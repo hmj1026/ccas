@@ -1,0 +1,79 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## What This Is
+
+CCAS (Claude Code Artifact System) is an OpenSpec-based workflow configuration repository. It provides structured, artifact-driven workflows for AI-assisted development across multiple platforms (Claude, Codex, Gemini). There is no compiled code or traditional build system -- this repo contains workflow definitions, skill configurations, and the OpenSpec runtime structure.
+
+## OpenSpec Workflow
+
+The core workflow follows the **spec-driven** schema with this artifact sequence:
+
+```
+proposal -> specs -> design -> tasks -> (implementation) -> archive
+```
+
+All OpenSpec state lives under `openspec/`:
+- `openspec/config.yaml` -- schema selection and optional project context/rules
+- `openspec/changes/<name>/` -- active changes with their artifacts
+- `openspec/changes/archive/` -- archived changes (prefixed `YYYY-MM-DD-`)
+- `openspec/specs/<capability>/spec.md` -- main capability specifications
+
+## Commands
+
+OpenSpec CLI is the primary tool. All commands assume `openspec` is available in PATH.
+
+```bash
+# Create a new change
+openspec new change "<kebab-case-name>"
+
+# Check artifact status
+openspec status --change "<name>"
+openspec status --change "<name>" --json
+
+# Get artifact creation instructions
+openspec instructions <artifact-id> --change "<name>"
+
+# Get implementation instructions
+openspec instructions apply --change "<name>" --json
+
+# List changes and schemas
+openspec list --json
+openspec schemas --json
+```
+
+## Skill Architecture
+
+Ten skills in `.claude/skills/` drive the workflow. Each has a corresponding slash command under `.claude/commands/opsx/`. Equivalent definitions exist in `.codex/` and `.gemini/` (TOML format).
+
+| Skill | Slash Command | Purpose |
+|-------|---------------|---------|
+| openspec-new-change | /opsx:new | Create a change, scaffold directory, show first artifact template |
+| openspec-continue-change | /opsx:continue | Create the next artifact in sequence |
+| openspec-ff-change | /opsx:ff | Fast-forward: generate all artifacts at once |
+| openspec-apply-change | /opsx:apply | Implement tasks from tasks.md |
+| openspec-verify-change | /opsx:verify | Three-dimensional verification (completeness, correctness, coherence) |
+| openspec-archive-change | /opsx:archive | Finalize and move to archive |
+| openspec-sync-specs | /opsx:sync | Merge delta specs into main specs |
+| openspec-bulk-archive-change | /opsx:bulk-archive | Archive multiple changes at once |
+| openspec-explore | /opsx:explore | Read-only thinking partner mode |
+| openspec-onboard | /opsx:onboard | Guided walkthrough of the full workflow |
+
+## Key Conventions
+
+- Change names must be **kebab-case** (e.g., `add-user-auth`)
+- Skills use `AskUserQuestion` for disambiguation -- never guess when input is ambiguous
+- Skills are **not phase-locked**: you can apply tasks before all artifacts are done, or interleave verification with implementation
+- Each skill invocation creates at most **one artifact** (except ff-change)
+- Task completion is tracked via markdown checkboxes (`- [ ]` / `- [x]`) in the tasks artifact
+- Delta specs created during a change sync to `openspec/specs/` at archive time
+
+## Multi-Platform Parity
+
+The same 10 skills are defined in three formats:
+- `.claude/skills/<name>/SKILL.md` -- Claude Code (markdown with YAML frontmatter)
+- `.codex/skills/<name>/SKILL.md` -- Codex (same format)
+- `.gemini/commands/<name>.toml` -- Gemini (TOML format)
+
+When modifying a skill, update all three platform definitions to maintain parity.

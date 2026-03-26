@@ -1,0 +1,25 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OpenSpec runtime output (keep changes/ tracked, ignore temp files)
+openspec/.cache/
+openspec/*.log
+
+# Playwright snapshots (local testing artifacts)
+.playwright-cli/
+
+# Logs
+*.log
+logs/
+
+# Environment
+.env
+.env.local
+.env.*.local
