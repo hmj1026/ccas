@@ -16,14 +16,13 @@ CCAS 的自動化流程需要先把帳單 PDF 從 Gmail 安全且可追蹤地抓
 - `gmail-ingestion`: 透過 Gmail API 搜尋帳單郵件、過濾 PDF 附件並下載到本地 staging 區
 - `attachment-staging`: 保存下載附件的追蹤資料、檔案位置、處理狀態與失敗原因，供後續 parser 接手
 - `ingestion-job-hook`: 定義單次 ingestion job 的執行邊界、輸出摘要與失敗不中止的批次處理行為
-- `pipeline-orchestration`: 定義 ingest -> parse -> classify -> notify 的端到端 pipeline 執行流程，支援排程觸發與手動觸發
 
 ### 修改能力 (Modified Capabilities)
 (無 -- 沒有既有 capability 的 requirement 被修改)
 
 ## 影響範圍 (Impact)
 
-- **後端模組**: `ingestor/`、`storage/`、`scheduler/`、`pipeline/`、`config.py`
+- **後端模組**: `ingestor/`、`storage/`、`config.py`
 - **資料庫**: 新增附件 staging 資料表與對應 migration
 - **外部系統**: Gmail API OAuth、Gmail message/attachment metadata
-- **執行行為**: 建立可重跑、可追蹤的帳單附件匯入流程；定義完整 pipeline 串接策略，確保 ingest -> parse -> classify -> notify 可被排程或手動觸發
+- **執行行為**: 建立可重跑、可追蹤的帳單附件匯入流程

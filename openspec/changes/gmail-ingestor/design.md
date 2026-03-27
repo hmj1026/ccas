@@ -70,18 +70,27 @@ CCAS 目前只有 `foundation-setup` 這個基礎建設 change，已規劃 backe
 - Fail-fast：實作較簡單，但實務上可用性差
 - 對所有錯誤完全吞掉：不利觀測與後續補救
 
-### D6: Pipeline 串接採用同步 orchestrator，支援排程與手動觸發
+### D6: OAuth token 自動刷新與失敗處理
 
-**選擇**: 定義一個 `run_pipeline()` 入口，依序執行 ingest -> parse -> classify -> notify 四個階段；每個階段獨立容錯，前一階段的新產出自動成為下一階段的輸入。支援 APScheduler 定時觸發與 CLI/API 手動觸發。
+**選擇**: 使用 google-auth 的 `Credentials.refresh()` 在 token 過期時自動刷新；若 refresh 失敗（例如 refresh token 被撤銷），記錄明確錯誤訊息並指引重新授權流程。
 
-**理由**: 四個階段有明確的資料依賴順序（staging -> bills -> classified transactions -> notifications），同步串接最簡單且可追蹤。各階段已有獨立的失敗處理機制，pipeline 只需協調呼叫順序與傳遞階段摘要。
+**理由**: Gmail OAuth access token 有效期約 1 小時，每日排程必然需要刷新。自動刷新可降低維運負擔，失敗時的明確訊息則能協助使用者快速恢復。
 
 **考慮過的替代方案**:
-- 事件驅動 / message queue：對個人工具而言架構過重
-- 各階段獨立排程、各自觸發：難以保證執行順序，也不方便看到端到端結果
-- 只提供手動觸發：無法自動化每日處理
+- 手動定期更換 token：對每日自動化流程不實際
+- 使用 service account：Gmail 個人帳號不支援
 
-### D7: Staged PDF 長期保留，由後端提供檔案存取
+### D7: Gmail API 呼叫採用 exponential backoff retry
+
+**選擇**: 對 Gmail API 的搜尋與下載呼叫實作 exponential backoff retry（最多 3 次，間隔 1s / 2s / 4s），遇到 rate limit（429）或暫時性錯誤（5xx）時自動重試。
+
+**理由**: Gmail API 有速率限制，網路環境也可能出現短暫異常。重試策略可在不增加複雜度的前提下提升穩定性。
+
+**考慮過的替代方案**:
+- 不重試直接失敗：對暫時性問題過於敏感，容易產生不必要的 `failed` 記錄
+- 無限重試：可能在持續性問題上卡住
+
+### D8: Staged PDF 長期保留，由後端提供檔案存取
 
 **選擇**: 已下載的 staged PDF 在解析完成後仍保留在 staging 目錄中，不自動刪除。後端提供檔案存取端點，讓 dashboard 與 Telegram 可以連結到原始 PDF。
 
@@ -93,9 +102,9 @@ CCAS 目前只有 `foundation-setup` 這個基礎建設 change，已規劃 backe
 
 ## 風險 / 取捨 (Risks / Trade-offs)
 
-**Gmail OAuth token 失效或權限不足** → 啟動或 job 執行時需要回報明確錯誤，並保留重新授權的設定入口
+**Gmail OAuth token 失效或權限不足** → 自動刷新 token（D6），若 refresh 失敗回報明確錯誤與重新授權指引
+**Gmail API rate limit 或暫時性錯誤** → exponential backoff retry（D7）自動重試，超過次數後記錄失敗
 **銀行郵件格式或附件命名不一致** → 此 change 只保證抓取與落地，不處理 parser 判斷，以降低耦合
 **附件持久化會增加磁碟使用量** → PDF 每月每銀行約一份，長期保留量可控；未來可加入 retention policy
 **新增 staging table 會擴大資料模型** → 以獨立資料表處理，不污染 `bills` / `transactions` 這些尚未解析完成的領域資料
-**Pipeline 中間階段失敗可能導致部分完成** → 各階段獨立容錯，pipeline 回傳各階段摘要，方便定位問題
 **目前尚未有 main specs** → 此 change 先作為功能規格基礎，後續 archive 時再同步進主規格
