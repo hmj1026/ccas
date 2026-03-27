@@ -1,6 +1,6 @@
 ## 背景 (Context)
 
-在 `foundation-setup` 與 `gmail-ingestor` 之後，系統已具備基礎架構與 Gmail 附件 staging 能力，但仍缺少從 PDF 轉成 `Bill` 與 `Transaction` 的核心解析邏輯。銀行帳單格式會隨時間更動，因此 parser 不能是單一檔案對單一銀行的硬編碼實作，而需要支援版本化與回退策略。
+在 `foundation-setup`、`gmail-ingestor` 與 `pdf-decryptor` 之後，系統已具備基礎架構、Gmail 附件 staging 與 PDF 解密能力，但仍缺少從解密後的 PDF 轉成 `Bill` 與 `Transaction` 的核心解析邏輯。Parser 假設收到的 PDF 已經過解密，若 PDF 仍為加密狀態，視為 `parse_failed` 並記錄明確錯誤訊息。銀行帳單格式會隨時間更動，因此 parser 不能是單一檔案對單一銀行的硬編碼實作，而需要支援版本化與回退策略。
 
 本 change 的範圍集中在 parser engine 本身，不處理分類、Telegram、API 或 dashboard。
 
@@ -43,7 +43,7 @@
 
 ### D3: `ParseResult` 只承載正規化的帳單與交易資料，`due_date` 必須從 PDF 解析取得
 
-**選擇**: `ParseResult` 負責傳遞 `billing_month`、`total_amount`、`due_date` 與交易明細列表，不直接耦合 ORM model。`due_date`（繳費截止日）是每份帳單 PDF 內的必要欄位，各家銀行 parser 必須從 PDF 中提取此資訊。
+**選擇**: `ParseResult` 負責傳遞 `billing_month`、`total_amount`、`due_date` 與交易明細列表（每筆交易包含 `trans_date`、`posting_date`（nullable）、`merchant`、`amount` 等欄位），不直接耦合 ORM model。`due_date`（繳費截止日）是每份帳單 PDF 內的必要欄位，各家銀行 parser 必須從 PDF 中提取此資訊。
 
 **理由**: 解析邏輯與資料持久化分離後，單元測試較容易，也更方便後續調整儲存層。`due_date` 來自 PDF 而非固定設定，因為同一家銀行的到期日可能因帳單月份而異，且 Telegram 提醒與 `/upcoming` 功能都依賴準確的到期日。
 

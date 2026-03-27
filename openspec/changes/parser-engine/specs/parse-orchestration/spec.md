@@ -16,7 +16,7 @@
 
 #### Scenario: 分類尚未執行時保留原始交易資料
 - **WHEN** parser orchestration 建立 `Transaction` 紀錄
-- **THEN** 系統會先保存原始交易欄位，而分類欄位可待後續 classifier 流程補齊
+- **THEN** 系統會先保存原始交易欄位（包含 `trans_date`、`posting_date`（nullable）、`merchant`、`amount` 等），而分類欄位可待後續 classifier 流程補齊
 
 ### Requirement: 所有 parser 失敗時標記為 `parse_failed`
 系統 SHALL 在所有候選 parser 都無法成功解析某個附件時，將該附件標記為 `parse_failed`，並保存錯誤原因。

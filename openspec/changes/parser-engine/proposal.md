@@ -1,6 +1,6 @@
 ## 緣由 (Why)
 
-`gmail-ingestor` 只負責把帳單 PDF 抓回本地 staging 區，但系統還缺少能將不同銀行 PDF 解析成結構化帳單與交易資料的核心引擎。由於各家銀行格式不同且會隨時間變動，需要一個可版本化、可回退、可追蹤失敗原因的 parser engine。
+`gmail-ingestor` 只負責把帳單 PDF 抓回本地 staging 區，`pdf-decryptor` 負責解密受密碼保護的 PDF，但系統還缺少能將解密後的 PDF 解析成結構化帳單與交易資料的核心引擎。由於各家銀行格式不同且會隨時間變動，需要一個可版本化、可回退、可追蹤失敗原因的 parser engine。
 
 ## 變更內容 (What Changes)
 
