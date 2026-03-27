@@ -156,7 +156,7 @@ parser/
 
 | 指令 | 功能 |
 |------|------|
-| `/status` | 查看本月所有帳單繳費狀態 |
+| `/status [all\|unpaid\|paid]` | 查看本月帳單繳費狀態（預設 all，可篩選未繳/已繳） |
 | `/upcoming` | 查看 7 天內即將到期的帳單 |
 | `/paid {bill_id}` | 標記帳單已繳 |
 | `/summary {YYYY-MM}` | 查看指定月份消費摘要 |

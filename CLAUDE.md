@@ -45,7 +45,7 @@ openspec schemas --json
 
 ## Skill Architecture
 
-Ten skills in `.claude/skills/` drive the workflow. Each has a corresponding slash command under `.claude/commands/opsx/`. Equivalent definitions exist in `.codex/` and `.gemini/` (TOML format).
+Ten OpenSpec skills in `.claude/skills/` drive the workflow. Each has a corresponding slash command under `.claude/commands/opsx/`. Equivalent skill definitions exist in `.codex/skills/` and `.gemini/skills/`. Gemini additionally has 3 general-purpose skills (`bug-investigation`, `git-smart-commit`, `software-architecture`) and slash commands under `.gemini/commands/`. Codex has skills only (no commands directory).
 
 | Skill | Slash Command | Purpose |
 |-------|---------------|---------|
@@ -60,6 +60,73 @@ Ten skills in `.claude/skills/` drive the workflow. Each has a corresponding sla
 | openspec-explore | /opsx:explore | Read-only thinking partner mode |
 | openspec-onboard | /opsx:onboard | Guided walkthrough of the full workflow |
 
+## Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| Backend | Python 3.12, FastAPI, SQLAlchemy, Alembic |
+| Database | SQLite (WAL mode) |
+| Frontend | React, Vite, TypeScript (planned) |
+| Package Manager | uv |
+| Testing | pytest + pytest-cov, httpx (ASGI test client) |
+| Linting | ruff (check + format), pyright (type check) |
+| Integrations | Gmail API (PDF download), Telegram Bot (notifications) |
+| Domain | Credit card bill automation (parse PDFs, classify spending, reports) |
+
+## Development Commands
+
+```bash
+# Dependencies
+uv sync                                    # Install all deps
+uv add <pkg>                               # Add runtime dep
+uv add --dev <pkg>                         # Add dev dep
+
+# Testing
+uv run pytest                              # All tests
+uv run pytest --cov --cov-report=term-missing  # With coverage
+uv run pytest tests/unit/                  # Unit only
+uv run pytest tests/integration/           # Integration only
+uv run pytest -x                           # Stop on first failure
+
+# Lint & Format
+uv run ruff check .                        # Lint
+uv run ruff format .                       # Format
+uv run pyright                             # Type check
+
+# Database
+uv run alembic upgrade head                # Apply migrations
+uv run alembic revision --autogenerate -m "<description>"
+
+# Server
+uv run fastapi dev                         # Dev server with hot reload
+```
+
+## ECC Agent & Skill Reference
+
+When implementing features in this project, use these ECC agents at the appropriate phase:
+
+| Phase | Agent | Slash Command | When |
+|-------|-------|--------------|------|
+| Planning | `planner` | `/plan` | Complex features, multi-file changes |
+| Architecture | `architect` | -- | System design decisions |
+| TDD | `tdd-guide` | `/tdd` | Before writing implementation code |
+| Code Review | `python-reviewer` | `/python-review` | After Python code changes |
+| Code Review | `code-reviewer` | `/code-review` | After any code changes |
+| Security | `security-reviewer` | -- | Auth, user input, API endpoints, secrets |
+| Database | `database-reviewer` | -- | SQLAlchemy queries, schema design, migrations |
+| Build Fix | `build-error-resolver` | `/build-fix` | Build or type errors |
+| Docs | `doc-updater` | `/update-docs` | Documentation updates |
+
+Relevant ECC skills for this project:
+- `python-patterns` -- Pythonic idioms, type hints, PEP 8
+- `python-testing` -- pytest, TDD, fixtures, mocking, parametrize
+- `backend-patterns` -- FastAPI routes, middleware, error handling
+- `api-design` -- REST resource naming, status codes, pagination
+- `database-migrations` -- Alembic patterns, zero-downtime migrations
+- `tdd-workflow` -- RED-GREEN-REFACTOR cycle
+- `security-review` -- OWASP Top 10, input validation
+- `docker-patterns` -- Docker Compose for local dev
+
 ## Key Conventions
 
 - Change names must be **kebab-case** (e.g., `add-user-auth`)
@@ -71,9 +138,14 @@ Ten skills in `.claude/skills/` drive the workflow. Each has a corresponding sla
 
 ## Multi-Platform Parity
 
-The same 10 skills are defined in three formats:
+The 10 OpenSpec skills are defined in three formats:
 - `.claude/skills/<name>/SKILL.md` -- Claude Code (markdown with YAML frontmatter)
-- `.codex/skills/<name>/SKILL.md` -- Codex (same format)
-- `.gemini/commands/<name>.toml` -- Gemini (TOML format)
+- `.codex/skills/<name>/SKILL.md` -- Codex (same format, skills only)
+- `.gemini/skills/<name>/SKILL.md` -- Gemini (same format)
 
-When modifying a skill, update all three platform definitions to maintain parity.
+Slash commands:
+- `.claude/commands/opsx/*.md` -- Claude Code commands
+- `.gemini/commands/opsx/*.toml` -- Gemini commands (TOML format)
+- Codex has no commands directory
+
+When modifying an OpenSpec skill, update all three platform skill definitions to maintain parity.

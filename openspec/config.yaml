@@ -1,20 +1,11 @@
 schema: spec-driven
 
-# Project context (optional)
-# This is shown to AI when creating artifacts.
-# Add your tech stack, conventions, style guides, domain knowledge, etc.
-# Example:
-#   context: |
-#     Tech stack: TypeScript, React, Node.js
-#     We use conventional commits
-#     Domain: e-commerce platform
-
-# Per-artifact rules (optional)
-# Add custom rules for specific artifacts.
-# Example:
-#   rules:
-#     proposal:
-#       - Keep proposals under 500 words
-#       - Always include a "Non-goals" section
-#     tasks:
-#       - Break tasks into chunks of max 2 hours
+context: |
+  Tech stack: Python 3.12, FastAPI, SQLAlchemy, Alembic, SQLite (WAL mode)
+  Frontend: React (planned)
+  Integrations: Gmail API (PDF attachment download), Telegram Bot (notifications/queries)
+  Package manager: uv
+  Testing: pytest, pytest-cov, httpx (ASGI test client)
+  Domain: Credit card bill automation - download bank statement PDFs from email,
+    parse transactions, classify spending, generate reports, push summaries via Telegram
+  Conventions: Conventional commits, TDD workflow, 80% test coverage minimum
