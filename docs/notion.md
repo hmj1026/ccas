@@ -1,6 +1,6 @@
 # 信用卡帳單自動化管理系統 (CCAS) 規格文件
 
-> **Credit Card Automation System v1.0** | 建立日期：2026-03-26 | 更新日期：2026-03-26
+> **Credit Card Automation System v1.0** | 建立日期：2026-03-26 | 更新日期：2026-03-27
 
 ---
 
@@ -49,14 +49,15 @@
 
 ### 3.2 運作流程
 
-1. 每日排程啟動
-2. 登入 Gmail 搜尋新帳單（根據 bank_configs 中的 gmail_filter）
-3. 下載並解密 PDF（pikepdf，密碼規則來自 bank_configs）
-4. 依序調用該銀行的 Parser（從最新版本開始嘗試）
+1. 每日排程啟動（APScheduler 觸發 `run_pipeline()`）
+2. **Ingest**: 登入 Gmail 搜尋新帳單（根據 bank_configs 中的 gmail_filter），下載 PDF 附件到 staging 區
+3. **Decrypt**: 讀取 `bank_configs.pdf_password_rule` 解密加密 PDF（pikepdf），未加密 PDF 直接透通
+4. **Parse**: 依序調用該銀行的 Parser（從 active_parser_version 開始，再 fallback 由新到舊）
 5. 所有版本失敗 → 標記為 `parse_failed`，進入人工審查佇列
-6. 解析成功 → 關鍵字分類消費明細
-7. 存入資料庫
-8. 發送 Telegram 通知
+6. **Classify**: 解析成功 → 關鍵字分類消費明細（規則來自 categories 資料表）
+7. 存入資料庫（Bill + Transaction 原子寫入）
+8. **Notify**: 發送 Telegram 通知（新帳單、解析失敗）
+9. 各階段獨立容錯，單筆失敗不中止整批
 
 ---
 
@@ -82,6 +83,7 @@
 | `id` | INTEGER | Primary Key, 自動遞增 |
 | `bill_id` | INTEGER | Foreign Key (關聯 `bills.id`) |
 | `trans_date` | DATE | 消費日期 |
+| `posting_date` | DATE | 入帳日期 (nullable，部分銀行區分消費日與入帳日) |
 | `merchant` | TEXT | 商家名稱 |
 | `amount` | INTEGER | 台幣金額 |
 | `currency` | TEXT | 原始幣別 (TWD/USD/JPY...) |
@@ -111,6 +113,7 @@
 | `gmail_filter` | TEXT | Gmail 搜尋關鍵字 (如: "from:service@ctbcbank.com subject:帳單") |
 | `pdf_password_rule` | TEXT | 密碼規則描述 (如: "身分證後四碼", "生日 MMDD") |
 | `active_parser_version` | TEXT | 目前使用的 parser 版本 (如: "v2") |
+| `is_active` | BOOLEAN | 是否啟用 (預設 true，停用後 ingestor 與 parser 不處理此銀行) |
 
 ---
 
@@ -201,9 +204,12 @@ ccas/
         models.py            # SQLAlchemy models
         repository.py        # Repository pattern
         database.py          # Engine + session
+      decryptor/
+        service.py           # PDF 解密服務 (pikepdf)
       classifier/
-        engine.py            # 關鍵字分類引擎
-        mappings.yaml        # 商家-類別映射
+        engine.py            # 關鍵字分類引擎 (規則來源為 categories 資料表)
+      pipeline/
+        orchestrator.py      # Pipeline 串接 (ingest->decrypt->parse->classify->notify)
       bot/
         handlers.py          # Bot 指令處理
         notifications.py     # 主動通知
@@ -213,10 +219,14 @@ ccas/
         app.py               # App factory
       scheduler/
         jobs.py              # 排程任務
+      core/
+        exceptions.py        # 共用例外階層 (CcasError)
+        logging.py           # 結構化日誌 (JSON formatter, secret redaction)
       config.py              # 設定管理
     tests/
       unit/                  # 純單元測試
       integration/           # 整合測試
+      e2e/                   # 端到端 pipeline 測試
     pyproject.toml
     Dockerfile
   frontend/
@@ -241,11 +251,13 @@ ccas/
 
 ### 9.1 開發階段
 
-1. Foundation Setup -- 專案初始化、DB models、Docker
-2. Parser Engine -- 解析引擎核心、版本化機制
-3. Gmail Ingestor -- Gmail 整合、排程
-4. Keyword Classifier -- 消費分類引擎
-5. Telegram Bot -- Bot 指令與通知
-6. Backend API -- FastAPI RESTful API
-7. Frontend Dashboard -- React Dashboard
-8. Integration & Polish -- 端對端測試、錯誤處理
+1. Foundation Setup -- 專案初始化、DB models、Docker、Seed Data
+2. Backend API -- FastAPI RESTful API（含 Bearer Token 認證）
+3. Gmail Ingestor -- Gmail 整合、OAuth token 刷新、retry 策略
+4. PDF Decryptor -- PDF 解密（pikepdf）、密碼規則、staging 狀態管理
+5. Parser Engine -- 解析引擎核心、版本化機制、due_date 提取
+6. Keyword Classifier -- 消費分類引擎（規則來自 categories 資料表）
+7. Telegram Bot -- Bot 指令與通知、retry 策略
+8. Frontend Dashboard -- React Dashboard（5 頁面）
+9. Pipeline Scheduler -- Pipeline 串接（5 階段）、APScheduler、繳費提醒排程
+10. Integration & Polish -- 端對端測試、例外階層、結構化日誌、錯誤處理
