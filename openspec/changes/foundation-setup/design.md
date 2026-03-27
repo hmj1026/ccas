@@ -17,7 +17,7 @@ CCAS 是一個綠地專案，已有定稿的系統規格 [`docs/notion.md`](/hom
 **非目標：**
 - 不實作任何功能本身，不包含 parser、ingestor、bot 或 API route
 - 不處理正式環境部署設定，例如 CI/CD 或雲端託管
-- 不建立 seed data 或 PDF fixture
+- 不建立 PDF fixture（seed data 包含在本 change 中，用於開發階段驗證）
 - 不建立真正的前端頁面，只保留 health-check placeholder
 - 不處理 Telegram 或 Gmail 整合
 

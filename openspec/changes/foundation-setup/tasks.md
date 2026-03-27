@@ -16,7 +16,7 @@
 
 - [ ] 3.1 建立 `backend/src/ccas/storage/database.py`，包含 SQLAlchemy engine、session factory 與 SQLite WAL mode event listener
 - [ ] 3.2 在 `backend/src/ccas/storage/models.py` 建立 `Bill` model（`id`、`bank_code`、`billing_month`、`total_amount`、`due_date`、`is_paid`、`file_path`、`created_at`，以及 `bank_code+billing_month` 唯一約束）
-- [ ] 3.3 新增 `Transaction` model（`id`、`bill_id` FK、`trans_date`、`merchant`、`amount`、`currency`、`original_amount`、`card_last4`、`installment_current`、`installment_total`、`category`、`note`、`created_at`）並建立與 `Bill` 的 relationship
+- [ ] 3.3 新增 `Transaction` model（`id`、`bill_id` FK、`trans_date`、`posting_date`（nullable）、`merchant`、`amount`、`currency`、`original_amount`、`card_last4`、`installment_current`、`installment_total`、`category`、`note`、`created_at`）並建立與 `Bill` 的 relationship
 - [ ] 3.4 新增 `Category` model（`id`、`keyword` 唯一、`category`）
 - [ ] 3.5 新增 `BankConfig` model（`id`、`bank_code` 唯一、`bank_name`、`gmail_filter`、`pdf_password_rule`、`active_parser_version` 預設 `"v1"`、`is_active` 預設 `true`）
 
@@ -56,10 +56,16 @@
 - [ ] 8.3 撰寫 smoke test `frontend/src/App.test.tsx`，驗證 App component 可正常 render
 - [ ] 8.4 驗證 `pnpm test` 可發現並通過 smoke test
 
-## 9. Docker
+## 9. Seed Data
 
-- [ ] 9.1 建立 `backend/Dockerfile`（Python 3.12 base、安裝 uv、複製 `pyproject.toml` + `uv.lock`、安裝依賴、複製 source code、entrypoint 為 uvicorn）
-- [ ] 9.2 建立 `frontend/Dockerfile`（Node 22 base、安裝 pnpm、複製 `package.json` + `pnpm-lock.yaml`、安裝依賴、複製 source code、entrypoint 為 `vite dev --host 0.0.0.0`）
-- [ ] 9.3 建立 `docker-compose.yaml`，包含 backend（port 8000、`ccas-data` volume 掛載到 `/data`）與 frontend（port 5173）兩個服務
-- [ ] 9.4 建立 `backend/.dockerignore` 與 `frontend/.dockerignore`
-- [ ] 9.5 驗證 `docker compose up` 可啟動兩個服務，且 `localhost:8000` 可存取 `/health`
+- [ ] 9.1 建立 `backend/scripts/seed.py`，包含可重複執行的範例資料（BankConfig、Category、Bill、Transaction）
+- [ ] 9.2 使用 SQLAlchemy session 寫入，執行前清空已有 seed 資料以保持冪等性
+- [ ] 9.3 驗證 `uv run python scripts/seed.py` 可成功執行且資料可透過 API 查詢
+
+## 10. Docker
+
+- [ ] 10.1 建立 `backend/Dockerfile`（Python 3.12 base、安裝 uv、複製 `pyproject.toml` + `uv.lock`、安裝依賴、複製 source code、entrypoint 為 uvicorn）
+- [ ] 10.2 建立 `frontend/Dockerfile`（Node 22 base、安裝 pnpm、複製 `package.json` + `pnpm-lock.yaml`、安裝依賴、複製 source code、entrypoint 為 `vite dev --host 0.0.0.0`）
+- [ ] 10.3 建立 `docker-compose.yaml`，包含 backend（port 8000、`ccas-data` volume 掛載到 `/data`）與 frontend（port 5173）兩個服務
+- [ ] 10.4 建立 `backend/.dockerignore` 與 `frontend/.dockerignore`
+- [ ] 10.5 驗證 `docker compose up` 可啟動兩個服務，且 `localhost:8000` 可存取 `/health`

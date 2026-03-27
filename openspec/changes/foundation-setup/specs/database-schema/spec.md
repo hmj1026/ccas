@@ -12,7 +12,7 @@
 - **THEN** 資料庫會拋出 `IntegrityError`
 
 ### Requirement: 消費明細資料表模型
-系統 SHALL 定義一個 SQLAlchemy ORM model `Transaction`，欄位包含：`id`（INTEGER, PK, autoincrement）、`bill_id`（INTEGER, FK 至 `bills.id`, not null）、`trans_date`（DATE, not null）、`merchant`（TEXT, not null）、`amount`（INTEGER, not null）、`currency`（TEXT, 預設 `"TWD"`）、`original_amount`（INTEGER, nullable）、`card_last4`（TEXT, nullable）、`installment_current`（INTEGER, nullable）、`installment_total`（INTEGER, nullable）、`category`（TEXT, nullable）、`note`（TEXT, nullable）、`created_at`（DATETIME, 預設 `utcnow`）。
+系統 SHALL 定義一個 SQLAlchemy ORM model `Transaction`，欄位包含：`id`（INTEGER, PK, autoincrement）、`bill_id`（INTEGER, FK 至 `bills.id`, not null）、`trans_date`（DATE, not null）、`posting_date`（DATE, nullable）、`merchant`（TEXT, not null）、`amount`（INTEGER, not null）、`currency`（TEXT, 預設 `"TWD"`）、`original_amount`（INTEGER, nullable）、`card_last4`（TEXT, nullable）、`installment_current`（INTEGER, nullable）、`installment_total`（INTEGER, nullable）、`category`（TEXT, nullable）、`note`（TEXT, nullable）、`created_at`（DATETIME, 預設 `utcnow`）。
 
 #### Scenario: 消費明細可連結到帳單
 - **WHEN** 建立一筆具有有效 `bill_id` 的 `Transaction`
