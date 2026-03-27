@@ -1,55 +1,55 @@
 ## ADDED Requirements
 
-### Requirement: Python backend project initialization
-The system SHALL have a Python 3.12+ backend project managed by uv, with a `backend/` directory containing a `pyproject.toml` that declares all required dependencies (fastapi, uvicorn, sqlalchemy, alembic, pydantic-settings, pdfplumber, pikepdf, tabula-py, python-telegram-bot, google-api-python-client, apscheduler).
+### Requirement: 初始化 Python 後端專案
+系統 SHALL 具備一個由 uv 管理的 Python 3.12+ 後端專案，並在 `backend/` 目錄下提供 `pyproject.toml`，宣告所有必要依賴（`fastapi`、`uvicorn`、`sqlalchemy`、`alembic`、`pydantic-settings`、`pdfplumber`、`pikepdf`、`tabula-py`、`python-telegram-bot`、`google-api-python-client`、`apscheduler`）。
 
-#### Scenario: Backend project is runnable
-- **WHEN** a developer clones the repo and runs `cd backend && uv sync`
-- **THEN** all Python dependencies are installed and `uv run python -c "import ccas"` succeeds
+#### Scenario: 後端專案可執行
+- **WHEN** 開發者 clone repo 後執行 `cd backend && uv sync`
+- **THEN** 所有 Python 依賴都會安裝完成，且 `uv run python -c "import ccas"` 可成功執行
 
-#### Scenario: Backend dev server starts
-- **WHEN** a developer runs `uv run uvicorn ccas.api.app:create_app --factory`
-- **THEN** FastAPI starts on port 8000 and the `/health` endpoint returns `{"status": "ok"}`
+#### Scenario: 後端開發伺服器可啟動
+- **WHEN** 開發者執行 `uv run uvicorn ccas.api.app:create_app --factory`
+- **THEN** FastAPI 會在 8000 port 啟動，且 `/health` 端點回傳 `{"status": "ok"}`
 
-### Requirement: React frontend project initialization
-The system SHALL have a React + TypeScript frontend project managed by pnpm, with a `frontend/` directory containing Vite, Tailwind CSS, and shadcn/ui configured.
+### Requirement: 初始化 React 前端專案
+系統 SHALL 具備一個由 pnpm 管理的 React + TypeScript 前端專案，並在 `frontend/` 目錄中配置 Vite、Tailwind CSS 與 shadcn/ui。
 
-#### Scenario: Frontend project is runnable
-- **WHEN** a developer runs `cd frontend && pnpm install`
-- **THEN** all Node dependencies are installed and `pnpm dev` starts the Vite dev server on port 5173
+#### Scenario: 前端專案可執行
+- **WHEN** 開發者執行 `cd frontend && pnpm install`
+- **THEN** 所有 Node 依賴都會安裝完成，且 `pnpm dev` 可在 5173 port 啟動 Vite dev server
 
-#### Scenario: Frontend build succeeds
-- **WHEN** a developer runs `pnpm build`
-- **THEN** the build completes without errors and produces output in `frontend/dist/`
+#### Scenario: 前端可成功建置
+- **WHEN** 開發者執行 `pnpm build`
+- **THEN** 建置會成功完成，並在 `frontend/dist/` 產出結果
 
-### Requirement: Directory structure matches spec architecture
-The system SHALL organize backend source code under `backend/src/ccas/` with subdirectories: `ingestor/`, `parser/`, `storage/`, `classifier/`, `bot/`, `api/`, `scheduler/`. Each subdirectory SHALL contain an `__init__.py` file.
+### Requirement: 目錄結構符合系統規格架構
+系統 SHALL 將後端原始碼放在 `backend/src/ccas/` 下，並建立 `ingestor/`、`parser/`、`storage/`、`classifier/`、`bot/`、`api/`、`scheduler/` 子目錄。每個子目錄 SHALL 都包含 `__init__.py`。
 
-#### Scenario: All module directories exist
-- **WHEN** the project is initialized
-- **THEN** all 7 module directories exist under `backend/src/ccas/` and are importable Python packages
+#### Scenario: 所有模組目錄都存在
+- **WHEN** 專案完成初始化
+- **THEN** `backend/src/ccas/` 下會存在全部 7 個模組目錄，且都可作為 Python package import
 
-### Requirement: Docker Compose orchestration
-The system SHALL provide a `docker-compose.yaml` at the project root with two services: `backend` (Python/FastAPI on port 8000) and `frontend` (Vite dev server on port 5173), sharing a named volume `ccas-data` mounted at `/data` in the backend container.
+### Requirement: 提供 Docker Compose 編排
+系統 SHALL 在專案根目錄提供 `docker-compose.yaml`，定義兩個服務：`backend`（Python/FastAPI，port 8000）與 `frontend`（Vite dev server，port 5173），並共用名為 `ccas-data` 的 volume 掛載到 backend container 的 `/data`。
 
-#### Scenario: Full stack starts with docker compose
-- **WHEN** a developer runs `docker compose up`
-- **THEN** both backend and frontend services start, and the backend `/health` endpoint is reachable at `http://localhost:8000/health`
+#### Scenario: 使用 docker compose 啟動整個系統
+- **WHEN** 開發者執行 `docker compose up`
+- **THEN** backend 與 frontend 都會成功啟動，且 backend 的 `/health` 端點可在 `http://localhost:8000/health` 存取
 
-#### Scenario: Data persists across restarts
-- **WHEN** `docker compose down` is run followed by `docker compose up`
-- **THEN** the SQLite database file at `/data/ccas.db` retains its data from the previous session
+#### Scenario: 重啟後資料仍保留
+- **WHEN** 先執行 `docker compose down` 再執行 `docker compose up`
+- **THEN** `/data/ccas.db` 的 SQLite 資料會保留前一次執行的內容
 
-### Requirement: Backend Dockerfile
-The backend Dockerfile SHALL use a Python 3.12 base image, install uv, copy `pyproject.toml` and `uv.lock`, install dependencies, and copy source code. The entrypoint SHALL run uvicorn.
+### Requirement: 提供 backend Dockerfile
+後端 Dockerfile SHALL 使用 Python 3.12 base image，安裝 uv，複製 `pyproject.toml` 與 `uv.lock`，安裝依賴後再複製 source code，entrypoint SHALL 執行 uvicorn。
 
-#### Scenario: Backend Docker image builds
-- **WHEN** `docker build ./backend` is executed
-- **THEN** the image builds successfully and `docker run <image> python -c "import ccas"` succeeds
+#### Scenario: 後端 Docker image 可成功建置
+- **WHEN** 執行 `docker build ./backend`
+- **THEN** image 可成功建置，且 `docker run <image> python -c "import ccas"` 可成功執行
 
-### Requirement: Frontend Dockerfile
-The frontend Dockerfile SHALL use a Node 22 base image, install pnpm, copy `package.json` and `pnpm-lock.yaml`, install dependencies, and copy source code. The entrypoint SHALL run the Vite dev server with host binding to `0.0.0.0`.
+### Requirement: 提供 frontend Dockerfile
+前端 Dockerfile SHALL 使用 Node 22 base image，安裝 pnpm，複製 `package.json` 與 `pnpm-lock.yaml`，安裝依賴後再複製 source code，entrypoint SHALL 以 `0.0.0.0` 綁定 Vite dev server。
 
-#### Scenario: Frontend Docker image builds
-- **WHEN** `docker build ./frontend` is executed
-- **THEN** the image builds successfully and the dev server starts
+#### Scenario: 前端 Docker image 可成功建置
+- **WHEN** 執行 `docker build ./frontend`
+- **THEN** image 可成功建置，且 dev server 可以順利啟動

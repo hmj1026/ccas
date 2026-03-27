@@ -1,51 +1,51 @@
 ## ADDED Requirements
 
-### Requirement: pytest configuration for backend
-The system SHALL configure pytest via `pyproject.toml` with test directories at `backend/tests/unit/` and `backend/tests/integration/`. Coverage reporting SHALL be enabled targeting the `ccas` package with a minimum threshold of 80%.
+### Requirement: 後端 pytest 設定
+系統 SHALL 透過 `pyproject.toml` 設定 pytest，並將測試目錄設為 `backend/tests/unit/` 與 `backend/tests/integration/`。coverage 報告 SHALL 針對 `ccas` package 啟用，且最低門檻為 80%。
 
-#### Scenario: pytest discovers and runs tests
-- **WHEN** `uv run pytest` is executed from the `backend/` directory
-- **THEN** pytest discovers tests in `tests/unit/` and `tests/integration/` and executes them
+#### Scenario: pytest 可發現並執行測試
+- **WHEN** 在 `backend/` 目錄執行 `uv run pytest`
+- **THEN** pytest 會找到 `tests/unit/` 與 `tests/integration/` 下的測試並執行
 
-#### Scenario: Coverage report generated
-- **WHEN** `uv run pytest --cov=ccas --cov-report=term-missing` is executed
-- **THEN** a coverage report is displayed showing line-by-line coverage for all `ccas` modules
+#### Scenario: 產生 coverage 報告
+- **WHEN** 執行 `uv run pytest --cov=ccas --cov-report=term-missing`
+- **THEN** 會顯示涵蓋 `ccas` 所有模組逐行資訊的 coverage 報告
 
-### Requirement: Backend test directory structure
-The system SHALL organize backend tests into `tests/unit/` (pure unit tests, no database or external services) and `tests/integration/` (tests with database fixtures). Each test directory SHALL contain an `__init__.py` and a `conftest.py`.
+### Requirement: 後端測試目錄結構
+系統 SHALL 將後端測試分為 `tests/unit/`（純單元測試，不接資料庫或外部服務）與 `tests/integration/`（含資料庫 fixture 的測試）。每個測試目錄 SHALL 都包含 `__init__.py` 與 `conftest.py`。
 
-#### Scenario: Unit test directory exists with conftest
-- **WHEN** the project is initialized
-- **THEN** `backend/tests/unit/conftest.py` exists and is importable
+#### Scenario: 單元測試目錄存在且包含 conftest
+- **WHEN** 專案完成初始化
+- **THEN** `backend/tests/unit/conftest.py` 存在，且可被 import
 
-#### Scenario: Integration test directory exists with conftest
-- **WHEN** the project is initialized
-- **THEN** `backend/tests/integration/conftest.py` exists and is importable
+#### Scenario: 整合測試目錄存在且包含 conftest
+- **WHEN** 專案完成初始化
+- **THEN** `backend/tests/integration/conftest.py` 存在，且可被 import
 
-### Requirement: Database fixture for integration tests
-The integration test `conftest.py` SHALL provide a `db_session` fixture that creates an in-memory SQLite database, runs Alembic migrations, yields a SQLAlchemy session, and rolls back after each test.
+### Requirement: 提供整合測試資料庫 fixture
+整合測試的 `conftest.py` SHALL 提供 `db_session` fixture，建立 in-memory SQLite、執行 Alembic migration、yield 一個 SQLAlchemy session，並在每個測試結束後 rollback。
 
-#### Scenario: Integration test gets clean database
-- **WHEN** an integration test uses the `db_session` fixture
-- **THEN** a fresh in-memory database with all tables is available, and changes are rolled back after the test
+#### Scenario: 整合測試取得乾淨資料庫
+- **WHEN** 某個整合測試使用 `db_session` fixture
+- **THEN** 該測試會取得包含所有資料表的全新 in-memory database，且測試變更在結束後會回滾
 
-### Requirement: Smoke test for backend health endpoint
-The system SHALL include a smoke test that verifies the FastAPI `/health` endpoint returns status 200 with `{"status": "ok"}`.
+### Requirement: 提供後端 health endpoint smoke test
+系統 SHALL 包含一個 smoke test，驗證 FastAPI `/health` 端點回傳 200 與 `{"status": "ok"}`。
 
-#### Scenario: Health endpoint test passes
-- **WHEN** `uv run pytest tests/integration/test_health.py` is executed
-- **THEN** the test passes confirming the health endpoint works
+#### Scenario: Health endpoint 測試通過
+- **WHEN** 執行 `uv run pytest tests/integration/test_health.py`
+- **THEN** 該測試會通過，證明 health endpoint 可正常運作
 
-### Requirement: vitest configuration for frontend
-The system SHALL configure vitest via `vite.config.ts` for the frontend project. Test files SHALL follow the `*.test.tsx` or `*.test.ts` naming convention.
+### Requirement: 前端 vitest 設定
+系統 SHALL 透過 `vite.config.ts` 為前端設定 vitest。測試檔命名 SHALL 採用 `*.test.tsx` 或 `*.test.ts`。
 
-#### Scenario: vitest discovers and runs tests
-- **WHEN** `pnpm test` is executed from the `frontend/` directory
-- **THEN** vitest discovers and runs all test files
+#### Scenario: vitest 可發現並執行測試
+- **WHEN** 在 `frontend/` 目錄執行 `pnpm test`
+- **THEN** vitest 會找到並執行所有符合命名慣例的測試檔
 
-### Requirement: Smoke test for frontend
-The system SHALL include a smoke test that verifies the React App component renders without crashing.
+### Requirement: 提供前端 smoke test
+系統 SHALL 包含一個 smoke test，驗證 React App component 可正常 render。
 
-#### Scenario: App render test passes
-- **WHEN** `pnpm test` is executed
-- **THEN** the smoke test passes confirming the App component renders
+#### Scenario: App 元件 render 測試通過
+- **WHEN** 執行 `pnpm test`
+- **THEN** smoke test 會通過，證明 App component 可正常 render

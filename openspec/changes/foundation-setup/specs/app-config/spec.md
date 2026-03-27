@@ -1,34 +1,34 @@
 ## ADDED Requirements
 
-### Requirement: Centralized settings via pydantic-settings
-The system SHALL define a `Settings` class using pydantic-settings that loads configuration from environment variables and `.env` files. The Settings class SHALL include: `database_url` (default: "sqlite:///data/ccas.db"), `telegram_bot_token` (required), `telegram_chat_id` (required), `gmail_credentials_path` (default: "/data/credentials.json"), `gmail_token_path` (default: "/data/token.json"), `log_level` (default: "INFO"), `api_host` (default: "0.0.0.0"), `api_port` (default: 8000).
+### Requirement: 透過 pydantic-settings 集中管理設定
+系統 SHALL 定義一個使用 pydantic-settings 的 `Settings` 類別，能從環境變數與 `.env` 檔載入設定。`Settings` 類別 SHALL 包含：`database_url`（預設 `"sqlite:///data/ccas.db"`）、`telegram_bot_token`（必填）、`telegram_chat_id`（必填）、`gmail_credentials_path`（預設 `"/data/credentials.json"`）、`gmail_token_path`（預設 `"/data/token.json"`）、`log_level`（預設 `"INFO"`）、`api_host`（預設 `"0.0.0.0"`）、`api_port`（預設 `8000`）。
 
-#### Scenario: Settings load from environment
-- **WHEN** environment variable `TELEGRAM_BOT_TOKEN=abc123` is set and Settings is instantiated
-- **THEN** `settings.telegram_bot_token` equals `"abc123"`
+#### Scenario: 從環境變數載入設定
+- **WHEN** 環境變數 `TELEGRAM_BOT_TOKEN=abc123` 已設定，並建立 `Settings` 實例
+- **THEN** `settings.telegram_bot_token` 等於 `"abc123"`
 
-#### Scenario: Settings load from .env file
-- **WHEN** a `.env` file contains `TELEGRAM_BOT_TOKEN=abc123` and Settings is instantiated
-- **THEN** `settings.telegram_bot_token` equals `"abc123"`
+#### Scenario: 從 .env 檔載入設定
+- **WHEN** `.env` 檔中包含 `TELEGRAM_BOT_TOKEN=abc123`，並建立 `Settings` 實例
+- **THEN** `settings.telegram_bot_token` 等於 `"abc123"`
 
-#### Scenario: Missing required setting raises error
-- **WHEN** `TELEGRAM_BOT_TOKEN` is not set in environment or .env
-- **THEN** Settings instantiation raises a ValidationError with a clear message
+#### Scenario: 缺少必要設定時拋出錯誤
+- **WHEN** 環境變數與 `.env` 中都沒有設定 `TELEGRAM_BOT_TOKEN`
+- **THEN** 建立 `Settings` 實例時會拋出具有明確訊息的 `ValidationError`
 
-#### Scenario: Default values applied
-- **WHEN** `DATABASE_URL` is not set
-- **THEN** `settings.database_url` equals `"sqlite:///data/ccas.db"`
+#### Scenario: 套用預設值
+- **WHEN** 未設定 `DATABASE_URL`
+- **THEN** `settings.database_url` 等於 `"sqlite:///data/ccas.db"`
 
-### Requirement: Environment example file
-The system SHALL include a `.env.example` file in the `backend/` directory with all configuration keys and placeholder values, serving as documentation for required settings.
+### Requirement: 提供環境設定範例檔
+系統 SHALL 在 `backend/` 目錄中提供 `.env.example`，列出所有設定鍵與 placeholder 值，作為必要設定的文件。
 
-#### Scenario: Example file lists all keys
-- **WHEN** a developer reads `backend/.env.example`
-- **THEN** all keys from the Settings class are listed with descriptive placeholder values
+#### Scenario: 範例檔列出所有鍵值
+- **WHEN** 開發者閱讀 `backend/.env.example`
+- **THEN** 可以看到 `Settings` 類別中的所有設定鍵與具描述性的 placeholder 值
 
-### Requirement: Settings singleton access
-The system SHALL provide a `get_settings()` function that returns a cached Settings instance, usable as a FastAPI dependency.
+### Requirement: 提供設定單例存取方式
+系統 SHALL 提供 `get_settings()` 函式，回傳已快取的 `Settings` 實例，並可作為 FastAPI dependency 使用。
 
-#### Scenario: Settings reused across requests
-- **WHEN** `get_settings()` is called multiple times
-- **THEN** the same Settings instance is returned each time (no re-parsing)
+#### Scenario: 多次請求重用同一個設定實例
+- **WHEN** 多次呼叫 `get_settings()`
+- **THEN** 每次都回傳相同的 `Settings` 實例，而不會重複解析設定
