@@ -2,7 +2,108 @@
   "permissions": {
     "allow": [
       "Bash(find /home/paul/projects/ccas -maxdepth 1 -type f \\\\\\(-name .* \\\\\\) ! -name .git ! -name .. ! -name .)",
-      "Bash(find /home/paul/projects/ccas -maxdepth 2 \\\\\\(-name *.md -o -name *.txt -o -name *.yml -o -name *.yaml -o -name *.toml \\\\\\) ! -path */.git/*)"
+      "Bash(find /home/paul/projects/ccas -maxdepth 2 \\\\\\(-name *.md -o -name *.txt -o -name *.yml -o -name *.yaml -o -name *.toml \\\\\\) ! -path */.git/*)",
+      "Bash(openspec *)",
+      "Bash(uv sync*)",
+      "Bash(uv add *)",
+      "Bash(uv run pytest*)",
+      "Bash(uv run ruff *)",
+      "Bash(uv run pyright*)",
+      "Bash(uv run alembic *)",
+      "Bash(uv run fastapi dev*)",
+      "Bash(git status*)",
+      "Bash(git diff*)",
+      "Bash(git log*)",
+      "Bash(git add *)",
+      "Bash(git commit *)"
+    ]
+  },
+  "enabledPlugins": {
+    "everything-claude-code@everything-claude-code": true,
+    "pyright-lsp@claude-plugins-official": true
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c '[[ \"$1\" == *.py ]] && uv run ruff check \"$1\" 2>&1 | head -20 || true' _ \"$filePath\"",
+            "timeout": 15,
+            "statusMessage": "Linting Python (ruff check)...",
+            "async": true
+          },
+          {
+            "type": "command",
+            "command": "bash -c '[[ \"$1\" == *.py ]] && uv run pyright \"$1\" 2>&1 | tail -5 || true' _ \"$filePath\"",
+            "timeout": 30,
+            "statusMessage": "Type checking Python (pyright)...",
+            "async": true
+          },
+          {
+            "type": "command",
+            "command": "bash -c '[[ \"$1\" == *.py && \"$1\" != *test* ]] && grep -n \"print(\" \"$1\" | head -5 && echo \"[Hook] WARNING: print() found -- use logging instead\" || true' _ \"$filePath\"",
+            "timeout": 5,
+            "statusMessage": "Checking for print()...",
+            "async": true
+          },
+          {
+            "type": "command",
+            "command": "bash -c '[[ \"$1\" == *.py ]] && uv run ruff format --check \"$1\" 2>&1 | head -10 || true' _ \"$filePath\"",
+            "timeout": 10,
+            "statusMessage": "Checking Python format (ruff format)...",
+            "async": true
+          },
+          {
+            "type": "command",
+            "command": "bash -c '[[ \"$1\" == *.py && \"$1\" != *test* ]] && grep -nE \"(eval\\(|exec\\(|pickle\\.|subprocess\\.call|os\\.system\\(|__import__)\" \"$1\" | head -5 && echo \"[Hook] WARNING: potentially unsafe operation found\" || true' _ \"$filePath\"",
+            "timeout": 5,
+            "statusMessage": "Scanning Python security...",
+            "async": true
+          }
+        ]
+      },
+      {
+        "matcher": "Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c '[[ \"$1\" == *.py ]] && uv run ruff check \"$1\" 2>&1 | head -20 || true' _ \"$filePath\"",
+            "timeout": 15,
+            "statusMessage": "Linting Python (ruff check)...",
+            "async": true
+          },
+          {
+            "type": "command",
+            "command": "bash -c '[[ \"$1\" == *.py ]] && uv run pyright \"$1\" 2>&1 | tail -5 || true' _ \"$filePath\"",
+            "timeout": 30,
+            "statusMessage": "Type checking Python (pyright)...",
+            "async": true
+          },
+          {
+            "type": "command",
+            "command": "bash -c '[[ \"$1\" == *.py && \"$1\" != *test* ]] && grep -n \"print(\" \"$1\" | head -5 && echo \"[Hook] WARNING: print() found -- use logging instead\" || true' _ \"$filePath\"",
+            "timeout": 5,
+            "statusMessage": "Checking for print()...",
+            "async": true
+          },
+          {
+            "type": "command",
+            "command": "bash -c '[[ \"$1\" == *.py ]] && uv run ruff format --check \"$1\" 2>&1 | head -10 || true' _ \"$filePath\"",
+            "timeout": 10,
+            "statusMessage": "Checking Python format (ruff format)...",
+            "async": true
+          },
+          {
+            "type": "command",
+            "command": "bash -c '[[ \"$1\" == *.py && \"$1\" != *test* ]] && grep -nE \"(eval\\(|exec\\(|pickle\\.|subprocess\\.call|os\\.system\\(|__import__)\" \"$1\" | head -5 && echo \"[Hook] WARNING: potentially unsafe operation found\" || true' _ \"$filePath\"",
+            "timeout": 5,
+            "statusMessage": "Scanning Python security...",
+            "async": true
+          }
+        ]
+      }
     ]
   }
 }
