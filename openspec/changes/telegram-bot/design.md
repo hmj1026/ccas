@@ -96,10 +96,27 @@
 - 全部混合列表：帳單多時不易辨識歸屬銀行
 - 每家銀行獨立指令：指令數量過多
 
+### D9: Telegram API 呼叫採用 exponential backoff retry
+
+**選擇**: 對 Telegram Bot API 的 sendMessage 呼叫實作 exponential backoff retry（最多 3 次，間隔 1s / 2s / 4s），遇到 rate limit（429）或暫時性錯誤（5xx）時自動重試。
+
+**理由**: Telegram API 有速率限制，網路環境也可能出現短暫異常。指令回覆與通知推播都需要穩定送達。
+
+**考慮過的替代方案**:
+- 不重試直接失敗：使用者體驗差，通知可能靜默遺失
+- 無限重試：可能在持續性問題上卡住
+
+### D10: 通知排程由 `pipeline-scheduler` change 負責
+
+**選擇**: 本 change 只定義通知內容格式與發送函式，實際的排程觸發（到期提醒 3 天/1 天、新帳單通知）由獨立的 `pipeline-scheduler` change 負責串接。
+
+**理由**: 排程與通知責任分離，避免 bot 模組需要直接依賴 APScheduler 或了解排程邏輯。
+
 ## 風險 / 取捨 (Risks / Trade-offs)
 
 **Bot 回覆過長** → 採簡潔列表格式，只顯示必要欄位
 **資料尚未解析完成時無法提供摘要** → 用清楚訊息說明暫無資料或解析失敗
-**通知事件來源分散** → 先定義事件輸入契約，後續由 parser / scheduler 串接
+**通知事件來源分散** → 先定義事件輸入契約，排程觸發由 `pipeline-scheduler` change 負責
 **白名單 chat_id 管理** → 從環境變數讀取，變更時需重啟服務；未來可改為資料庫管理
 **非白名單使用者收到的回覆** → 靜默忽略，不回覆任何訊息以避免洩漏 bot 存在資訊
+**Telegram API 暫時性失敗** → exponential backoff retry（D9）自動重試，超過次數後記錄失敗
