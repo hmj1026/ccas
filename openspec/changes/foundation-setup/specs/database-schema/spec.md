@@ -59,9 +59,20 @@
 - **WHEN** 初始 migration 套用後執行 `alembic downgrade -1`
 - **THEN** 上述 4 個資料表都會被移除
 
+### Requirement: 使用 Async SQLAlchemy Engine
+系統 SHALL 使用 `sqlalchemy[asyncio]` 與 `aiosqlite` 建立非同步資料庫引擎。SQLAlchemy session 製造工廠 SHALL 透過 `async_sessionmaker()` 定義，所有 DB query 都應使用 `async with` 語法。
+
+#### Scenario: 建立 async engine
+- **WHEN** 應用程式啟動時初始化資料庫
+- **THEN** engine 會以 `create_async_engine("sqlite+aiosqlite://...")` 建立
+
+#### Scenario: 使用 async session
+- **WHEN** 在 FastAPI route 中取得 DB session dependency
+- **THEN** session 會是 async session，所有 query 應使用 `await` 與 `async with`
+
 ### Requirement: 啟用 SQLite WAL mode
-系統 SHALL 將 SQLite 設定為 WAL（Write-Ahead Logging）journal mode，以提升讀取並行性。
+系統 SHALL 將 SQLite 設定為 WAL（Write-Ahead Logging）journal mode，以提升讀取並行性。此設定應在 engine creation 時透過 `connect_args` 與 event listener 設定。
 
 #### Scenario: 啟用 WAL mode
-- **WHEN** 建立資料庫連線
-- **THEN** `PRAGMA journal_mode` 會回傳 `wal`
+- **WHEN** 建立資料庫連線時
+- **THEN** 引擎會自動透過 `sqlite_synchronous` pragma 啟用 WAL，`PRAGMA journal_mode` 會回傳 `wal`

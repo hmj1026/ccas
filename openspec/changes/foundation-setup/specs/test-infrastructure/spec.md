@@ -22,12 +22,20 @@
 - **WHEN** 專案完成初始化
 - **THEN** `backend/tests/integration/conftest.py` 存在，且可被 import
 
-### Requirement: 提供整合測試資料庫 fixture
-整合測試的 `conftest.py` SHALL 提供 `db_session` fixture，建立 in-memory SQLite、執行 Alembic migration、yield 一個 SQLAlchemy session，並在每個測試結束後 rollback。
+### Requirement: 提供整合測試資料庫 fixture（Async）
+整合測試的 `conftest.py` SHALL 提供 `db_session` fixture（異步 fixture），使用 pytest-asyncio。該 fixture 應：
+1. 建立 in-memory async SQLite engine（`create_async_engine("sqlite+aiosqlite:///:memory:")`）
+2. 執行 Alembic migration（需兼容 async engine）
+3. Yield 一個 async SQLAlchemy session（使用 `async_sessionmaker`）
+4. 在每個測試結束後 rollback transaction
 
 #### Scenario: 整合測試取得乾淨資料庫
-- **WHEN** 某個整合測試使用 `db_session` fixture
-- **THEN** 該測試會取得包含所有資料表的全新 in-memory database，且測試變更在結束後會回滾
+- **WHEN** 某個異步整合測試使用 `db_session` fixture
+- **THEN** 該測試會取得包含所有資料表的全新 in-memory async database，且測試變更在結束後會回滾
+
+#### Scenario: 支援異步查詢
+- **WHEN** 測試中透過 `async with db_session.begin()` 執行查詢
+- **THEN** 所有 query 都可透過 `await` 執行，不會阻塞 event loop
 
 ### Requirement: 提供後端 health endpoint smoke test
 系統 SHALL 包含一個 smoke test，驗證 FastAPI `/health` 端點回傳 200 與 `{"status": "ok"}`。

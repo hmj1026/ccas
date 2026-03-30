@@ -1,6 +1,6 @@
 ## 1. Python 後端骨架
 
-- [ ] 1.1 建立 `backend/` 目錄，並在 `pyproject.toml` 宣告所有依賴（`fastapi`、`uvicorn`、`sqlalchemy`、`alembic`、`pydantic-settings`、`pdfplumber`、`pikepdf`、`tabula-py`、`python-telegram-bot`、`google-api-python-client`、`apscheduler`、`pytest`、`pytest-cov`、`httpx`）
+- [ ] 1.1 建立 `backend/` 目錄，並在 `pyproject.toml` 宣告所有依賴（`fastapi`、`uvicorn`、`sqlalchemy[asyncio]`、`aiosqlite`、`alembic`、`pydantic-settings`、`pdfplumber`、`pikepdf`、`tabula-py`、`python-telegram-bot`、`google-api-python-client`、`google-auth-oauthlib`、`rq`、`redis`、`apscheduler`、`pytest`、`pytest-cov`、`pytest-asyncio`、`httpx`）
 - [ ] 1.2 執行 `uv sync` 產生 `uv.lock` 並安裝依賴
 - [ ] 1.3 建立 `backend/src/ccas/__init__.py` 作為根 package
 - [ ] 1.4 建立包含 `__init__.py` 的模組目錄：`ingestor/`、`parser/`、`storage/`、`classifier/`、`bot/`、`api/`、`scheduler/`
@@ -8,7 +8,7 @@
 
 ## 2. 應用程式設定
 
-- [ ] 2.1 建立 `backend/src/ccas/config.py`，以 pydantic-settings 定義 `Settings` 類別（`database_url`、`telegram_bot_token`、`telegram_chat_id`、`gmail_credentials_path`、`gmail_token_path`、`log_level`、`api_host`、`api_port`）
+- [ ] 2.1 建立 `backend/src/ccas/config.py`，以 pydantic-settings 定義 `Settings` 類別（`database_url` 預設 `"sqlite+aiosqlite:///data/ccas.db"`、`telegram_bot_token`、`telegram_chat_id`、`gmail_credentials_path`、`gmail_token_path`、`log_level`、`api_host`、`api_port`、`api_token`（必填，Bearer Token 驗證用）、`redis_url` 預設 `"redis://localhost:6379/0"`），並實作動態方法 `get_pdf_password(bank_code: str) -> str | None` 從環境變數查詢銀行 PDF 密碼
 - [ ] 2.2 實作有快取的單例函式 `get_settings()`
 - [ ] 2.3 建立 `backend/.env.example`，列出所有設定鍵與 placeholder 值
 
@@ -66,6 +66,6 @@
 
 - [ ] 10.1 建立 `backend/Dockerfile`（Python 3.12 base、安裝 uv、複製 `pyproject.toml` + `uv.lock`、安裝依賴、複製 source code、entrypoint 為 uvicorn）
 - [ ] 10.2 建立 `frontend/Dockerfile`（Node 22 base、安裝 pnpm、複製 `package.json` + `pnpm-lock.yaml`、安裝依賴、複製 source code、entrypoint 為 `vite dev --host 0.0.0.0`）
-- [ ] 10.3 建立 `docker-compose.yaml`，包含 backend（port 8000、`ccas-data` volume 掛載到 `/data`）與 frontend（port 5173）兩個服務
+- [ ] 10.3 建立 `docker-compose.yaml`，包含 backend（port 8000、`ccas-data` volume 掛載到 `/data`）、frontend（port 5173）與 redis（port 6379、`ccas-redis` volume）三個服務
 - [ ] 10.4 建立 `backend/.dockerignore` 與 `frontend/.dockerignore`
 - [ ] 10.5 驗證 `docker compose up` 可啟動兩個服務，且 `localhost:8000` 可存取 `/health`
