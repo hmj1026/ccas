@@ -1,34 +1,40 @@
 ## ADDED Requirements
 
-### Requirement: 應用程式啟動時初始化並啟動排程器
-系統 SHALL 在應用程式啟動時初始化 APScheduler `BackgroundScheduler` 並自動啟動，應用程式關閉時優雅停止排程器。
+### Requirement: 使用 RQ (Redis Queue) 執行排程工作
+系統 SHALL 使用 RQ（Redis Queue）而非 APScheduler 在 FastAPI process 內執行排程工作。RQ job 應在獨立的 worker process 中執行，與 FastAPI server 分離。FastAPI 提供 `/api/pipeline/trigger` API endpoint 用於手動觸發 pipeline；定期觸發應透過 RQ scheduler 或外部 cron job 實現。
 
-#### Scenario: 排程器隨應用程式啟動
-- **WHEN** 應用程式（FastAPI server 或 CLI 模式）啟動
-- **THEN** APScheduler BackgroundScheduler 被初始化並啟動，所有排程工作開始生效
+#### Scenario: RQ worker 在獨立 process 中執行 pipeline
+- **WHEN** RQ worker 啟動並連線到 Redis
+- **THEN** 系統可接收并執行 pipeline 任務，不阻塞 FastAPI server
 
-#### Scenario: 排程器隨應用程式關閉
-- **WHEN** 應用程式收到關閉信號
-- **THEN** 排程器執行優雅停止，等待正在執行的工作完成後再退出
+#### Scenario: FastAPI 提供手動 pipeline 觸發端點
+- **WHEN** POST `/api/pipeline/trigger` 被呼叫
+- **THEN** 系統將 `run_pipeline()` 加入 RQ 工作隊列，立即回傳 job ID，工作在背景執行
 
-### Requirement: 週期性 pipeline 排程工作可設定觸發頻率
-系統 SHALL 提供週期性觸發 `run_pipeline()` 的排程工作，觸發頻率由 `Settings` 統一設定，不硬編碼在程式中。
+### Requirement: Pipeline 工作失敗重試機制
+系統 SHALL 為每個 pipeline RQ job 設定重試邏輯：最多重試 3 次，每次重試間隔採用指數退避（2^retry_count 秒，最多 60 秒）。重試計數器應記錄在 staging 表中。
 
-#### Scenario: 依 Settings 設定的頻率週期觸發 pipeline
-- **WHEN** 排程器啟動且 pipeline 排程工作被註冊
-- **THEN** 系統依照 `Settings` 中的排程設定（cron 表達式或 interval）週期性呼叫 `run_pipeline()`
+#### Scenario: Job 首次失敗自動重試
+- **WHEN** RQ job 執行 `run_pipeline()` 並拋出例外
+- **THEN** 系統自動重試該 job，重試次數不超過 3 次
 
-#### Scenario: 排程設定更新後下次觸發反映新設定
-- **WHEN** `Settings` 中的 pipeline 排程設定被修改並套用
-- **THEN** 後續的觸發時機依照新設定執行，不影響已在進行中的執行
+#### Scenario: 重試達上限後標記為 manual_review_needed
+- **WHEN** pipeline job 的重試次數達到 3 次仍失敗
+- **THEN** 系統將該 job 對應的所有 staging 項目狀態標記為 `manual_review_needed`，停止進一步自動重試，管理者可手動檢視並補救
 
-### Requirement: 排程工作執行時不阻塞主程序
-系統 SHALL 確保所有排程工作在背景執行緒中執行，不阻塞 FastAPI 主執行緒的正常請求處理。
+#### Scenario: 重試間隔採用指數退避
+- **WHEN** 重試次數為 0, 1, 2
+- **THEN** 重試延遲分別為 1s, 2s, 4s（即 2^retry_count，上限 60s）
 
-#### Scenario: Pipeline 排程工作在背景執行
-- **WHEN** 排程工作觸發 `run_pipeline()` 執行
-- **THEN** 執行在 APScheduler 的背景執行緒中進行，FastAPI 仍可正常回應其他 API 請求
+### Requirement: 週期性觸發方式（外部 cron 或 APScheduler 佐助）
+系統 **不在 FastAPI process 內啟動 APScheduler**。定期觸發 pipeline 應透過以下其中一種方式實現：
+1. **外部 cron job** — 定期呼叫 `curl /api/pipeline/trigger`（推薦用於生產環境）
+2. **CLI 命令** — `python -m ccas.scheduler` 啟動一個獨立的輕量排程服務（使用 APScheduler），該服務與 FastAPI 和 RQ worker 分別運行
 
-#### Scenario: 前一次排程尚未完成時新一次觸發不重疊執行
-- **WHEN** pipeline 排程工作的觸發時間到來，但前一次執行尚未完成
-- **THEN** 此次觸發被略過，避免多個 pipeline 同時執行造成資料衝突
+#### Scenario: Cron job 定期觸發 pipeline
+- **WHEN** 系統 cron 設定為每日午夜執行 `curl -X POST http://localhost:8000/api/pipeline/trigger -H "Authorization: Bearer $API_TOKEN"`
+- **THEN** pipeline 會定期啟動，RQ job 在 worker 執行
+
+#### Scenario: CLI 排程器啟動獨立 APScheduler
+- **WHEN** 執行 `python -m ccas.scheduler` 並配置定期時間
+- **THEN** 獨立進程啟動 APScheduler，定期呼叫 `/api/pipeline/trigger` 或直接向 RQ 隊列推送工作

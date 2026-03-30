@@ -23,12 +23,19 @@
 - **THEN** 只有成功的項目會被傳遞給下一個階段，失敗項目停留在當前階段並記錄失敗狀態
 
 ### Requirement: 回傳包含各階段統計的結構化 pipeline 摘要
-系統 SHALL 在 `run_pipeline()` 完成後回傳結構化摘要，包含每個階段的統計數字與總耗時。
+系統 SHALL 在 `run_pipeline()` 完成後回傳結構化摘要，包含每個階段的統計數字與總耗時。摘要應包含失敗項目的詳細錯誤資訊，供 RQ job 重試邏輯與日誌記錄使用。
 
 #### Scenario: 摘要包含所有階段的統計
 - **WHEN** 一次 pipeline 完整執行完畢
-- **THEN** 回傳的摘要至少包含：ingest 階段的 staged/skipped/failed 數量、decrypt 階段的 decrypted/failed 數量、parse 階段的 parsed/failed 數量、classify 階段的 classified 數量、notify 階段的 sent/failed 數量，以及從 pipeline 開始到結束的總耗時秒數
+- **THEN** 回傳的摘要至少包含：ingest 階段的 staged/skipped/failed 數量、decrypt 階段的 decrypted/failed 數量、parse 階段的 parsed/failed 數量、classify 階段的 classified 數量、notify 階段的 sent/failed 數量，以及從 pipeline 開始到結束的總耗時秒數、失敗清單（各失敗項目的 ID 與錯誤訊息）
 
 #### Scenario: 階段全部略過時摘要仍完整
 - **WHEN** 某個階段因無輸入項目而全部略過
 - **THEN** 該階段在摘要中仍呈現，所有計數器為零
+
+### Requirement: Pipeline 執行異常應拋出 CcasError 例外
+系統 SHALL 在 pipeline 執行過程中遇到不可恢復的錯誤時拋出 `CcasError` 或其子類別。此例外應被 RQ job 層級的重試邏輯捕捉，以觸發 job 重試。
+
+#### Scenario: Pipeline 異常被 RQ job 捕捉並重試
+- **WHEN** `run_pipeline()` 拋出 `CcasError` （例如資料庫連線失敗）
+- **THEN** RQ job handler 捕捉該例外，檢查重試次數是否 < 3，若是則重試；若否則標記 staging 項目為 `manual_review_needed`

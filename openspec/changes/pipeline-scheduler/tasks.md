@@ -12,20 +12,21 @@
 - [ ] 2.3 確保各階段的錯誤訊息保存到對應的資料庫狀態欄位，支援後續追蹤與重跑
 - [ ] 2.4 確保任一階段全部失敗時，後續階段以空列表輸入優雅地空跑並回傳零計數
 
-## 3. 排程設定
+## 3. RQ 工作隊列與排程
 
-- [ ] 3.1 整合 APScheduler `BackgroundScheduler`，在應用程式啟動時初始化並啟動排程器
-- [ ] 3.2 註冊週期性 pipeline 排程工作，觸發頻率由 `Settings` 中的設定項目控制（支援 cron 表達式或 interval）
-- [ ] 3.3 註冊付款到期前 3 天提醒工作，每日固定時間執行，查詢 `due_date` 等於今日加 3 天的未付帳單
-- [ ] 3.4 註冊付款到期前 1 天提醒工作，每日固定時間執行，查詢 `due_date` 等於今日加 1 天的未付帳單
-- [ ] 3.5 實作應用程式關閉時的排程器優雅停止（graceful shutdown）
+- [ ] 3.1 設定 RQ worker 配置與 Redis 連線（使用 `Settings.redis_url`），worker 在獨立 process 執行
+- [ ] 3.2 實作 `POST /api/pipeline/trigger` API 端點，將 `run_pipeline()` 加入 RQ 工作隊列，立即回傳 job ID
+- [ ] 3.3 實作 RQ job 失敗重試邏輯：最多 3 次，指數退避（2^retry_count 秒，上限 60 秒）
+- [ ] 3.4 重試達上限後，將該 job 對應的所有 staging 項目狀態標記為 `manual_review_needed`，停止自動重試
+- [ ] 3.5 建立可選的 `python -m ccas.scheduler` CLI 入口，啟動獨立 APScheduler 行程，定期觸發 pipeline（不在 FastAPI process 內執行排程）
+- [ ] 3.6 註冊每日付款提醒工作：查詢 `due_date == today + 3` 與 `due_date == today + 1` 的未付帳單，觸發 Telegram 通知，並實作同一帳單+提醒類型的重複發送防護
+- [ ] 3.7 實作 RQ worker 的優雅停止（graceful shutdown）
 
 ## 4. 手動觸發介面
 
 - [ ] 4.1 實作 CLI 模組入口（`python -m ccas.pipeline`），呼叫 `run_pipeline()` 並將摘要輸出至 stdout
-- [ ] 4.2 實作 `POST /api/pipeline/trigger` API 端點，需 Bearer token 驗證，呼叫 `run_pipeline()` 並以 JSON 回傳摘要
-- [ ] 4.3 確保 CLI 與 API 端點共用同一個 `run_pipeline()` 實作，行為完全一致
-- [ ] 4.4 定義 pipeline 摘要的回應結構（包含各階段統計與總耗時），作為 CLI 輸出與 API 回應的共同格式
+- [ ] 4.2 確保 CLI 入口直接呼叫 `run_pipeline()` 並同步輸出摘要；API 端點透過 RQ 非同步執行（見 3.2）
+- [ ] 4.3 定義 `PipelineSummary` 結構（各階段統計、總耗時、失敗清單含 ID 與錯誤訊息），作為 CLI 輸出與 RQ job result 的共同格式
 
 ## 5. 測試覆蓋
 
