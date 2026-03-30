@@ -24,3 +24,30 @@ logs/
 .env.local
 .env.*.local
 *.Zone.Identifier
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+*.egg-info/
+
+# Python tooling
+.pytest_cache/
+.coverage
+htmlcov/
+.ruff_cache/
+.mypy_cache/
+.pyright/
+
+# SQLite
+backend/data/*.db
+backend/data/*.db-wal
+backend/data/*.db-shm
+
+# Node.js
+node_modules/
+
+# Build
+dist/
+build/
