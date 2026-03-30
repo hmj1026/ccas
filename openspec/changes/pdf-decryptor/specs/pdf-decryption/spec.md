@@ -1,15 +1,15 @@
 ## ADDED Requirements
 
 ### Requirement: 依銀行密碼規則解密加密 PDF
-系統 SHALL 從 `bank_configs.pdf_password_rule` 取得每家銀行的密碼產生規則，並以產生的密碼嘗試解密該銀行的 staged PDF。
+系統 SHALL 從環境變數（如 `PDF_PASSWORD_BANK001`）取得每家銀行的密碼，並以該密碼嘗試解密該銀行的 staged PDF。密碼查詢應透過 `settings.get_pdf_password(bank_code)` 方法進行。
 
 #### Scenario: 以正確密碼解密加密 PDF
-- **WHEN** 某個 staged PDF 為加密狀態，且系統依 `pdf_password_rule` 產生的密碼正確
-- **THEN** 系統會以解密後的內容覆寫原始 staging 路徑，並將該附件的 staging status 更新為 `decrypted`
+- **WHEN** 某個 staged PDF 為加密狀態，且環境變數中有該銀行的 `PDF_PASSWORD_BANK???=password`
+- **THEN** 系統會以該密碼解密，將解密後的內容覆寫原始 staging 路徑，並將該附件的 staging status 更新為 `decrypted`
 
-#### Scenario: 密碼錯誤時標記為 `decrypt_failed`
-- **WHEN** 某個 staged PDF 為加密狀態，但系統產生的密碼無法開啟該檔案
-- **THEN** 系統會將該附件的 staging status 更新為 `decrypt_failed`，並保存描述失敗原因的 error reason
+#### Scenario: 密碼錯誤或缺漏時標記為 `decrypt_failed`
+- **WHEN** 某個 staged PDF 為加密狀態，但環境變數中沒有該銀行的密碼，或密碼錯誤
+- **THEN** 系統會將該附件的 staging status 更新為 `decrypt_failed`，並保存描述失敗原因的 error reason（如 "Password not found in settings" 或 "Invalid password"）
 
 ### Requirement: 未加密 PDF 直接透通
 系統 SHALL 在偵測到 PDF 本身不需要密碼時，直接將其視為可讀取並更新狀態，不拋出例外或標記失敗。
@@ -18,8 +18,8 @@
 - **WHEN** 某個 staged PDF 本身不需要密碼即可開啟
 - **THEN** 系統不會嘗試套用密碼規則，直接將該附件的 staging status 更新為 `decrypted`，讓後續 parser 可以接手
 
-#### Scenario: 未設定密碼規則的銀行也能透通
-- **WHEN** 某家銀行的 `pdf_password_rule` 為空或未設定，且其 PDF 附件本身不加密
+#### Scenario: 未設定密碼的銀行如果 PDF 不加密也能透通
+- **WHEN** 某家銀行的環境變數中無 `PDF_PASSWORD_BANK???`，且其 PDF 附件本身不加密
 - **THEN** 系統仍可正常將該附件標記為 `decrypted`，不視為設定缺漏錯誤
 
 ### Requirement: 解密冪等性保護
