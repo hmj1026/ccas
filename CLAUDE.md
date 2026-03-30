@@ -129,6 +129,7 @@ Relevant ECC skills for this project:
 
 ## Key Conventions
 
+- All responses must be in **Traditional Chinese** (正體中文)
 - Change names must be **kebab-case** (e.g., `add-user-auth`)
 - Skills use `AskUserQuestion` for disambiguation -- never guess when input is ambiguous
 - Skills are **not phase-locked**: you can apply tasks before all artifacts are done, or interleave verification with implementation

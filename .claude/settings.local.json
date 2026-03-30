@@ -61,6 +61,34 @@
             "timeout": 5,
             "statusMessage": "Scanning Python security...",
             "async": true
+          },
+          {
+            "type": "command",
+            "command": "bash -c '[[ \"$1\" == *.py ]] && grep -nEi \"(password|token|api_key|secret|credentials)\\\\s*=\\\\s*[\\\"\\\"'\\\"\\\"'][^\\\"\\\"'\\\"\\\"']*[\\\"\\\"'\\\"\\\"']\" \"$1\" | head -5 && echo \"[Hook] WARNING: possible hardcoded secret found\" || true' _ \"$filePath\"",
+            "timeout": 5,
+            "statusMessage": "Scanning for hardcoded secrets...",
+            "async": true
+          },
+          {
+            "type": "command",
+            "command": "bash -c '[[ \"$1\" == *models*.py ]] && { grep -q \"__tablename__\" \"$1\" || echo \"[Hook] WARNING: __tablename__ not found\"; grep -q \"Base\" \"$1\" || echo \"[Hook] WARNING: does not inherit from Base\"; }' _ \"$filePath\"",
+            "timeout": 5,
+            "statusMessage": "Validating SQLAlchemy model...",
+            "async": true
+          },
+          {
+            "type": "command",
+            "command": "bash -c '[[ \"$1\" == *.py ]] && uv run ruff format --check \"$1\" 2>&1 | grep -q \"would reformat\" && echo \"[Hook] SUGGESTION: Run uv run ruff format $1\" || true' _ \"$filePath\"",
+            "timeout": 10,
+            "statusMessage": "Checking format suggestion...",
+            "async": true
+          },
+          {
+            "type": "command",
+            "command": "bash -c '[[ \"$1\" == *models*.py ]] && echo \"[Hook] REMINDER: Run uv run alembic revision --autogenerate -m description\"' _ \"$filePath\"",
+            "timeout": 5,
+            "statusMessage": "Reminding about Alembic...",
+            "async": true
           }
         ]
       },
@@ -101,6 +129,40 @@
             "timeout": 5,
             "statusMessage": "Scanning Python security...",
             "async": true
+          },
+          {
+            "type": "command",
+            "command": "bash -c '[[ \"$1\" == *.py ]] && grep -nEi \"(password|token|api_key|secret|credentials)\\\\s*=\\\\s*[\\\"\\\"'\\\"\\\"'][^\\\"\\\"'\\\"\\\"']*[\\\"\\\"'\\\"\\\"']\" \"$1\" | head -5 && echo \"[Hook] WARNING: possible hardcoded secret found\" || true' _ \"$filePath\"",
+            "timeout": 5,
+            "statusMessage": "Scanning for hardcoded secrets...",
+            "async": true
+          },
+          {
+            "type": "command",
+            "command": "bash -c '[[ \"$1\" == test_*.py ]] && cd /home/paul/projects/ccas && uv run pytest \"$1\" -x --tb=short 2>&1 | tail -30' _ \"$filePath\"",
+            "timeout": 30,
+            "statusMessage": "Running test to confirm RED state...",
+            "async": true
+          },
+          {
+            "type": "command",
+            "command": "bash -c '[[ \"$1\" == *models*.py ]] && { grep -q \"__tablename__\" \"$1\" || echo \"[Hook] WARNING: __tablename__ not found\"; grep -q \"Base\" \"$1\" || echo \"[Hook] WARNING: does not inherit from Base\"; }' _ \"$filePath\"",
+            "timeout": 5,
+            "statusMessage": "Validating SQLAlchemy model...",
+            "async": true
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash /home/paul/.claude/scripts/hooks/ccas-session-retrospective.sh",
+            "timeout": 10,
+            "statusMessage": "Running session retrospective...",
+            "async": false
           }
         ]
       }
