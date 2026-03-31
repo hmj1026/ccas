@@ -146,3 +146,25 @@ class StagedAttachment(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow
     )
+
+
+class PaymentReminder(Base):
+    """付款提醒發送記錄。
+
+    以 (bill_id, reminder_type) 為唯一識別，
+    防止同一帳單同一提醒類型重複發送。
+    """
+
+    __tablename__ = "payment_reminders"
+    __table_args__ = (
+        UniqueConstraint("bill_id", "reminder_type", name="uq_reminder_bill_type"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    bill_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("bills.id"), nullable=False
+    )
+    reminder_type: Mapped[str] = mapped_column(Text, nullable=False)
+    sent_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow
+    )
