@@ -39,7 +39,7 @@
 - **THEN** 會回傳 `None`
 
 ### Requirement: Redis 連線驗證
-系統應在應用程式啟動時驗證 Redis 連線是否可用。若 Redis 連線失敗，應記錄警告但不會阻止應用程式啟動（RQ worker 為可選後台服務）。
+系統 SHALL 在應用程式啟動時驗證 Redis 連線是否可用。若 Redis 連線失敗，系統 SHALL 記錄警告但不會阻止應用程式啟動（RQ worker 為可選後台服務）。
 
 #### Scenario: Redis 連線成功
 - **WHEN** 應用程式啟動且 Redis 可連線
