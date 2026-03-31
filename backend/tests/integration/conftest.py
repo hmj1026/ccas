@@ -19,7 +19,9 @@ from ccas.storage.models import Base
 
 os.environ.setdefault("TELEGRAM_BOT_TOKEN", "test")
 os.environ.setdefault("TELEGRAM_CHAT_ID", "test")
-os.environ.setdefault("API_TOKEN", "test")
+os.environ.setdefault("API_TOKEN", "test-token")
+
+TEST_TOKEN = "test-token"
 
 
 @pytest.fixture
@@ -41,11 +43,23 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
 
 
 @pytest.fixture
-async def client() -> AsyncGenerator[AsyncClient, None]:
-    """提供連接 FastAPI 測試應用程式的 httpx AsyncClient。"""
+async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
+    """提供連接 FastAPI 測試應用程式的 httpx AsyncClient（含 DB 注入）。"""
     from ccas.api.app import create_app
+    from ccas.storage.database import get_db_session
 
     app = create_app()
+
+    async def _override_db():
+        yield db_session
+
+    app.dependency_overrides[get_db_session] = _override_db
+
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
+
+
+def auth_headers(token: str = TEST_TOKEN) -> dict[str, str]:
+    """產生 Bearer Token 認證 header。"""
+    return {"Authorization": f"Bearer {token}"}
