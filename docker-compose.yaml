@@ -6,7 +6,7 @@ services:
     volumes:
       - ccas-data:/data
     env_file:
-      - ./backend/.env
+      - ./.env
     depends_on:
       - redis
 

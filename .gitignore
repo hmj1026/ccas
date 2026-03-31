@@ -44,6 +44,14 @@ htmlcov/
 backend/data/*.db
 backend/data/*.db-wal
 backend/data/*.db-shm
+*.db-journal
+
+# Staging data (user downloads, contains PII)
+backend/data/staging/
+
+# Credentials (Gmail OAuth tokens)
+backend/data/credentials.json
+backend/data/token.json
 
 # Node.js
 node_modules/

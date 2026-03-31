@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-CCAS (Claude Code Artifact System) is an OpenSpec-based workflow configuration repository. It provides structured, artifact-driven workflows for AI-assisted development across multiple platforms (Claude, Codex, Gemini). There is no compiled code or traditional build system -- this repo contains workflow definitions, skill configurations, and the OpenSpec runtime structure.
+CCAS (Credit Card Automation System) is a credit card bill automation pipeline. It ingests PDF statements from Gmail, decrypts and parses them, classifies spending, and exposes results via a REST API dashboard and Telegram notifications. The project uses OpenSpec for spec-driven development across multiple AI platforms (Claude, Codex, Gemini).
 
 ## OpenSpec Workflow
 
@@ -127,10 +127,19 @@ Relevant ECC skills for this project:
 - `security-review` -- OWASP Top 10, input validation
 - `docker-patterns` -- Docker Compose for local dev
 
+## Environment Configuration
+
+A single `.env` file at the **project root** is shared by backend and frontend:
+- Backend: `pydantic-settings` loads `../.env` relative to `backend/` working directory
+- Frontend: Vite reads from root via `envDir: '..'` (variables must use `VITE_` prefix)
+- Docker: `docker-compose.yaml` injects via `env_file: ./.env`
+- Template: `.env.example` documents all available variables
+
 ## Key Conventions
 
 - All responses must be in **Traditional Chinese** (正體中文)
 - Change names must be **kebab-case** (e.g., `add-user-auth`)
+- **CLAUDE.md is the SSOT** (single source of truth) for project context; `AGENTS.md` and `GEMINI.md` contain only platform-specific differences
 - Skills use `AskUserQuestion` for disambiguation -- never guess when input is ambiguous
 - Skills are **not phase-locked**: you can apply tasks before all artifacts are done, or interleave verification with implementation
 - Each skill invocation creates at most **one artifact** (except ff-change)
