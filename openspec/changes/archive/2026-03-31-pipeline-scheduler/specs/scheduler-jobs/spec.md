@@ -27,7 +27,7 @@
 - **THEN** 重試延遲分別為 1s, 2s, 4s（即 2^retry_count，上限 60s）
 
 ### Requirement: 週期性觸發方式（外部 cron 或 APScheduler 佐助）
-系統 **不在 FastAPI process 內啟動 APScheduler**。定期觸發 pipeline 應透過以下其中一種方式實現：
+系統 SHALL **不在 FastAPI process 內啟動 APScheduler**。定期觸發 pipeline SHALL 透過以下其中一種方式實現：
 1. **外部 cron job** — 定期呼叫 `curl /api/pipeline/trigger`（推薦用於生產環境）
 2. **CLI 命令** — `python -m ccas.scheduler` 啟動一個獨立的輕量排程服務（使用 APScheduler），該服務與 FastAPI 和 RQ worker 分別運行
 
