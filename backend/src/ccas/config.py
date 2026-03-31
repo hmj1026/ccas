@@ -21,6 +21,7 @@ class Settings(BaseSettings):
         telegram_chat_id: Telegram 通知目標聊天室 ID。
         gmail_credentials_path: Gmail API OAuth 憑證檔路徑。
         gmail_token_path: Gmail API Token 檔路徑。
+        staging_dir: Gmail 附件 staging 目錄根路徑。
         log_level: 日誌等級（DEBUG / INFO / WARNING / ERROR）。
         api_host: API 伺服器綁定位址。
         api_port: API 伺服器連接埠。
@@ -39,6 +40,7 @@ class Settings(BaseSettings):
     telegram_chat_id: str
     gmail_credentials_path: str = "/data/credentials.json"
     gmail_token_path: str = "/data/token.json"
+    staging_dir: str = "data/staging"
     log_level: str = "INFO"
     api_host: str = "0.0.0.0"
     api_port: int = 8000
