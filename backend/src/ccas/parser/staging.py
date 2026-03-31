@@ -1,0 +1,134 @@
+"""Parser 流程的 staging 資料存取層。
+
+提供查詢待解析附件、更新附件狀態、
+以及建立 Bill/Transaction 記錄的函式。
+"""
+
+from collections.abc import Sequence
+from datetime import date
+
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from ccas.parser.result import ParseResult
+from ccas.storage.models import Bill, BankConfig, StagedAttachment, Transaction
+
+
+async def fetch_parseable_attachments(
+    session: AsyncSession,
+) -> Sequence[StagedAttachment]:
+    """查詢所有狀態為 ``decrypted`` 的附件（待解析）。
+
+    Args:
+        session: 非同步 DB Session。
+
+    Returns:
+        待解析的 StagedAttachment 記錄清單。
+    """
+    stmt = select(StagedAttachment).where(
+        StagedAttachment.status == "decrypted"
+    )
+    result = await session.execute(stmt)
+    return result.scalars().all()
+
+
+async def get_bank_config(
+    session: AsyncSession, bank_code: str
+) -> BankConfig | None:
+    """依 bank_code 取得銀行設定。
+
+    Args:
+        session: 非同步 DB Session。
+        bank_code: 銀行代碼。
+
+    Returns:
+        BankConfig 記錄，不存在則回傳 None。
+    """
+    stmt = select(BankConfig).where(BankConfig.bank_code == bank_code)
+    result = await session.execute(stmt)
+    return result.scalar_one_or_none()
+
+
+async def check_bill_exists(
+    session: AsyncSession, bank_code: str, billing_month: str
+) -> bool:
+    """檢查某銀行某月份的帳單是否已存在。
+
+    Args:
+        session: 非同步 DB Session。
+        bank_code: 銀行代碼。
+        billing_month: 帳單月份（如 "2026-03"）。
+
+    Returns:
+        True 表示帳單已存在。
+    """
+    stmt = select(Bill.id).where(
+        Bill.bank_code == bank_code,
+        Bill.billing_month == billing_month,
+    )
+    result = await session.execute(stmt)
+    return result.scalar_one_or_none() is not None
+
+
+async def create_bill_and_transactions(
+    session: AsyncSession,
+    parse_result: ParseResult,
+    file_path: str | None = None,
+) -> Bill:
+    """根據 ParseResult 建立 Bill 與 Transaction 記錄。
+
+    Args:
+        session: 非同步 DB Session。
+        parse_result: Parser 解析結果。
+        file_path: 原始 PDF 檔案路徑。
+
+    Returns:
+        新建立的 Bill 記錄。
+    """
+    bill = Bill(
+        bank_code=parse_result.bank_code,
+        billing_month=parse_result.billing_month,
+        total_amount=parse_result.total_amount,
+        due_date=parse_result.due_date,
+        file_path=file_path,
+    )
+    session.add(bill)
+    await session.flush()
+
+    for item in parse_result.transactions:
+        txn = Transaction(
+            bill_id=bill.id,
+            trans_date=item.trans_date,
+            posting_date=item.posting_date,
+            merchant=item.merchant,
+            amount=item.amount,
+            currency=item.currency,
+            original_amount=item.original_amount,
+            card_last4=item.card_last4,
+            installment_current=item.installment_current,
+            installment_total=item.installment_total,
+        )
+        session.add(txn)
+
+    await session.flush()
+    return bill
+
+
+async def update_attachment_status(
+    session: AsyncSession,
+    attachment: StagedAttachment,
+    *,
+    status: str,
+    error_reason: str | None = None,
+) -> None:
+    """更新附件的處理狀態。
+
+    Args:
+        session: 非同步 DB Session。
+        attachment: 要更新的 StagedAttachment 記錄。
+        status: 新狀態值（如 ``parsed``、``parse_failed``）。
+        error_reason: 失敗原因（成功時傳入 None 以清除既有錯誤）。
+    """
+    attachment.status = status
+    attachment.error_reason = error_reason
+    await session.flush()
