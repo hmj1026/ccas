@@ -9,9 +9,14 @@ from pathlib import Path
 
 import pikepdf
 
+from ccas.errors import DecryptError
 
-class DecryptionError(Exception):
+
+class DecryptionError(DecryptError):
     """PDF 解密失敗時拋出的例外。"""
+
+    def __init__(self, reason: str = "", **ctx: object) -> None:
+        super().__init__("PDF 解密失敗", reason=reason, **ctx)
 
 
 @dataclass(frozen=True)

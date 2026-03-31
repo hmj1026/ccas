@@ -144,7 +144,8 @@ class TestMixedBatchScenario:
             result = await session.execute(stmt)
             record = result.scalar_one()
             assert record.status == "decrypt_failed"
-            assert record.error_reason == "Invalid password"
+            assert record.error_reason is not None
+            assert "Invalid password" in record.error_reason
 
         await engine.dispose()
 

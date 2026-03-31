@@ -4,11 +4,15 @@
 並根據 active_parser_version 與版本 fallback 選擇最佳 parser。
 """
 
+from ccas.errors import ParseError
 from ccas.parser.base import BankParser
 
 
-class ParserNotFoundError(Exception):
+class ParserNotFoundError(ParseError):
     """找不到任何可用的 parser。"""
+
+    def __init__(self, reason: str = "", **ctx: object) -> None:
+        super().__init__("找不到可用 parser", reason=reason, **ctx)
 
 
 class _ParserRegistry:

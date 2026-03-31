@@ -11,13 +11,18 @@ from google.auth.exceptions import RefreshError
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 
+from ccas.errors import IngestError
+
 logger = logging.getLogger(__name__)
 
 GMAIL_SCOPES = ("https://www.googleapis.com/auth/gmail.readonly",)
 
 
-class GmailAuthError(Exception):
+class GmailAuthError(IngestError):
     """Gmail OAuth 驗證失敗。"""
+
+    def __init__(self, reason: str = "", **ctx: object) -> None:
+        super().__init__("Gmail OAuth 驗證失敗", reason=reason, **ctx)
 
 
 def load_credentials(credentials_path: str, token_path: str) -> Credentials:

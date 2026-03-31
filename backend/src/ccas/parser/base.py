@@ -6,6 +6,7 @@
 from abc import ABC, abstractmethod
 from pathlib import Path
 
+from ccas.errors import ParseError as _CcasParseError
 from ccas.parser.result import ParseResult
 
 
@@ -48,5 +49,5 @@ class BankParser(ABC):
         """
 
 
-class ParseError(Exception):
+class ParseError(_CcasParseError):
     """Parser 解析過程中的錯誤。"""
