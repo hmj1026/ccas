@@ -11,7 +11,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from ccas.config import get_settings
-from ccas.storage.models import Base, BankConfig, Bill, Category, Transaction
+from ccas.storage.models import BankConfig, Base, Bill, Category, Transaction
 
 
 async def clear_seed_data(session: AsyncSession) -> None:

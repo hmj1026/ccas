@@ -1,10 +1,11 @@
 """ORM 資料模型定義。
 
-定義 CCAS 系統的四張核心資料表：
+定義 CCAS 系統的資料表：
 - bills: 信用卡帳單
 - transactions: 帳單內的消費明細
 - categories: 關鍵字分類對照
 - bank_configs: 銀行設定
+- staged_attachments: Gmail 附件 staging 記錄
 """
 
 from datetime import date, datetime
@@ -113,3 +114,35 @@ class BankConfig(Base):
     pdf_password_rule: Mapped[str | None] = mapped_column(Text, nullable=True)
     active_parser_version: Mapped[str] = mapped_column(Text, default="v1")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class StagedAttachment(Base):
+    """Gmail 附件 staging 記錄。
+
+    每筆記錄追蹤一個從 Gmail 下載的 PDF 附件，
+    包含其 Gmail 來源識別資訊、落地路徑與處理狀態。
+    以 (gmail_message_id, gmail_attachment_id) 為唯一識別，
+    防止同一附件重複 staging。
+    """
+
+    __tablename__ = "staged_attachments"
+    __table_args__ = (
+        UniqueConstraint(
+            "gmail_message_id",
+            "gmail_attachment_id",
+            name="uq_staged_gmail_attachment",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    bank_code: Mapped[str] = mapped_column(Text, nullable=False)
+    gmail_message_id: Mapped[str] = mapped_column(Text, nullable=False)
+    gmail_attachment_id: Mapped[str] = mapped_column(Text, nullable=False)
+    message_date: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    original_filename: Mapped[str] = mapped_column(Text, nullable=False)
+    staged_path: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(Text, nullable=False)
+    error_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow
+    )
