@@ -1,22 +1,42 @@
 /**
  * 應用程式根元件。
  *
- * 目前為 Placeholder 頁面，顯示系統名稱與健康狀態。
- * 後續將整合路由與版面配置。
+ * 設定 React Query 與 React Router，定義五個主要路由。
  */
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router'
+import Layout from '@/components/layout'
+import OverviewPage from '@/pages/overview'
+import TransactionsPage from '@/pages/transactions'
+import AnalyticsPage from '@/pages/analytics'
+import BillsPage from '@/pages/bills'
+import SettingsPage from '@/pages/settings'
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 30_000,
+      retry: 1,
+    },
+  },
+})
+
 function App() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50">
-      <div className="text-center">
-        <h1 className="text-3xl font-bold text-gray-900">CCAS</h1>
-        <p className="mt-2 text-gray-600">
-          Credit Card Artifact System
-        </p>
-        <div className="mt-4 rounded-lg border border-green-200 bg-green-50 px-4 py-2">
-          <span className="text-green-700">Health: OK</span>
-        </div>
-      </div>
-    </div>
+    <QueryClientProvider client={queryClient}>
+      <BrowserRouter>
+        <Routes>
+          <Route element={<Layout />}>
+            <Route index element={<Navigate to="/overview" replace />} />
+            <Route path="overview" element={<OverviewPage />} />
+            <Route path="transactions" element={<TransactionsPage />} />
+            <Route path="analytics" element={<AnalyticsPage />} />
+            <Route path="bills" element={<BillsPage />} />
+            <Route path="settings" element={<SettingsPage />} />
+          </Route>
+        </Routes>
+      </BrowserRouter>
+    </QueryClientProvider>
   )
 }
 

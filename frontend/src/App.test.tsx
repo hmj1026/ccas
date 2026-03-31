@@ -1,20 +1,25 @@
 /**
  * App 元件冒煙測試。
  *
- * 驗證根元件可正常渲染，並顯示系統名稱與健康狀態。
+ * 驗證根元件可正常渲染，顯示導覽項目。
  */
-import { render, screen } from '@testing-library/react'
-import { describe, it, expect } from 'vitest'
+import { render, screen, waitFor } from '@testing-library/react'
+import { describe, it, expect, vi } from 'vitest'
 import App from './App'
 
-describe('App', () => {
-  it('renders the CCAS heading', () => {
-    render(<App />)
-    expect(screen.getByText('CCAS')).toBeInTheDocument()
-  })
+vi.mock('@/lib/api-client', () => ({
+  apiGet: vi.fn(() => new Promise(() => {})),
+}))
 
-  it('shows health status', () => {
+describe('App', () => {
+  it('renders the sidebar with navigation', async () => {
     render(<App />)
-    expect(screen.getByText('Health: OK')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.getByText('總覽')).toBeInTheDocument()
+    })
+    expect(screen.getByText('交易')).toBeInTheDocument()
+    expect(screen.getByText('分析')).toBeInTheDocument()
+    expect(screen.getByText('帳單')).toBeInTheDocument()
+    expect(screen.getByText('設定')).toBeInTheDocument()
   })
 })
