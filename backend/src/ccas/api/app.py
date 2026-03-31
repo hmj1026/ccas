@@ -7,7 +7,7 @@
 from fastapi import Depends, FastAPI
 
 from ccas.api.deps import verify_token
-from ccas.api.routers import analytics, bills, overview, settings, transactions
+from ccas.api.routers import analytics, bills, overview, pipeline, settings, transactions
 
 
 def create_app() -> FastAPI:
@@ -29,5 +29,6 @@ def create_app() -> FastAPI:
     app.include_router(analytics.router, dependencies=api_dependencies)
     app.include_router(bills.router, dependencies=api_dependencies)
     app.include_router(settings.router, dependencies=api_dependencies)
+    app.include_router(pipeline.router, dependencies=api_dependencies)
 
     return app

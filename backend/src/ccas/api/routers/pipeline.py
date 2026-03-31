@@ -1,0 +1,43 @@
+"""Pipeline 觸發 API 路由。
+
+提供 POST /api/pipeline/trigger 將 run_pipeline() 加入 RQ 工作隊列。
+"""
+
+import logging
+
+from fastapi import APIRouter
+from redis import Redis
+from rq import Queue
+
+from ccas.config import get_settings
+from ccas.pipeline.worker import get_retry, on_failure_handler, run_pipeline_sync
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter(prefix="/api/pipeline", tags=["pipeline"])
+
+
+@router.post("/trigger")
+async def trigger_pipeline():
+    """將 pipeline 加入 RQ 工作隊列，立即回傳 job ID。
+
+    Returns:
+        ``{"success": true, "data": {"job_id": "..."}, "message": "..."}``
+    """
+    settings = get_settings()
+    redis_conn = Redis.from_url(settings.redis_url)
+    queue = Queue(connection=redis_conn)
+
+    job = queue.enqueue(
+        run_pipeline_sync,
+        retry=get_retry(),
+        on_failure=on_failure_handler,
+        job_timeout="30m",
+    )
+
+    logger.info("Pipeline job enqueued: %s", job.id)
+    return {
+        "success": True,
+        "data": {"job_id": job.id},
+        "message": "Pipeline job enqueued",
+    }
