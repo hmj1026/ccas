@@ -4,10 +4,15 @@
 並實作指數退避重試（最多 3 次）。
 """
 
+from __future__ import annotations
+
 import asyncio
 import logging
+from types import TracebackType
 
+from redis import Redis
 from rq import Retry
+from rq.job import Job
 
 from ccas.pipeline.summary import PipelineSummary
 
@@ -45,11 +50,10 @@ def run_pipeline_sync(opts: dict | None = None) -> dict:
     options = PipelineOptions.from_dict(opts)
 
     async def _run() -> PipelineSummary:
-        engine = get_engine()
-        session_factory = get_session_factory(engine)
+        session_factory = get_session_factory()
         async with session_factory() as session:
             result = await run_pipeline(session, options)
-        await engine.dispose()
+        await get_engine().dispose()
         return result
 
     summary = asyncio.run(_run())
@@ -90,7 +94,13 @@ async def mark_manual_review(session) -> int:
     return result.rowcount  # type: ignore[return-value]
 
 
-def on_failure_handler(job, connection, typ, value, traceback):
+def on_failure_handler(
+    job: Job,
+    connection: Redis,  # noqa: ARG001
+    typ: type[BaseException],  # noqa: ARG001
+    value: BaseException,  # noqa: ARG001
+    traceback: TracebackType | None,  # noqa: ARG001
+) -> None:
     """RQ job 失敗 handler：重試達上限後標記 staging 項目。"""
     if not hasattr(job, "retries_left") or job.retries_left == 0:
         logger.error(
@@ -99,13 +109,17 @@ def on_failure_handler(job, connection, typ, value, traceback):
         )
         from ccas.storage.database import get_engine, get_session_factory
 
-        async def _mark():
-            engine = get_engine()
-            session_factory = get_session_factory(engine)
+        async def _mark() -> int:
+            session_factory = get_session_factory()
             async with session_factory() as session:
                 count = await mark_manual_review(session)
-            await engine.dispose()
+            await get_engine().dispose()
             return count
 
-        count = asyncio.run(_mark())
-        logger.info("Marked %d staging items as manual_review_needed", count)
+        try:
+            count = asyncio.run(_mark())
+            logger.info("Marked %d staging items as manual_review_needed", count)
+        except Exception:
+            logger.error(
+                "Failed to mark staging items for manual review", exc_info=True
+            )

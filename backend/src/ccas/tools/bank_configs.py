@@ -9,7 +9,7 @@ from pathlib import Path
 
 import yaml
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from ccas.storage.database import get_engine, get_session_factory
 from ccas.storage.models import BankConfig
@@ -236,10 +236,14 @@ def _load_yaml_mapping(path: Path, *, label: str) -> dict[str, object]:
 
 async def _run_cli(args: argparse.Namespace) -> int:
     specs = load_bank_config_specs(args.config, args.registry)
-    engine = (
-        create_async_engine(args.database_url) if args.database_url else get_engine()
-    )
-    session_factory = get_session_factory(engine)
+    if args.database_url:
+        engine = create_async_engine(args.database_url)
+        session_factory = async_sessionmaker(
+            engine, class_=AsyncSession, expire_on_commit=False
+        )
+    else:
+        engine = get_engine()
+        session_factory = get_session_factory()
 
     try:
         async with session_factory() as session:

@@ -33,11 +33,10 @@ def run_payment_reminders_sync() -> dict[str, int]:
     from ccas.storage.database import get_engine, get_session_factory
 
     async def _run() -> dict[str, int]:
-        engine = get_engine()
-        session_factory = get_session_factory(engine)
+        session_factory = get_session_factory()
         async with session_factory() as session:
             result = await send_payment_reminders(session)
-        await engine.dispose()
+        await get_engine().dispose()
         return result
 
     result = asyncio.run(_run())

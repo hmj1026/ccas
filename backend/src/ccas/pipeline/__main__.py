@@ -74,11 +74,10 @@ def _parse_args(argv: list[str] | None = None) -> PipelineOptions:
 
 
 async def _main(options: PipelineOptions) -> PipelineSummary:
-    engine = get_engine()
-    session_factory = get_session_factory(engine)
+    session_factory = get_session_factory()
     async with session_factory() as session:
         summary = await run_pipeline(session, options)
-    await engine.dispose()
+    await get_engine().dispose()
     return summary
 
 

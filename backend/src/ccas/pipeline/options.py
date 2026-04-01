@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import date, timedelta
 
@@ -48,7 +49,8 @@ class PipelineOptions:
             effective_year = date.today().year
 
         if effective_month is not None:
-            assert effective_year is not None
+            if effective_year is None:
+                raise ValueError("effective_year must not be None when month is set")
             start = date(effective_year, effective_month, 1)
             if effective_month == 12:
                 end = date(effective_year + 1, 1, 1)
@@ -57,7 +59,8 @@ class PipelineOptions:
             return (start, end)
 
         # Year only
-        assert effective_year is not None
+        if effective_year is None:
+            raise ValueError("effective_year must not be None for year-only filter")
         return (date(effective_year, 1, 1), date(effective_year + 1, 1, 1))
 
     def gmail_date_filter(self) -> str:
@@ -94,7 +97,7 @@ class PipelineOptions:
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, object] | None) -> PipelineOptions:
+    def from_dict(cls, data: Mapping[str, object] | None) -> PipelineOptions:
         """Deserialize from dict (e.g. from RQ job kwargs)."""
         if not data:
             return cls()
