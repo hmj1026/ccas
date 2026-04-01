@@ -69,6 +69,7 @@ cp .env.example .env
 - `TELEGRAM_CHAT_ID` -- notification target chat ID
 - `TELEGRAM_ALLOWED_CHAT_IDS` -- bot command allowlist
 - `API_TOKEN` -- API authentication Bearer token
+- `FRONTEND_ORIGINS` -- allowed browser origins for cookie-based dashboard login
 - `PDF_PASSWORD_<BANK_CODE>` -- per-bank PDF decryption passwords
 
 ### 後端啟動

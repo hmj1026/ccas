@@ -6,6 +6,7 @@
 
 - Slash commands use **TOML format**: `.gemini/commands/opsx/*.toml`
 - Skills are defined in `.gemini/skills/<name>/SKILL.md`
+- This repo's `.gemini/skills/` contains 13 skills total: 10 OpenSpec workflow skills plus 3 Gemini-specific skills
 
 ## Gemini-Exclusive Skills
 

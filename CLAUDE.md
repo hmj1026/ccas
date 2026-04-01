@@ -45,7 +45,7 @@ openspec schemas --json
 
 ## Skill Architecture
 
-Ten OpenSpec skills in `.claude/skills/` drive the workflow. Each has a corresponding slash command under `.claude/commands/opsx/`. Equivalent skill definitions exist in `.codex/skills/` and `.gemini/skills/`. Gemini additionally has 3 general-purpose skills (`bug-investigation`, `git-smart-commit`, `software-architecture`) and slash commands under `.gemini/commands/`. Codex has skills only (no commands directory).
+The repo currently defines 10 OpenSpec workflow skills in `.claude/skills/`, each with a corresponding slash command under `.claude/commands/opsx/`. The repo also defines 2 general-purpose skills in `.claude/skills/` (`bug-investigation`, `software-architecture`). Equivalent OpenSpec skill definitions exist in `.codex/skills/` and `.gemini/skills/`; Gemini additionally has the repo-local `git-smart-commit` skill. The ECC/reference skills listed later in this document are globally available helpers, not extra entries under `.claude/skills/`.
 
 | Skill | Slash Command | Purpose |
 |-------|---------------|---------|

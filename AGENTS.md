@@ -6,7 +6,7 @@
 
 - Codex has **skills only** (no slash commands directory)
 - Skills are defined in `.codex/skills/<name>/SKILL.md`
-- Same 10 OpenSpec skills as Claude, plus `bug-investigation` and `software-architecture`
+- This repo's `.codex/skills/` contains 12 skills total: the same 10 OpenSpec workflow skills as Claude, plus `bug-investigation` and `software-architecture`
 
 ## Codex Limitations
 
@@ -20,3 +20,5 @@
 |-------|---------|
 | `bug-investigation` | Structured bug triage and root cause analysis |
 | `software-architecture` | Architecture decision records |
+
+The Claude-only ECC/reference skills described in [CLAUDE.md](./CLAUDE.md) are not additional entries under `.codex/skills/`.
