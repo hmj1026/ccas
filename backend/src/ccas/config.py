@@ -5,8 +5,13 @@
 
 import os
 from functools import lru_cache
+from pathlib import Path
+from typing import Any
 
+from dotenv import dotenv_values
+from pydantic import PrivateAttr
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings.sources.types import ENV_FILE_SENTINEL, DotenvType
 
 
 class Settings(BaseSettings):
@@ -52,6 +57,26 @@ class Settings(BaseSettings):
     api_session_max_age: int = 43200
     api_cookie_secure: bool = False
     redis_url: str = "redis://localhost:6379/0"
+    telegram_allowed_chat_ids: str = ""
+
+    _env_map: dict[str, str] = PrivateAttr(default_factory=dict)
+
+    def __init__(self, **kwargs: Any) -> None:
+        raw = kwargs.get("_env_file", ENV_FILE_SENTINEL)
+        is_override = raw is not ENV_FILE_SENTINEL
+        super().__init__(**kwargs)
+        # model_post_init already built _env_map from model_config default.
+        # Rebuild from the caller-supplied _env_file if it was overridden.
+        if is_override:
+            _build_env_map(self, raw)
+
+    def model_post_init(self, __context: Any) -> None:
+        """Merge .env file values with os.environ for dynamic key lookups.
+
+        os.environ takes precedence over .env file values.
+        """
+        env_file = self.model_config.get("env_file", "../.env")
+        _build_env_map(self, env_file)
 
     def get_pdf_password(self, bank_code: str) -> str | None:
         """取得指定銀行的 PDF 解密密碼。
@@ -65,13 +90,37 @@ class Settings(BaseSettings):
             密碼字串；若未設定則回傳 None。
         """
         key = f"PDF_PASSWORD_{bank_code.upper()}"
-        return os.environ.get(key)
+        return self._env_map.get(key)
 
     def get_frontend_origins(self) -> list[str]:
         """解析允許攜帶 cookie 的前端來源清單。"""
         return [
             item.strip() for item in self.frontend_origins.split(",") if item.strip()
         ]
+
+
+def _build_env_map(
+    settings: Settings,
+    env_file: DotenvType | None,
+) -> None:
+    """Build ``_env_map`` from *env_file* merged with ``os.environ``.
+
+    ``os.environ`` takes precedence over .env file values.
+    ``dotenv_values`` returns ``{}`` safely when file is absent (e.g. CI).
+    """
+    if env_file is None:
+        file_values: dict[str, str | None] = {}
+    elif isinstance(env_file, (str, Path)):
+        file_values = dotenv_values(env_file)
+    elif isinstance(env_file, (list, tuple)):
+        file_values = {}
+        for path in env_file:
+            file_values.update(dotenv_values(path))
+    else:
+        file_values = {}
+    merged = {k: v for k, v in file_values.items() if v is not None}
+    merged.update(os.environ)
+    object.__setattr__(settings, "_env_map", merged)
 
 
 @lru_cache(maxsize=1)
