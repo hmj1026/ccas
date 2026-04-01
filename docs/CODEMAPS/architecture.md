@@ -1,4 +1,4 @@
-<!-- Generated: 2026-04-01 | Files scanned: 90 | Token estimate: ~600 -->
+<!-- Generated: 2026-04-01 | Files scanned: 91 | Token estimate: ~600 -->
 
 # Architecture
 
@@ -52,7 +52,7 @@ backend/src/ccas/
 ├── parser/       PDF table extraction (bank-specific)
 ├── pipeline/     5-stage orchestrator
 ├── scheduler/    APScheduler cron jobs
-├── storage/      SQLAlchemy models + database
+├── storage/      SQLAlchemy models, database, queries
 ├── tools/        Bank configs, Gmail auth helpers
 ├── config.py     Pydantic Settings
 ├── errors.py     Exception hierarchy

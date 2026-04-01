@@ -1,4 +1,4 @@
-<!-- Generated: 2026-04-01 | Files scanned: 90 | Token estimate: ~450 -->
+<!-- Generated: 2026-04-01 | Files scanned: 91 | Token estimate: ~450 -->
 
 # Dependencies
 
@@ -11,7 +11,7 @@
 - **Library**: `google-api-python-client`
 
 ### Telegram Bot API
-- **Module**: `bot/` (8 files, 883 LOC)
+- **Module**: `bot/` (10 files, 892 LOC)
 - **Auth**: Bot token
 - **Commands**: `/status`, `/upcoming`, `/summary`, `/category`, `/paid`
 - **Push**: New bill notifications, payment reminders

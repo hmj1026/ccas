@@ -1,4 +1,4 @@
-<!-- Generated: 2026-04-01 | Files scanned: 67 | Token estimate: ~800 -->
+<!-- Generated: 2026-04-01 | Files scanned: 68 | Token estimate: ~800 -->
 
 # Backend
 
@@ -61,15 +61,15 @@ Health:
 
 | Module | Files | LOC | Purpose |
 |--------|-------|-----|---------|
-| api | 10 | 584 | FastAPI routes, schemas, deps |
-| bot | 8 | 883 | Telegram commands, notifications, formatting |
-| ingestor | 5 | 727 | Gmail download, staging, retry |
-| parser | 6 | 791 | PDF extraction, bank-specific parsers |
-| pipeline | 6 | 553 | Orchestrator, worker, CLI, options |
-| classifier | 4 | 322 | Keyword engine, rules |
-| decryptor | 4 | 298 | PDF password resolution, decryption |
-| scheduler | 3 | 243 | APScheduler, reminders |
-| storage | 2 | 227 | ORM models, async DB session |
-| tools | 2 | 405 | Bank configs (YAML), Gmail auth |
-| core | 4 | 325 | config, errors, log, __init__ |
-| **Total** | **67** | **~6000** | |
+| api | 12 | 1129 | FastAPI routes, schemas, deps |
+| bot | 10 | 892 | Telegram commands, notifications, formatting |
+| ingestor | 6 | 736 | Gmail download, staging, retry |
+| parser | 8 | 836 | PDF extraction, bank-specific parsers |
+| pipeline | 7 | 569 | Orchestrator, worker, CLI, options |
+| classifier | 5 | 327 | Keyword engine, rules |
+| decryptor | 5 | 306 | PDF password resolution, decryption |
+| scheduler | 4 | 237 | APScheduler, reminders |
+| storage | 4 | 250 | ORM models, async DB session, queries |
+| tools | 3 | 409 | Bank configs (YAML), Gmail auth |
+| core | 4 | 330 | config, errors, log, __init__ |
+| **Total** | **68** | **~6021** | |
