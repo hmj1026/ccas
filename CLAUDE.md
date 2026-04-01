@@ -45,7 +45,7 @@ openspec schemas --json
 
 ## Skill Architecture
 
-The repo currently defines 10 OpenSpec workflow skills in `.claude/skills/`, each with a corresponding slash command under `.claude/commands/opsx/`. The repo also defines 2 general-purpose skills in `.claude/skills/` (`bug-investigation`, `software-architecture`). Equivalent OpenSpec skill definitions exist in `.codex/skills/` and `.gemini/skills/`; Gemini additionally has the repo-local `git-smart-commit` skill. The ECC/reference skills listed later in this document are globally available helpers, not extra entries under `.claude/skills/`.
+The repo defines 12 skills in `.claude/skills/`: 10 OpenSpec workflow skills (each with a corresponding slash command under `.claude/commands/opsx/`) and 2 general-purpose skills (`bug-investigation`, `software-architecture`). Equivalent OpenSpec skill definitions exist in `.codex/skills/` and `.gemini/skills/`; Gemini additionally has the repo-local `git-smart-commit` skill. ECC reference skills (python-patterns, tdd-workflow, etc.) are available globally via the `everything-claude-code` plugin -- they are not installed locally.
 
 | Skill | Slash Command | Purpose |
 |-------|---------------|---------|
