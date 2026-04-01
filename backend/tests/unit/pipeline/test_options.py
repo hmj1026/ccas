@@ -33,6 +33,55 @@ class TestDefaults:
             opts.force = True  # type: ignore[misc]
 
 
+class TestValidation:
+    def test_valid_construction(self):
+        opts = PipelineOptions(year=2026, month=3)
+        assert opts.year == 2026
+        assert opts.month == 3
+
+    @pytest.mark.parametrize("month", [0, -1, 13, 100])
+    def test_invalid_month_raises(self, month):
+        with pytest.raises(ValueError, match="month must be 1-12"):
+            PipelineOptions(month=month)
+
+    @pytest.mark.parametrize("year", [0, 1999, 2100, -1, 9999])
+    def test_invalid_year_raises(self, year):
+        with pytest.raises(ValueError, match="year must be 2000-2099"):
+            PipelineOptions(year=year)
+
+    def test_boundary_month_valid(self):
+        assert PipelineOptions(month=1).month == 1
+        assert PipelineOptions(month=12).month == 12
+
+    def test_boundary_year_valid(self):
+        assert PipelineOptions(year=2000).year == 2000
+        assert PipelineOptions(year=2099).year == 2099
+
+
+class TestDateRange:
+    def test_no_year_no_month_returns_none(self):
+        assert PipelineOptions().date_range() is None
+
+    def test_year_and_month(self):
+        opts = PipelineOptions(year=2026, month=3)
+        assert opts.date_range() == (date(2026, 3, 1), date(2026, 4, 1))
+
+    def test_year_only(self):
+        opts = PipelineOptions(year=2026)
+        assert opts.date_range() == (date(2026, 1, 1), date(2027, 1, 1))
+
+    def test_month_only_uses_current_year(self):
+        with patch("ccas.pipeline.options.date") as mock_date:
+            mock_date.today.return_value = date(2026, 4, 1)
+            mock_date.side_effect = lambda *args, **kw: date(*args, **kw)
+            opts = PipelineOptions(month=3)
+            assert opts.date_range() == (date(2026, 3, 1), date(2026, 4, 1))
+
+    def test_december(self):
+        opts = PipelineOptions(year=2026, month=12)
+        assert opts.date_range() == (date(2026, 12, 1), date(2027, 1, 1))
+
+
 class TestGmailDateFilter:
     def test_no_year_no_month_returns_empty(self):
         opts = PipelineOptions()

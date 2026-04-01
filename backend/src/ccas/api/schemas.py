@@ -211,5 +211,5 @@ class PipelineTriggerRequest(BaseModel):
 
     force: bool = False
     bank_code: str | None = None
-    year: int | None = None
+    year: int | None = Field(default=None, ge=2000, le=2099)
     month: int | None = Field(default=None, ge=1, le=12)

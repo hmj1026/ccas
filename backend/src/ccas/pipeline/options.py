@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-import calendar
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 
 
 @dataclass(frozen=True)
@@ -25,6 +24,42 @@ class PipelineOptions:
     year: int | None = None
     month: int | None = None
 
+    def __post_init__(self) -> None:
+        if self.month is not None and not (1 <= self.month <= 12):
+            raise ValueError(f"month must be 1-12, got {self.month}")
+        if self.year is not None and not (2000 <= self.year <= 2099):
+            raise ValueError(f"year must be 2000-2099, got {self.year}")
+
+    def date_range(self) -> tuple[date, date] | None:
+        """Return (start_inclusive, end_exclusive) date boundaries.
+
+        When only ``month`` is set, defaults ``year`` to the current year.
+
+        Returns:
+            ``(first_day, first_day_after)`` or ``None`` if no date filtering.
+        """
+        effective_year = self.year
+        effective_month = self.month
+
+        if effective_year is None and effective_month is None:
+            return None
+
+        if effective_month is not None and effective_year is None:
+            effective_year = date.today().year
+
+        if effective_month is not None:
+            assert effective_year is not None
+            start = date(effective_year, effective_month, 1)
+            if effective_month == 12:
+                end = date(effective_year + 1, 1, 1)
+            else:
+                end = date(effective_year, effective_month + 1, 1)
+            return (start, end)
+
+        # Year only
+        assert effective_year is not None
+        return (date(effective_year, 1, 1), date(effective_year + 1, 1, 1))
+
     def gmail_date_filter(self) -> str:
         """根據 year/month 產生 Gmail 查詢日期篩選子句。
 
@@ -35,48 +70,18 @@ class PipelineOptions:
         Returns:
             Gmail date filter clause, or empty string if no date filtering.
         """
-        effective_year = self.year
-        effective_month = self.month
-
-        if effective_year is None and effective_month is None:
+        dr = self.date_range()
+        if dr is None:
             return ""
 
-        if effective_month is not None and effective_year is None:
-            effective_year = date.today().year
-
-        if effective_month is not None:
-            assert effective_year is not None
-            # after: last day of previous month (exclusive)
-            # before: first day of next month (exclusive)
-            if effective_month == 1:
-                after_date = date(effective_year - 1, 12, 31)
-            else:
-                last_day_prev = calendar.monthrange(
-                    effective_year, effective_month - 1
-                )[1]
-                after_date = date(effective_year, effective_month - 1, last_day_prev)
-
-            if effective_month == 12:
-                before_date = date(effective_year + 1, 1, 1)
-            else:
-                before_date = date(effective_year, effective_month + 1, 1)
-
-            return (
-                f"after:{after_date.year}/{after_date.month:02d}/"
-                f"{after_date.day:02d} "
-                f"before:{before_date.year}/{before_date.month:02d}/"
-                f"{before_date.day:02d}"
-            )
-
-        # Year only
-        assert effective_year is not None
-        after_date = date(effective_year - 1, 12, 31)
-        before_date = date(effective_year + 1, 1, 1)
+        start, end = dr
+        # Gmail after: is exclusive, so use day before start
+        after_date = start - timedelta(days=1)
         return (
             f"after:{after_date.year}/{after_date.month:02d}/"
             f"{after_date.day:02d} "
-            f"before:{before_date.year}/{before_date.month:02d}/"
-            f"{before_date.day:02d}"
+            f"before:{end.year}/{end.month:02d}/"
+            f"{end.day:02d}"
         )
 
     def to_dict(self) -> dict[str, object]:

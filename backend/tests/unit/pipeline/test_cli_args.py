@@ -40,3 +40,11 @@ class TestParseArgs:
     def test_invalid_month_zero_exits(self):
         with pytest.raises(SystemExit):
             _parse_args(["--month", "0"])
+
+    def test_invalid_year_zero_exits(self):
+        with pytest.raises((SystemExit, ValueError)):
+            _parse_args(["--year", "0"])
+
+    def test_invalid_year_too_large_exits(self):
+        with pytest.raises((SystemExit, ValueError)):
+            _parse_args(["--year", "2100"])

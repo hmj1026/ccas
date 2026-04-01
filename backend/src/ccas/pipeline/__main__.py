@@ -63,6 +63,8 @@ def _parse_args(argv: list[str] | None = None) -> PipelineOptions:
         help="Filter Gmail messages by month (1-12).",
     )
     args = parser.parse_args(argv)
+    if args.year is not None and not (2000 <= args.year <= 2099):
+        parser.error(f"year must be between 2000 and 2099, got {args.year}")
     return PipelineOptions(
         force=args.force,
         bank_code=args.bank,
