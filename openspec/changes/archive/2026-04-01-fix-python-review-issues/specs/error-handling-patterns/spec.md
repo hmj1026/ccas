@@ -2,6 +2,8 @@
 
 ### Requirement: 共用例外階層以 `CcasError` 為基底
 
+系統 SHALL 維持以 `CcasError` 為基底的共用例外階層，且 attachment ingestion、parser 探測與 RQ failure handling MUST 僅捕捉預期的 domain、PDF 與 I/O 例外；對已處理失敗 SHALL 記錄 traceback，未預期例外 SHALL 持續向上傳播。
+
 #### ADDED Scenario: ingestor attachment 處理僅捕捉預期例外
 - **WHEN** `_process_attachment` 執行附件下載與寫檔
 - **THEN** 僅捕捉 `IngestError` 和 `OSError`，其他未預期例外向上傳播
