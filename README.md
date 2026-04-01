@@ -46,6 +46,11 @@ staged --> decrypted --> parsed       (success path)
 
 ## 快速開始
 
+給第一次接觸這個專案的人，建議先看完整教學：
+
+- [CCAS 新手上手指南](docs/beginner-setup-guide.md)
+- [Bank Code 對照表](docs/bank-codes.md)
+
 ### 前置需求
 
 - Python 3.12+
@@ -62,16 +67,16 @@ cp .env.example .env
 編輯 `.env`，填入必要值：
 - `TELEGRAM_BOT_TOKEN` -- Telegram Bot API token
 - `TELEGRAM_CHAT_ID` -- notification target chat ID
+- `TELEGRAM_ALLOWED_CHAT_IDS` -- bot command allowlist
 - `API_TOKEN` -- API authentication Bearer token
 - `PDF_PASSWORD_<BANK_CODE>` -- per-bank PDF decryption passwords
 
 ### 後端啟動
 
 ```bash
-cd backend
-uv sync                        # install dependencies
-uv run alembic upgrade head    # apply database migrations
-uv run fastapi dev             # dev server with hot reload (port 8000)
+cp config/banks.example.yaml config/banks.yaml
+./scripts/setup.sh
+./scripts/start.sh
 ```
 
 ### 前端啟動
