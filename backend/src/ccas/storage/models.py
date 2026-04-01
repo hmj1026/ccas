@@ -8,7 +8,7 @@
 - staged_attachments: Gmail 附件 staging 記錄
 """
 
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 
 from sqlalchemy import (
     Boolean,
@@ -20,6 +20,10 @@ from sqlalchemy import (
     UniqueConstraint,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+
+
+def _utcnow() -> datetime:
+    return datetime.now(UTC)
 
 
 class Base(DeclarativeBase):
@@ -45,7 +49,7 @@ class Bill(Base):
     due_date: Mapped[date] = mapped_column(Date, nullable=False)
     is_paid: Mapped[bool] = mapped_column(Boolean, default=False)
     file_path: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
 
     transactions: Mapped[list["Transaction"]] = relationship(
         back_populates="bill", cascade="all, delete-orphan"
@@ -76,7 +80,7 @@ class Transaction(Base):
     installment_total: Mapped[int | None] = mapped_column(Integer, nullable=True)
     category: Mapped[str | None] = mapped_column(Text, nullable=True)
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
 
     bill: Mapped["Bill"] = relationship(back_populates="transactions")
 
@@ -139,7 +143,7 @@ class StagedAttachment(Base):
     staged_path: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(Text, nullable=False)
     error_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
 
 
 class PaymentReminder(Base):
@@ -159,4 +163,4 @@ class PaymentReminder(Base):
         Integer, ForeignKey("bills.id"), nullable=False
     )
     reminder_type: Mapped[str] = mapped_column(Text, nullable=False)
-    sent_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    sent_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
