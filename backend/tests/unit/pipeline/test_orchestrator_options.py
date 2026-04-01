@@ -73,20 +73,35 @@ class TestOptionsForwarding:
             m_ingest.assert_called_once_with(mock_session, None)
             m_parse.assert_called_once_with(mock_session, None)
 
-    async def test_decrypt_classify_notify_unaffected(self, mock_session):
-        """Decrypt, classify, notify should NOT receive options."""
-        options = PipelineOptions(force=True)
+    async def test_decrypt_receives_options(self, mock_session):
+        """Decrypt should receive options for bank/date filtering."""
+        options = PipelineOptions(force=True, bank_code="CTBC")
 
         p_ingest, p_decrypt, p_parse, p_classify, p_notify = _patch_all_stages()
         with (
             p_ingest,
             p_decrypt as m_dec,
             p_parse,
+            p_classify,
+            p_notify,
+        ):
+            await run_pipeline(mock_session, options)
+
+            m_dec.assert_called_once_with(mock_session, options)
+
+    async def test_classify_notify_unaffected(self, mock_session):
+        """Classify and notify should NOT receive options."""
+        options = PipelineOptions(force=True)
+
+        p_ingest, p_decrypt, p_parse, p_classify, p_notify = _patch_all_stages()
+        with (
+            p_ingest,
+            p_decrypt,
+            p_parse,
             p_classify as m_cls,
             p_notify as m_ntf,
         ):
             await run_pipeline(mock_session, options)
 
-            m_dec.assert_called_once_with(mock_session)
             m_cls.assert_called_once_with(mock_session)
             m_ntf.assert_called_once_with(mock_session)

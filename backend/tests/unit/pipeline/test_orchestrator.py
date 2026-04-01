@@ -87,7 +87,7 @@ class TestPipelineStageOrder:
             call_order.append("ingest")
             return _make_ingest_summary()
 
-        async def mock_decrypt(session):
+        async def mock_decrypt(session, options=None):
             call_order.append("decrypt")
             return _make_decrypt_summary()
 
@@ -165,7 +165,7 @@ class TestFaultTolerance:
                 staged_count=1, failed_count=1, errors=["bank X failed"]
             )
 
-        async def mock_decrypt(session):
+        async def mock_decrypt(session, options=None):
             stages_called.append("decrypt")
             return _make_decrypt_summary()
 
