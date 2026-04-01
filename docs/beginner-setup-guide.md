@@ -299,14 +299,13 @@ curl \
 ## 11. 啟動前端並打開報表
 
 前端透過 Vite 的 `envDir: '..'` 設定，直接讀取專案根目錄的 `.env`。
-請確認根目錄 `.env` 中這兩行已取消註解並填入正確值：
+請確認根目錄 `.env` 中這行已取消註解並填入正確值：
 
 ```dotenv
 VITE_API_BASE=http://127.0.0.1:8000
-VITE_API_TOKEN=replace-with-a-long-random-string
 ```
 
-注意：`VITE_API_TOKEN` 必須與 `API_TOKEN` 的值一致。
+登入前端時，直接在登入頁輸入 `.env` 裡的 `API_TOKEN` 即可，前端會向 backend 換成 httpOnly session cookie，不再把 token 打包進前端程式碼。
 
 安裝與啟動：
 
@@ -400,7 +399,7 @@ PY
 確認兩件事：
 
 - `.env` 裡的 `API_TOKEN`
-- `curl` header 或根目錄 `.env` 裡的 `VITE_API_TOKEN`
+- 你在前端登入頁輸入的 token，或 `curl` header 裡帶的 token
 
 這兩邊要一致。
 
@@ -410,7 +409,8 @@ PY
 
 - backend 還活著
 - `VITE_API_BASE=http://127.0.0.1:8000`
-- `VITE_API_TOKEN` 跟 backend 的 `API_TOKEN` 一樣
+- `.env` 的 `FRONTEND_ORIGINS` 包含你的前端來源（預設已含 `http://127.0.0.1:5173`）
+- 你已在前端登入頁輸入正確的 `API_TOKEN`
 
 ### Telegram 沒收到訊息
 

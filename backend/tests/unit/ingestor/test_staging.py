@@ -56,6 +56,23 @@ class TestBuildStagedPath:
         result = build_staged_path("/data/staging", "CTBC", "abc", "bill.pdf")
         assert result == Path("/data/staging/CTBC/abc_bill.pdf")
 
+    def test_strips_attachment_path_segments(self):
+        """附件檔名含路徑片段時只保留 basename。"""
+        result = build_staged_path(
+            "/data/staging", "CTBC", "abc123def456xyz", "../../evil.pdf"
+        )
+        assert result == Path("/data/staging/CTBC/abc123def456_evil.pdf")
+
+    def test_rejects_empty_attachment_filename(self):
+        """空白或無效檔名應直接拒絕。"""
+        with pytest.raises(ValueError, match="filename"):
+            build_staged_path("/data/staging", "CTBC", "abc123", "../")
+
+    def test_rejects_invalid_bank_code(self):
+        """bank_code 不能包含路徑控制字元。"""
+        with pytest.raises(ValueError, match="bank_code"):
+            build_staged_path("/data/staging", "../CTBC", "abc123", "bill.pdf")
+
 
 class TestFindExistingStaged:
     """find_existing_staged() 的測試案例。"""

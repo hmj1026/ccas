@@ -9,7 +9,7 @@ from pathlib import Path
 from google_auth_oauthlib.flow import InstalledAppFlow
 
 from ccas.config import get_settings
-from ccas.ingestor.auth import GMAIL_SCOPES
+from ccas.ingestor.auth import GMAIL_SCOPES, write_private_token_file
 
 
 class GmailAuthSetupError(ValueError):
@@ -53,7 +53,7 @@ def generate_token(paths: AuthPaths) -> Path:
     )
     creds = flow.run_local_server(port=0)
     paths.token_path.parent.mkdir(parents=True, exist_ok=True)
-    paths.token_path.write_text(creds.to_json(), encoding="utf-8")
+    write_private_token_file(paths.token_path, creds.to_json())
     return paths.token_path
 
 

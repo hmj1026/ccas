@@ -47,6 +47,8 @@ class TestLoadCredentials:
 
         assert result is mock_creds
         mock_creds.refresh.assert_called_once_with(mock_request_cls.return_value)
+        mock_path_instance.write_text.assert_called_once_with('{"token": "refreshed"}')
+        mock_path_instance.chmod.assert_called_once_with(0o600)
 
     @patch("ccas.ingestor.auth.Request")
     @patch("ccas.ingestor.auth.Credentials.from_authorized_user_file")

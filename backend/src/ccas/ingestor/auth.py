@@ -18,6 +18,12 @@ logger = logging.getLogger(__name__)
 GMAIL_SCOPES = ("https://www.googleapis.com/auth/gmail.readonly",)
 
 
+def write_private_token_file(path: Path, content: str) -> None:
+    """寫入 token 檔並收斂權限到 owner-only。"""
+    path.write_text(content)
+    path.chmod(0o600)
+
+
 class GmailAuthError(IngestError):
     """Gmail OAuth 驗證失敗。"""
 
@@ -69,6 +75,6 @@ def load_credentials(credentials_path: str, token_path: str) -> Credentials:
         raise GmailAuthError(msg) from exc
 
     # 刷新成功後回寫 token 檔案
-    token_file.write_text(creds.to_json())
+    write_private_token_file(token_file, creds.to_json())
 
     return creds

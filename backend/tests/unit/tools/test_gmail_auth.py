@@ -82,6 +82,7 @@ def test_generate_token_runs_oauth_and_creates_dirs(
     assert result == token
     assert token.read_text(encoding="utf-8") == '{"token": "new"}'
     assert token_dir.exists()
+    assert token.stat().st_mode & 0o777 == 0o600
     mock_flow_cls.from_client_secrets_file.assert_called_once()
     mock_flow.run_local_server.assert_called_once_with(port=0)
 

@@ -5,6 +5,7 @@ StagedAttachment 記錄的持久化。
 不執行檔案系統操作（寫檔由 job.py 負責）。
 """
 
+import re
 from datetime import datetime
 from pathlib import Path
 
@@ -12,6 +13,29 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ccas.storage.models import StagedAttachment
+
+_BANK_CODE_RE = re.compile(r"^[A-Za-z0-9_-]+$")
+
+
+def _sanitize_bank_code(bank_code: str) -> str:
+    value = bank_code.strip()
+    if not value or not _BANK_CODE_RE.fullmatch(value):
+        raise ValueError(f"Invalid bank_code: {bank_code}")
+    return value
+
+
+def _sanitize_filename(filename: str) -> str:
+    normalized = filename.replace("\\", "/").strip()
+    basename = normalized.rsplit("/", maxsplit=1)[-1].strip()
+    if basename in {"", ".", ".."}:
+        raise ValueError(f"Invalid filename: {filename}")
+    return basename
+
+
+def _ensure_within_root(path: Path, root: Path) -> Path:
+    resolved = path.resolve()
+    resolved.relative_to(root.resolve())
+    return resolved
 
 
 def build_staged_path(
@@ -33,8 +57,13 @@ def build_staged_path(
     Returns:
         附件的完整 staging 路徑。
     """
-    safe_prefix = message_id[:12]
-    return Path(staging_dir) / bank_code / f"{safe_prefix}_{filename}"
+    staging_root = Path(staging_dir).resolve()
+    safe_bank_code = _sanitize_bank_code(bank_code)
+    safe_filename = _sanitize_filename(filename)
+    safe_prefix = re.sub(r"[^A-Za-z0-9_-]", "_", message_id[:12]) or "message"
+    bank_root = staging_root / safe_bank_code
+    candidate = bank_root / f"{safe_prefix}_{safe_filename}"
+    return _ensure_within_root(candidate, bank_root)
 
 
 async def find_existing_staged(
