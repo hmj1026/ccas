@@ -55,7 +55,7 @@ def create_bot_app() -> Application:
         已註冊所有指令 handler 的 Application 實例。
     """
     settings = get_settings()
-    allowed = load_allowed_chat_ids()
+    allowed = load_allowed_chat_ids(settings.telegram_allowed_chat_ids)
     sf = get_session_factory()
 
     app = Application.builder().token(settings.telegram_bot_token).build()

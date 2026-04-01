@@ -6,34 +6,28 @@ from ccas.bot.auth import is_chat_allowed, load_allowed_chat_ids
 class TestLoadAllowedChatIds:
     """load_allowed_chat_ids 測試。"""
 
-    def test_loads_comma_separated_ids(self, monkeypatch):
-        monkeypatch.setenv("TELEGRAM_ALLOWED_CHAT_IDS", "111,222,333")
-        result = load_allowed_chat_ids()
+    def test_loads_comma_separated_ids(self):
+        result = load_allowed_chat_ids("111,222,333")
         assert result == frozenset({111, 222, 333})
 
-    def test_single_id(self, monkeypatch):
-        monkeypatch.setenv("TELEGRAM_ALLOWED_CHAT_IDS", "42")
-        result = load_allowed_chat_ids()
+    def test_single_id(self):
+        result = load_allowed_chat_ids("42")
         assert result == frozenset({42})
 
-    def test_empty_string_returns_empty(self, monkeypatch):
-        monkeypatch.setenv("TELEGRAM_ALLOWED_CHAT_IDS", "")
-        result = load_allowed_chat_ids()
+    def test_empty_string_returns_empty(self):
+        result = load_allowed_chat_ids("")
         assert result == frozenset()
 
-    def test_unset_env_returns_empty(self, monkeypatch):
-        monkeypatch.delenv("TELEGRAM_ALLOWED_CHAT_IDS", raising=False)
-        result = load_allowed_chat_ids()
+    def test_whitespace_only_returns_empty(self):
+        result = load_allowed_chat_ids("   ")
         assert result == frozenset()
 
-    def test_whitespace_handling(self, monkeypatch):
-        monkeypatch.setenv("TELEGRAM_ALLOWED_CHAT_IDS", " 111 , 222 , ")
-        result = load_allowed_chat_ids()
+    def test_whitespace_handling(self):
+        result = load_allowed_chat_ids(" 111 , 222 , ")
         assert result == frozenset({111, 222})
 
-    def test_returns_frozenset(self, monkeypatch):
-        monkeypatch.setenv("TELEGRAM_ALLOWED_CHAT_IDS", "1")
-        result = load_allowed_chat_ids()
+    def test_returns_frozenset(self):
+        result = load_allowed_chat_ids("1")
         assert isinstance(result, frozenset)
 
 
