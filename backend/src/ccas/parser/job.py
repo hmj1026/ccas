@@ -195,7 +195,7 @@ async def run_parse_job(
     summary = ParseSummary()
     force = options.force if options else False
 
-    attachments = await fetch_parseable_attachments(session)
+    attachments = await fetch_parseable_attachments(session, options)
     if not attachments:
         logger.info("沒有待解析的附件，跳過 parsing")
         return summary
