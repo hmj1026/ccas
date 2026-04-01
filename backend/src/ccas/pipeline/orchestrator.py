@@ -111,7 +111,7 @@ async def run_pipeline(
 
     # Stage 2: Decrypt
     logger.info("Pipeline stage 2/5: decrypt")
-    decrypt_result = await run_decryption_job(session)
+    decrypt_result = await run_decryption_job(session, options)
     decrypt_ss = _decrypt_stage_summary(decrypt_result)
 
     # Stage 3: Parse

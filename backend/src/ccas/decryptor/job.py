@@ -16,6 +16,7 @@ from ccas.config import get_settings
 from ccas.decryptor.decrypt import DecryptionError, decrypt_pdf
 from ccas.decryptor.password import resolve_password
 from ccas.decryptor.staging import fetch_pending_attachments, update_attachment_status
+from ccas.pipeline.options import PipelineOptions
 from ccas.storage.models import StagedAttachment
 
 logger = logging.getLogger(__name__)
@@ -113,24 +114,28 @@ async def _process_attachment(
     await update_attachment_status(session, attachment, status="decrypted")
 
 
-async def run_decryption_job(session: AsyncSession) -> DecryptionSummary:
+async def run_decryption_job(
+    session: AsyncSession,
+    options: PipelineOptions | None = None,
+) -> DecryptionSummary:
     """執行單次批次 PDF 解密。
 
     流程：
-    1. 查詢所有狀態為 staged 的附件
+    1. 查詢所有狀態為 staged 的附件（依 options 篩選）
     2. 逐一嘗試解密，更新 staging 狀態
     3. 單筆失敗不中止整個批次
     4. 回傳統計摘要
 
     Args:
         session: 非同步 DB Session（由呼叫端注入）。
+        options: Pipeline 選項（bank_code / date range 篩選）。
 
     Returns:
         DecryptionSummary 統計摘要。
     """
     summary = DecryptionSummary()
 
-    attachments = await fetch_pending_attachments(session)
+    attachments = await fetch_pending_attachments(session, options)
     if not attachments:
         logger.info("沒有待解密的附件，跳過 decryption")
         return summary

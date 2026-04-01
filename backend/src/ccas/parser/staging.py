@@ -10,6 +10,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ccas.parser.result import ParseResult
+from ccas.pipeline.filters import apply_pipeline_filters
+from ccas.pipeline.options import PipelineOptions
 from ccas.storage.models import (
     BankConfig,
     Bill,
@@ -21,16 +23,19 @@ from ccas.storage.models import (
 
 async def fetch_parseable_attachments(
     session: AsyncSession,
+    options: PipelineOptions | None = None,
 ) -> Sequence[StagedAttachment]:
-    """查詢所有狀態為 ``decrypted`` 的附件（待解析）。
+    """查詢狀態為 ``decrypted`` 的附件（待解析），可依 options 篩選。
 
     Args:
         session: 非同步 DB Session。
+        options: Pipeline 選項（bank_code / date range 篩選）。
 
     Returns:
         待解析的 StagedAttachment 記錄清單。
     """
     stmt = select(StagedAttachment).where(StagedAttachment.status == "decrypted")
+    stmt = apply_pipeline_filters(stmt, options)
     result = await session.execute(stmt)
     return result.scalars().all()
 
