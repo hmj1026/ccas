@@ -156,9 +156,7 @@ async def test_download_pdf_success(
         db_session.add(bill)
         await db_session.commit()
 
-        response = await client.get(
-            f"/api/bills/{bill.id}/pdf", headers=auth_headers()
-        )
+        response = await client.get(f"/api/bills/{bill.id}/pdf", headers=auth_headers())
         assert response.status_code == 200
         assert response.headers["content-type"] == "application/pdf"
 
@@ -190,9 +188,7 @@ async def test_download_pdf_file_missing(
         db_session.add(bill)
         await db_session.commit()
 
-        response = await client.get(
-            f"/api/bills/{bill.id}/pdf", headers=auth_headers()
-        )
+        response = await client.get(f"/api/bills/{bill.id}/pdf", headers=auth_headers())
         assert response.status_code == 404
 
 
