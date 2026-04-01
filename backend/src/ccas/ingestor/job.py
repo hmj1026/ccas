@@ -122,14 +122,12 @@ async def _process_attachment(
             )
             return
 
-        # Force mode: delete old record and re-download
+        # Force mode: defer cleanup until download succeeds
         logger.info(
-            "Force 模式：刪除舊記錄並重新下載 %s/%s",
+            "Force 模式：重新下載 %s/%s",
             attachment.message_id,
             attachment.attachment_id,
         )
-        await _cleanup_old_staged_file(existing.staged_path)
-        await delete_staged_record(session, existing)
 
     staged_path = build_staged_path(
         staging_dir, bank_code, attachment.message_id, attachment.filename
@@ -146,6 +144,11 @@ async def _process_attachment(
         target_dir = staged_path.parent
         await asyncio.to_thread(lambda: target_dir.mkdir(parents=True, exist_ok=True))
         await asyncio.to_thread(staged_path.write_bytes, pdf_bytes)
+
+        # Cleanup old record only after new download succeeds
+        if existing is not None:
+            await _cleanup_old_staged_file(existing.staged_path)
+            await delete_staged_record(session, existing)
 
         await create_staged_record(
             session,
@@ -166,17 +169,19 @@ async def _process_attachment(
         summary.errors.append(error_msg)
         logger.error(error_msg)
 
-        await create_staged_record(
-            session,
-            bank_code=bank_code,
-            message_id=attachment.message_id,
-            attachment_id=attachment.attachment_id,
-            message_date=attachment.message_date,
-            original_filename=attachment.filename,
-            staged_path=None,
-            status="failed",
-            error_reason=str(exc),
-        )
+        # In force mode, preserve the existing good record
+        if existing is None:
+            await create_staged_record(
+                session,
+                bank_code=bank_code,
+                message_id=attachment.message_id,
+                attachment_id=attachment.attachment_id,
+                message_date=attachment.message_date,
+                original_filename=attachment.filename,
+                staged_path=None,
+                status="failed",
+                error_reason=str(exc),
+            )
 
 
 async def run_ingestion_job(
