@@ -66,7 +66,7 @@ The repo defines 12 skills in `.claude/skills/`: 10 OpenSpec workflow skills (ea
 |-------|-----------|
 | Backend | Python 3.12, FastAPI, SQLAlchemy, Alembic |
 | Database | SQLite (WAL mode) |
-| Frontend | React, Vite, TypeScript (planned) |
+| Frontend | React, Vite, TypeScript, Tailwind CSS |
 | Package Manager | uv |
 | Testing | pytest + pytest-cov, httpx (ASGI test client) |
 | Linting | ruff (check + format), pyright (type check) |
