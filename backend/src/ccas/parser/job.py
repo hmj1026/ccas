@@ -5,6 +5,8 @@
 單筆失敗不會中止整個 batch。
 """
 
+from __future__ import annotations
+
 import asyncio
 import logging
 from dataclasses import dataclass, field
@@ -18,10 +20,12 @@ from ccas.parser.result import ParseResult
 from ccas.parser.staging import (
     check_bill_exists,
     create_bill_and_transactions,
+    delete_existing_bill,
     fetch_parseable_attachments,
     get_bank_config,
     update_attachment_status,
 )
+from ccas.pipeline.options import PipelineOptions
 from ccas.storage.models import StagedAttachment
 
 logger = logging.getLogger(__name__)
@@ -46,7 +50,7 @@ class ParseSummary:
 
 def _try_parse(
     candidates: list[BankParser], pdf_path: Path
-) -> tuple[bool, "ParseResult | None", str]:
+) -> tuple[bool, ParseResult | None, str]:
     """依序嘗試候選 parser，回傳第一個成功的結果。
 
     Args:
@@ -77,6 +81,8 @@ async def _process_attachment(
     attachment: StagedAttachment,
     session: AsyncSession,
     summary: ParseSummary,
+    *,
+    force: bool = False,
 ) -> None:
     """處理單一附件的解析。"""
     bank_code = attachment.bank_code
@@ -131,9 +137,10 @@ async def _process_attachment(
     assert parse_result is not None
 
     # 去重複：檢查同銀行同月份帳單是否已存在
-    if await check_bill_exists(
+    bill_exists = await check_bill_exists(
         session, parse_result.bank_code, parse_result.billing_month
-    ):
+    )
+    if bill_exists and not force:
         summary.skipped_count += 1
         logger.info(
             "帳單已存在，略過：%s/%s",
@@ -142,6 +149,16 @@ async def _process_attachment(
         )
         await update_attachment_status(session, attachment, status="parsed")
         return
+
+    if bill_exists and force:
+        logger.info(
+            "Force 模式：刪除舊帳單並重新解析 %s/%s",
+            parse_result.bank_code,
+            parse_result.billing_month,
+        )
+        await delete_existing_bill(
+            session, parse_result.bank_code, parse_result.billing_month
+        )
 
     # 建立 Bill 與 Transaction 記錄
     await create_bill_and_transactions(session, parse_result, file_path=staged_path)
@@ -156,7 +173,10 @@ async def _process_attachment(
     )
 
 
-async def run_parse_job(session: AsyncSession) -> ParseSummary:
+async def run_parse_job(
+    session: AsyncSession,
+    options: PipelineOptions | None = None,
+) -> ParseSummary:
     """執行單次批次 PDF 解析。
 
     流程：
@@ -167,11 +187,13 @@ async def run_parse_job(session: AsyncSession) -> ParseSummary:
 
     Args:
         session: 非同步 DB Session（由呼叫端注入）。
+        options: Pipeline 執行參數（可選）。
 
     Returns:
         ParseSummary 統計摘要。
     """
     summary = ParseSummary()
+    force = options.force if options else False
 
     attachments = await fetch_parseable_attachments(session)
     if not attachments:
@@ -179,7 +201,7 @@ async def run_parse_job(session: AsyncSession) -> ParseSummary:
         return summary
 
     for attachment in attachments:
-        await _process_attachment(attachment, session, summary)
+        await _process_attachment(attachment, session, summary, force=force)
 
     await session.commit()
 
