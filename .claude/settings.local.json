@@ -38,7 +38,12 @@
       "Bash(echo \"---EXIT:$?\")",
       "Bash(grep -r \"class.*Exception\\\\|class.*Error\" .venv/lib/python*/site-packages/pdfplumber/)",
       "Bash(cx definition:*)",
-      "Bash(xargs -I {} sh -c 'echo \"=== {} ===\" && head -30 {}')"
+      "Bash(xargs -I {} sh -c 'echo \"=== {} ===\" && head -30 {}')",
+      "Bash(wc -l backend/src/ccas/**/*.py backend/src/ccas/*.py)",
+      "Bash(wc -l src/ccas/bot/*.py)",
+      "Bash(wc -l src/ccas/storage/*.py)",
+      "Bash(wc -l src/ccas/tools/*.py)",
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\('react:', d['dependencies'].get\\('react','-'\\)\\); print\\('vite:', d['devDependencies'].get\\('vite','-'\\)\\); print\\('tailwindcss:', d['dependencies'].get\\('tailwindcss', d['devDependencies'].get\\('tailwindcss','-'\\)\\)\\); print\\('typescript:', d['devDependencies'].get\\('typescript','-'\\)\\)\")"
     ]
   },
   "hooks": {
