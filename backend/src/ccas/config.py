@@ -47,6 +47,10 @@ class Settings(BaseSettings):
     api_host: str = "0.0.0.0"
     api_port: int = 8000
     api_token: str
+    frontend_origins: str = "http://127.0.0.1:5173,http://localhost:5173"
+    api_session_cookie_name: str = "ccas_session"
+    api_session_max_age: int = 43200
+    api_cookie_secure: bool = False
     redis_url: str = "redis://localhost:6379/0"
 
     def get_pdf_password(self, bank_code: str) -> str | None:
@@ -62,6 +66,14 @@ class Settings(BaseSettings):
         """
         key = f"PDF_PASSWORD_{bank_code.upper()}"
         return os.environ.get(key)
+
+    def get_frontend_origins(self) -> list[str]:
+        """解析允許攜帶 cookie 的前端來源清單。"""
+        return [
+            item.strip()
+            for item in self.frontend_origins.split(",")
+            if item.strip()
+        ]
 
 
 @lru_cache(maxsize=1)

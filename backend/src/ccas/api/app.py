@@ -5,9 +5,19 @@
 """
 
 from fastapi import Depends, FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
 from ccas.api.deps import verify_token
-from ccas.api.routers import analytics, bills, overview, pipeline, settings, transactions
+from ccas.api.routers import (
+    analytics,
+    auth,
+    bills,
+    overview,
+    pipeline,
+    settings,
+    transactions,
+)
+from ccas.config import get_settings
 
 
 def create_app() -> FastAPI:
@@ -15,12 +25,22 @@ def create_app() -> FastAPI:
 
     ``/health`` 不需認證；所有 ``/api`` 路由皆需 Bearer Token。
     """
+    settings_obj = get_settings()
     app = FastAPI(title="CCAS", version="0.1.0")
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=settings_obj.get_frontend_origins(),
+        allow_credentials=True,
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+        allow_headers=["Authorization", "Content-Type"],
+    )
 
     @app.get("/health")
     async def health():
         """健康檢查端點，回傳 ``{"status": "ok"}``。"""
         return {"status": "ok"}
+
+    app.include_router(auth.router)
 
     # 所有業務 API 路由，統一加上 Bearer Token 認證
     api_dependencies = [Depends(verify_token)]

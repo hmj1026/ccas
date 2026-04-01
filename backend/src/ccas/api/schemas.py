@@ -45,6 +45,18 @@ class ErrorResponse(BaseModel):
     data: None = None
 
 
+class SessionLoginRequest(BaseModel):
+    """建立瀏覽器 session 的登入請求。"""
+
+    token: str = Field(min_length=1)
+
+
+class SessionStatus(BaseModel):
+    """目前 session 驗證狀態。"""
+
+    authenticated: bool
+
+
 # -- Overview --
 
 

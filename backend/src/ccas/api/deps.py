@@ -1,24 +1,42 @@
 """API 共用依賴：認證、共用查詢參數。"""
 
 import re
+import secrets
 
-from fastapi import Depends, HTTPException, Query, Security
+from fastapi import Depends, HTTPException, Query, Request, Security
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from ccas.config import get_settings
 
 _MONTH_RE = re.compile(r"^\d{4}-(?:0[1-9]|1[0-2])$")
-_bearer_scheme = HTTPBearer()
+_bearer_scheme = HTTPBearer(auto_error=False)
+
+
+def is_valid_api_token(token: str | None) -> bool:
+    """檢查 token 是否與設定值相符。"""
+    if not token:
+        return False
+    return secrets.compare_digest(token, get_settings().api_token)
+
+
+def get_session_cookie_token(request: Request) -> str | None:
+    """從 httpOnly session cookie 讀取 token。"""
+    settings = get_settings()
+    return request.cookies.get(settings.api_session_cookie_name)
 
 
 def verify_token(
-    credentials: HTTPAuthorizationCredentials = Security(_bearer_scheme),
+    request: Request,
+    credentials: HTTPAuthorizationCredentials | None = Security(_bearer_scheme),
 ) -> str:
     """驗證 Bearer Token，回傳 token 值。"""
-    settings = get_settings()
-    if credentials.credentials != settings.api_token:
-        raise HTTPException(status_code=401, detail="Invalid token")
-    return credentials.credentials
+    bearer_token = credentials.credentials if credentials else None
+    cookie_token = get_session_cookie_token(request)
+    if is_valid_api_token(bearer_token):
+        return bearer_token  # type: ignore[return-value]
+    if is_valid_api_token(cookie_token):
+        return cookie_token  # type: ignore[return-value]
+    raise HTTPException(status_code=401, detail="Invalid token")
 
 
 def validate_month(month: str) -> str:
