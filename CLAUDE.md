@@ -97,6 +97,12 @@ uv run pyright                             # Type check
 uv run alembic upgrade head                # Apply migrations
 uv run alembic revision --autogenerate -m "<description>"
 
+# Pipeline
+uv run python -m ccas.pipeline             # Run full pipeline
+uv run python -m ccas.pipeline --bank CTBC # Single bank only
+uv run python -m ccas.pipeline --force     # Force re-download/re-parse
+uv run python -m ccas.pipeline --force --bank CTBC --year 2026 --month 3
+
 # Server
 uv run fastapi dev                         # Dev server with hot reload
 ```

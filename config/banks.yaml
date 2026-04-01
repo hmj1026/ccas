@@ -1,0 +1,15 @@
+# 複製為 config/banks.yaml 後再編輯。
+# bank_code 只能使用 config/bank-code-registry.yaml 裡定義的代碼。
+#
+# 範例：
+# banks:
+#   - bank_code: CTBC
+#     gmail_filter: "from:service@ctbcbank.com subject:信用卡"
+#     active_parser_version: v1
+#     is_active: true
+
+banks:
+  - bank_code: CTBC
+    gmail_filter: "from:ebill@estats.ctbcbank.com subject:中國信託信用卡電子帳單"
+    active_parser_version: v1
+    is_active: true
