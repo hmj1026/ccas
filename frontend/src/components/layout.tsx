@@ -3,6 +3,7 @@
  *
  * 左側導覽列 + 右側內容區。支援 responsive。
  */
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   LayoutDashboard,
   Receipt,
@@ -11,9 +12,13 @@ import {
   Settings,
   Menu,
   X,
+  LogOut,
 } from 'lucide-react'
 import { useState } from 'react'
-import { NavLink, Outlet } from 'react-router'
+import { NavLink, Outlet, useNavigate } from 'react-router'
+import { apiDelete } from '@/lib/api-client'
+import type { ApiResponse } from '@/lib/types'
+import { Button } from '@/components/ui/button'
 
 const NAV_ITEMS = [
   { to: '/overview', label: '總覽', icon: LayoutDashboard },
@@ -25,6 +30,15 @@ const NAV_ITEMS = [
 
 function Layout() {
   const [mobileOpen, setMobileOpen] = useState(false)
+  const navigate = useNavigate()
+  const queryClient = useQueryClient()
+  const logout = useMutation({
+    mutationFn: () => apiDelete<ApiResponse<null>>('/api/auth/session'),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['auth', 'session'] })
+      navigate('/login', { replace: true })
+    },
+  })
 
   return (
     <div className="flex min-h-screen bg-background">
@@ -77,6 +91,17 @@ function Layout() {
             </NavLink>
           ))}
         </nav>
+        <div className="border-t border-border p-3">
+          <Button
+            variant="ghost"
+            className="w-full justify-start"
+            onClick={() => logout.mutate()}
+            disabled={logout.isPending}
+          >
+            <LogOut className="size-4" data-icon="inline-start" />
+            登出
+          </Button>
+        </div>
       </aside>
 
       {/* Main content */}

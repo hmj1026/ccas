@@ -10,6 +10,10 @@ export interface ApiResponse<T> {
   readonly message: string
 }
 
+export interface SessionStatus {
+  readonly authenticated: boolean
+}
+
 export interface PaginationMeta {
   readonly page: number
   readonly page_size: number
