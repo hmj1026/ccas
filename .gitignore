@@ -59,3 +59,12 @@ node_modules/
 # Build
 dist/
 build/
+
+# Local config (use banks.example.yaml as template)
+config/banks.yaml
+
+# Docker Compose local overrides
+docker-compose.override.yml
+
+# Claude Code plan files
+.claude/plans/
