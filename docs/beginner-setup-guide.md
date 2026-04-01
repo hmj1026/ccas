@@ -12,7 +12,7 @@ CCAS 目前已經有這些能力：
 
 但 repo 目前也有兩個限制：
 
-- `backend/src/ccas/parser/banks/` 還沒有真正的銀行 parser 實作，所以真實銀行 PDF 暫時不會自動解析成報表資料。
+- 目前已實作中國信託（CTBC）v1 parser；其他銀行的 parser 仍在開發中，真實銀行 PDF 需確認對應銀行 parser 是否已實作。
 - `run_pipeline()` 目前不會自動送出「新帳單解析完成」通知，所以本文件用「直接送測試訊息」驗證 Telegram 收訊。
 
 因此這份指南會分成兩段：
@@ -263,8 +263,8 @@ CLI 會輸出 JSON。重點看：
 
 - PDF 下載後會進到 staging
 - 解密流程可以跑
-- 但 `backend/src/ccas/parser/banks/` 目前沒有真實 parser
-- 所以真實銀行 PDF 不會自動變成 `bills` 和 `transactions`
+- 目前已實作中國信託（CTBC）v1 parser；其他銀行尚未實作
+- 非 CTBC 的真實銀行 PDF 目前不會自動解析成 `bills` 和 `transactions`
 
 如果你此刻的目標是驗證「前端報表能不能看」與「手機能不能收到訊息」，請走下一段 demo 驗證流程。
 
@@ -423,5 +423,5 @@ PY
 
 ### 為什麼 Gmail 附件抓到了，前端還是沒有真實帳單資料
 
-因為目前 repo 還沒有實際銀行 parser。  
-這不是設定問題，是目前功能尚未補齊。你可以先用 seed data 驗證前端與通知鏈路，等 parser 補上後再接回真實 Gmail 帳單。
+目前已實作中國信託（CTBC）v1 parser。若你使用的不是 CTBC 帳單，該銀行的 parser 可能尚未實作。
+你可以先用 seed data 驗證前端與通知鏈路，或等待對應銀行 parser 補上後再接回真實 Gmail 帳單。
