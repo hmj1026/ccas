@@ -35,9 +35,11 @@ def registry_file(tmp_path: Path) -> Path:
 banks:
   - bank_code: CTBC
     bank_name: 中國信託
+    fsc_code: "822"
     supported: false
   - bank_code: ESUN
     bank_name: 玉山銀行
+    fsc_code: "808"
     supported: false
 """.strip()
     )
@@ -49,6 +51,8 @@ def test_load_bank_registry_returns_lookup(registry_file: Path):
 
     assert sorted(registry) == ["CTBC", "ESUN"]
     assert registry["CTBC"].bank_name == "中國信託"
+    assert registry["CTBC"].fsc_code == "822"
+    assert registry["ESUN"].fsc_code == "808"
 
 
 def test_load_bank_config_specs_normalizes_and_defaults(
@@ -259,11 +263,51 @@ def test_registry_duplicate_bank_code(tmp_path: Path):
         "banks:\n"
         "  - bank_code: CTBC\n"
         "    bank_name: 中國信託\n"
+        '    fsc_code: "822"\n'
         "  - bank_code: CTBC\n"
         "    bank_name: 重複\n"
+        '    fsc_code: "822"\n'
     )
 
     with pytest.raises(BankConfigValidationError, match="重複 bank_code"):
+        load_bank_registry(path)
+
+
+def test_registry_missing_fsc_code(tmp_path: Path):
+    path = tmp_path / "no-fsc.yaml"
+    path.write_text(
+        "banks:\n"
+        "  - bank_code: CTBC\n"
+        "    bank_name: 中國信託\n"
+    )
+
+    with pytest.raises(BankConfigValidationError, match="fsc_code 必須是三位數字字串"):
+        load_bank_registry(path)
+
+
+def test_registry_fsc_code_wrong_length(tmp_path: Path):
+    path = tmp_path / "bad-fsc-len.yaml"
+    path.write_text(
+        "banks:\n"
+        "  - bank_code: CTBC\n"
+        "    bank_name: 中國信託\n"
+        '    fsc_code: "82"\n'
+    )
+
+    with pytest.raises(BankConfigValidationError, match="fsc_code 必須是三位數字字串"):
+        load_bank_registry(path)
+
+
+def test_registry_fsc_code_non_digit(tmp_path: Path):
+    path = tmp_path / "bad-fsc-char.yaml"
+    path.write_text(
+        "banks:\n"
+        "  - bank_code: CTBC\n"
+        "    bank_name: 中國信託\n"
+        '    fsc_code: "ABC"\n'
+    )
+
+    with pytest.raises(BankConfigValidationError, match="fsc_code 必須是三位數字字串"):
         load_bank_registry(path)
 
 

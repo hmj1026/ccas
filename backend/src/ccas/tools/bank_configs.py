@@ -28,6 +28,7 @@ class BankRegistryEntry:
 
     bank_code: str
     bank_name: str
+    fsc_code: str
     supported: bool = False
     notes: str = ""
 
@@ -74,6 +75,12 @@ def load_bank_registry(path: str | Path) -> dict[str, BankRegistryEntry]:
             raise BankConfigValidationError(
                 f"bank-code-registry.yaml 第 {index} 筆缺少 bank_code 或 bank_name。"
             )
+        raw_fsc = str(row.get("fsc_code", "")).strip()
+        if not raw_fsc or len(raw_fsc) != 3 or not raw_fsc.isdigit():
+            raise BankConfigValidationError(
+                f"bank-code-registry.yaml 第 {index} 筆 ({raw_code}) "
+                f"的 fsc_code 必須是三位數字字串，實際值: {raw_fsc!r}"
+            )
         if raw_code in registry:
             raise BankConfigValidationError(
                 f"bank-code-registry.yaml 出現重複 bank_code: {raw_code}"
@@ -81,6 +88,7 @@ def load_bank_registry(path: str | Path) -> dict[str, BankRegistryEntry]:
         registry[raw_code] = BankRegistryEntry(
             bank_code=raw_code,
             bank_name=raw_name,
+            fsc_code=raw_fsc,
             supported=bool(row.get("supported", False)),
             notes=str(row.get("notes", "")).strip(),
         )
