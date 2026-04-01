@@ -4,42 +4,24 @@
 TBD - created by archiving change pipeline-force-download. Update Purpose after archive.
 ## Requirements
 ### Requirement: PipelineOptions 資料模型
-系統 SHALL 提供一個不可變的 `PipelineOptions` 資料模型，包含以下欄位，所有欄位皆有預設值：
-- `force: bool = False` — 是否繞過去重強制重新處理
-- `bank_code: str | None = None` — 僅處理指定銀行（None 表示全部）
-- `year: int | None = None` — 篩選年份
-- `month: int | None = None` — 篩選月份
 
-#### Scenario: 預設建構
-- **WHEN** `PipelineOptions()` 被建構且不帶任何參數
-- **THEN** `force` 為 `False`，`bank_code`、`year`、`month` 皆為 `None`
+`PipelineOptions` SHALL 提供 `from_dict()` 與 `to_dict()` 方法，支援與 `Mapping[str, object]` 之間的序列化與反序列化；`from_dict()` MUST 接受 `dict[str, bool]` 等 `Mapping` 子型別，且在 pyright strict mode 下不得產生型別錯誤。
 
-#### Scenario: 指定部分參數
-- **WHEN** `PipelineOptions(force=True, bank_code="CTBC")` 被建構
-- **THEN** `force` 為 `True`，`bank_code` 為 `"CTBC"`，`year` 和 `month` 為 `None`
+#### MODIFIED Scenario: 從 dict 反序列化
+- **WHEN** 呼叫 `PipelineOptions.from_dict(data)` 且 `data` 型別為任意 `Mapping[str, object]`（包含 `dict[str, bool]` 等子型別）
+- **THEN** 正確建立 `PipelineOptions` 實例，且 pyright strict mode 不報錯
 
 ### Requirement: Gmail 日期篩選子句產生
-`PipelineOptions` SHALL 提供 `gmail_date_filter()` 方法，根據 `year` 和 `month` 產生 Gmail 查詢日期篩選子句。
 
-#### Scenario: 無年月時回傳空字串
-- **WHEN** `year` 和 `month` 皆為 `None`
-- **THEN** `gmail_date_filter()` 回傳 `""`
+`PipelineOptions` SHALL 提供 `date_range()` 方法，根據 `year` 和 `month` 計算起訖日期範圍，並以明確的 `ValueError` 防護無效輸入（非 `assert`）；當僅提供 `month` 時 SHALL 自動採用當年，當僅提供 `year` 時 SHALL 回傳全年範圍。
 
-#### Scenario: 指定年月時回傳 after/before 子句
-- **WHEN** `year=2026` 且 `month=3`
-- **THEN** `gmail_date_filter()` 回傳 `"after:2026/02/28 before:2026/04/01"`
+#### MODIFIED Scenario: 設定 month 但未設定 year 時使用當年
+- **WHEN** 呼叫 `date_range()` 且 `month` 有值但 `year` 為 None
+- **THEN** `effective_year` 自動設為當年，並以明確的 `ValueError` 防護（非 `assert`）
 
-#### Scenario: 僅指定年份時篩選整年
-- **WHEN** `year=2026` 且 `month` 為 `None`
-- **THEN** `gmail_date_filter()` 回傳 `"after:2025/12/31 before:2027/01/01"`
-
-#### Scenario: 僅指定月份時自動採用當年
-- **WHEN** `month=3` 且 `year` 為 `None`
-- **THEN** `gmail_date_filter()` 使用當前年份計算 after/before 子句
-
-#### Scenario: 12 月跨年邊界正確處理
-- **WHEN** `year=2026` 且 `month=12`
-- **THEN** `gmail_date_filter()` 回傳 `"after:2026/11/30 before:2027/01/01"`
+#### MODIFIED Scenario: 僅設定 year 時涵蓋全年
+- **WHEN** 呼叫 `date_range()` 且 `year` 有值但 `month` 為 None
+- **THEN** 回傳全年範圍，並以明確的 `ValueError` 防護（非 `assert`）
 
 ### Requirement: CLI 參數支援
 `python -m ccas.pipeline` SHALL 支援以下 CLI 參數：

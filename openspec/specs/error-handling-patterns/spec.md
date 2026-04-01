@@ -4,19 +4,21 @@
 TBD - created by archiving change integration-polish. Update Purpose after archive.
 ## Requirements
 ### Requirement: 共用例外階層以 `CcasError` 為基底
-系統 SHALL 在 `core/exceptions.py` 定義 `CcasError(Exception)` 基底類別，以及各模組的專屬子類別，確保跨模組錯誤可被統一捕捉或精確區分。
 
-#### Scenario: 可用基底類別統一捕捉所有 CCAS 例外
-- **WHEN** pipeline 呼叫端以 `except CcasError` 捕捉例外
-- **THEN** 由任一模組（ingestor、parser、classifier、notifier）拋出的例外均可被捕捉，不會有漏網的模組例外
+系統 SHALL 維持以 `CcasError` 為基底的共用例外階層，且 attachment ingestion、parser 探測與 RQ failure handling MUST 僅捕捉預期的 domain、PDF 與 I/O 例外；對已處理失敗 SHALL 記錄 traceback，未預期例外 SHALL 持續向上傳播。
 
-#### Scenario: 可用子類別精確捕捉特定模組例外
-- **WHEN** 呼叫端只需處理特定模組的錯誤（例如 `except DecryptError`）
-- **THEN** 只有來自該模組的例外會被捕捉，其他模組的例外不受影響
+#### ADDED Scenario: ingestor attachment 處理僅捕捉預期例外
+- **WHEN** `_process_attachment` 執行附件下載與寫檔
+- **THEN** 僅捕捉 `IngestError` 和 `OSError`，其他未預期例外向上傳播
+- **AND** 捕捉時記錄完整 traceback（`exc_info=True`）
 
-#### Scenario: 例外攜帶可選的結構化 context 欄位
-- **WHEN** 模組拋出例外時傳入 `context` 參數（例如附件路徑、銀行代碼）
-- **THEN** 捕捉端可從 `context` 取得結構化診斷資訊，用於日誌記錄或錯誤回報
+#### ADDED Scenario: parser can_parse 僅捕捉 PDF 讀取例外
+- **WHEN** `can_parse` 嘗試開啟並辨識 PDF
+- **THEN** 僅捕捉 PDF 解析相關例外（`pdfplumber.exceptions` 和 `OSError`），其他未預期例外向上傳播
+
+#### ADDED Scenario: RQ failure handler 不吞掉內部例外
+- **WHEN** `on_failure_handler` 執行 manual review 標記時發生錯誤
+- **THEN** 該錯誤會被記錄（含 traceback），不會覆蓋原始 pipeline 失敗資訊
 
 ### Requirement: 結構化日誌輸出 JSON 格式
 系統 SHALL 使用 Python stdlib `logging` 模組搭配自訂 `JsonFormatter`，輸出包含必要欄位的 JSON 格式日誌，以利後續接入 log aggregation 工具。

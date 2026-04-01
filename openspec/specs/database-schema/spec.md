@@ -4,30 +4,20 @@
 TBD - created by archiving change foundation-setup. Update Purpose after archive.
 ## Requirements
 ### Requirement: 帳單主表資料模型
-系統 SHALL 定義一個 SQLAlchemy ORM model `Bill`，欄位包含：`id`（INTEGER, PK, autoincrement）、`bank_code`（TEXT, not null）、`billing_month`（TEXT, not null, 格式 `YYYY-MM`）、`total_amount`（INTEGER, not null）、`due_date`（DATE, not null）、`is_paid`（BOOLEAN, 預設 false）、`file_path`（TEXT）、`created_at`（DATETIME, 預設 `utcnow`）。系統 SHALL 在 (`bank_code`, `billing_month`) 上建立唯一約束。
 
-#### Scenario: 建立帳單紀錄
-- **WHEN** 建立一筆 `Bill`，內容為 `bank_code="CTBC"`、`billing_month="2026-03"`、`total_amount=15000`、`due_date="2026-04-15"`
-- **THEN** 該紀錄會成功持久化，且 `is_paid=false`、`created_at` 會自動設定
+系統 SHALL 維持 `Bill` 資料模型的既有欄位與唯一約束，且 `created_at` 的 Python 端預設值 SHALL 由 naive `datetime.utcnow()` 改為 timezone-aware 的 `datetime.now(UTC)`。
 
-#### Scenario: 防止重複帳單
-- **WHEN** 已存在一筆 `bank_code="CTBC"` 且 `billing_month="2026-03"` 的 `Bill`，又插入另一筆相同組合資料
-- **THEN** 資料庫會拋出 `IntegrityError`
+#### MODIFIED Scenario: 建立帳單紀錄
+- **WHEN** 建立一筆 `Bill`
+- **THEN** `created_at` 會自動設定為 timezone-aware UTC datetime（`datetime.now(UTC)`），而非 naive datetime
 
 ### Requirement: 消費明細資料表模型
-系統 SHALL 定義一個 SQLAlchemy ORM model `Transaction`，欄位包含：`id`（INTEGER, PK, autoincrement）、`bill_id`（INTEGER, FK 至 `bills.id`, not null）、`trans_date`（DATE, not null）、`posting_date`（DATE, nullable）、`merchant`（TEXT, not null）、`amount`（INTEGER, not null）、`currency`（TEXT, 預設 `"TWD"`）、`original_amount`（INTEGER, nullable）、`card_last4`（TEXT, nullable）、`installment_current`（INTEGER, nullable）、`installment_total`（INTEGER, nullable）、`category`（TEXT, nullable）、`note`（TEXT, nullable）、`created_at`（DATETIME, 預設 `utcnow`）。
 
-#### Scenario: 消費明細可連結到帳單
+系統 SHALL 維持 `Transaction` 資料模型的既有欄位與外鍵關聯，且 `created_at` 的 Python 端預設值 SHALL 由 naive `datetime.utcnow()` 改為 timezone-aware 的 `datetime.now(UTC)`。
+
+#### MODIFIED Scenario: 消費明細可連結到帳單
 - **WHEN** 建立一筆具有有效 `bill_id` 的 `Transaction`
-- **THEN** 該紀錄會成功持久化，且可透過 `bill.transactions` relationship 存取
-
-#### Scenario: 外鍵約束生效
-- **WHEN** 建立一筆 `bill_id` 不存在於 `bills` 的 `Transaction`
-- **THEN** 資料庫會拋出 `IntegrityError`
-
-#### Scenario: 分期欄位可為空值
-- **WHEN** 建立一筆非分期的 `Transaction`，並將 `installment_current=None` 與 `installment_total=None`
-- **THEN** 該紀錄會成功持久化，且分期欄位以 null 保存
+- **THEN** `created_at` 會自動設定為 timezone-aware UTC datetime
 
 ### Requirement: 分類對應資料表模型
 系統 SHALL 定義一個 SQLAlchemy ORM model `Category`，欄位包含：`id`（INTEGER, PK, autoincrement）、`keyword`（TEXT, not null, unique）、`category`（TEXT, not null）。
