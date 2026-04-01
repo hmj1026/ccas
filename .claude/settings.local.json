@@ -35,7 +35,9 @@
       "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('INSTRUCTION:', d.get\\('instruction',''\\)[:500]\\); print\\('TEMPLATE:', d.get\\('template',''\\)[:1000]\\); print\\('OUTPUT:', d.get\\('outputPath'\\)\\); print\\('DEPS:', d.get\\('dependencies'\\)\\)\")",
       "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('INSTRUCTION:', d.get\\('instruction',''\\)[:800]\\); print\\('TEMPLATE:', d.get\\('template',''\\)[:1000]\\); print\\('OUTPUT:', d.get\\('outputPath'\\)\\); print\\('DEPS:', d.get\\('dependencies'\\)\\)\")",
       "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('INSTRUCTION:', d.get\\('instruction',''\\)[:800]\\); print\\('---TEMPLATE---'\\); print\\(d.get\\('template',''\\)[:1500]\\); print\\('OUTPUT:', d.get\\('outputPath'\\)\\)\")",
-      "Bash(echo \"---EXIT:$?\")"
+      "Bash(echo \"---EXIT:$?\")",
+      "Bash(grep -r \"class.*Exception\\\\|class.*Error\" .venv/lib/python*/site-packages/pdfplumber/)",
+      "Bash(cx definition:*)"
     ]
   },
   "hooks": {
