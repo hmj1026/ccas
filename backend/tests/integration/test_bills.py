@@ -148,28 +148,33 @@ async def test_bill_pdf_url_null_when_no_file(
 async def test_download_pdf_success(client: AsyncClient, db_session: AsyncSession):
     """成功下載帳單 PDF。"""
     # 建立暫存 PDF 檔案
-    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as f:
-        f.write(b"%PDF-1.4 test content")
-        pdf_path = f.name
+    from ccas.config import get_settings
 
-    try:
-        bill = Bill(
-            bank_code="CTBC",
-            billing_month="2026-03",
-            total_amount=5000,
-            due_date=date(2026, 4, 15),
-            file_path=pdf_path,
-        )
-        db_session.add(bill)
-        await db_session.commit()
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        settings = get_settings()
+        original_staging_dir = settings.staging_dir
+        pdf_path = Path(tmp_dir) / "test.pdf"
+        pdf_path.write_bytes(b"%PDF-1.4 test content")
+        settings.staging_dir = tmp_dir
 
-        response = await client.get(
-            f"/api/bills/{bill.id}/pdf", headers=auth_headers()
-        )
-        assert response.status_code == 200
-        assert response.headers["content-type"] == "application/pdf"
-    finally:
-        Path(pdf_path).unlink(missing_ok=True)
+        try:
+            bill = Bill(
+                bank_code="CTBC",
+                billing_month="2026-03",
+                total_amount=5000,
+                due_date=date(2026, 4, 15),
+                file_path=str(pdf_path),
+            )
+            db_session.add(bill)
+            await db_session.commit()
+
+            response = await client.get(
+                f"/api/bills/{bill.id}/pdf", headers=auth_headers()
+            )
+            assert response.status_code == 200
+            assert response.headers["content-type"] == "application/pdf"
+        finally:
+            settings.staging_dir = original_staging_dir
 
 
 async def test_download_pdf_bill_not_found(
@@ -198,3 +203,38 @@ async def test_download_pdf_file_missing(
         f"/api/bills/{bill.id}/pdf", headers=auth_headers()
     )
     assert response.status_code == 404
+
+
+async def test_download_pdf_rejects_path_outside_staging_root(
+    client: AsyncClient, db_session: AsyncSession
+):
+    """帳單 PDF 若不在 staging 根目錄下應拒絕存取。"""
+    from ccas.config import get_settings
+
+    with tempfile.TemporaryDirectory() as allowed_dir:
+        with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as outside_file:
+            outside_file.write(b"%PDF-1.4 outside")
+            outside_path = outside_file.name
+
+        settings = get_settings()
+        original_staging_dir = settings.staging_dir
+        settings.staging_dir = allowed_dir
+
+        try:
+            bill = Bill(
+                bank_code="CTBC",
+                billing_month="2026-03",
+                total_amount=5000,
+                due_date=date(2026, 4, 15),
+                file_path=outside_path,
+            )
+            db_session.add(bill)
+            await db_session.commit()
+
+            response = await client.get(
+                f"/api/bills/{bill.id}/pdf", headers=auth_headers()
+            )
+            assert response.status_code == 403
+        finally:
+            settings.staging_dir = original_staging_dir
+            Path(outside_path).unlink(missing_ok=True)

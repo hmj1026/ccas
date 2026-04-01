@@ -13,10 +13,24 @@ from ccas.api.schemas import (
     BillItem,
     BillUpdateRequest,
 )
+from ccas.config import get_settings
 from ccas.storage.database import get_db_session
 from ccas.storage.models import BankConfig, Bill
 
 router = APIRouter(prefix="/api/bills", tags=["bills"])
+
+
+def _resolve_bill_pdf_path(file_path: str, allowed_root: str) -> Path:
+    """解析並驗證帳單 PDF 路徑是否仍位於允許根目錄下。"""
+    pdf_path = Path(file_path).resolve()
+    root_path = Path(allowed_root).resolve()
+    try:
+        pdf_path.relative_to(root_path)
+    except ValueError as exc:
+        raise HTTPException(status_code=403, detail="PDF 路徑不在允許範圍內") from exc
+    if not pdf_path.is_file():
+        raise HTTPException(status_code=404, detail="PDF 檔案不存在")
+    return pdf_path
 
 
 @router.get("", response_model=ApiResponse[list[BillItem]])
@@ -75,10 +89,9 @@ async def download_bill_pdf(
     if not bill.file_path:
         raise HTTPException(status_code=404, detail="此帳單沒有對應的 PDF 檔案")
 
-    # 路徑穿越防護：解析為絕對路徑後確認存在
-    pdf_path = Path(bill.file_path).resolve()
-    if not pdf_path.is_file():
-        raise HTTPException(status_code=404, detail="PDF 檔案不存在")
+    # 僅允許讀取 staging 根目錄下的 PDF 檔案
+    settings = get_settings()
+    pdf_path = _resolve_bill_pdf_path(bill.file_path, settings.staging_dir)
 
     return FileResponse(
         path=pdf_path,

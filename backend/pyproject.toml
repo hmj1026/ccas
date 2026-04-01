@@ -64,3 +64,8 @@ select = ["E", "F", "I", "N", "W", "UP"]
 venvPath = "."
 venv = ".venv"
 pythonVersion = "3.12"
+
+[dependency-groups]
+dev = [
+    "fpdf2>=2.8.7",
+]
