@@ -16,7 +16,6 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ccas.config import get_settings
-from ccas.errors import IngestError
 from ccas.ingestor.auth import load_credentials
 from ccas.ingestor.gmail_client import (
     GmailAttachmentMeta,
