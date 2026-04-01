@@ -83,7 +83,7 @@ class TestPipelineStageOrder:
     async def test_stages_called_in_order(self, mock_session):
         call_order = []
 
-        async def mock_ingest(session):
+        async def mock_ingest(session, options=None):
             call_order.append("ingest")
             return _make_ingest_summary()
 
@@ -91,7 +91,7 @@ class TestPipelineStageOrder:
             call_order.append("decrypt")
             return _make_decrypt_summary()
 
-        async def mock_parse(session):
+        async def mock_parse(session, options=None):
             call_order.append("parse")
             return _make_parse_summary()
 
@@ -159,7 +159,7 @@ class TestFaultTolerance:
         """Ingest 有失敗項目時，後續階段仍然被呼叫。"""
         stages_called = []
 
-        async def mock_ingest(session):
+        async def mock_ingest(session, options=None):
             stages_called.append("ingest")
             return _make_ingest_summary(
                 staged_count=1, failed_count=1, errors=["bank X failed"]
@@ -169,7 +169,7 @@ class TestFaultTolerance:
             stages_called.append("decrypt")
             return _make_decrypt_summary()
 
-        async def mock_parse(session):
+        async def mock_parse(session, options=None):
             stages_called.append("parse")
             return _make_parse_summary()
 

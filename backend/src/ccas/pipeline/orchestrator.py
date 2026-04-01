@@ -4,6 +4,8 @@
 每階段部分失敗不阻斷後續階段。
 """
 
+from __future__ import annotations
+
 import logging
 import time
 
@@ -14,6 +16,7 @@ from ccas.classifier.job import ClassifySummary, run_classify_job
 from ccas.decryptor.job import DecryptionSummary, run_decryption_job
 from ccas.ingestor.job import IngestionSummary, run_ingestion_job
 from ccas.parser.job import ParseSummary, run_parse_job
+from ccas.pipeline.options import PipelineOptions
 from ccas.pipeline.summary import FailedItem, PipelineSummary, StageSummary
 
 logger = logging.getLogger(__name__)
@@ -82,7 +85,10 @@ def _collect_failures(*stage_summaries: StageSummary) -> tuple[FailedItem, ...]:
     return tuple(items)
 
 
-async def run_pipeline(session: AsyncSession) -> PipelineSummary:
+async def run_pipeline(
+    session: AsyncSession,
+    options: PipelineOptions | None = None,
+) -> PipelineSummary:
     """執行五階段 pipeline 並回傳結構化摘要。
 
     各階段依序執行：ingest -> decrypt -> parse -> classify -> notify。
@@ -91,6 +97,7 @@ async def run_pipeline(session: AsyncSession) -> PipelineSummary:
 
     Args:
         session: 非同步 DB Session。
+        options: Pipeline 執行參數（可選）。
 
     Returns:
         PipelineSummary 包含各階段統計與總耗時。
@@ -99,7 +106,7 @@ async def run_pipeline(session: AsyncSession) -> PipelineSummary:
 
     # Stage 1: Ingest
     logger.info("Pipeline stage 1/5: ingest")
-    ingest_result = await run_ingestion_job(session)
+    ingest_result = await run_ingestion_job(session, options)
     ingest_ss = _ingest_stage_summary(ingest_result)
 
     # Stage 2: Decrypt
@@ -109,7 +116,7 @@ async def run_pipeline(session: AsyncSession) -> PipelineSummary:
 
     # Stage 3: Parse
     logger.info("Pipeline stage 3/5: parse")
-    parse_result = await run_parse_job(session)
+    parse_result = await run_parse_job(session, options)
     parse_ss = _parse_stage_summary(parse_result)
 
     # Stage 4: Classify
