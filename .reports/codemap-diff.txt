@@ -1,0 +1,19 @@
+Codemap Generation Report
+=========================
+Date: 2026-04-01
+Type: Initial generation (no prior codemaps)
+
+Files scanned: 90 (67 Python, 23 TypeScript/TSX)
+Total backend LOC: ~6000
+Codemaps created: 5
+
+Created:
+  docs/CODEMAPS/architecture.md  (~600 tokens) - System overview, data flow, entry points
+  docs/CODEMAPS/backend.md       (~800 tokens) - API routes, pipeline stages, module inventory
+  docs/CODEMAPS/frontend.md      (~400 tokens) - Page tree, components, state management
+  docs/CODEMAPS/data.md          (~600 tokens) - 6 tables, relationships, 3 migrations
+  docs/CODEMAPS/dependencies.md  (~450 tokens) - Gmail, Telegram, Redis, Docker, packages
+
+No prior codemaps to diff against.
+No architecture changes detected (baseline).
+No staleness warnings (all docs freshly generated).
