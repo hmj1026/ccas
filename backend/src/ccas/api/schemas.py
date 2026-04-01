@@ -204,3 +204,12 @@ class CategoryKeywordUpdateRequest(BaseModel):
 
     keyword: str | None = Field(default=None, min_length=1)
     category: str | None = Field(default=None, min_length=1)
+
+
+class PipelineTriggerRequest(BaseModel):
+    """Pipeline 觸發請求參數。"""
+
+    force: bool = False
+    bank_code: str | None = None
+    year: int | None = None
+    month: int | None = Field(default=None, ge=1, le=12)

@@ -51,3 +51,76 @@ class TestPipelineTriggerEndpoint:
             headers=auth_headers("wrong-token"),
         )
         assert response.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_trigger_with_force_body(self, client: AsyncClient):
+        """帶 force=true body 應成功觸發並傳遞 opts。"""
+        mock_job = MagicMock()
+        mock_job.id = "force-job-456"
+
+        mock_queue = MagicMock()
+        mock_queue.enqueue.return_value = mock_job
+
+        with (
+            patch("ccas.api.routers.pipeline.Redis"),
+            patch("ccas.api.routers.pipeline.Queue", return_value=mock_queue),
+        ):
+            response = await client.post(
+                "/api/pipeline/trigger",
+                headers=auth_headers(),
+                json={"force": True, "bank_code": "CTBC"},
+            )
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["success"] is True
+        assert body["data"]["job_id"] == "force-job-456"
+
+        # Verify opts dict was passed as first positional arg
+        enqueue_call = mock_queue.enqueue.call_args
+        opts_arg = enqueue_call[0][1]  # Second positional arg (after fn)
+        assert opts_arg["force"] is True
+        assert opts_arg["bank_code"] == "CTBC"
+
+    @pytest.mark.asyncio
+    async def test_trigger_with_empty_body(self, client: AsyncClient):
+        """空 JSON body 應等同無 body，使用預設值。"""
+        mock_job = MagicMock()
+        mock_job.id = "default-job-789"
+
+        mock_queue = MagicMock()
+        mock_queue.enqueue.return_value = mock_job
+
+        with (
+            patch("ccas.api.routers.pipeline.Redis"),
+            patch("ccas.api.routers.pipeline.Queue", return_value=mock_queue),
+        ):
+            response = await client.post(
+                "/api/pipeline/trigger",
+                headers=auth_headers(),
+                json={},
+            )
+
+        assert response.status_code == 200
+
+        enqueue_call = mock_queue.enqueue.call_args
+        opts_arg = enqueue_call[0][1]
+        assert opts_arg["force"] is False
+        assert opts_arg["bank_code"] is None
+
+    @pytest.mark.asyncio
+    async def test_trigger_invalid_month_returns_422(self, client: AsyncClient):
+        """month 超出 1-12 範圍應回傳 422。"""
+        mock_queue = MagicMock()
+
+        with (
+            patch("ccas.api.routers.pipeline.Redis"),
+            patch("ccas.api.routers.pipeline.Queue", return_value=mock_queue),
+        ):
+            response = await client.post(
+                "/api/pipeline/trigger",
+                headers=auth_headers(),
+                json={"month": 13},
+            )
+
+        assert response.status_code == 422

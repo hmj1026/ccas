@@ -26,23 +26,29 @@ def get_retry() -> Retry:
     return Retry(max=MAX_RETRIES, interval=_calculate_retry_delays())
 
 
-def run_pipeline_sync() -> dict:
+def run_pipeline_sync(opts: dict | None = None) -> dict:
     """RQ worker 執行的同步入口。
 
     建立 async event loop 執行 run_pipeline()，
     回傳可序列化的摘要 dict 作為 RQ job result。
 
+    Args:
+        opts: 可選的 pipeline 參數 dict（由 API 端序列化傳入）。
+
     若執行失敗且重試次數已達上限，將所有 staging 項目
     標記為 manual_review_needed。
     """
+    from ccas.pipeline.options import PipelineOptions
     from ccas.pipeline.orchestrator import run_pipeline
     from ccas.storage.database import get_engine, get_session_factory
+
+    options = PipelineOptions.from_dict(opts)
 
     async def _run() -> PipelineSummary:
         engine = get_engine()
         session_factory = get_session_factory(engine)
         async with session_factory() as session:
-            result = await run_pipeline(session)
+            result = await run_pipeline(session, options)
         await engine.dispose()
         return result
 
