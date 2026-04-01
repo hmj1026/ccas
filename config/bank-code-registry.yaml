@@ -1,0 +1,13 @@
+banks:
+  - bank_code: CTBC
+    bank_name: 中國信託
+    supported: false
+    notes: 尚未提供正式 parser，適合先配置 Gmail filter
+  - bank_code: CATHAY
+    bank_name: 國泰世華
+    supported: false
+    notes: 尚未提供正式 parser，適合先配置 Gmail filter
+  - bank_code: ESUN
+    bank_name: 玉山銀行
+    supported: false
+    notes: 尚未提供正式 parser，適合先配置 Gmail filter
