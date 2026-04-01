@@ -29,14 +29,14 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash /home/paul/.claude/scripts/hooks/ccas-python-lint.sh \"$filePath\"",
+            "command": "bash .claude/hooks/ccas-python-lint.sh \"$filePath\"",
             "timeout": 30,
             "statusMessage": "Running Python lint & security checks...",
             "async": true
           },
           {
             "type": "command",
-            "command": "bash -c '[[ \"$1\" == *models*.py ]] && { grep -q \"__tablename__\" \"$1\" || echo \"[Hook] WARNING: __tablename__ not found\"; grep -q \"Base\" \"$1\" || echo \"[Hook] WARNING: does not inherit from Base\"; echo \"[Hook] REMINDER: Run uv run alembic revision --autogenerate -m description\"; }' _ \"$filePath\"",
+            "command": "bash .claude/hooks/ccas-sqlalchemy-model-check.sh \"$filePath\"",
             "timeout": 5,
             "statusMessage": "Validating SQLAlchemy model...",
             "async": true
@@ -48,21 +48,21 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash /home/paul/.claude/scripts/hooks/ccas-python-lint.sh \"$filePath\"",
+            "command": "bash .claude/hooks/ccas-python-lint.sh \"$filePath\"",
             "timeout": 30,
             "statusMessage": "Running Python lint & security checks...",
             "async": true
           },
           {
             "type": "command",
-            "command": "bash -c '[[ \"$1\" == *models*.py ]] && { grep -q \"__tablename__\" \"$1\" || echo \"[Hook] WARNING: __tablename__ not found\"; grep -q \"Base\" \"$1\" || echo \"[Hook] WARNING: does not inherit from Base\"; }' _ \"$filePath\"",
+            "command": "bash .claude/hooks/ccas-sqlalchemy-model-check.sh \"$filePath\"",
             "timeout": 5,
             "statusMessage": "Validating SQLAlchemy model...",
             "async": true
           },
           {
             "type": "command",
-            "command": "bash -c '[[ \"$1\" == test_*.py ]] && cd /home/paul/projects/ccas && uv run pytest \"$1\" -x --tb=short 2>&1 | tail -30' _ \"$filePath\"",
+            "command": "bash .claude/hooks/ccas-tdd-red-check.sh \"$filePath\"",
             "timeout": 30,
             "statusMessage": "Running test to confirm RED state...",
             "async": true
@@ -75,10 +75,10 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash /home/paul/.claude/scripts/hooks/ccas-session-retrospective.sh",
+            "command": "bash .claude/hooks/ccas-session-retrospective.sh",
             "timeout": 10,
             "statusMessage": "Running session retrospective...",
-            "async": false
+            "async": true
           }
         ]
       }
