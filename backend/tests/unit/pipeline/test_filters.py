@@ -1,8 +1,5 @@
 """Unit tests for pipeline filter helper."""
 
-from datetime import datetime
-
-import pytest
 from sqlalchemy import select
 
 from ccas.pipeline.filters import apply_pipeline_filters

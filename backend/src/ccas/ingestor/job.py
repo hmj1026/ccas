@@ -16,6 +16,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ccas.config import get_settings
+from ccas.errors import IngestError
 from ccas.ingestor.auth import load_credentials
 from ccas.ingestor.gmail_client import (
     GmailAttachmentMeta,
@@ -167,7 +168,7 @@ async def _process_attachment(
         error_msg = f"附件下載失敗 ({bank_code}/{attachment.filename}): {exc}"
         summary.failed_count += 1
         summary.errors.append(error_msg)
-        logger.error(error_msg)
+        logger.error(error_msg, exc_info=True)
 
         # In force mode, preserve the existing good record
         if existing is None:

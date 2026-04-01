@@ -34,6 +34,7 @@ def existing_record():
 @pytest.fixture
 def summary():
     from ccas.ingestor.job import IngestionSummary
+
     return IngestionSummary()
 
 
@@ -151,6 +152,7 @@ class TestForceModeSafety:
         # Failed record should be created (no existing record to preserve)
         mock_create.assert_called_once()
         call_kwargs = mock_create.call_args
-        assert call_kwargs.kwargs.get("status") == "failed" or \
-            (len(call_kwargs.args) == 0 and "failed" in str(call_kwargs))
+        assert call_kwargs.kwargs.get("status") == "failed" or (
+            len(call_kwargs.args) == 0 and "failed" in str(call_kwargs)
+        )
         assert summary.failed_count == 1
