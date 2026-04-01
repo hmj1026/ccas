@@ -104,10 +104,17 @@ class TestPipelineStageOrder:
             return _make_notify_summary()
 
         with (
-            patch("ccas.pipeline.orchestrator.run_ingestion_job", side_effect=mock_ingest),
-            patch("ccas.pipeline.orchestrator.run_decryption_job", side_effect=mock_decrypt),
+            patch(
+                "ccas.pipeline.orchestrator.run_ingestion_job", side_effect=mock_ingest
+            ),
+            patch(
+                "ccas.pipeline.orchestrator.run_decryption_job",
+                side_effect=mock_decrypt,
+            ),
             patch("ccas.pipeline.orchestrator.run_parse_job", side_effect=mock_parse),
-            patch("ccas.pipeline.orchestrator.run_classify_job", side_effect=mock_classify),
+            patch(
+                "ccas.pipeline.orchestrator.run_classify_job", side_effect=mock_classify
+            ),
             patch("ccas.pipeline.orchestrator.run_notify_job", side_effect=mock_notify),
         ):
             await run_pipeline(mock_session)
@@ -117,11 +124,26 @@ class TestPipelineStageOrder:
     @pytest.mark.asyncio
     async def test_all_five_stages_present_in_summary(self, mock_session):
         with (
-            patch("ccas.pipeline.orchestrator.run_ingestion_job", return_value=_make_ingest_summary()),
-            patch("ccas.pipeline.orchestrator.run_decryption_job", return_value=_make_decrypt_summary()),
-            patch("ccas.pipeline.orchestrator.run_parse_job", return_value=_make_parse_summary()),
-            patch("ccas.pipeline.orchestrator.run_classify_job", return_value=_make_classify_summary()),
-            patch("ccas.pipeline.orchestrator.run_notify_job", return_value=_make_notify_summary()),
+            patch(
+                "ccas.pipeline.orchestrator.run_ingestion_job",
+                return_value=_make_ingest_summary(),
+            ),
+            patch(
+                "ccas.pipeline.orchestrator.run_decryption_job",
+                return_value=_make_decrypt_summary(),
+            ),
+            patch(
+                "ccas.pipeline.orchestrator.run_parse_job",
+                return_value=_make_parse_summary(),
+            ),
+            patch(
+                "ccas.pipeline.orchestrator.run_classify_job",
+                return_value=_make_classify_summary(),
+            ),
+            patch(
+                "ccas.pipeline.orchestrator.run_notify_job",
+                return_value=_make_notify_summary(),
+            ),
         ):
             summary = await run_pipeline(mock_session)
 
@@ -139,7 +161,9 @@ class TestFaultTolerance:
 
         async def mock_ingest(session):
             stages_called.append("ingest")
-            return _make_ingest_summary(staged_count=1, failed_count=1, errors=["bank X failed"])
+            return _make_ingest_summary(
+                staged_count=1, failed_count=1, errors=["bank X failed"]
+            )
 
         async def mock_decrypt(session):
             stages_called.append("decrypt")
@@ -158,10 +182,17 @@ class TestFaultTolerance:
             return _make_notify_summary()
 
         with (
-            patch("ccas.pipeline.orchestrator.run_ingestion_job", side_effect=mock_ingest),
-            patch("ccas.pipeline.orchestrator.run_decryption_job", side_effect=mock_decrypt),
+            patch(
+                "ccas.pipeline.orchestrator.run_ingestion_job", side_effect=mock_ingest
+            ),
+            patch(
+                "ccas.pipeline.orchestrator.run_decryption_job",
+                side_effect=mock_decrypt,
+            ),
             patch("ccas.pipeline.orchestrator.run_parse_job", side_effect=mock_parse),
-            patch("ccas.pipeline.orchestrator.run_classify_job", side_effect=mock_classify),
+            patch(
+                "ccas.pipeline.orchestrator.run_classify_job", side_effect=mock_classify
+            ),
             patch("ccas.pipeline.orchestrator.run_notify_job", side_effect=mock_notify),
         ):
             summary = await run_pipeline(mock_session)
@@ -173,14 +204,31 @@ class TestFaultTolerance:
         assert len(ingest_stage.errors) == 1
 
     @pytest.mark.asyncio
-    async def test_all_items_fail_in_stage_subsequent_stages_still_run(self, mock_session):
+    async def test_all_items_fail_in_stage_subsequent_stages_still_run(
+        self, mock_session
+    ):
         """某階段全部失敗時，後續階段仍被呼叫（空跑）。"""
         with (
-            patch("ccas.pipeline.orchestrator.run_ingestion_job", return_value=_make_ingest_summary(staged_count=0, failed_count=3)),
-            patch("ccas.pipeline.orchestrator.run_decryption_job", return_value=_make_decrypt_summary(decrypted_count=0)),
-            patch("ccas.pipeline.orchestrator.run_parse_job", return_value=_make_parse_summary(parsed_count=0)),
-            patch("ccas.pipeline.orchestrator.run_classify_job", return_value=_make_classify_summary(classified_count=0, total_count=0)),
-            patch("ccas.pipeline.orchestrator.run_notify_job", return_value=_make_notify_summary()),
+            patch(
+                "ccas.pipeline.orchestrator.run_ingestion_job",
+                return_value=_make_ingest_summary(staged_count=0, failed_count=3),
+            ),
+            patch(
+                "ccas.pipeline.orchestrator.run_decryption_job",
+                return_value=_make_decrypt_summary(decrypted_count=0),
+            ),
+            patch(
+                "ccas.pipeline.orchestrator.run_parse_job",
+                return_value=_make_parse_summary(parsed_count=0),
+            ),
+            patch(
+                "ccas.pipeline.orchestrator.run_classify_job",
+                return_value=_make_classify_summary(classified_count=0, total_count=0),
+            ),
+            patch(
+                "ccas.pipeline.orchestrator.run_notify_job",
+                return_value=_make_notify_summary(),
+            ),
         ):
             summary = await run_pipeline(mock_session)
 
@@ -198,16 +246,39 @@ class TestSummaryAggregation:
     @pytest.mark.asyncio
     async def test_summary_counts_match_stage_results(self, mock_session):
         with (
-            patch("ccas.pipeline.orchestrator.run_ingestion_job", return_value=_make_ingest_summary(staged_count=3, skipped_count=1, failed_count=1)),
-            patch("ccas.pipeline.orchestrator.run_decryption_job", return_value=_make_decrypt_summary(decrypted_count=2, failed_count=1)),
-            patch("ccas.pipeline.orchestrator.run_parse_job", return_value=_make_parse_summary(parsed_count=2, failed_count=0)),
-            patch("ccas.pipeline.orchestrator.run_classify_job", return_value=_make_classify_summary(classified_count=15)),
-            patch("ccas.pipeline.orchestrator.run_notify_job", return_value=_make_notify_summary(sent_count=2, failed_count=1, errors=["notify err"])),
+            patch(
+                "ccas.pipeline.orchestrator.run_ingestion_job",
+                return_value=_make_ingest_summary(
+                    staged_count=3, skipped_count=1, failed_count=1
+                ),
+            ),
+            patch(
+                "ccas.pipeline.orchestrator.run_decryption_job",
+                return_value=_make_decrypt_summary(decrypted_count=2, failed_count=1),
+            ),
+            patch(
+                "ccas.pipeline.orchestrator.run_parse_job",
+                return_value=_make_parse_summary(parsed_count=2, failed_count=0),
+            ),
+            patch(
+                "ccas.pipeline.orchestrator.run_classify_job",
+                return_value=_make_classify_summary(classified_count=15),
+            ),
+            patch(
+                "ccas.pipeline.orchestrator.run_notify_job",
+                return_value=_make_notify_summary(
+                    sent_count=2, failed_count=1, errors=["notify err"]
+                ),
+            ),
         ):
             summary = await run_pipeline(mock_session)
 
         assert summary.stages[0].counts == {"staged": 3, "skipped": 1, "failed": 1}
-        assert summary.stages[1].counts == {"decrypted": 2, "passthrough": 0, "failed": 1}
+        assert summary.stages[1].counts == {
+            "decrypted": 2,
+            "passthrough": 0,
+            "failed": 1,
+        }
         assert summary.stages[2].counts == {"parsed": 2, "skipped": 0, "failed": 0}
         assert summary.stages[3].counts == {"classified": 15}
         assert summary.stages[4].counts == {"sent": 2, "failed": 1}
@@ -215,11 +286,26 @@ class TestSummaryAggregation:
     @pytest.mark.asyncio
     async def test_total_seconds_is_positive(self, mock_session):
         with (
-            patch("ccas.pipeline.orchestrator.run_ingestion_job", return_value=_make_ingest_summary()),
-            patch("ccas.pipeline.orchestrator.run_decryption_job", return_value=_make_decrypt_summary()),
-            patch("ccas.pipeline.orchestrator.run_parse_job", return_value=_make_parse_summary()),
-            patch("ccas.pipeline.orchestrator.run_classify_job", return_value=_make_classify_summary()),
-            patch("ccas.pipeline.orchestrator.run_notify_job", return_value=_make_notify_summary()),
+            patch(
+                "ccas.pipeline.orchestrator.run_ingestion_job",
+                return_value=_make_ingest_summary(),
+            ),
+            patch(
+                "ccas.pipeline.orchestrator.run_decryption_job",
+                return_value=_make_decrypt_summary(),
+            ),
+            patch(
+                "ccas.pipeline.orchestrator.run_parse_job",
+                return_value=_make_parse_summary(),
+            ),
+            patch(
+                "ccas.pipeline.orchestrator.run_classify_job",
+                return_value=_make_classify_summary(),
+            ),
+            patch(
+                "ccas.pipeline.orchestrator.run_notify_job",
+                return_value=_make_notify_summary(),
+            ),
         ):
             summary = await run_pipeline(mock_session)
 
@@ -228,11 +314,26 @@ class TestSummaryAggregation:
     @pytest.mark.asyncio
     async def test_failures_collected_from_all_stages(self, mock_session):
         with (
-            patch("ccas.pipeline.orchestrator.run_ingestion_job", return_value=_make_ingest_summary(errors=["ingest err"])),
-            patch("ccas.pipeline.orchestrator.run_decryption_job", return_value=_make_decrypt_summary(errors=["decrypt err"])),
-            patch("ccas.pipeline.orchestrator.run_parse_job", return_value=_make_parse_summary(errors=["parse err"])),
-            patch("ccas.pipeline.orchestrator.run_classify_job", return_value=_make_classify_summary()),
-            patch("ccas.pipeline.orchestrator.run_notify_job", return_value=_make_notify_summary(errors=["notify err"])),
+            patch(
+                "ccas.pipeline.orchestrator.run_ingestion_job",
+                return_value=_make_ingest_summary(errors=["ingest err"]),
+            ),
+            patch(
+                "ccas.pipeline.orchestrator.run_decryption_job",
+                return_value=_make_decrypt_summary(errors=["decrypt err"]),
+            ),
+            patch(
+                "ccas.pipeline.orchestrator.run_parse_job",
+                return_value=_make_parse_summary(errors=["parse err"]),
+            ),
+            patch(
+                "ccas.pipeline.orchestrator.run_classify_job",
+                return_value=_make_classify_summary(),
+            ),
+            patch(
+                "ccas.pipeline.orchestrator.run_notify_job",
+                return_value=_make_notify_summary(errors=["notify err"]),
+            ),
         ):
             summary = await run_pipeline(mock_session)
 
@@ -244,11 +345,26 @@ class TestSummaryAggregation:
     async def test_empty_pipeline_returns_zero_counts(self, mock_session):
         """無任何資料時，所有階段計數為零，摘要仍完整。"""
         with (
-            patch("ccas.pipeline.orchestrator.run_ingestion_job", return_value=_make_ingest_summary(banks_processed=0, staged_count=0)),
-            patch("ccas.pipeline.orchestrator.run_decryption_job", return_value=_make_decrypt_summary(decrypted_count=0)),
-            patch("ccas.pipeline.orchestrator.run_parse_job", return_value=_make_parse_summary(parsed_count=0)),
-            patch("ccas.pipeline.orchestrator.run_classify_job", return_value=_make_classify_summary(classified_count=0, total_count=0)),
-            patch("ccas.pipeline.orchestrator.run_notify_job", return_value=_make_notify_summary()),
+            patch(
+                "ccas.pipeline.orchestrator.run_ingestion_job",
+                return_value=_make_ingest_summary(banks_processed=0, staged_count=0),
+            ),
+            patch(
+                "ccas.pipeline.orchestrator.run_decryption_job",
+                return_value=_make_decrypt_summary(decrypted_count=0),
+            ),
+            patch(
+                "ccas.pipeline.orchestrator.run_parse_job",
+                return_value=_make_parse_summary(parsed_count=0),
+            ),
+            patch(
+                "ccas.pipeline.orchestrator.run_classify_job",
+                return_value=_make_classify_summary(classified_count=0, total_count=0),
+            ),
+            patch(
+                "ccas.pipeline.orchestrator.run_notify_job",
+                return_value=_make_notify_summary(),
+            ),
         ):
             summary = await run_pipeline(mock_session)
 

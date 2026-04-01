@@ -65,9 +65,7 @@ class TestCallWithRetry:
     @patch("ccas.ingestor.retry.time.sleep")
     def test_backoff_sequence(self, mock_sleep):
         """驗證 backoff 間隔序列為 1s, 2s。"""
-        fn = MagicMock(
-            side_effect=[_make_http_error(429), _make_http_error(429), "ok"]
-        )
+        fn = MagicMock(side_effect=[_make_http_error(429), _make_http_error(429), "ok"])
         result = call_with_retry(fn)
         assert result == "ok"
         assert mock_sleep.call_args_list == [

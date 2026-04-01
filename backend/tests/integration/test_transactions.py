@@ -81,9 +81,7 @@ async def test_list_transactions_filter_category(
     assert data[0]["merchant"] == "星巴克"
 
 
-async def test_list_transactions_search(
-    client: AsyncClient, db_session: AsyncSession
-):
+async def test_list_transactions_search(client: AsyncClient, db_session: AsyncSession):
     """商家名稱搜尋。"""
     await _seed_transactions(db_session)
 
@@ -132,9 +130,7 @@ async def test_export_csv(client: AsyncClient, db_session: AsyncSession):
     assert "商家名稱" in lines[0]
 
 
-async def test_export_csv_with_bank_code(
-    client: AsyncClient, db_session: AsyncSession
-):
+async def test_export_csv_with_bank_code(client: AsyncClient, db_session: AsyncSession):
     """CSV 檔名含 bank_code。"""
     await _seed_transactions(db_session)
 
@@ -143,9 +139,9 @@ async def test_export_csv_with_bank_code(
         headers=auth_headers(),
     )
     assert response.status_code == 200
-    assert "ccas-transactions-2026-03-CTBC.csv" in response.headers[
-        "content-disposition"
-    ]
+    assert (
+        "ccas-transactions-2026-03-CTBC.csv" in response.headers["content-disposition"]
+    )
 
 
 async def test_invalid_month_format(client: AsyncClient, db_session: AsyncSession):

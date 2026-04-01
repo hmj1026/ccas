@@ -70,9 +70,7 @@ class Settings(BaseSettings):
     def get_frontend_origins(self) -> list[str]:
         """解析允許攜帶 cookie 的前端來源清單。"""
         return [
-            item.strip()
-            for item in self.frontend_origins.split(",")
-            if item.strip()
+            item.strip() for item in self.frontend_origins.split(",") if item.strip()
         ]
 
 
@@ -82,4 +80,4 @@ def get_settings() -> Settings:
 
     使用 lru_cache 確保整個生命週期只建立一次 Settings 實例。
     """
-    return Settings()
+    return Settings()  # pyright: ignore[reportCallIssue]

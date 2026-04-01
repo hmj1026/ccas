@@ -5,8 +5,8 @@
 """
 
 import logging
+from collections.abc import Callable
 from functools import wraps
-from typing import Callable
 
 from telegram import Update
 from telegram.ext import (
@@ -37,9 +37,7 @@ def _with_auth_and_session(
     """包裝 handler：先驗證白名單，再注入 DB Session。"""
 
     @wraps(handler_fn)
-    async def wrapper(
-        update: Update, context: ContextTypes.DEFAULT_TYPE
-    ) -> None:
+    async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         chat_id = update.effective_chat.id if update.effective_chat else None
         if chat_id is None or not is_chat_allowed(chat_id, allowed_chat_ids):
             return  # silently ignore

@@ -70,9 +70,7 @@ class _ParserRegistry:
         all_versions = self.get_versions(code)
 
         if not all_versions:
-            raise ParserNotFoundError(
-                f"沒有已註冊的 parser：bank_code={bank_code}"
-            )
+            raise ParserNotFoundError(f"沒有已註冊的 parser：bank_code={bank_code}")
 
         if active_version is None:
             return all_versions

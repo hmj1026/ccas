@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ccas.bot.client import send_message
 from ccas.bot.notifications import render_new_bill_notification
 from ccas.config import get_settings
-from ccas.storage.models import Bill, BankConfig
+from ccas.storage.models import BankConfig, Bill
 
 logger = logging.getLogger(__name__)
 
@@ -70,7 +70,9 @@ async def run_notify_job(
         try:
             bank_name = bank_names.get(bill.bank_code, bill.bank_code)
             text = render_new_bill_notification(bill, bank_name)
-            await send_message(settings.telegram_bot_token, settings.telegram_chat_id, text)
+            await send_message(
+                settings.telegram_bot_token, settings.telegram_chat_id, text
+            )
             summary.sent_count += 1
         except Exception as exc:
             error_msg = f"通知失敗 (bill #{bill.id}): {exc}"

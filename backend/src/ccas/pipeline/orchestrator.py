@@ -134,7 +134,10 @@ async def run_pipeline(session: AsyncSession) -> PipelineSummary:
     )
 
     logger.info(
-        "Pipeline completed in %.2fs: ingest=%d decrypt=%d parse=%d classify=%d notify=%d",
+        (
+            "Pipeline completed in %.2fs: ingest=%d decrypt=%d "
+            "parse=%d classify=%d notify=%d"
+        ),
         elapsed,
         ingest_result.staged_count,
         decrypt_result.decrypted_count,

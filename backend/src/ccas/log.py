@@ -54,9 +54,7 @@ class JsonFormatter(logging.Formatter):
             "message": record.getMessage(),
         }
         if record.exc_info and record.exc_info[1] is not None:
-            log_entry["exception"] = self.formatException(
-                record.exc_info
-            )
+            log_entry["exception"] = self.formatException(record.exc_info)
         return json.dumps(log_entry, ensure_ascii=False)
 
 
@@ -78,8 +76,7 @@ class RedactingFilter(logging.Filter):
                 }
             elif isinstance(record.args, tuple):
                 record.args = tuple(
-                    _redact(a) if isinstance(a, str) else a
-                    for a in record.args
+                    _redact(a) if isinstance(a, str) else a for a in record.args
                 )
         return True
 
@@ -119,9 +116,7 @@ def configure_logging(settings: Settings | None = None) -> None:
         handler.setFormatter(JsonFormatter())
     else:
         handler.setFormatter(
-            logging.Formatter(
-                "%(asctime)s %(levelname)s %(name)s %(message)s"
-            )
+            logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s")
         )
 
     # 掛載 RedactingFilter

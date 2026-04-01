@@ -49,6 +49,7 @@ class TestJsonFormatter:
             raise ValueError("boom")
         except ValueError:
             import sys
+
             exc_info = sys.exc_info()
 
         record = logging.LogRecord(
@@ -104,7 +105,7 @@ class TestRedactingFilter:
         assert "ya29.abc123xyz" not in record.msg
 
     def test_redacts_access_token(self, filt: RedactingFilter) -> None:
-        record = self._make_record('access_token=abc123secret')
+        record = self._make_record("access_token=abc123secret")
         filt.filter(record)
         assert "[REDACTED]" in record.msg
         assert "abc123secret" not in record.msg
@@ -153,9 +154,7 @@ class TestConfigureLogging:
     """configure_logging 整合測試。"""
 
     @staticmethod
-    def _mock_settings(
-        level: str = "INFO", fmt: str = "json"
-    ) -> object:
+    def _mock_settings(level: str = "INFO", fmt: str = "json") -> object:
         from unittest.mock import MagicMock
 
         s = MagicMock()

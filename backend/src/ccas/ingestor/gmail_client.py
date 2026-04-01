@@ -123,10 +123,7 @@ def search_messages(service, gmail_filter: str) -> list[GmailMessage]:
         不含 PDF 附件的郵件會被過濾掉。
     """
     messages_response = call_with_retry(
-        lambda: service.users()
-        .messages()
-        .list(userId="me", q=gmail_filter)
-        .execute()
+        lambda: service.users().messages().list(userId="me", q=gmail_filter).execute()
     )
 
     message_ids = messages_response.get("messages", [])
@@ -138,10 +135,9 @@ def search_messages(service, gmail_filter: str) -> list[GmailMessage]:
     for msg_ref in message_ids:
         msg_id = msg_ref["id"]
         msg_data = call_with_retry(
-            lambda _id=msg_id: service.users()
-            .messages()
-            .get(userId="me", id=_id)
-            .execute()
+            lambda _id=msg_id: (
+                service.users().messages().get(userId="me", id=_id).execute()
+            )
         )
 
         payload = msg_data.get("payload", {})
@@ -175,11 +171,13 @@ def download_attachment(service, message_id: str, attachment_id: str) -> bytes:
         附件的原始 bytes。
     """
     attachment_data = call_with_retry(
-        lambda: service.users()
-        .messages()
-        .attachments()
-        .get(userId="me", messageId=message_id, id=attachment_id)
-        .execute()
+        lambda: (
+            service.users()
+            .messages()
+            .attachments()
+            .get(userId="me", messageId=message_id, id=attachment_id)
+            .execute()
+        )
     )
 
     data = attachment_data["data"]

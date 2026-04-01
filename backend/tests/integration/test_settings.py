@@ -4,8 +4,7 @@ from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ccas.storage.models import BankConfig, Category
-from tests.integration.conftest import auth_headers
-
+from tests.integration.conftest import auth_headers, make_ctbc_bank_config
 
 # -- Banks --
 
@@ -49,9 +48,7 @@ async def test_create_bank(client: AsyncClient, db_session: AsyncSession):
 
 async def test_create_bank_duplicate(client: AsyncClient, db_session: AsyncSession):
     """重複銀行代碼回傳 409。"""
-    bank = BankConfig(
-        bank_code="CTBC", bank_name="中國信託", gmail_filter="from:ctbc"
-    )
+    bank = make_ctbc_bank_config()
     db_session.add(bank)
     await db_session.commit()
 
@@ -69,9 +66,7 @@ async def test_create_bank_duplicate(client: AsyncClient, db_session: AsyncSessi
 
 async def test_update_bank(client: AsyncClient, db_session: AsyncSession):
     """更新銀行設定。"""
-    bank = BankConfig(
-        bank_code="CTBC", bank_name="中國信託", gmail_filter="from:ctbc"
-    )
+    bank = make_ctbc_bank_config()
     db_session.add(bank)
     await db_session.commit()
 
@@ -95,9 +90,7 @@ async def test_list_categories(client: AsyncClient, db_session: AsyncSession):
     db_session.add(cat)
     await db_session.commit()
 
-    response = await client.get(
-        "/api/settings/categories", headers=auth_headers()
-    )
+    response = await client.get("/api/settings/categories", headers=auth_headers())
     assert response.status_code == 200
     data = response.json()["data"]
     assert len(data) == 1
@@ -117,9 +110,7 @@ async def test_create_category(client: AsyncClient, db_session: AsyncSession):
     assert data["category"] == "日用"
 
 
-async def test_create_category_duplicate(
-    client: AsyncClient, db_session: AsyncSession
-):
+async def test_create_category_duplicate(client: AsyncClient, db_session: AsyncSession):
     """重複關鍵字回傳 409。"""
     cat = Category(keyword="星巴克", category="餐飲")
     db_session.add(cat)
@@ -160,15 +151,11 @@ async def test_delete_category(client: AsyncClient, db_session: AsyncSession):
     assert response.status_code == 204
 
     # 確認已刪除
-    response = await client.get(
-        "/api/settings/categories", headers=auth_headers()
-    )
+    response = await client.get("/api/settings/categories", headers=auth_headers())
     assert len(response.json()["data"]) == 0
 
 
-async def test_delete_category_not_found(
-    client: AsyncClient, db_session: AsyncSession
-):
+async def test_delete_category_not_found(client: AsyncClient, db_session: AsyncSession):
     """刪除不存在的分類回傳 404。"""
     response = await client.delete(
         "/api/settings/categories/999", headers=auth_headers()

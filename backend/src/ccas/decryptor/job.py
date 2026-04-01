@@ -48,10 +48,29 @@ async def _process_attachment(
     """處理單一附件的解密。"""
     settings = get_settings()
     password = resolve_password(settings, attachment.bank_code)
+    staged_path = attachment.staged_path
+
+    if staged_path is None:
+        error_msg = (
+            f"缺少 staged_path，無法解密 ({attachment.bank_code}/"
+            f"{attachment.original_filename})"
+        )
+        summary.failed_count += 1
+        summary.errors.append(error_msg)
+        logger.error(error_msg)
+        await update_attachment_status(
+            session,
+            attachment,
+            status="decrypt_failed",
+            error_reason=error_msg,
+        )
+        return
 
     try:
         result = await asyncio.to_thread(
-            decrypt_pdf, Path(attachment.staged_path), password  # type: ignore[arg-type]
+            decrypt_pdf,
+            Path(staged_path),
+            password,
         )
     except DecryptionError as exc:
         error_msg = (

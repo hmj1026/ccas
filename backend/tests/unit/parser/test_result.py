@@ -74,12 +74,8 @@ class TestParseResult:
     def test_parse_result_fields(self) -> None:
         """ParseResult 包含帳單摘要與交易明細。"""
         txns = (
-            TransactionItem(
-                trans_date=date(2026, 3, 1), merchant="星巴克", amount=150
-            ),
-            TransactionItem(
-                trans_date=date(2026, 3, 5), merchant="7-11", amount=85
-            ),
+            TransactionItem(trans_date=date(2026, 3, 1), merchant="星巴克", amount=150),
+            TransactionItem(trans_date=date(2026, 3, 5), merchant="7-11", amount=85),
         )
         result = ParseResult(
             bank_code="CTBC",

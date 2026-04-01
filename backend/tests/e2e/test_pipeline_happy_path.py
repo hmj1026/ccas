@@ -58,6 +58,7 @@ class TestIngestStage:
             mock_svc.return_value = MagicMock()
 
             from ccas.ingestor.job import run_ingestion_job
+
             summary = await run_ingestion_job(db_session)
 
         assert summary.staged_count == 1
@@ -91,6 +92,7 @@ class TestDecryptStage:
             ),
         ):
             from ccas.decryptor.job import run_decryption_job
+
             summary = await run_decryption_job(db_session)
 
         assert summary.decrypted_count == 1
@@ -139,6 +141,7 @@ class TestParseStage:
             return_value=[mock_parser],
         ):
             from ccas.parser.job import run_parse_job
+
             summary = await run_parse_job(db_session)
 
         assert summary.parsed_count == 1
@@ -183,6 +186,7 @@ class TestNotifyStage:
 
         with patch("ccas.bot.job.send_message", mock_send):
             from ccas.bot.job import run_notify_job
+
             summary = await run_notify_job(db_session, bill_ids=[bill.id])
 
         assert summary.sent_count == 1

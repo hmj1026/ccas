@@ -13,8 +13,8 @@ class TestResolvePassword:
         """環境變數有設定時回傳密碼。"""
         monkeypatch.setenv("PDF_PASSWORD_CTBC", "secret123")
         settings = MagicMock()
-        settings.get_pdf_password.side_effect = (
-            lambda code: os.environ.get(f"PDF_PASSWORD_{code.upper()}")
+        settings.get_pdf_password.side_effect = lambda code: os.environ.get(
+            f"PDF_PASSWORD_{code.upper()}"
         )
 
         result = resolve_password(settings, "CTBC")
@@ -32,8 +32,8 @@ class TestResolvePassword:
         """銀行代碼不分大小寫。"""
         monkeypatch.setenv("PDF_PASSWORD_CATHAY", "mypass")
         settings = MagicMock()
-        settings.get_pdf_password.side_effect = (
-            lambda code: os.environ.get(f"PDF_PASSWORD_{code.upper()}")
+        settings.get_pdf_password.side_effect = lambda code: os.environ.get(
+            f"PDF_PASSWORD_{code.upper()}"
         )
 
         result = resolve_password(settings, "cathay")

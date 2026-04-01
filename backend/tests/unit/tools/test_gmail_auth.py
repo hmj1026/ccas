@@ -89,8 +89,10 @@ def test_generate_token_runs_oauth_and_creates_dirs(
 
 def test_main_returns_2_on_missing_credentials(tmp_path: Path):
     argv = [
-        "--credentials", str(tmp_path / "nonexistent.json"),
-        "--token", str(tmp_path / "token.json"),
+        "--credentials",
+        str(tmp_path / "nonexistent.json"),
+        "--token",
+        str(tmp_path / "token.json"),
     ]
 
     result = main(argv)
@@ -107,8 +109,10 @@ def test_main_returns_0_when_token_exists(
     token.write_text('{"token": "existing"}')
 
     argv = [
-        "--credentials", str(credentials),
-        "--token", str(token),
+        "--credentials",
+        str(credentials),
+        "--token",
+        str(token),
     ]
 
     result = main(argv)

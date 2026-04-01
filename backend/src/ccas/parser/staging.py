@@ -5,13 +5,12 @@
 """
 
 from collections.abc import Sequence
-from datetime import date
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ccas.parser.result import ParseResult
-from ccas.storage.models import Bill, BankConfig, StagedAttachment, Transaction
+from ccas.storage.models import BankConfig, Bill, StagedAttachment, Transaction
 
 
 async def fetch_parseable_attachments(
@@ -25,16 +24,12 @@ async def fetch_parseable_attachments(
     Returns:
         待解析的 StagedAttachment 記錄清單。
     """
-    stmt = select(StagedAttachment).where(
-        StagedAttachment.status == "decrypted"
-    )
+    stmt = select(StagedAttachment).where(StagedAttachment.status == "decrypted")
     result = await session.execute(stmt)
     return result.scalars().all()
 
 
-async def get_bank_config(
-    session: AsyncSession, bank_code: str
-) -> BankConfig | None:
+async def get_bank_config(session: AsyncSession, bank_code: str) -> BankConfig | None:
     """依 bank_code 取得銀行設定。
 
     Args:

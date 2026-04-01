@@ -21,9 +21,7 @@ def _reset_registry():
 # -- Shared mock helpers --
 
 
-def make_mock_page(
-    text: str, tables: list[list[list[str]]] | None = None
-):
+def make_mock_page(text: str, tables: list[list[list[str]]] | None = None):
     """Create a mock pdfplumber Page with extract_text() and extract_tables()."""
     page = MagicMock()
     page.extract_text.return_value = text

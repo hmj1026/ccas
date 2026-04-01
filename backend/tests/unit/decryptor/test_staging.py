@@ -53,7 +53,9 @@ class TestFetchPendingAttachments:
         db_session.add(_make_attachment(status="staged", attachment_id="att-1"))
         db_session.add(
             _make_attachment(
-                status="decrypted", message_id="msg-2", attachment_id="att-2",
+                status="decrypted",
+                message_id="msg-2",
+                attachment_id="att-2",
             )
         )
         db_session.add(
@@ -67,9 +69,7 @@ class TestFetchPendingAttachments:
 
     async def test_returns_empty_when_none_staged(self, db_session):
         """沒有 staged 附件時回傳空清單。"""
-        db_session.add(
-            _make_attachment(status="decrypted", attachment_id="att-1")
-        )
+        db_session.add(_make_attachment(status="decrypted", attachment_id="att-1"))
         await db_session.flush()
 
         results = await fetch_pending_attachments(db_session)

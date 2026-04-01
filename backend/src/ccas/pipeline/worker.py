@@ -6,11 +6,9 @@
 
 import asyncio
 import logging
-import math
 
 from rq import Retry
 
-from ccas.config import get_settings
 from ccas.pipeline.summary import PipelineSummary
 
 logger = logging.getLogger(__name__)
@@ -56,8 +54,7 @@ def run_pipeline_sync() -> dict:
             for s in summary.stages
         ],
         "failures": [
-            {"item_id": f.item_id, "error": f.error}
-            for f in summary.failures
+            {"item_id": f.item_id, "error": f.error} for f in summary.failures
         ],
     }
 
@@ -79,9 +76,7 @@ async def mark_manual_review(session) -> int:
 
     stmt = (
         update(StagedAttachment)
-        .where(
-            StagedAttachment.status.in_(["staged", "decrypted"])
-        )
+        .where(StagedAttachment.status.in_(["staged", "decrypted"]))
         .values(status="manual_review_needed")
     )
     result = await session.execute(stmt)

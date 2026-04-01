@@ -36,45 +36,33 @@ def _fmt(module: str, description: str, reason: str) -> str:
 class IngestError(CcasError):
     """Gmail 抓取 / 附件 staging 階段的錯誤。"""
 
-    def __init__(
-        self, description: str, reason: str = "", **ctx: Any
-    ) -> None:
+    def __init__(self, description: str, reason: str = "", **ctx: Any) -> None:
         super().__init__(_fmt("Ingest", description, reason), context=ctx)
 
 
 class DecryptError(CcasError):
     """PDF 解密階段的錯誤。"""
 
-    def __init__(
-        self, description: str, reason: str = "", **ctx: Any
-    ) -> None:
+    def __init__(self, description: str, reason: str = "", **ctx: Any) -> None:
         super().__init__(_fmt("Decrypt", description, reason), context=ctx)
 
 
 class ParseError(CcasError):
     """PDF 解析階段的錯誤。"""
 
-    def __init__(
-        self, description: str, reason: str = "", **ctx: Any
-    ) -> None:
+    def __init__(self, description: str, reason: str = "", **ctx: Any) -> None:
         super().__init__(_fmt("Parse", description, reason), context=ctx)
 
 
 class ClassifyError(CcasError):
     """交易分類階段的錯誤。"""
 
-    def __init__(
-        self, description: str, reason: str = "", **ctx: Any
-    ) -> None:
-        super().__init__(
-            _fmt("Classify", description, reason), context=ctx
-        )
+    def __init__(self, description: str, reason: str = "", **ctx: Any) -> None:
+        super().__init__(_fmt("Classify", description, reason), context=ctx)
 
 
 class NotifyError(CcasError):
     """Telegram 通知發送階段的錯誤。"""
 
-    def __init__(
-        self, description: str, reason: str = "", **ctx: Any
-    ) -> None:
+    def __init__(self, description: str, reason: str = "", **ctx: Any) -> None:
         super().__init__(_fmt("Notify", description, reason), context=ctx)

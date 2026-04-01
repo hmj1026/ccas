@@ -136,9 +136,10 @@ def load_bank_config_specs(
                 "請填入能在 Gmail 搜到帳單的搜尋條件。"
             )
 
-        active_parser_version = str(
-            row.get("active_parser_version", DEFAULT_PARSER_VERSION)
-        ).strip() or DEFAULT_PARSER_VERSION
+        active_parser_version = (
+            str(row.get("active_parser_version", DEFAULT_PARSER_VERSION)).strip()
+            or DEFAULT_PARSER_VERSION
+        )
         is_active = bool(row.get("is_active", True))
 
         seen_codes.add(bank_code)
@@ -163,9 +164,7 @@ async def sync_bank_configs(
 ) -> SyncSummary:
     """把 YAML 設定同步到資料庫。"""
     result = await session.execute(select(BankConfig))
-    existing_rows = {
-        row.bank_code.upper(): row for row in result.scalars().all()
-    }
+    existing_rows = {row.bank_code.upper(): row for row in result.scalars().all()}
 
     created = 0
     updated = 0
@@ -176,9 +175,7 @@ async def sync_bank_configs(
         row = existing_rows.get(spec.bank_code)
         if row is None:
             created += 1
-            actions.append(
-                f"CREATE {spec.bank_code}: gmail_filter={spec.gmail_filter}"
-            )
+            actions.append(f"CREATE {spec.bank_code}: gmail_filter={spec.gmail_filter}")
             if apply_changes:
                 session.add(
                     BankConfig(
@@ -227,9 +224,7 @@ def _load_yaml_mapping(path: Path, *, label: str) -> dict[str, object]:
     try:
         raw = yaml.safe_load(path.read_text(encoding="utf-8"))
     except FileNotFoundError:
-        raise BankConfigValidationError(
-            f"找不到 {label}: {path}。請先建立檔案再重試。"
-        )
+        raise BankConfigValidationError(f"找不到 {label}: {path}。請先建立檔案再重試。")
     except yaml.YAMLError as exc:
         raise BankConfigValidationError(
             f"{label} 不是合法 YAML：{exc}。請修正縮排或冒號後再重試。"
@@ -242,17 +237,13 @@ def _load_yaml_mapping(path: Path, *, label: str) -> dict[str, object]:
 async def _run_cli(args: argparse.Namespace) -> int:
     specs = load_bank_config_specs(args.config, args.registry)
     engine = (
-        create_async_engine(args.database_url)
-        if args.database_url
-        else get_engine()
+        create_async_engine(args.database_url) if args.database_url else get_engine()
     )
     session_factory = get_session_factory(engine)
 
     try:
         async with session_factory() as session:
-            summary = await sync_bank_configs(
-                session, specs, apply_changes=args.apply
-            )
+            summary = await sync_bank_configs(session, specs, apply_changes=args.apply)
     finally:
         await engine.dispose()
 

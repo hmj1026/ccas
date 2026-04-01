@@ -46,12 +46,14 @@ class TestRuleSet:
 
     def test_reload_returns_new_instance(self) -> None:
         """重載等同於建立新 RuleSet — 舊實例不變。"""
-        old = RuleSet(rules=(
-            ClassificationRule(rule_id=1, keyword="星巴克", category="餐飲"),
-        ))
-        new = RuleSet(rules=(
-            ClassificationRule(rule_id=1, keyword="星巴克", category="餐飲"),
-            ClassificationRule(rule_id=2, keyword="台灣大", category="通訊"),
-        ))
+        old = RuleSet(
+            rules=(ClassificationRule(rule_id=1, keyword="星巴克", category="餐飲"),)
+        )
+        new = RuleSet(
+            rules=(
+                ClassificationRule(rule_id=1, keyword="星巴克", category="餐飲"),
+                ClassificationRule(rule_id=2, keyword="台灣大", category="通訊"),
+            )
+        )
         assert old.count == 1
         assert new.count == 2

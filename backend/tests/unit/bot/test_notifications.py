@@ -67,7 +67,5 @@ class TestRenderParseFailureNotification:
         assert "解析失敗" in result
 
     def test_none_error_reason(self):
-        result = render_parse_failure_notification(
-            "中國信託", "file.pdf", None
-        )
+        result = render_parse_failure_notification("中國信託", "file.pdf", None)
         assert "未知錯誤" in result

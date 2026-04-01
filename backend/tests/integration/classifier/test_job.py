@@ -16,12 +16,14 @@ from ccas.storage.models import Bill, Category, Transaction
 
 async def _seed_categories(session: AsyncSession) -> None:
     """建立測試用分類規則。"""
-    session.add_all([
-        Category(keyword="星巴克", category="餐飲"),
-        Category(keyword="台灣大哥大", category="通訊"),
-        Category(keyword="台灣", category="其他"),
-        Category(keyword="AMAZON", category="購物"),
-    ])
+    session.add_all(
+        [
+            Category(keyword="星巴克", category="餐飲"),
+            Category(keyword="台灣大哥大", category="通訊"),
+            Category(keyword="台灣", category="其他"),
+            Category(keyword="AMAZON", category="購物"),
+        ]
+    )
     await session.flush()
 
 
@@ -82,9 +84,7 @@ class TestLoadRulesIntegration:
 
 class TestRunClassifyJob:
     @pytest.mark.asyncio
-    async def test_classify_new_transactions(
-        self, db_session: AsyncSession
-    ) -> None:
+    async def test_classify_new_transactions(self, db_session: AsyncSession) -> None:
         await _seed_categories(db_session)
         await _seed_bill_with_transactions(
             db_session,
@@ -97,18 +97,14 @@ class TestRunClassifyJob:
         assert summary.total_count == 3
 
         # 驗證分類結果
-        result = await db_session.execute(
-            select(Transaction).order_by(Transaction.id)
-        )
+        result = await db_session.execute(select(Transaction).order_by(Transaction.id))
         txns = result.scalars().all()
         assert txns[0].category == "餐飲"
         assert txns[1].category == "通訊"  # 最長關鍵字 "台灣大哥大" > "台灣"
         assert txns[2].category == "未分類"
 
     @pytest.mark.asyncio
-    async def test_skip_already_classified(
-        self, db_session: AsyncSession
-    ) -> None:
+    async def test_skip_already_classified(self, db_session: AsyncSession) -> None:
         """已有分類的交易不會被 run_classify_job 處理。"""
         await _seed_categories(db_session)
         await _seed_bill_with_transactions(db_session, ["星巴克"])
@@ -146,9 +142,7 @@ class TestRunClassifyJob:
 
 class TestRunReclassifyJob:
     @pytest.mark.asyncio
-    async def test_reclassify_updates_category(
-        self, db_session: AsyncSession
-    ) -> None:
+    async def test_reclassify_updates_category(self, db_session: AsyncSession) -> None:
         """重跑分類會以最新規則更新所有交易。"""
         await _seed_categories(db_session)
         await _seed_bill_with_transactions(db_session, ["星巴克咖啡"])
@@ -196,9 +190,7 @@ class TestRunReclassifyJob:
         assert txn.trans_date == original_trans_date
 
     @pytest.mark.asyncio
-    async def test_reclassify_skips_unchanged(
-        self, db_session: AsyncSession
-    ) -> None:
+    async def test_reclassify_skips_unchanged(self, db_session: AsyncSession) -> None:
         """分類結果不變時不做更新。"""
         await _seed_categories(db_session)
         await _seed_bill_with_transactions(db_session, ["星巴克咖啡"])

@@ -41,5 +41,7 @@ def run_payment_reminders_sync() -> dict[str, int]:
         return result
 
     result = asyncio.run(_run())
-    logger.info("Payment reminders: sent=%d, skipped=%d", result["sent"], result["skipped"])
+    logger.info(
+        "Payment reminders: sent=%d, skipped=%d", result["sent"], result["skipped"]
+    )
     return result

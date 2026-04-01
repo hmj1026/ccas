@@ -47,8 +47,7 @@ def load_credentials(credentials_path: str, token_path: str) -> Credentials:
     token_file = Path(token_path)
     if not token_file.exists():
         msg = (
-            f"Token 檔案不存在：{token_path}。"
-            "請先執行 OAuth 授權流程產生 token.json。"
+            f"Token 檔案不存在：{token_path}。請先執行 OAuth 授權流程產生 token.json。"
         )
         raise GmailAuthError(msg)
 
@@ -58,10 +57,7 @@ def load_credentials(credentials_path: str, token_path: str) -> Credentials:
         return creds
 
     if not creds.expired or not creds.refresh_token:
-        msg = (
-            "Token 無效且無法刷新。"
-            "請刪除 token.json 後重新執行 OAuth 授權流程。"
-        )
+        msg = "Token 無效且無法刷新。請刪除 token.json 後重新執行 OAuth 授權流程。"
         raise GmailAuthError(msg)
 
     try:

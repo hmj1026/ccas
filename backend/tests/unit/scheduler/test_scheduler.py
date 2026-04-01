@@ -12,13 +12,15 @@ class TestSchedulerJobRegistration:
     """5.4: 驗證 scheduler 註冊了 pipeline 觸發與付款提醒兩個工作。"""
 
     def test_scheduler_registers_both_jobs(self):
-        """scheduler.main() 應註冊 daily_pipeline 與 daily_payment_reminders 兩個工作。"""
+        """scheduler.main() 應註冊兩個預設工作。"""
         mock_scheduler = MagicMock()
         # start() 會 block，所以讓它拋出 KeyboardInterrupt 來結束
         mock_scheduler.start.side_effect = KeyboardInterrupt
 
         with (
-            patch("ccas.scheduler.__main__.BlockingScheduler", return_value=mock_scheduler),
+            patch(
+                "ccas.scheduler.__main__.BlockingScheduler", return_value=mock_scheduler
+            ),
             patch("ccas.scheduler.__main__.signal.signal"),
         ):
             try:
@@ -43,7 +45,9 @@ class TestSchedulerJobRegistration:
         mock_scheduler.start.side_effect = KeyboardInterrupt
 
         with (
-            patch("ccas.scheduler.__main__.BlockingScheduler", return_value=mock_scheduler),
+            patch(
+                "ccas.scheduler.__main__.BlockingScheduler", return_value=mock_scheduler
+            ),
             patch("ccas.scheduler.__main__.signal.signal"),
         ):
             try:
@@ -69,7 +73,9 @@ class TestSchedulerJobRegistration:
         mock_scheduler.start.side_effect = KeyboardInterrupt
 
         with (
-            patch("ccas.scheduler.__main__.BlockingScheduler", return_value=mock_scheduler),
+            patch(
+                "ccas.scheduler.__main__.BlockingScheduler", return_value=mock_scheduler
+            ),
             patch("ccas.scheduler.__main__.signal.signal"),
         ):
             try:

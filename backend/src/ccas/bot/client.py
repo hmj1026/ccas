@@ -76,9 +76,7 @@ async def send_message(
                 )
                 await asyncio.sleep(delay)
 
-        logger.error(
-            "Telegram API failed after %d retries", max_retries
-        )
+        logger.error("Telegram API failed after %d retries", max_retries)
         raise last_error  # type: ignore[misc]
 
     if http_client is not None:

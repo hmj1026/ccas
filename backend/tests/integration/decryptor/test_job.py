@@ -74,7 +74,10 @@ class TestMixedBatchScenario:
             # Attachment 4: already decrypted, should be skipped (not fetched)
             session.add(
                 _make_attachment(
-                    "CTBC", "msg-4", "att-4", status="decrypted",
+                    "CTBC",
+                    "msg-4",
+                    "att-4",
+                    status="decrypted",
                     staged_path="/tmp/4.pdf",
                 )
             )
@@ -121,7 +124,9 @@ class TestMixedBatchScenario:
         async with session_factory() as session:
             session.add(
                 _make_attachment(
-                    "ESUN", "msg-fail", "att-fail",
+                    "ESUN",
+                    "msg-fail",
+                    "att-fail",
                     staged_path="/tmp/f.pdf",
                 )
             )

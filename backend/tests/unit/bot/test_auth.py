@@ -1,9 +1,5 @@
 """chat_id 白名單驗證的單元測試。"""
 
-import os
-
-import pytest
-
 from ccas.bot.auth import is_chat_allowed, load_allowed_chat_ids
 
 

@@ -58,7 +58,9 @@ def main() -> None:
     signal.signal(signal.SIGINT, _shutdown)
     signal.signal(signal.SIGTERM, _shutdown)
 
-    logger.info("Starting scheduler with 2 jobs: daily_pipeline, daily_payment_reminders")
+    logger.info(
+        "Starting scheduler with 2 jobs: daily_pipeline, daily_payment_reminders"
+    )
     scheduler.start()
 
 

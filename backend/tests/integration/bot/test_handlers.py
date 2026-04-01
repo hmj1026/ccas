@@ -6,28 +6,26 @@
 from datetime import date, timedelta
 
 import pytest
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ccas.bot import queries
 from ccas.bot.formatting import format_status
-from ccas.storage.models import Bill, BankConfig, Transaction
+from ccas.storage.models import BankConfig, Bill, Transaction
+from tests.integration.conftest import make_ctbc_bank_config
 
 
 async def _seed_bank_configs(session: AsyncSession) -> None:
     """建立測試用銀行設定。"""
-    session.add_all([
-        BankConfig(
-            bank_code="CTBC",
-            bank_name="中國信託",
-            gmail_filter="from:ctbc",
-        ),
-        BankConfig(
-            bank_code="CATHAY",
-            bank_name="國泰世華",
-            gmail_filter="from:cathay",
-        ),
-    ])
+    session.add_all(
+        [
+            make_ctbc_bank_config(),
+            BankConfig(
+                bank_code="CATHAY",
+                bank_name="國泰世華",
+                gmail_filter="from:cathay",
+            ),
+        ]
+    )
     await session.flush()
 
 
@@ -132,9 +130,7 @@ class TestQueryHandlers:
         db_session.add(bill)
         await db_session.flush()
 
-        result = await queries.fetch_upcoming_bills(
-            db_session, today=today, days=7
-        )
+        result = await queries.fetch_upcoming_bills(db_session, today=today, days=7)
         assert len(result) == 1
         assert result[0].id == bill.id
 
@@ -150,9 +146,7 @@ class TestQueryHandlers:
         db_session.add(bill)
         await db_session.flush()
 
-        result = await queries.fetch_upcoming_bills(
-            db_session, today=today, days=7
-        )
+        result = await queries.fetch_upcoming_bills(db_session, today=today, days=7)
         assert len(result) == 0
 
     async def test_fetch_bank_names(self, db_session: AsyncSession):
@@ -170,22 +164,24 @@ class TestQueryHandlers:
         db_session.add(bill)
         await db_session.flush()
 
-        db_session.add_all([
-            Transaction(
-                bill_id=bill.id,
-                trans_date=date(2026, 3, 1),
-                merchant="星巴克",
-                amount=300,
-                category="餐飲",
-            ),
-            Transaction(
-                bill_id=bill.id,
-                trans_date=date(2026, 3, 2),
-                merchant="台灣大車隊",
-                amount=200,
-                category="交通",
-            ),
-        ])
+        db_session.add_all(
+            [
+                Transaction(
+                    bill_id=bill.id,
+                    trans_date=date(2026, 3, 1),
+                    merchant="星巴克",
+                    amount=300,
+                    category="餐飲",
+                ),
+                Transaction(
+                    bill_id=bill.id,
+                    trans_date=date(2026, 3, 2),
+                    merchant="台灣大車隊",
+                    amount=200,
+                    category="交通",
+                ),
+            ]
+        )
         await db_session.flush()
 
         rows = await queries.fetch_category_summary(db_session, "2026-03")

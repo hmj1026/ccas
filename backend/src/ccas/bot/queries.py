@@ -11,7 +11,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from ccas.storage.models import Bill, BankConfig, Transaction
+from ccas.storage.models import BankConfig, Bill, Transaction
 
 
 async def fetch_bills_by_month(

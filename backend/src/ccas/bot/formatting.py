@@ -39,8 +39,7 @@ def format_status(
         for b in bank_bills:
             paid_mark = "v" if b.is_paid else "x"
             lines.append(
-                f"  [{paid_mark}] #{b.id} ${b.total_amount:,} "
-                f"到期 {b.due_date}"
+                f"  [{paid_mark}] #{b.id} ${b.total_amount:,} 到期 {b.due_date}"
             )
 
     total = sum(b.total_amount for b in bills)
@@ -100,10 +99,7 @@ def format_summary(
         subtotal = sum(b.total_amount for b in bank_bills)
         paid_count = sum(1 for b in bank_bills if b.is_paid)
         total_count = len(bank_bills)
-        lines.append(
-            f"\n{name}（${subtotal:,}，"
-            f"已繳 {paid_count}/{total_count}）"
-        )
+        lines.append(f"\n{name}（${subtotal:,}，已繳 {paid_count}/{total_count}）")
         for b in bank_bills:
             paid_mark = "v" if b.is_paid else "x"
             lines.append(f"  [{paid_mark}] #{b.id} ${b.total_amount:,}")

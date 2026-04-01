@@ -108,9 +108,7 @@ async def notify_due_reminder(
     """發送到期提醒通知。"""
     text = render_due_reminder(bill, bank_name, days_until_due)
     await send_message(bot_token, chat_id, text)
-    logger.info(
-        "Sent due reminder for bill #%d (%d days)", bill.id, days_until_due
-    )
+    logger.info("Sent due reminder for bill #%d (%d days)", bill.id, days_until_due)
 
 
 async def notify_parse_failure(
@@ -154,9 +152,7 @@ async def send_due_reminders(
         days_left = (bill.due_date - today).days
         bank_name = bank_names.get(bill.bank_code, bill.bank_code)
         try:
-            await notify_due_reminder(
-                bot_token, chat_id, bill, bank_name, days_left
-            )
+            await notify_due_reminder(bot_token, chat_id, bill, bank_name, days_left)
             sent_count += 1
         except Exception:
             logger.exception("Failed to send reminder for bill #%d", bill.id)

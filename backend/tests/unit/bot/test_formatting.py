@@ -6,8 +6,6 @@
 from datetime import date
 from unittest.mock import MagicMock
 
-import pytest
-
 from ccas.bot.formatting import (
     format_category_summary,
     format_paid_already,

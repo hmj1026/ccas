@@ -275,11 +275,7 @@ def test_registry_duplicate_bank_code(tmp_path: Path):
 
 def test_registry_missing_fsc_code(tmp_path: Path):
     path = tmp_path / "no-fsc.yaml"
-    path.write_text(
-        "banks:\n"
-        "  - bank_code: CTBC\n"
-        "    bank_name: 中國信託\n"
-    )
+    path.write_text("banks:\n  - bank_code: CTBC\n    bank_name: 中國信託\n")
 
     with pytest.raises(BankConfigValidationError, match="fsc_code 必須是三位數字字串"):
         load_bank_registry(path)
@@ -288,10 +284,7 @@ def test_registry_missing_fsc_code(tmp_path: Path):
 def test_registry_fsc_code_wrong_length(tmp_path: Path):
     path = tmp_path / "bad-fsc-len.yaml"
     path.write_text(
-        "banks:\n"
-        "  - bank_code: CTBC\n"
-        "    bank_name: 中國信託\n"
-        '    fsc_code: "82"\n'
+        'banks:\n  - bank_code: CTBC\n    bank_name: 中國信託\n    fsc_code: "82"\n'
     )
 
     with pytest.raises(BankConfigValidationError, match="fsc_code 必須是三位數字字串"):
@@ -301,10 +294,7 @@ def test_registry_fsc_code_wrong_length(tmp_path: Path):
 def test_registry_fsc_code_non_digit(tmp_path: Path):
     path = tmp_path / "bad-fsc-char.yaml"
     path.write_text(
-        "banks:\n"
-        "  - bank_code: CTBC\n"
-        "    bank_name: 中國信託\n"
-        '    fsc_code: "ABC"\n'
+        'banks:\n  - bank_code: CTBC\n    bank_name: 中國信託\n    fsc_code: "ABC"\n'
     )
 
     with pytest.raises(BankConfigValidationError, match="fsc_code 必須是三位數字字串"):
@@ -316,9 +306,7 @@ def test_registry_fsc_code_non_digit(tmp_path: Path):
 
 def test_config_missing_bank_code_field(tmp_path: Path, registry_file: Path):
     config_file = tmp_path / "banks.yaml"
-    config_file.write_text(
-        'banks:\n  - gmail_filter: "from:x@example.com"'
-    )
+    config_file.write_text('banks:\n  - gmail_filter: "from:x@example.com"')
 
     with pytest.raises(BankConfigValidationError, match="缺少 bank_code"):
         load_bank_config_specs(config_file, registry_file)
@@ -363,9 +351,13 @@ def test_main_returns_2_on_validation_error(tmp_path: Path):
     bad_config = tmp_path / "bad.yaml"
     bad_config.write_text("{[broken")
 
-    result = main([
-        "--config", str(bad_config),
-        "--registry", str(tmp_path / "nonexistent.yaml"),
-    ])
+    result = main(
+        [
+            "--config",
+            str(bad_config),
+            "--registry",
+            str(tmp_path / "nonexistent.yaml"),
+        ]
+    )
 
     assert result == 2

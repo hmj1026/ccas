@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ccas.parser.base import BankParser, ParseError
 from ccas.parser.registry import ParserNotFoundError, registry
+from ccas.parser.result import ParseResult
 from ccas.parser.staging import (
     check_bill_exists,
     create_bill_and_transactions,
@@ -55,24 +56,19 @@ def _try_parse(
     Returns:
         (success, result, error_message) 三元組。
     """
-    from ccas.parser.result import ParseResult
 
     errors: list[str] = []
     for parser in candidates:
         try:
             if not parser.can_parse(pdf_path):
-                errors.append(
-                    f"{parser.bank_code}/{parser.version}: can_parse=False"
-                )
+                errors.append(f"{parser.bank_code}/{parser.version}: can_parse=False")
                 continue
             result = parser.parse(pdf_path)
             return True, result, ""
         except ParseError as exc:
             errors.append(f"{parser.bank_code}/{parser.version}: {exc}")
         except Exception as exc:
-            errors.append(
-                f"{parser.bank_code}/{parser.version}: 非預期錯誤 {exc}"
-            )
+            errors.append(f"{parser.bank_code}/{parser.version}: 非預期錯誤 {exc}")
 
     return False, None, "; ".join(errors)
 
@@ -84,6 +80,17 @@ async def _process_attachment(
 ) -> None:
     """處理單一附件的解析。"""
     bank_code = attachment.bank_code
+    staged_path = attachment.staged_path
+
+    if staged_path is None:
+        error_msg = f"缺少 staged_path，無法解析：bank_code={bank_code}"
+        summary.failed_count += 1
+        summary.errors.append(error_msg)
+        logger.error(error_msg)
+        await update_attachment_status(
+            session, attachment, status="parse_failed", error_reason=error_msg
+        )
+        return
 
     # 取得銀行設定以獲取 active_parser_version
     bank_config = await get_bank_config(session, bank_code)
@@ -103,7 +110,7 @@ async def _process_attachment(
         return
 
     # 在 thread 中執行同步 parse 邏輯
-    pdf_path = Path(attachment.staged_path)  # type: ignore[arg-type]
+    pdf_path = Path(staged_path)
     success, parse_result, error_detail = await asyncio.to_thread(
         _try_parse, candidates, pdf_path
     )
@@ -137,9 +144,7 @@ async def _process_attachment(
         return
 
     # 建立 Bill 與 Transaction 記錄
-    await create_bill_and_transactions(
-        session, parse_result, file_path=attachment.staged_path
-    )
+    await create_bill_and_transactions(session, parse_result, file_path=staged_path)
     await update_attachment_status(session, attachment, status="parsed")
 
     summary.parsed_count += 1

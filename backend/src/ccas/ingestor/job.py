@@ -96,9 +96,7 @@ async def _process_attachment(
         )
 
         target_dir = staged_path.parent
-        await asyncio.to_thread(
-            lambda: target_dir.mkdir(parents=True, exist_ok=True)
-        )
+        await asyncio.to_thread(lambda: target_dir.mkdir(parents=True, exist_ok=True))
         await asyncio.to_thread(staged_path.write_bytes, pdf_bytes)
 
         await create_staged_record(
@@ -112,9 +110,7 @@ async def _process_attachment(
             status="staged",
         )
         summary.staged_count += 1
-        logger.info(
-            "已 staged 附件：%s -> %s", attachment.filename, staged_path
-        )
+        logger.info("已 staged 附件：%s -> %s", attachment.filename, staged_path)
 
     except Exception as exc:
         error_msg = f"附件下載失敗 ({bank_code}/{attachment.filename}): {exc}"

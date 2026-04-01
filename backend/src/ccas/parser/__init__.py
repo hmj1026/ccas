@@ -4,11 +4,12 @@
 將解密後的 PDF 轉為結構化帳單與交易資料。
 """
 
-import ccas.parser.banks  # noqa: F401 -- triggers bank parser registration
 from ccas.parser.base import BankParser, ParseError
 from ccas.parser.job import ParseSummary, run_parse_job
 from ccas.parser.registry import ParserNotFoundError, registry
 from ccas.parser.result import ParseResult, TransactionItem
+
+from . import banks
 
 __all__ = [
     "BankParser",
@@ -17,6 +18,7 @@ __all__ = [
     "ParseSummary",
     "ParserNotFoundError",
     "TransactionItem",
+    "banks",
     "registry",
     "run_parse_job",
 ]

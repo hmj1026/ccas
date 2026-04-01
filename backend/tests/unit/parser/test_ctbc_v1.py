@@ -5,8 +5,10 @@ using text fixtures, not real PDFs.
 """
 
 from datetime import date
+from typing import cast
 from unittest.mock import MagicMock, patch
 
+import pdfplumber.page
 import pytest
 
 from ccas.parser.base import ParseError
@@ -87,10 +89,12 @@ class TestExtractSummary:
 
 
 class TestExtractTransactions:
-    def _make_pages_with_table(self, rows: list[list[str]]):
+    def _make_pages_with_table(
+        self, rows: list[list[str]]
+    ) -> list[pdfplumber.page.Page]:
         table = [CTBC_TABLE_HEADER_ROW, *rows]
         page = make_mock_page("", tables=[table])
-        return [page]
+        return cast(list[pdfplumber.page.Page], [page])
 
     def test_extracts_basic_transactions(self):
         parser = _make_parser()
@@ -118,7 +122,9 @@ class TestExtractTransactions:
         parser = _make_parser()
         page = make_mock_page("no table content")
 
-        txns = parser._extract_transactions([page], 2026)
+        txns = parser._extract_transactions(
+            cast(list[pdfplumber.page.Page], [page]), 2026
+        )
 
         assert txns == ()
 
@@ -139,7 +145,10 @@ class TestExtractTransactions:
         page1 = make_mock_page("", tables=[table1])
         page2 = make_mock_page("", tables=[table2])
 
-        txns = parser._extract_transactions([page1, page2], 2026)
+        txns = parser._extract_transactions(
+            cast(list[pdfplumber.page.Page], [page1, page2]),
+            2026,
+        )
 
         assert len(txns) == 2
 

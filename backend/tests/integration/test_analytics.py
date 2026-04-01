@@ -10,12 +10,8 @@ from tests.integration.conftest import auth_headers
 
 
 async def _seed_analytics_data(session: AsyncSession):
-    bank1 = BankConfig(
-        bank_code="CTBC", bank_name="中國信託", gmail_filter="from:ctbc"
-    )
-    bank2 = BankConfig(
-        bank_code="ESUN", bank_name="玉山銀行", gmail_filter="from:esun"
-    )
+    bank1 = BankConfig(bank_code="CTBC", bank_name="中國信託", gmail_filter="from:ctbc")
+    bank2 = BankConfig(bank_code="ESUN", bank_name="玉山銀行", gmail_filter="from:esun")
     session.add_all([bank1, bank2])
 
     # 2026-03
@@ -72,9 +68,7 @@ async def test_trend(client: AsyncClient, db_session: AsyncSession):
     """回傳最近 N 月趨勢。"""
     await _seed_analytics_data(db_session)
 
-    response = await client.get(
-        "/api/analytics/trend?months=6", headers=auth_headers()
-    )
+    response = await client.get("/api/analytics/trend?months=6", headers=auth_headers())
     assert response.status_code == 200
     data = response.json()["data"]
     assert len(data) == 6

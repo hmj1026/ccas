@@ -61,6 +61,7 @@ class TestDecryptFailureIsolation:
             patch("ccas.decryptor.job.resolve_password", return_value="pw"),
         ):
             from ccas.decryptor.job import run_decryption_job
+
             summary = await run_decryption_job(db_session)
 
         assert summary.decrypted_count == 1
@@ -131,6 +132,7 @@ class TestParseFailureIsolation:
             call_count += 1
             if "bad.pdf" in str(pdf_path):
                 from ccas.parser.base import ParseError
+
                 raise ParseError("corrupt PDF")
             return good_result
 
@@ -142,6 +144,7 @@ class TestParseFailureIsolation:
             return_value=[mock_parser],
         ):
             from ccas.parser.job import run_parse_job
+
             summary = await run_parse_job(db_session)
 
         assert summary.parsed_count == 1
@@ -180,6 +183,7 @@ class TestNotifyFailureIsolation:
 
         with patch("ccas.bot.job.send_message", mock_send):
             from ccas.bot.job import run_notify_job
+
             summary = await run_notify_job(db_session, bill_ids=[bill.id])
 
         assert summary.sent_count == 0

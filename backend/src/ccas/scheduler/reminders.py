@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ccas.bot.client import send_message
 from ccas.bot.notifications import render_due_reminder
 from ccas.config import get_settings
-from ccas.storage.models import Bill, BankConfig, PaymentReminder
+from ccas.storage.models import BankConfig, Bill, PaymentReminder
 
 logger = logging.getLogger(__name__)
 

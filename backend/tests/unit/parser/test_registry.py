@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from ccas.parser.base import BankParser, ParseError
+from ccas.parser.base import BankParser
 from ccas.parser.registry import ParserNotFoundError, _ParserRegistry
 from ccas.parser.result import ParseResult
 

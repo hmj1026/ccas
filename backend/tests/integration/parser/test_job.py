@@ -17,8 +17,8 @@ from ccas.parser.job import run_parse_job
 from ccas.parser.registry import _ParserRegistry
 from ccas.parser.result import ParseResult, TransactionItem
 from ccas.storage.models import (
-    Base,
     BankConfig,
+    Base,
     Bill,
     StagedAttachment,
     Transaction,
@@ -140,9 +140,7 @@ class TestSuccessfulParse:
         async with session_factory() as session:
             session.add(_make_bank_config("CTBC"))
             session.add(
-                _make_attachment(
-                    "CTBC", "msg-1", "att-1", staged_path="/tmp/ctbc.pdf"
-                )
+                _make_attachment("CTBC", "msg-1", "att-1", staged_path="/tmp/ctbc.pdf")
             )
             await session.commit()
 
@@ -179,9 +177,7 @@ class TestSuccessfulParse:
         async with session_factory() as session:
             session.add(_make_bank_config("CTBC"))
             session.add(
-                _make_attachment(
-                    "CTBC", "msg-1", "att-1", staged_path="/tmp/ctbc.pdf"
-                )
+                _make_attachment("CTBC", "msg-1", "att-1", staged_path="/tmp/ctbc.pdf")
             )
             await session.commit()
 
@@ -211,9 +207,7 @@ class TestParseFailure:
         async with session_factory() as session:
             session.add(_make_bank_config("ESUN"))
             session.add(
-                _make_attachment(
-                    "ESUN", "msg-1", "att-1", staged_path="/tmp/esun.pdf"
-                )
+                _make_attachment("ESUN", "msg-1", "att-1", staged_path="/tmp/esun.pdf")
             )
             await session.commit()
 
@@ -272,14 +266,10 @@ class TestParseFailure:
             session.add(_make_bank_config("CTBC"))
             session.add(_make_bank_config("ESUN"))
             session.add(
-                _make_attachment(
-                    "ESUN", "msg-1", "att-1", staged_path="/tmp/esun.pdf"
-                )
+                _make_attachment("ESUN", "msg-1", "att-1", staged_path="/tmp/esun.pdf")
             )
             session.add(
-                _make_attachment(
-                    "CTBC", "msg-2", "att-2", staged_path="/tmp/ctbc.pdf"
-                )
+                _make_attachment("CTBC", "msg-2", "att-2", staged_path="/tmp/ctbc.pdf")
             )
             await session.commit()
 
@@ -313,9 +303,7 @@ class TestDeduplication:
                 )
             )
             session.add(
-                _make_attachment(
-                    "CTBC", "msg-1", "att-1", staged_path="/tmp/ctbc.pdf"
-                )
+                _make_attachment("CTBC", "msg-1", "att-1", staged_path="/tmp/ctbc.pdf")
             )
             await session.commit()
 
@@ -348,7 +336,9 @@ class TestDeduplication:
             session.add(_make_bank_config("CTBC"))
             session.add(
                 _make_attachment(
-                    "CTBC", "msg-1", "att-1",
+                    "CTBC",
+                    "msg-1",
+                    "att-1",
                     status="parsed",
                     staged_path="/tmp/ctbc.pdf",
                 )

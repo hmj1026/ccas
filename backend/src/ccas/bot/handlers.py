@@ -32,8 +32,7 @@ async def handle_status(
 
     if filter_value not in _FILTER_VALUES:
         await update.message.reply_text(  # type: ignore[union-attr]
-            f"無效的篩選條件：{filter_value}\n"
-            "用法：/status [all|unpaid|paid]"
+            f"無效的篩選條件：{filter_value}\n用法：/status [all|unpaid|paid]"
         )
         return
 
@@ -77,8 +76,7 @@ async def handle_summary(
     billing_month = args[0]
     if not _MONTH_PATTERN.match(billing_month):
         await update.message.reply_text(  # type: ignore[union-attr]
-            f"無效的月份格式：{billing_month}\n"
-            "用法：/summary YYYY-MM"
+            f"無效的月份格式：{billing_month}\n用法：/summary YYYY-MM"
         )
         return
 
@@ -104,8 +102,7 @@ async def handle_category(
     billing_month = args[0]
     if not _MONTH_PATTERN.match(billing_month):
         await update.message.reply_text(  # type: ignore[union-attr]
-            f"無效的月份格式：{billing_month}\n"
-            "用法：/category YYYY-MM"
+            f"無效的月份格式：{billing_month}\n用法：/category YYYY-MM"
         )
         return
 
@@ -130,8 +127,7 @@ async def handle_paid(
     raw_id = args[0]
     if not raw_id.isdigit():
         await update.message.reply_text(  # type: ignore[union-attr]
-            f"無效的帳單編號：{raw_id}\n"
-            "帳單編號須為數字。"
+            f"無效的帳單編號：{raw_id}\n帳單編號須為數字。"
         )
         return
 
@@ -140,8 +136,7 @@ async def handle_paid(
 
     if bill is None:
         await update.message.reply_text(  # type: ignore[union-attr]
-            f"找不到帳單 #{bill_id}。\n"
-            "請確認帳單編號是否正確。"
+            f"找不到帳單 #{bill_id}。\n請確認帳單編號是否正確。"
         )
         return
 

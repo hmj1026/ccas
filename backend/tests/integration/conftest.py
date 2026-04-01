@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
-from ccas.storage.models import Base
+from ccas.storage.models import BankConfig, Base
 
 os.environ.setdefault("TELEGRAM_BOT_TOKEN", "test")
 os.environ.setdefault("TELEGRAM_CHAT_ID", "test")
@@ -63,3 +63,8 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
 def auth_headers(token: str = TEST_TOKEN) -> dict[str, str]:
     """產生 Bearer Token 認證 header。"""
     return {"Authorization": f"Bearer {token}"}
+
+
+def make_ctbc_bank_config() -> BankConfig:
+    """建立標準 CTBC 測試用 BankConfig。"""
+    return BankConfig(bank_code="CTBC", bank_name="中國信託", gmail_filter="from:ctbc")

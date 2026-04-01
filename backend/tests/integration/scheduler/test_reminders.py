@@ -15,11 +15,13 @@ from ccas.storage.models import BankConfig, Bill, PaymentReminder
 
 
 async def _seed_bank(session: AsyncSession, bank_code: str = "CTBC") -> None:
-    session.add(BankConfig(
-        bank_code=bank_code,
-        bank_name="中國信託",
-        gmail_filter="from:ctbc",
-    ))
+    session.add(
+        BankConfig(
+            bank_code=bank_code,
+            bank_name="中國信託",
+            gmail_filter="from:ctbc",
+        )
+    )
     await session.flush()
 
 
@@ -119,13 +121,17 @@ class TestPaymentReminderQuery:
         await _seed_bank(db_session)
         await _seed_bill(db_session, due_date=today + timedelta(days=3))
         # 需要第二間銀行來避免 unique constraint
-        db_session.add(BankConfig(
-            bank_code="ESUN",
-            bank_name="玉山銀行",
-            gmail_filter="from:esun",
-        ))
+        db_session.add(
+            BankConfig(
+                bank_code="ESUN",
+                bank_name="玉山銀行",
+                gmail_filter="from:esun",
+            )
+        )
         await db_session.flush()
-        await _seed_bill(db_session, bank_code="ESUN", due_date=today + timedelta(days=1))
+        await _seed_bill(
+            db_session, bank_code="ESUN", due_date=today + timedelta(days=1)
+        )
 
         mock_send = AsyncMock(return_value={"ok": True})
         with patch("ccas.scheduler.reminders.send_message", mock_send):

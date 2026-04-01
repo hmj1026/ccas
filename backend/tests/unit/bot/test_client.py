@@ -47,7 +47,9 @@ class TestSendMessageRetry:
     async def test_success_on_first_try(self):
         transport = _MockTransport([200])
         result = await send_message(
-            "token", "123", "hello",
+            "token",
+            "123",
+            "hello",
             base_delay=0,
             http_client=_make_client(transport),
         )
@@ -57,8 +59,11 @@ class TestSendMessageRetry:
     async def test_retry_on_429(self):
         transport = _MockTransport([429, 200])
         result = await send_message(
-            "token", "123", "hello",
-            max_retries=3, base_delay=0,
+            "token",
+            "123",
+            "hello",
+            max_retries=3,
+            base_delay=0,
             http_client=_make_client(transport),
         )
         assert result["ok"] is True
@@ -67,8 +72,11 @@ class TestSendMessageRetry:
     async def test_retry_on_5xx(self):
         transport = _MockTransport([503, 502, 200])
         result = await send_message(
-            "token", "123", "hello",
-            max_retries=3, base_delay=0,
+            "token",
+            "123",
+            "hello",
+            max_retries=3,
+            base_delay=0,
             http_client=_make_client(transport),
         )
         assert result["ok"] is True
@@ -78,8 +86,11 @@ class TestSendMessageRetry:
         transport = _MockTransport([400])
         with pytest.raises(httpx.HTTPStatusError):
             await send_message(
-                "token", "123", "hello",
-                max_retries=3, base_delay=0,
+                "token",
+                "123",
+                "hello",
+                max_retries=3,
+                base_delay=0,
                 http_client=_make_client(transport),
             )
         assert transport.call_count == 1
@@ -88,8 +99,11 @@ class TestSendMessageRetry:
         transport = _MockTransport([403])
         with pytest.raises(httpx.HTTPStatusError):
             await send_message(
-                "token", "123", "hello",
-                max_retries=3, base_delay=0,
+                "token",
+                "123",
+                "hello",
+                max_retries=3,
+                base_delay=0,
                 http_client=_make_client(transport),
             )
         assert transport.call_count == 1
@@ -98,8 +112,11 @@ class TestSendMessageRetry:
         transport = _MockTransport([500, 500, 500, 500])
         with pytest.raises(httpx.HTTPStatusError):
             await send_message(
-                "token", "123", "hello",
-                max_retries=3, base_delay=0,
+                "token",
+                "123",
+                "hello",
+                max_retries=3,
+                base_delay=0,
                 http_client=_make_client(transport),
             )
         assert transport.call_count == 4  # 1 initial + 3 retries

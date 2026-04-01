@@ -21,8 +21,7 @@ def _summary_to_dict(summary: PipelineSummary) -> dict:
             for s in summary.stages
         ],
         "failures": [
-            {"item_id": f.item_id, "error": f.error}
-            for f in summary.failures
+            {"item_id": f.item_id, "error": f.error} for f in summary.failures
         ],
     }
 
