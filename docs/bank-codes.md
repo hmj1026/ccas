@@ -14,7 +14,7 @@
 
 | bank_code | fsc_code | 銀行名稱 | Parser 現況 | 備註 |
 |---|---|---|---|---|
-| `CTBC` | `822` | 中國信託 | 尚未提供正式 parser | 可先配置 Gmail filter 與本地流程 |
+| `CTBC` | `822` | 中國信託 | v1 已實作 | `parser/banks/ctbc_v1.py` |
 | `CATHAY` | `013` | 國泰世華 | 尚未提供正式 parser | 可先配置 Gmail filter 與本地流程 |
 | `ESUN` | `808` | 玉山銀行 | 尚未提供正式 parser | 可先配置 Gmail filter 與本地流程 |
 | `TAISHIN` | `812` | 台新銀行 | 尚未提供正式 parser | 可先配置 Gmail filter 與本地流程 |

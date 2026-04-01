@@ -75,13 +75,13 @@ staged --> decrypted --> parsed       (success path)
 
 ## Progress Tracker
 
-- [ ] Phase 1: foundation-setup
-- [ ] Phase 2: gmail-ingestor
-- [ ] Phase 3: pdf-decryptor
-- [ ] Phase 4: parser-engine
-- [ ] Phase 5: keyword-classifier
-- [ ] Phase 6a: telegram-bot
-- [ ] Phase 6b: backend-api
-- [ ] Phase 7: frontend-dashboard
-- [ ] Phase 7*: pipeline-scheduler
+- [x] Phase 1: foundation-setup
+- [x] Phase 2: gmail-ingestor
+- [x] Phase 3: pdf-decryptor
+- [x] Phase 4: parser-engine
+- [x] Phase 5: keyword-classifier
+- [x] Phase 6a: telegram-bot
+- [x] Phase 6b: backend-api
+- [x] Phase 7: frontend-dashboard
+- [x] Phase 7*: pipeline-scheduler
 - [ ] Phase 8: integration-polish
