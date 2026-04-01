@@ -5,9 +5,12 @@
 單筆失敗不會中止整個 batch。
 """
 
+from __future__ import annotations
+
 import asyncio
 import logging
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -23,8 +26,10 @@ from ccas.ingestor.gmail_client import (
 from ccas.ingestor.staging import (
     build_staged_path,
     create_staged_record,
+    delete_staged_record,
     find_existing_staged,
 )
+from ccas.pipeline.options import PipelineOptions
 from ccas.storage.models import BankConfig
 
 logger = logging.getLogger(__name__)
@@ -51,15 +56,46 @@ class IngestionSummary:
     errors: list[str] = field(default_factory=list)
 
 
-async def _fetch_active_banks(session: AsyncSession) -> list[BankConfig]:
-    """查詢所有啟用中且具有有效 gmail_filter 的銀行設定。"""
+async def _fetch_active_banks(
+    session: AsyncSession,
+    options: PipelineOptions | None = None,
+) -> list[BankConfig]:
+    """查詢所有啟用中且具有有效 gmail_filter 的銀行設定。
+
+    若 options.bank_code 有值，僅回傳該銀行。
+    """
     stmt = select(BankConfig).where(
         BankConfig.is_active == True,  # noqa: E712
         BankConfig.gmail_filter != "",
         BankConfig.gmail_filter.is_not(None),
     )
+    if options and options.bank_code:
+        stmt = stmt.where(BankConfig.bank_code == options.bank_code)
     result = await session.execute(stmt)
     return list(result.scalars().all())
+
+
+def _build_gmail_query(
+    base_filter: str,
+    options: PipelineOptions | None,
+) -> str:
+    """組合銀行的 gmail_filter 與日期篩選子句。"""
+    if not options:
+        return base_filter
+    date_clause = options.gmail_date_filter()
+    if not date_clause:
+        return base_filter
+    return f"{base_filter} {date_clause}"
+
+
+async def _cleanup_old_staged_file(staged_path: str | None) -> None:
+    """刪除舊的 staging 檔案（若存在）。"""
+    if not staged_path:
+        return
+    path = Path(staged_path)
+    if path.exists():
+        await asyncio.to_thread(path.unlink)
+        logger.debug("已刪除舊 staging 檔案：%s", staged_path)
 
 
 async def _process_attachment(
@@ -69,19 +105,31 @@ async def _process_attachment(
     attachment: GmailAttachmentMeta,
     staging_dir: str,
     summary: IngestionSummary,
+    *,
+    force: bool = False,
 ) -> None:
     """處理單個 PDF 附件：dedupe 檢查、下載、寫檔、建立記錄。"""
     existing = await find_existing_staged(
         session, attachment.message_id, attachment.attachment_id
     )
     if existing is not None:
-        summary.skipped_count += 1
-        logger.debug(
-            "略過已存在的附件：%s/%s",
+        if not force:
+            summary.skipped_count += 1
+            logger.debug(
+                "略過已存在的附件：%s/%s",
+                attachment.message_id,
+                attachment.attachment_id,
+            )
+            return
+
+        # Force mode: delete old record and re-download
+        logger.info(
+            "Force 模式：刪除舊記錄並重新下載 %s/%s",
             attachment.message_id,
             attachment.attachment_id,
         )
-        return
+        await _cleanup_old_staged_file(existing.staged_path)
+        await delete_staged_record(session, existing)
 
     staged_path = build_staged_path(
         staging_dir, bank_code, attachment.message_id, attachment.filename
@@ -131,7 +179,10 @@ async def _process_attachment(
         )
 
 
-async def run_ingestion_job(session: AsyncSession) -> IngestionSummary:
+async def run_ingestion_job(
+    session: AsyncSession,
+    options: PipelineOptions | None = None,
+) -> IngestionSummary:
     """執行單次 Gmail ingestion batch。
 
     流程：
@@ -142,6 +193,7 @@ async def run_ingestion_job(session: AsyncSession) -> IngestionSummary:
 
     Args:
         session: 非同步 DB Session（由呼叫端注入）。
+        options: Pipeline 執行參數（可選）。
 
     Returns:
         IngestionSummary 統計摘要。
@@ -157,18 +209,20 @@ async def run_ingestion_job(session: AsyncSession) -> IngestionSummary:
     )
     service = build_gmail_service(credentials)
 
-    active_banks = await _fetch_active_banks(session)
+    active_banks = await _fetch_active_banks(session, options)
     if not active_banks:
         logger.info("沒有啟用中的銀行設定，跳過 ingestion")
         return summary
 
+    force = options.force if options else False
+
     for bank in active_banks:
         summary.banks_processed += 1
 
+        gmail_query = _build_gmail_query(bank.gmail_filter, options)
+
         try:
-            messages = await asyncio.to_thread(
-                search_messages, service, bank.gmail_filter
-            )
+            messages = await asyncio.to_thread(search_messages, service, gmail_query)
         except Exception as exc:
             error_msg = f"銀行 {bank.bank_code} Gmail 搜尋失敗: {exc}"
             summary.errors.append(error_msg)
@@ -186,6 +240,7 @@ async def run_ingestion_job(session: AsyncSession) -> IngestionSummary:
                     attachment,
                     settings.staging_dir,
                     summary,
+                    force=force,
                 )
 
     await session.commit()

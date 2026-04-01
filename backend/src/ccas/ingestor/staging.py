@@ -132,3 +132,20 @@ async def create_staged_record(
     session.add(record)
     await session.flush()
     return record
+
+
+async def delete_staged_record(
+    session: AsyncSession,
+    record: StagedAttachment,
+) -> None:
+    """刪除既有的 StagedAttachment 記錄。
+
+    用於 force 模式：先刪舊記錄再重新下載。
+    不處理磁碟檔案清理（由呼叫端負責）。
+
+    Args:
+        session: 非同步 DB Session。
+        record: 要刪除的 staging 記錄。
+    """
+    await session.delete(record)
+    await session.flush()

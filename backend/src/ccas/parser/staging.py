@@ -10,7 +10,13 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ccas.parser.result import ParseResult
-from ccas.storage.models import BankConfig, Bill, StagedAttachment, Transaction
+from ccas.storage.models import (
+    BankConfig,
+    Bill,
+    PaymentReminder,
+    StagedAttachment,
+    Transaction,
+)
 
 
 async def fetch_parseable_attachments(
@@ -63,6 +69,46 @@ async def check_bill_exists(
     )
     result = await session.execute(stmt)
     return result.scalar_one_or_none() is not None
+
+
+async def delete_existing_bill(
+    session: AsyncSession,
+    bank_code: str,
+    billing_month: str,
+) -> bool:
+    """刪除指定銀行月份的既有帳單及關聯資料。
+
+    用於 force 模式：先刪除舊帳單再重新解析。
+    刪除順序：PaymentReminder -> Bill (cascade Transaction)。
+
+    Args:
+        session: 非同步 DB Session。
+        bank_code: 銀行代碼。
+        billing_month: 帳單月份。
+
+    Returns:
+        True 表示有刪除舊帳單，False 表示不存在。
+    """
+    stmt = select(Bill).where(
+        Bill.bank_code == bank_code,
+        Bill.billing_month == billing_month,
+    )
+    result = await session.execute(stmt)
+    bill = result.scalar_one_or_none()
+
+    if bill is None:
+        return False
+
+    # Delete associated payment reminders first (no cascade on FK)
+    reminder_stmt = select(PaymentReminder).where(PaymentReminder.bill_id == bill.id)
+    reminder_result = await session.execute(reminder_stmt)
+    for reminder in reminder_result.scalars().all():
+        await session.delete(reminder)
+
+    # Delete bill (cascade deletes transactions)
+    await session.delete(bill)
+    await session.flush()
+    return True
 
 
 async def create_bill_and_transactions(
