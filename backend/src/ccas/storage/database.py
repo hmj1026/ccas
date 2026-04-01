@@ -6,18 +6,25 @@ SQLite 連線時自動啟用 WAL mode 以提升並行讀取效能。
 """
 
 from collections.abc import AsyncGenerator
+from functools import lru_cache
 
 from sqlalchemy import event
+from sqlalchemy.engine.interfaces import DBAPIConnection
 from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
     AsyncSession,
     async_sessionmaker,
     create_async_engine,
 )
+from sqlalchemy.pool import ConnectionPoolEntry
 
 from ccas.config import get_settings
 
 
-def _set_sqlite_wal(dbapi_connection, connection_record):
+def _set_sqlite_wal(
+    dbapi_connection: DBAPIConnection,
+    connection_record: ConnectionPoolEntry,
+) -> None:
     """設定 SQLite WAL mode 與 synchronous=NORMAL。
 
     作為 SQLAlchemy ``connect`` 事件監聽器，在每次建立新的
@@ -29,10 +36,12 @@ def _set_sqlite_wal(dbapi_connection, connection_record):
     cursor.close()
 
 
-def get_engine():
-    """建立 SQLAlchemy 非同步引擎。
+@lru_cache(maxsize=1)
+def get_engine() -> AsyncEngine:
+    """建立 SQLAlchemy 非同步引擎（singleton）。
 
-    從 Settings 讀取 database_url，並註冊 WAL mode 事件監聽器。
+    從 Settings 讀取 database_url，並註冊 WAL mode 事件監聯器。
+    結果快取，避免每次 request 重建引擎與連線池。
     """
     settings = get_settings()
     engine = create_async_engine(settings.database_url, echo=False)
@@ -40,17 +49,14 @@ def get_engine():
     return engine
 
 
-def get_session_factory(engine=None):
-    """建立非同步 Session Factory。
-
-    Args:
-        engine: 可選的 SQLAlchemy 引擎。若為 None 則自動建立。
+@lru_cache(maxsize=1)
+def get_session_factory() -> async_sessionmaker[AsyncSession]:
+    """建立非同步 Session Factory（singleton）。
 
     Returns:
         設定好的 async_sessionmaker 實例。
     """
-    if engine is None:
-        engine = get_engine()
+    engine = get_engine()
     return async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
 
 
