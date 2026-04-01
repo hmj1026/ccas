@@ -1,13 +1,81 @@
 banks:
   - bank_code: CTBC
     bank_name: 中國信託
-    supported: false
-    notes: 尚未提供正式 parser，適合先配置 Gmail filter
+    fsc_code: "822"
+    supported: true
+    notes: 支援 v1 parser，可自動解析表格式帳單
   - bank_code: CATHAY
     bank_name: 國泰世華
+    fsc_code: "013"
     supported: false
     notes: 尚未提供正式 parser，適合先配置 Gmail filter
   - bank_code: ESUN
     bank_name: 玉山銀行
+    fsc_code: "808"
+    supported: false
+    notes: 尚未提供正式 parser，適合先配置 Gmail filter
+  - bank_code: TAISHIN
+    bank_name: 台新銀行
+    fsc_code: "812"
+    supported: false
+    notes: 尚未提供正式 parser，適合先配置 Gmail filter
+  - bank_code: FUBON
+    bank_name: 台北富邦
+    fsc_code: "012"
+    supported: false
+    notes: 尚未提供正式 parser，適合先配置 Gmail filter
+  - bank_code: MEGA
+    bank_name: 兆豐銀行
+    fsc_code: "017"
+    supported: false
+    notes: 尚未提供正式 parser，適合先配置 Gmail filter
+  - bank_code: FIRST
+    bank_name: 第一銀行
+    fsc_code: "007"
+    supported: false
+    notes: 尚未提供正式 parser，適合先配置 Gmail filter
+  - bank_code: SINOPAC
+    bank_name: 永豐銀行
+    fsc_code: "807"
+    supported: false
+    notes: 尚未提供正式 parser，適合先配置 Gmail filter
+  - bank_code: UBOT
+    bank_name: 聯邦銀行
+    fsc_code: "803"
+    supported: false
+    notes: 尚未提供正式 parser，適合先配置 Gmail filter
+  - bank_code: HSBC
+    bank_name: 匯豐銀行
+    fsc_code: "081"
+    supported: false
+    notes: 尚未提供正式 parser，適合先配置 Gmail filter
+  - bank_code: SCB
+    bank_name: 渣打銀行
+    fsc_code: "052"
+    supported: false
+    notes: 尚未提供正式 parser，適合先配置 Gmail filter
+  - bank_code: LANDBANK
+    bank_name: 土地銀行
+    fsc_code: "005"
+    supported: false
+    notes: 尚未提供正式 parser，適合先配置 Gmail filter
+  - bank_code: TCB
+    bank_name: 合作金庫
+    fsc_code: "006"
+    supported: false
+    notes: 尚未提供正式 parser，適合先配置 Gmail filter
+  - bank_code: HUANAN
+    bank_name: 華南銀行
+    fsc_code: "008"
+    supported: false
+    notes: 尚未提供正式 parser，適合先配置 Gmail filter
+  - bank_code: CHANG_HWA
+    bank_name: 彰化銀行
+    fsc_code: "009"
+    supported: false
+    notes: 尚未提供正式 parser，適合先配置 Gmail filter
+  - bank_code: YUANTA
+    bank_name: 元大銀行
+    fsc_code: "806"
     supported: false
     notes: 尚未提供正式 parser，適合先配置 Gmail filter

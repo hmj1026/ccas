@@ -34,23 +34,23 @@ TBD - created by archiving change developer-onboarding. Update Purpose after arc
 
 ### Requirement: Bank code registry
 
-系統 SHALL 維護 `config/bank-code-registry.yaml` 作為有效 bank_code 的唯一權威來源。
+系統 SHALL 維護 `config/bank-code-registry.yaml` 作為有效 `bank_code` 的唯一權威來源，並為每筆記錄提供 `fsc_code`。
 
-Registry 每筆記錄 MUST 包含 `bank_code`（大寫）和 `bank_name`，可選 `supported` 和 `notes`。
+Registry 每筆記錄 MUST 包含 `bank_code`、`bank_name`、`fsc_code`，可選 `supported` 和 `notes`。
 
-Registry MUST 禁止重複的 bank_code。
+`fsc_code` MUST 為三位數字字串，保留前導零。
 
-#### Scenario: 載入有效 registry
-- **WHEN** registry YAML 包含有效的 banks 清單
-- **THEN** 回傳以 bank_code 為 key 的 lookup dict
+Registry SHALL 至少涵蓋以下銀行代碼：CTBC, CATHAY, ESUN, TAISHIN, FUBON, MEGA, FIRST, SINOPAC, UBOT, HSBC, SCB, LANDBANK, TCB, HUANAN, CHANG_HWA, YUANTA。
 
-#### Scenario: Registry 包含重複 bank_code
-- **WHEN** registry 有兩筆相同的 bank_code
-- **THEN** 拋出 BankConfigValidationError 包含 "重複 bank_code"
+#### Scenario: 載入擴充後的 registry
 
-#### Scenario: Registry 檔案不存在
-- **WHEN** 指定路徑不存在
-- **THEN** 拋出 BankConfigValidationError 包含 "找不到"
+- **WHEN** 使用 `ccas.tools.bank_configs.load_bank_registry()` 載入更新後的 registry
+- **THEN** 會回傳包含上述銀行代碼的 lookup dict，且每筆 `BankRegistryEntry` 皆可提供 `fsc_code`
+
+#### Scenario: fsc_code 缺漏或格式錯誤
+
+- **WHEN** registry 某筆記錄缺少 `fsc_code`，或其值不是三位數字字串
+- **THEN** `load_bank_registry()` SHALL 拋出 `BankConfigValidationError`
 
 ### Requirement: Bank config YAML validation
 
@@ -140,17 +140,19 @@ Registry MUST 禁止重複的 bank_code。
 
 ### Requirement: Onboarding documentation
 
-系統 SHALL 提供 `docs/beginner-setup-guide.md` 新手指南，涵蓋從零到前後端跑通的完整流程。
+系統 SHALL 提供 `docs/bank-codes.md` 銀行代碼對照表，並與 `config/bank-code-registry.yaml` 維持同步。
 
-系統 SHALL 提供 `docs/bank-codes.md` 銀行代碼對照表。
+文件對照表 MUST 包含 `fsc_code` 欄位。
 
-文件 MUST 與實際程式碼行為一致（環境變數名稱、路徑、指令）。
+文件 SHALL 包含「已合併/停止發卡」區段，說明花旗銀行消金業務併入星展銀行等歷史變更。
 
-#### Scenario: 新手依照指南完成設定
-- **WHEN** 使用者照著指南從第 1 步執行到最後
-- **THEN** 成功完成 Gmail OAuth、Telegram Bot 設定、後端啟動、前端啟動、Telegram 測試訊息
+#### Scenario: 所有 registry 銀行出現在文件中
 
-#### Scenario: 文件引用正確的環境變數來源
-- **WHEN** 文件提及前端環境變數
-- **THEN** 指向根目錄 `.env` 的 `VITE_` 前綴變數（非 frontend/.env.local）
+- **WHEN** 比對 registry 與 `docs/bank-codes.md`
+- **THEN** 每筆 registry 中的銀行 SHALL 在文件對照表中有對應列
+
+#### Scenario: 使用者查詢花旗銀行
+
+- **WHEN** 使用者在文件中搜尋「花旗」
+- **THEN** SHALL 找到花旗消金業務已於 2023 年併入星展銀行的說明
 

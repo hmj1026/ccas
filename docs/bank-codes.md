@@ -12,15 +12,34 @@
 
 ## 對照表
 
-| bank_code | 銀行名稱 | Parser 現況 | 備註 |
-|---|---|---|---|
-| `CTBC` | 中國信託 | 尚未提供正式 parser | 可先配置 Gmail filter 與本地流程 |
-| `CATHAY` | 國泰世華 | 尚未提供正式 parser | 可先配置 Gmail filter 與本地流程 |
-| `ESUN` | 玉山銀行 | 尚未提供正式 parser | 可先配置 Gmail filter 與本地流程 |
+| bank_code | fsc_code | 銀行名稱 | Parser 現況 | 備註 |
+|---|---|---|---|---|
+| `CTBC` | `822` | 中國信託 | 尚未提供正式 parser | 可先配置 Gmail filter 與本地流程 |
+| `CATHAY` | `013` | 國泰世華 | 尚未提供正式 parser | 可先配置 Gmail filter 與本地流程 |
+| `ESUN` | `808` | 玉山銀行 | 尚未提供正式 parser | 可先配置 Gmail filter 與本地流程 |
+| `TAISHIN` | `812` | 台新銀行 | 尚未提供正式 parser | 可先配置 Gmail filter 與本地流程 |
+| `FUBON` | `012` | 台北富邦 | 尚未提供正式 parser | 可先配置 Gmail filter 與本地流程 |
+| `MEGA` | `017` | 兆豐銀行 | 尚未提供正式 parser | 可先配置 Gmail filter 與本地流程 |
+| `FIRST` | `007` | 第一銀行 | 尚未提供正式 parser | 可先配置 Gmail filter 與本地流程 |
+| `SINOPAC` | `807` | 永豐銀行 | 尚未提供正式 parser | 可先配置 Gmail filter 與本地流程 |
+| `UBOT` | `803` | 聯邦銀行 | 尚未提供正式 parser | 可先配置 Gmail filter 與本地流程 |
+| `HSBC` | `081` | 匯豐銀行 | 尚未提供正式 parser | 可先配置 Gmail filter 與本地流程 |
+| `SCB` | `052` | 渣打銀行 | 尚未提供正式 parser | 可先配置 Gmail filter 與本地流程 |
+| `LANDBANK` | `005` | 土地銀行 | 尚未提供正式 parser | 可先配置 Gmail filter 與本地流程 |
+| `TCB` | `006` | 合作金庫 | 尚未提供正式 parser | 可先配置 Gmail filter 與本地流程 |
+| `HUANAN` | `008` | 華南銀行 | 尚未提供正式 parser | 可先配置 Gmail filter 與本地流程 |
+| `CHANG_HWA` | `009` | 彰化銀行 | 尚未提供正式 parser | 可先配置 Gmail filter 與本地流程 |
+| `YUANTA` | `806` | 元大銀行 | 尚未提供正式 parser | 可先配置 Gmail filter 與本地流程 |
+
+## 已合併 / 停止發卡
+
+| 原銀行 / 品牌 | 現況 | 說明 |
+|---|---|---|
+| 花旗銀行 (`CITI`) | 2023 年消金業務併入星展銀行 | 歷史帳單與卡面仍可能出現花旗名稱，但新支援方向應以合併後發卡行資訊為準 |
 
 ## 新增代碼的原則
 
 - 不要直接在 `config/banks.yaml` 自創新代碼
 - 先補 `config/bank-code-registry.yaml`
-- 再同步更新這份文件
+- 再同步更新這份文件與 `fsc_code` 對照欄位
 - 若未來有正式 parser，請一併更新 `Parser 現況`
