@@ -15,3 +15,5 @@
 每個 parser 模組須定義一個繼承 BankParser 的類別，
 並設定 bank_code 與 version 屬性。
 """
+
+import ccas.parser.banks.ctbc_v1  # noqa: F401 -- triggers registry.register()
