@@ -87,6 +87,15 @@ banks:
     is_active: true
 ```
 
+CTBC 電子帳單 PDF 有密碼保護，**必須在 `.env` 加入 PDF 密碼，否則解密階段會全數失敗**：
+
+```dotenv
+# CTBC PDF 密碼（通常是身分證字號，依申辦方式而定）
+PDF_PASSWORD_CTBC=你的密碼
+```
+
+密碼格式由銀行決定，常見選項：身分證字號、出生年月日（YYYYMMDD）。若不確定請登入網銀確認或聯絡 CTBC 客服。
+
 ## 3. 申請 Gmail API 憑證並下載 `credentials.json`
 
 1. 打開 Google Cloud Console。
@@ -227,7 +236,7 @@ curl \
 
 如果你有正確填 `API_TOKEN`，這個請求不應該回 401。
 
-## 8. 執行一次 pipeline，確認信件附件有落到本地
+## 8. 執行一次 pipeline，確認信件附件有落到本地並解析成功
 
 因為目前沒有完整 worker 流程給新手一鍵跑，最簡單的方式是直接用 CLI：
 
@@ -236,12 +245,39 @@ cd backend
 uv run python -m ccas.pipeline
 ```
 
-你要看的是兩個結果：
+### Pipeline CLI 參數
+
+Pipeline 支援以下可選參數，可組合使用：
+
+```bash
+# 僅處理指定銀行
+uv run python -m ccas.pipeline --bank CTBC
+
+# 僅處理指定月份（自動以 Gmail 日期篩選縮小搜尋範圍）
+uv run python -m ccas.pipeline --bank CTBC --year 2026 --month 3
+
+# 強制重新下載與重新解析（繞過去重機制）
+uv run python -m ccas.pipeline --force --bank CTBC
+
+# 全部銀行強制重新處理
+uv run python -m ccas.pipeline --force
+```
+
+| 參數 | 說明 |
+|------|------|
+| `--force` | 繞過去重，重新下載已存在的附件、重新解析已存在的帳單 |
+| `--bank BANK_CODE` | 僅處理指定銀行（如 `CTBC`） |
+| `--year YYYY` | 以 Gmail 日期篩選限制年份 |
+| `--month MM` | 以 Gmail 日期篩選限制月份（1-12） |
+
+預設不帶任何參數時，pipeline 會處理所有啟用中的銀行，並自動跳過已下載的附件與已解析的帳單。
+
+你要看的是三個結果：
 
 ### 8.1 本地 staging 目錄有檔案
 
 ```bash
-find data/staging -type f
+find data/staging -type f | wc -l
 ```
 
 如果 Gmail filter 有找到信件，而且信裡有 PDF 附件，你會看到檔案落在這裡。
@@ -250,19 +286,37 @@ find data/staging -type f
 
 CLI 會輸出 JSON。重點看：
 
-- `stages[].stage == "ingest"`
-- `counts.staged`
-- `counts.skipped`
-- `failures`
+- `stages[].stage == "ingest"` 的 `counts.staged > 0`：代表從 Gmail 成功下載了 PDF
+- `stages[].stage == "decrypt"` 的 `counts.decrypted > 0`：代表解密成功
+- `stages[].stage == "parse"` 的 `counts.parsed > 0`：代表解析成帳單資料成功
 
-如果 `staged > 0`，代表「從 Gmail 抓信並存到本地」這段已經成功。
+如果 `staged > 0` 但 `decrypted == 0`，通常是密碼未設定（見第 2 節 `PDF_PASSWORD_CTBC`）。
+
+### 8.3 確認資料庫已有帳單記錄
+
+```bash
+# 必須在 backend/ 目錄下執行
+cd backend
+uv run python -c "
+from sqlalchemy import text, create_engine
+engine = create_engine('sqlite:///data/ccas.db')
+with engine.connect() as conn:
+    rows = conn.execute(text('SELECT status, COUNT(*) FROM staged_attachments GROUP BY status')).fetchall()
+    print('staged_attachments:', {status: count for status, count in rows})
+    bills = conn.execute(text('SELECT bank_code, billing_month, total_amount FROM bills')).fetchall()
+    for b in bills:
+        print(f'  {b[0]} {b[1]} NT\${b[2]:,}')
+"
+```
+
+如果 `bills` 有資料，代表整條鏈路（Gmail → decrypt → parse）已完全打通。
 
 ## 9. 真實 Gmail 路徑目前為什麼還不會直接出報表
 
 這不是你操作錯，是目前 repo 的狀態：
 
 - PDF 下載後會進到 staging
-- 解密流程可以跑
+- 解密需要設定 `PDF_PASSWORD_<BANK_CODE>`（見第 2 節）
 - 目前已實作中國信託（CTBC）v1 parser；其他銀行尚未實作
 - 非 CTBC 的真實銀行 PDF 目前不會自動解析成 `bills` 和 `transactions`
 
@@ -420,6 +474,45 @@ PY
 - `TELEGRAM_CHAT_ID` 有沒有填錯
 - bot token 有沒有貼錯
 - 你的手機 Telegram 有沒有把 bot 對話靜音
+
+### 解密失敗：`Password not found in settings`
+
+代表 `.env` 裡缺少對應銀行的 PDF 密碼。
+
+1. 在 `.env` 補上密碼，格式為 `PDF_PASSWORD_<BANK_CODE>`：
+
+   ```dotenv
+   PDF_PASSWORD_CTBC=你的密碼
+   ```
+
+2. 把 `decrypt_failed` 的記錄重置為 `staged`，才能讓下次 pipeline 重試：
+
+   ```bash
+   # 必須在 backend/ 目錄下執行
+   cd backend
+   uv run python -c "
+   from sqlalchemy import text, create_engine
+   engine = create_engine('sqlite:///data/ccas.db')
+   with engine.begin() as conn:
+       conn.execute(
+           text('UPDATE staged_attachments SET status=:s, error_reason=NULL WHERE status=:f'),
+           {'s': 'staged', 'f': 'decrypt_failed'},
+       )
+   with engine.connect() as conn:
+       n = conn.execute(text(\"SELECT COUNT(*) FROM staged_attachments WHERE status='staged'\")).scalar()
+       print(f'重置完成，待解密: {n} 筆')
+   "
+   ```
+
+3. 重新執行 pipeline（兩種方式皆可）：
+
+   ```bash
+   # 方式 A：一般模式（需要先做上面的重置步驟）
+   uv run python -m ccas.pipeline
+
+   # 方式 B：force 模式（自動繞過去重，不需手動重置）
+   uv run python -m ccas.pipeline --force --bank CTBC
+   ```
 
 ### 為什麼 Gmail 附件抓到了，前端還是沒有真實帳單資料
 
