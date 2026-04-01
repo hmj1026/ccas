@@ -13,7 +13,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ccas.bot.client import send_message
 from ccas.bot.notifications import render_new_bill_notification
 from ccas.config import get_settings
-from ccas.storage.models import BankConfig, Bill
+from ccas.storage.models import Bill
+from ccas.storage.queries import fetch_bank_names
 
 logger = logging.getLogger(__name__)
 
@@ -31,13 +32,6 @@ class NotifySummary:
     sent_count: int = 0
     failed_count: int = 0
     errors: list[str] = field(default_factory=list)
-
-
-async def _fetch_bank_names(session: AsyncSession) -> dict[str, str]:
-    """查詢銀行代碼到名稱的對照表。"""
-    stmt = select(BankConfig.bank_code, BankConfig.bank_name)
-    result = await session.execute(stmt)
-    return {row[0]: row[1] for row in result.all()}
 
 
 async def run_notify_job(
@@ -60,7 +54,7 @@ async def run_notify_job(
         return summary
 
     settings = get_settings()
-    bank_names = await _fetch_bank_names(session)
+    bank_names = await fetch_bank_names(session)
 
     stmt = select(Bill).where(Bill.id.in_(bill_ids))
     result = await session.execute(stmt)

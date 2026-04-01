@@ -12,7 +12,8 @@ from ccas.api.schemas import (
     TrendItem,
 )
 from ccas.storage.database import get_db_session
-from ccas.storage.models import BankConfig, Bill, Transaction
+from ccas.storage.models import Bill, Transaction
+from ccas.storage.queries import fetch_bank_names
 
 router = APIRouter(prefix="/api/analytics", tags=["analytics"])
 
@@ -76,7 +77,7 @@ async def get_banks(
     session: AsyncSession = Depends(get_db_session),
 ):
     """取得指定月份按銀行彙總的消費總額。"""
-    bank_names = await _fetch_bank_names(session)
+    bank_names = await fetch_bank_names(session)
 
     stmt = (
         select(Bill.bank_code, func.sum(Bill.total_amount))
@@ -94,9 +95,3 @@ async def get_banks(
         for row in result.all()
     ]
     return ApiResponse(data=data)
-
-
-async def _fetch_bank_names(session: AsyncSession) -> dict[str, str]:
-    stmt = select(BankConfig.bank_code, BankConfig.bank_name)
-    result = await session.execute(stmt)
-    return {row[0]: row[1] for row in result.all()}

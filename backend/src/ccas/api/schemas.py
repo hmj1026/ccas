@@ -213,3 +213,9 @@ class PipelineTriggerRequest(BaseModel):
     bank_code: str | None = None
     year: int | None = Field(default=None, ge=2000, le=2099)
     month: int | None = Field(default=None, ge=1, le=12)
+
+
+class PipelineTriggerData(BaseModel):
+    """Pipeline 觸發回應資料。"""
+
+    job_id: str

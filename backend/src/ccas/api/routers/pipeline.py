@@ -9,7 +9,7 @@ from fastapi import APIRouter
 from redis import Redis
 from rq import Queue
 
-from ccas.api.schemas import PipelineTriggerRequest
+from ccas.api.schemas import ApiResponse, PipelineTriggerData, PipelineTriggerRequest
 from ccas.config import get_settings
 from ccas.pipeline.worker import get_retry, on_failure_handler, run_pipeline_sync
 
@@ -18,15 +18,14 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/pipeline", tags=["pipeline"])
 
 
-@router.post("/trigger")
-async def trigger_pipeline(body: PipelineTriggerRequest | None = None):
+@router.post("/trigger", response_model=ApiResponse[PipelineTriggerData])
+async def trigger_pipeline(
+    body: PipelineTriggerRequest | None = None,
+) -> ApiResponse[PipelineTriggerData]:
     """將 pipeline 加入 RQ 工作隊列，立即回傳 job ID。
 
     Args:
         body: 可選的 pipeline 參數（force, bank_code, year, month）。
-
-    Returns:
-        ``{"success": true, "data": {"job_id": "..."}, "message": "..."}``
     """
     settings = get_settings()
     redis_conn = Redis.from_url(settings.redis_url)
@@ -43,8 +42,7 @@ async def trigger_pipeline(body: PipelineTriggerRequest | None = None):
     )
 
     logger.info("Pipeline job enqueued: %s (opts=%s)", job.id, opts)
-    return {
-        "success": True,
-        "data": {"job_id": job.id},
-        "message": "Pipeline job enqueued",
-    }
+    return ApiResponse(
+        data=PipelineTriggerData(job_id=job.id),
+        message="Pipeline job enqueued",
+    )

@@ -9,7 +9,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ccas.api.deps import CommonMonthParams
 from ccas.api.schemas import ApiResponse, OverviewData, UpcomingBillItem
 from ccas.storage.database import get_db_session
-from ccas.storage.models import BankConfig, Bill
+from ccas.storage.models import Bill
+from ccas.storage.queries import fetch_bank_names
 
 router = APIRouter(prefix="/api", tags=["overview"])
 
@@ -21,7 +22,7 @@ async def get_overview(
 ):
     """取得指定月份的摘要卡片資料與即將到期帳單。"""
     month = params.month
-    bank_names = await _fetch_bank_names(session)
+    bank_names = await fetch_bank_names(session)
 
     # 月份摘要
     stmt = select(Bill).where(Bill.billing_month == month)
@@ -66,9 +67,3 @@ async def get_overview(
         ],
     )
     return ApiResponse(data=data)
-
-
-async def _fetch_bank_names(session: AsyncSession) -> dict[str, str]:
-    stmt = select(BankConfig.bank_code, BankConfig.bank_name)
-    result = await session.execute(stmt)
-    return {row[0]: row[1] for row in result.all()}

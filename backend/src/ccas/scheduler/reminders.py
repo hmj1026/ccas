@@ -14,15 +14,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ccas.bot.client import send_message
 from ccas.bot.notifications import render_due_reminder
 from ccas.config import get_settings
-from ccas.storage.models import BankConfig, Bill, PaymentReminder
+from ccas.storage.models import Bill, PaymentReminder
+from ccas.storage.queries import fetch_bank_names
 
 logger = logging.getLogger(__name__)
-
-
-async def _fetch_bank_names(session: AsyncSession) -> dict[str, str]:
-    stmt = select(BankConfig.bank_code, BankConfig.bank_name)
-    result = await session.execute(stmt)
-    return {row[0]: row[1] for row in result.all()}
 
 
 async def _fetch_unpaid_bills_due_on(
@@ -89,7 +84,7 @@ async def send_payment_reminders(
         today = date.today()
 
     settings = get_settings()
-    bank_names = await _fetch_bank_names(session)
+    bank_names = await fetch_bank_names(session)
 
     sent = 0
     skipped = 0

@@ -15,7 +15,8 @@ from ccas.api.schemas import (
 )
 from ccas.config import get_settings
 from ccas.storage.database import get_db_session
-from ccas.storage.models import BankConfig, Bill
+from ccas.storage.models import Bill
+from ccas.storage.queries import fetch_bank_names
 
 router = APIRouter(prefix="/api/bills", tags=["bills"])
 
@@ -44,7 +45,7 @@ async def list_bills(
     session: AsyncSession = Depends(get_db_session),
 ):
     """取得指定月份的帳單清單。"""
-    bank_names = await _fetch_bank_names(session)
+    bank_names = await fetch_bank_names(session)
 
     stmt = (
         select(Bill).where(Bill.billing_month == params.month).order_by(Bill.bank_code)
@@ -69,7 +70,7 @@ async def update_bill(
 ):
     """更新帳單付款狀態。"""
     bill = await _get_bill_or_404(session, bill_id)
-    bank_names = await _fetch_bank_names(session)
+    bank_names = await fetch_bank_names(session)
 
     bill.is_paid = body.is_paid
     await session.commit()
@@ -122,9 +123,3 @@ async def _get_bill_or_404(session: AsyncSession, bill_id: int) -> Bill:
     if bill is None:
         raise HTTPException(status_code=404, detail=f"找不到帳單 #{bill_id}")
     return bill
-
-
-async def _fetch_bank_names(session: AsyncSession) -> dict[str, str]:
-    stmt = select(BankConfig.bank_code, BankConfig.bank_name)
-    result = await session.execute(stmt)
-    return {row[0]: row[1] for row in result.all()}
