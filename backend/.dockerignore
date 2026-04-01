@@ -7,3 +7,8 @@ data/
 .coverage
 htmlcov/
 *.egg-info/
+tests/
+docs/
+scripts/
+.mypy_cache/
+.ruff_cache/

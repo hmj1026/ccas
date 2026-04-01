@@ -1,0 +1,44 @@
+# Development overrides — auto-loaded by `docker compose up`
+# Source code is bind-mounted for hot reload.
+# For production, run: docker compose -f docker-compose.yaml up
+
+services:
+  backend:
+    build:
+      target: dev
+    volumes:
+      - ccas-data:/data
+      - ./backend/src:/app/src
+      - ./backend/alembic:/app/alembic
+    command:
+      - uv
+      - run
+      - uvicorn
+      - ccas.api.app:create_app
+      - --host
+      - "0.0.0.0"
+      - --port
+      - "8000"
+      - --factory
+      - --reload
+
+  scheduler:
+    build:
+      target: dev
+    volumes:
+      - ccas-data:/data
+      - ./backend/src:/app/src
+
+  bot:
+    build:
+      target: dev
+    volumes:
+      - ccas-data:/data
+      - ./backend/src:/app/src
+
+  frontend:
+    build:
+      target: dev
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules

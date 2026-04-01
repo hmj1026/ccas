@@ -1,73 +1,40 @@
-# React + TypeScript + Vite
+# CCAS Frontend -- 信用卡帳單儀表板
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+CCAS (Credit Card Automation System) 的前端儀表板，用於瀏覽信用卡帳單、交易明細、消費分析與帳單管理。
 
-Currently, two official plugins are available:
+完整專案說明請參考根目錄 [README.md](../README.md)。
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## 技術棧
 
-## React Compiler
+| 項目 | 技術 |
+|------|------|
+| 框架 | React 19, TypeScript |
+| 建置工具 | Vite |
+| 樣式 | Tailwind CSS, shadcn/ui |
+| 路由 | React Router v7 |
+| 資料獲取 | TanStack Query v5 |
+| 圖表 | Recharts |
+| 測試 | Vitest |
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## 開發指令
 
-## Expanding the ESLint configuration
+<!-- AUTO-GENERATED from frontend/package.json scripts -->
+| 指令 | 說明 |
+|------|------|
+| `pnpm dev` | 啟動開發伺服器 (port 5173, HMR) |
+| `pnpm build` | TypeScript 型別檢查 + 正式建置 |
+| `pnpm lint` | ESLint 檢查 |
+| `pnpm preview` | 預覽正式建置結果 |
+| `pnpm test` | 執行 Vitest 測試（單次） |
+| `pnpm test:watch` | 執行 Vitest 測試（監視模式） |
+<!-- AUTO-GENERATED END -->
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+## 環境變數
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+前端環境變數須使用 `VITE_` 前綴（由根目錄 `.env` 提供）：
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+| 變數 | 說明 | 預設值 |
+|------|------|--------|
+| `VITE_API_BASE` | 後端 API base URL | `http://127.0.0.1:8000` |
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
-
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
-
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+環境設定範本請參考根目錄 [`.env.example`](../.env.example)。

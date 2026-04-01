@@ -167,6 +167,18 @@ ccas/
 └── GEMINI.md                  # Gemini-specific config
 ```
 
+## CI/CD
+
+<!-- AUTO-GENERATED from .github/workflows/ci.yaml -->
+**觸發條件**：push 或 Pull Request 至 `develop` / `master`
+
+| Job | 內容 |
+|-----|------|
+| `backend-lint` | `ruff check` lint、`ruff format --check` 格式檢查、`pyright` 型別檢查 |
+
+工具鏈：`astral-sh/setup-uv@v4`、Python 3.12、`uv sync --frozen --all-extras`
+<!-- AUTO-GENERATED END -->
+
 ## OpenSpec 工作流
 
 本專案使用 [OpenSpec](https://github.com/anthropics/openspec) 進行 spec-driven 開發。工作流程：
