@@ -22,7 +22,9 @@
       "Bash(uv pip:*)",
       "Bash(cx o:*)",
       "Bash(cx symbols:*)",
-      "Bash(cx s:*)"
+      "Bash(cx s:*)",
+      "Bash(find:*)",
+      "Bash(xargs cat:*)"
     ]
   },
   "hooks": {

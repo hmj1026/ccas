@@ -20,6 +20,7 @@ dependencies = [
     "rq",
     "redis",
     "apscheduler",
+    "python-dotenv>=1.2.2",
 ]
 
 [project.optional-dependencies]
