@@ -1,9 +1,13 @@
 """開發用種子資料腳本。
 
-可重複執行（冪等）：每次先清除既有資料再重新寫入。
+Usage:
+    uv run python backend/scripts/seed.py           # 新增 seed 資料（不清除既有）
+    uv run python backend/scripts/seed.py --reset    # 清除所有資料後重新寫入
+
 包含 BankConfig、Category、Bill、Transaction 範例資料。
 """
 
+import argparse
 import asyncio
 from datetime import date, datetime
 
@@ -24,21 +28,13 @@ async def clear_seed_data(session: AsyncSession) -> None:
 
 
 async def seed_bank_configs(session: AsyncSession) -> None:
-    """寫入銀行設定範例資料（中國信託、國泰世華）。"""
+    """寫入銀行設定範例資料（僅含已實作 parser 的銀行）。"""
     configs = [
         BankConfig(
             bank_code="CTBC",
             bank_name="中國信託",
             gmail_filter="from:service@ctbcbank.com subject:信用卡",
             pdf_password_rule="ID_LAST_4 + BIRTHDAY_MMDD",
-            active_parser_version="v1",
-            is_active=True,
-        ),
-        BankConfig(
-            bank_code="CATHAY",
-            bank_name="國泰世華",
-            gmail_filter="from:cathaybk@email.cathaybk.com.tw subject:帳單",
-            pdf_password_rule="ID_FULL",
             active_parser_version="v1",
             is_active=True,
         ),
@@ -130,7 +126,20 @@ async def seed_bills_and_transactions(session: AsyncSession) -> None:
     await session.commit()
 
 
-async def main() -> None:
+def _parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="CCAS seed data management.",
+    )
+    parser.add_argument(
+        "--reset",
+        action="store_true",
+        default=False,
+        help="Clear all existing data before seeding.",
+    )
+    return parser.parse_args()
+
+
+async def main(*, reset: bool = False) -> None:
     """執行種子資料寫入流程並輸出統計。"""
     settings = get_settings()
     engine = create_async_engine(settings.database_url, echo=False)
@@ -144,8 +153,9 @@ async def main() -> None:
     )
 
     async with session_factory() as session:
-        print("Clearing existing seed data...")
-        await clear_seed_data(session)
+        if reset:
+            print("Clearing existing seed data...")
+            await clear_seed_data(session)
 
         print("Seeding bank configs...")
         await seed_bank_configs(session)
@@ -178,4 +188,5 @@ async def main() -> None:
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    args = _parse_args()
+    asyncio.run(main(reset=args.reset))
