@@ -48,7 +48,7 @@ class TestDecryptPdfEncrypted:
         mock_pdf = MagicMock()
         call_count = {"n": 0}
 
-        def fake_open(path, password=None):
+        def fake_open(path, password=None, **kwargs):
             call_count["n"] += 1
             if call_count["n"] == 1:
                 raise mock_pikepdf.PasswordError("encrypted")
@@ -69,7 +69,7 @@ class TestDecryptPdfEncrypted:
         """以錯誤密碼解密失敗，拋出 DecryptionError。"""
         mock_pikepdf.PasswordError = type("PasswordError", (Exception,), {})
 
-        def fake_open(path, password=None):
+        def fake_open(path, password=None, **kwargs):
             raise mock_pikepdf.PasswordError("bad password")
 
         mock_pikepdf.open.side_effect = fake_open
@@ -82,7 +82,7 @@ class TestDecryptPdfEncrypted:
         """加密 PDF 無密碼可用時拋出 DecryptionError。"""
         mock_pikepdf.PasswordError = type("PasswordError", (Exception,), {})
 
-        def fake_open(path, password=None):
+        def fake_open(path, password=None, **kwargs):
             raise mock_pikepdf.PasswordError("encrypted")
 
         mock_pikepdf.open.side_effect = fake_open

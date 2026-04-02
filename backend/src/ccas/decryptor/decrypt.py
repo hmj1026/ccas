@@ -51,7 +51,7 @@ def decrypt_pdf(pdf_path: Path, password: str | None) -> DecryptResult:
         FileNotFoundError: PDF 檔案不存在。
     """
     try:
-        with pikepdf.open(pdf_path) as pdf:
+        with pikepdf.open(pdf_path, allow_overwriting_input=True) as pdf:
             pdf.save(pdf_path)
             return DecryptResult(needed_decryption=False)
     except pikepdf.PasswordError:
@@ -61,7 +61,9 @@ def decrypt_pdf(pdf_path: Path, password: str | None) -> DecryptResult:
         raise DecryptionError("Password not found in settings")
 
     try:
-        with pikepdf.open(pdf_path, password=password) as pdf:
+        with pikepdf.open(
+            pdf_path, password=password, allow_overwriting_input=True
+        ) as pdf:
             pdf.save(pdf_path)
             return DecryptResult(needed_decryption=True)
     except pikepdf.PasswordError:
