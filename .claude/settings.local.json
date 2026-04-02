@@ -43,7 +43,16 @@
       "Bash(wc -l src/ccas/bot/*.py)",
       "Bash(wc -l src/ccas/storage/*.py)",
       "Bash(wc -l src/ccas/tools/*.py)",
-      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\('react:', d['dependencies'].get\\('react','-'\\)\\); print\\('vite:', d['devDependencies'].get\\('vite','-'\\)\\); print\\('tailwindcss:', d['dependencies'].get\\('tailwindcss', d['devDependencies'].get\\('tailwindcss','-'\\)\\)\\); print\\('typescript:', d['devDependencies'].get\\('typescript','-'\\)\\)\")"
+      "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); print\\('react:', d['dependencies'].get\\('react','-'\\)\\); print\\('vite:', d['devDependencies'].get\\('vite','-'\\)\\); print\\('tailwindcss:', d['dependencies'].get\\('tailwindcss', d['devDependencies'].get\\('tailwindcss','-'\\)\\)\\); print\\('typescript:', d['devDependencies'].get\\('typescript','-'\\)\\)\")",
+      "Read(//home/paul/projects/**)",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(d.get\\('scripts',{}\\)\\)\")",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(d.get\\('outputPath',''\\)\\)\")",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); [print\\(a['id'], a['status']\\) for a in d['artifacts']]\")",
+      "Bash(npm run:*)",
+      "Bash(kill %1)",
+      "Bash(python3 -m json.tool)",
+      "Bash(python3 -c \"import sys,json; d=json.loads\\(sys.stdin.read\\(\\)\\); print\\(f'ingest={d[\\\\\"stages\\\\\"][0][\\\\\"counts\\\\\"]}, decrypt={d[\\\\\"stages\\\\\"][1][\\\\\"counts\\\\\"]}, parse={d[\\\\\"stages\\\\\"][2][\\\\\"counts\\\\\"]}, failures={len\\(d[\\\\\"failures\\\\\"]\\)}'\\)\")",
+      "Bash(ls:*)"
     ]
   },
   "hooks": {
