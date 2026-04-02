@@ -62,18 +62,77 @@ def _try_parse(
     """
 
     errors: list[str] = []
+    pdf_filename = pdf_path.name
     for parser in candidates:
         try:
+            logger.debug(
+                "嘗試 parser %s/%s: %s",
+                parser.bank_code,
+                parser.version,
+                pdf_filename,
+            )
             if not parser.can_parse(pdf_path):
+                logger.debug(
+                    "parser %s/%s can_parse=False: %s",
+                    parser.bank_code,
+                    parser.version,
+                    pdf_filename,
+                )
                 errors.append(f"{parser.bank_code}/{parser.version}: can_parse=False")
                 continue
             result = parser.parse(pdf_path)
+            logger.info(
+                "parser 匹配成功: parser=%s/%s, bank_code=%s, pdf=%s",
+                parser.bank_code,
+                parser.version,
+                parser.bank_code,
+                pdf_filename,
+            )
             return True, result, ""
         except ParseError as exc:
+            logger.error(
+                "parse 失敗: parser=%s/%s, pdf=%s, error_type=ParseError, detail=%s",
+                parser.bank_code,
+                parser.version,
+                pdf_filename,
+                str(exc),
+                extra={
+                    "pdf_filename": pdf_filename,
+                    "bank_code": parser.bank_code,
+                    "error_type": "ParseError",
+                    "error_detail": str(exc),
+                },
+            )
             errors.append(f"{parser.bank_code}/{parser.version}: {exc}")
         except Exception as exc:
+            logger.error(
+                "parse 非預期錯誤: parser=%s/%s, pdf=%s, error_type=%s, detail=%s",
+                parser.bank_code,
+                parser.version,
+                pdf_filename,
+                type(exc).__name__,
+                str(exc),
+                exc_info=True,
+                extra={
+                    "pdf_filename": pdf_filename,
+                    "bank_code": parser.bank_code,
+                    "error_type": type(exc).__name__,
+                    "error_detail": str(exc),
+                },
+            )
             errors.append(f"{parser.bank_code}/{parser.version}: 非預期錯誤 {exc}")
 
+    logger.warning(
+        "所有 parser 均無法匹配: pdf=%s, 嘗試過=%s",
+        pdf_filename,
+        ", ".join(f"{p.bank_code}/{p.version}" for p in candidates),
+        extra={
+            "pdf_filename": pdf_filename,
+            "attempted_parsers": [
+                f"{p.bank_code}/{p.version}" for p in candidates
+            ],
+        },
+    )
     return False, None, "; ".join(errors)
 
 
@@ -122,13 +181,22 @@ async def _process_attachment(
     )
 
     if not success:
+        pdf_filename = attachment.original_filename or "unknown"
         error_msg = (
-            f"所有 parser 皆失敗 ({bank_code}/{attachment.original_filename}): "
+            f"所有 parser 皆失敗 ({bank_code}/{pdf_filename}): "
             f"{error_detail}"
         )
         summary.failed_count += 1
         summary.errors.append(error_msg)
-        logger.error(error_msg)
+        logger.error(
+            error_msg,
+            extra={
+                "pdf_filename": pdf_filename,
+                "bank_code": bank_code,
+                "error_type": "AllParsersFailed",
+                "error_detail": error_detail,
+            },
+        )
         await update_attachment_status(
             session, attachment, status="parse_failed", error_reason=error_detail
         )
