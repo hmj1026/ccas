@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ccas.api.deps import CommonMonthParams
+from ccas.api.deps import CommonMonthParams, get_month_params
 from ccas.api.schemas import ApiResponse, OverviewData, UpcomingBillItem
 from ccas.storage.database import get_db_session
 from ccas.storage.models import Bill
@@ -17,7 +17,7 @@ router = APIRouter(prefix="/api", tags=["overview"])
 
 @router.get("/overview", response_model=ApiResponse[OverviewData])
 async def get_overview(
-    params: CommonMonthParams = Depends(),
+    params: CommonMonthParams = Depends(get_month_params),
     session: AsyncSession = Depends(get_db_session),
 ):
     """取得指定月份的摘要卡片資料與即將到期帳單。"""

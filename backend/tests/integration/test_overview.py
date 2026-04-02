@@ -33,7 +33,7 @@ async def _seed_data(session: AsyncSession, month: str = "2026-03"):
 
 
 async def test_overview_default_month(client: AsyncClient, db_session: AsyncSession):
-    """未指定月份時回傳當月摘要。"""
+    """未指定月份時回傳最近有資料月份的摘要。"""
     current_month = date.today().strftime("%Y-%m")
     await _seed_data(db_session, current_month)
 
@@ -45,6 +45,30 @@ async def test_overview_default_month(client: AsyncClient, db_session: AsyncSess
     assert data["total_spending"] == 15000
     assert data["total_paid"] == 5000
     assert data["total_unpaid"] == 10000
+
+
+async def test_overview_default_resolves_to_latest_data_month(
+    client: AsyncClient, db_session: AsyncSession
+):
+    """未指定月份且資料不在當月時，自動解析為最近有帳單的月份。"""
+    await _seed_data(db_session, "2024-06")
+
+    response = await client.get("/api/overview", headers=auth_headers())
+    assert response.status_code == 200
+    assert response.json()["data"]["month"] == "2024-06"
+    assert response.json()["data"]["total_spending"] == 15000
+
+
+async def test_overview_empty_db_falls_back_to_current_month(
+    client: AsyncClient, db_session: AsyncSession
+):
+    """DB 無帳單時，預設月份 fallback 為當月（結果為零）。"""
+    response = await client.get("/api/overview", headers=auth_headers())
+    assert response.status_code == 200
+
+    data = response.json()["data"]
+    assert data["month"] == date.today().strftime("%Y-%m")
+    assert data["total_spending"] == 0
 
 
 async def test_overview_specified_month(client: AsyncClient, db_session: AsyncSession):

@@ -7,7 +7,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ccas.api.deps import CommonMonthParams
+from ccas.api.deps import CommonMonthParams, get_month_params
 from ccas.api.schemas import (
     ApiResponse,
     BillItem,
@@ -36,7 +36,7 @@ def _resolve_bill_pdf_path(file_path: str, allowed_root: str) -> Path:
 
 @router.get("", response_model=ApiResponse[list[BillItem]])
 async def list_bills(
-    params: CommonMonthParams = Depends(),
+    params: CommonMonthParams = Depends(get_month_params),
     status: str = Query(
         default="all",
         pattern="^(all|paid|unpaid)$",

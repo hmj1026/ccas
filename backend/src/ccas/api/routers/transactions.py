@@ -9,7 +9,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ccas.api.deps import CommonMonthParams, PaginationParams
+from ccas.api.deps import CommonMonthParams, PaginationParams, get_month_params
 from ccas.api.schemas import (
     PaginatedResponse,
     PaginationMeta,
@@ -62,7 +62,7 @@ def _to_item(row) -> TransactionItem:
 
 @router.get("/transactions", response_model=PaginatedResponse[TransactionItem])
 async def list_transactions(
-    month_params: CommonMonthParams = Depends(),
+    month_params: CommonMonthParams = Depends(get_month_params),
     pagination: PaginationParams = Depends(),
     bank_code: str | None = Query(default=None),
     category: str | None = Query(default=None),
@@ -100,7 +100,7 @@ async def list_transactions(
 
 @router.get("/transactions/export")
 async def export_transactions(
-    month_params: CommonMonthParams = Depends(),
+    month_params: CommonMonthParams = Depends(get_month_params),
     bank_code: str | None = Query(default=None),
     category: str | None = Query(default=None),
     q: str | None = Query(default=None),

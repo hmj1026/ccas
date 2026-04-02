@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ccas.api.deps import CommonMonthParams
+from ccas.api.deps import CommonMonthParams, get_month_params
 from ccas.api.schemas import (
     ApiResponse,
     BankItem,
@@ -52,7 +52,7 @@ async def get_trend(
 
 @router.get("/categories", response_model=ApiResponse[list[CategoryItem]])
 async def get_categories(
-    params: CommonMonthParams = Depends(),
+    params: CommonMonthParams = Depends(get_month_params),
     session: AsyncSession = Depends(get_db_session),
 ):
     """取得指定月份的類別分布。"""
@@ -73,7 +73,7 @@ async def get_categories(
 
 @router.get("/banks", response_model=ApiResponse[list[BankItem]])
 async def get_banks(
-    params: CommonMonthParams = Depends(),
+    params: CommonMonthParams = Depends(get_month_params),
     session: AsyncSession = Depends(get_db_session),
 ):
     """取得指定月份按銀行彙總的消費總額。"""
