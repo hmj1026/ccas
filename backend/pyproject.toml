@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Credit Card Artifact System - automated bill parsing and reporting"
 requires-python = ">=3.12"
 dependencies = [
-    "fastapi",
+    "fastapi[standard]",
     "uvicorn[standard]",
     "sqlalchemy[asyncio]",
     "aiosqlite",

@@ -7,10 +7,13 @@ services:
       - "8000:8000"
     volumes:
       - ccas-data:/data
+      - ./scripts:/scripts:ro
+      - ./.env.example:/app/.env.example:ro
     env_file:
       - ./.env
     environment:
       REDIS_URL: redis://redis:6379/0
+    entrypoint: ["/scripts/docker-entrypoint.sh"]
     depends_on:
       redis:
         condition: service_healthy
