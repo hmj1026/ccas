@@ -40,6 +40,11 @@ TBD - created by archiving change ctbc-parser-v1. Update Purpose after archive.
 - **WHEN** PDF 中找不到繳費截止日或應繳總額
 - **THEN** parser SHALL 拋出 `ParseError`，訊息中包含缺失欄位名稱
 
+#### Scenario: 真實 CTBC 帳單端到端解析驗證
+
+- **WHEN** 透過真實 pipeline 從 Gmail 下載並解密 CTBC 帳單 PDF 後進行解析
+- **THEN** DB 中 SHALL 建立 `Bill` 記錄（`bank_code=CTBC`），且對應的 `Transaction` 記錄筆數大於 0，每筆交易的 `amount` 為正整數。`merchant` 可為空字串（真實 CTBC PDF 的商家名稱為圖片，無法由 pdfplumber 提取）
+
 ### Requirement: CTBC v1 parser 可提取交易明細
 
 系統 SHALL 從 CTBC 帳單 PDF 的表格中提取所有交易明細行。

@@ -14,6 +14,10 @@ TBD - created by archiving change integration-polish. Update Purpose after archi
 - **WHEN** 在無網路連線或無 Gmail 帳號憑證的環境中執行 E2E 測試
 - **THEN** 測試應仍能正常啟動並完成，不因外部服務不可用而失敗
 
+#### Scenario: 去重複機制在 E2E 測試中可驗證
+- **WHEN** E2E 測試執行兩次 pipeline（第二次不帶 force）且第一次已成功 ingest 相同附件
+- **THEN** 第二次執行的 ingest 階段 `skipped_count` SHALL 大於 0，parse 階段 `skipped_count` SHALL 大於 0，且 DB 中不產生重複的 Bill 記錄
+
 ### Requirement: 驗證 staging 狀態機的完整生命週期
 系統 SHALL 以獨立測試案例驗證 staging record 在完整生命週期中的每一個狀態轉換，包含成功路徑與所有已定義的錯誤分支。
 
