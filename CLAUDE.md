@@ -102,9 +102,19 @@ uv run python -m ccas.pipeline             # Run full pipeline
 uv run python -m ccas.pipeline --bank CTBC # Single bank only
 uv run python -m ccas.pipeline --force     # Force re-download/re-parse
 uv run python -m ccas.pipeline --force --bank CTBC --year 2026 --month 3
+uv run python -m ccas.pipeline --from parse --to classify  # Stage range
+uv run python -m ccas.pipeline --from decrypt              # From stage to end
 
 # Server
-uv run fastapi dev                         # Dev server with hot reload
+./scripts/start.sh                         # Backend + frontend (recommended)
+uv run uvicorn ccas.api.app:create_app --factory --reload  # Backend only
+
+# Seed Data
+uv run python scripts/seed.py             # Add test data
+uv run python scripts/seed.py --reset     # Reset and re-seed
+
+# Env Validation
+./scripts/check-env.sh                    # Check .env for missing vars
 ```
 
 ## ECC Agent & Skill Reference
@@ -137,7 +147,7 @@ Relevant ECC skills for this project:
 
 A single `.env` file at the **project root** is shared by backend and frontend:
 - Backend: `pydantic-settings` loads `../.env` relative to `backend/` working directory
-- Frontend: Vite reads from root via `envDir: '..'` (variables must use `VITE_` prefix)
+- Frontend: Vite dev server proxies `/api` to `http://127.0.0.1:8000` (configured in `vite.config.ts`); no `VITE_API_BASE` needed for development
 - Docker: `docker-compose.yaml` injects via `env_file: ./.env`
 - Template: `.env.example` documents all available variables
 
