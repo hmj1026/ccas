@@ -17,12 +17,18 @@ from .conftest import (
     CTBC_FIRST_PAGE_TEXT,
     CTBC_INSTALLMENT_ROW,
     CTBC_NON_CTBC_PAGE_TEXT,
+    CTBC_ROC_FIRST_PAGE_TEXT,
+    CTBC_ROC_PAYMENT_PAGE_TEXT,
+    CTBC_ROC_TXN_PAGE_TEXT,
     CTBC_SUMMARY_MISSING_DUE_DATE_TEXT,
     CTBC_SUMMARY_MISSING_TOTAL_TEXT,
     CTBC_TABLE_HEADER_ROW,
     CTBC_TRANSACTION_ROWS,
     EXPECTED_BILLING_MONTH,
     EXPECTED_DUE_DATE,
+    EXPECTED_ROC_BILLING_MONTH,
+    EXPECTED_ROC_DUE_DATE,
+    EXPECTED_ROC_TOTAL_AMOUNT,
     EXPECTED_TOTAL_AMOUNT,
     make_mock_page,
 )
@@ -218,3 +224,90 @@ class TestParse:
         assert result.total_amount == EXPECTED_TOTAL_AMOUNT
         assert result.due_date == EXPECTED_DUE_DATE
         assert len(result.transactions) == 3
+
+
+# -- ROC format tests (real CTBC PDFs) --
+
+
+class TestIdentifyRoc:
+    def test_identifies_by_url_and_roc_header(self):
+        parser = _make_parser()
+        assert parser._identify(CTBC_ROC_FIRST_PAGE_TEXT) is True
+
+    def test_rejects_url_only_without_roc_header(self):
+        parser = _make_parser()
+        assert parser._identify("some text https://ctbc.tw/link") is False
+
+    def test_rejects_roc_header_without_url(self):
+        parser = _make_parser()
+        assert parser._identify("115 03 1 / 3\nsome text") is False
+
+
+class TestExtractSummaryRoc:
+    def test_extracts_roc_billing_month(self):
+        parser = _make_parser()
+        page1 = make_mock_page(CTBC_ROC_FIRST_PAGE_TEXT)
+        page3 = make_mock_page(CTBC_ROC_PAYMENT_PAGE_TEXT)
+
+        billing_month, total, due = parser._extract_summary([page1, page3])
+
+        assert billing_month == EXPECTED_ROC_BILLING_MONTH
+
+    def test_extracts_roc_total_amount_from_payment_page(self):
+        parser = _make_parser()
+        page1 = make_mock_page(CTBC_ROC_FIRST_PAGE_TEXT)
+        page3 = make_mock_page(CTBC_ROC_PAYMENT_PAGE_TEXT)
+
+        _, total, _ = parser._extract_summary([page1, page3])
+
+        assert total == EXPECTED_ROC_TOTAL_AMOUNT
+
+    def test_extracts_roc_due_date_from_payment_page(self):
+        parser = _make_parser()
+        page1 = make_mock_page(CTBC_ROC_FIRST_PAGE_TEXT)
+        page3 = make_mock_page(CTBC_ROC_PAYMENT_PAGE_TEXT)
+
+        _, _, due = parser._extract_summary([page1, page3])
+
+        assert due == EXPECTED_ROC_DUE_DATE
+
+
+class TestExtractTransactionsRoc:
+    def test_extracts_roc_transactions(self):
+        parser = _make_parser()
+        page = make_mock_page(CTBC_ROC_TXN_PAGE_TEXT)
+
+        txns = parser._extract_transactions(
+            cast(list[pdfplumber.page.Page], [page]), 2026
+        )
+
+        assert len(txns) == 4
+        assert txns[0].trans_date == date(2026, 2, 9)
+        assert txns[0].posting_date == date(2026, 2, 11)
+        assert txns[0].amount == 28
+        assert txns[0].card_last4 == "6713"
+        assert txns[0].merchant == ""
+
+    def test_skips_non_transaction_lines(self):
+        """Summary and payment lines should not match transaction regex."""
+        parser = _make_parser()
+        text = "115/03/10 3,292 2,967 0 3,292 0 +2,967\n115/03/02 -3,292\n"
+        page = make_mock_page(text)
+
+        txns = parser._extract_transactions(
+            cast(list[pdfplumber.page.Page], [page]), 2026
+        )
+
+        assert len(txns) == 0
+
+    def test_malformed_roc_transaction_skipped(self, caplog):
+        """ROC transaction with invalid date should be skipped."""
+        parser = _make_parser()
+        text = "999/99/99 999/99/99 100 1234 TW\n"
+        page = make_mock_page(text)
+
+        txns = parser._extract_transactions(
+            cast(list[pdfplumber.page.Page], [page]), 2026
+        )
+
+        assert len(txns) == 0

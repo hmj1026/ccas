@@ -89,6 +89,39 @@ CTBC_INSTALLMENT_ROW = [
     "1,250",
 ]
 
+# -- ROC format fixtures (real CTBC PDFs) --
+
+CTBC_ROC_FIRST_PAGE_TEXT = (
+    "115 03 1 / 3\n"
+    "402\n"
+    "115/04 7.7\n"
+    "i APP\n"
+    ":0800-024365 02-2745-8080\n"
+    "80,000\n"
+    "115/03/28\n"
+    "/ 80,000/ 80,000\n"
+    "( ) 2,967 7.7%\n"
+    "115/04\n"
+    "1,000 ( )\n"
+    "https://ctbc.tw/I6R5Wd\n"
+)
+
+CTBC_ROC_TXN_PAGE_TEXT = (
+    "2 / 3\n"
+    "115/03/10 3,292 2,967 0 3,292 0 +2,967\n"
+    "115/03/02 -3,292\n"
+    "115/02/09 115/02/11 28 6713 TW\n"
+    "115/02/12 115/02/23 75 6713 TW\n"
+    "115/02/15 115/02/23 228 6713 TW\n"
+    "115/03/06 115/03/09 205 6713 TW\n"
+)
+
+CTBC_ROC_PAYMENT_PAGE_TEXT = "3 / 3\n03 28 ( )\n$2,967 115 03\n$1,000 115/03/28\n"
+
+EXPECTED_ROC_BILLING_MONTH = "2026-03"
+EXPECTED_ROC_TOTAL_AMOUNT = 2967
+EXPECTED_ROC_DUE_DATE = date(2026, 3, 28)
+
 # -- Expected parsed values --
 
 EXPECTED_BILLING_MONTH = "2026-03"

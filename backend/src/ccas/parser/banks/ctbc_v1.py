@@ -1,6 +1,9 @@
 """中國信託 (CTBC) v1 信用卡帳單 parser。
 
-使用 pdfplumber 解析表格式帳單 PDF，提取帳單摘要與交易明細。
+使用 pdfplumber 解析帳單 PDF，提取帳單摘要與交易明細。
+支援兩種格式：
+- 標籤式（合成測試 PDF）：中文標籤 + 西元年 + 表格式交易
+- 民國年式（真實帳單 PDF）：ROC 年 + 文字行式交易
 """
 
 from __future__ import annotations
@@ -22,17 +25,30 @@ logger = logging.getLogger(__name__)
 # -- Identification patterns --
 
 _CTBC_KEYWORDS = ("中國信託", "信用卡")
+_CTBC_URL_MARKER = "ctbc.tw"
 
-# -- Summary extraction patterns --
+# -- Labeled format (synthetic test PDFs) --
 
 _RE_DUE_DATE = re.compile(r"繳費截止日[：:]\s*(\d{4})/(\d{2})/(\d{2})")
 _RE_TOTAL_AMOUNT = re.compile(r"本期應繳總額[：:]\s*NT\$\s*([\d,]+)")
 _RE_BILLING_MONTH = re.compile(r"帳單月份[：:]\s*(\d{4})年(\d{2})月")
-
-# -- Transaction table patterns --
-
 _TRANSACTION_HEADER_KEYWORDS = ("交易日", "金額")
 _RE_DATE_MMDD = re.compile(r"^(\d{2})/(\d{2})$")
+
+# -- ROC format (real CTBC PDFs) --
+
+_ROC_OFFSET = 1911
+_RE_BILLING_LINE_ROC = re.compile(r"^(\d{3})\s+(\d{2})\s+\d+\s*/\s*\d+", re.MULTILINE)
+_RE_ROC_DATE = re.compile(r"(\d{3})/(\d{2})/(\d{2})")
+_RE_DOLLAR_AMOUNT = re.compile(r"\$\s*([\d,]+)")
+_RE_TRANSACTION_LINE_ROC = re.compile(
+    r"(\d{3}/\d{2}/\d{2})\s+(\d{3}/\d{2}/\d{2})\s+([\d,]+)\s+(\d{4})\s+([A-Z]{2,4})"
+)
+
+
+def _roc_to_date(roc_year: int, month: int, day: int) -> date:
+    """Convert ROC (minguo) date to Python date."""
+    return date(roc_year + _ROC_OFFSET, month, day)
 
 
 class CtbcV1Parser(BankParser):
@@ -70,37 +86,49 @@ class CtbcV1Parser(BankParser):
         )
 
     def _identify(self, text: str) -> bool:
-        """Check if first-page text contains CTBC statement markers."""
-        return all(kw in text for kw in _CTBC_KEYWORDS)
+        """Check if first-page text contains CTBC statement markers.
+
+        Accepts either:
+        - All Chinese keywords (labeled/synthetic PDFs), OR
+        - ctbc.tw URL plus ROC billing month header (real PDFs)
+        """
+        has_keywords = all(kw in text for kw in _CTBC_KEYWORDS)
+        has_url = _CTBC_URL_MARKER in text
+        has_roc_header = _RE_BILLING_LINE_ROC.search(text) is not None
+        return has_keywords or (has_url and has_roc_header)
 
     def _extract_summary(
         self, pages: list[pdfplumber.page.Page]
     ) -> tuple[str, int, date]:
         """Extract billing_month, total_amount, due_date from page text.
 
+        Tries ROC format first (real PDFs), then labeled format (test PDFs).
+
         Raises:
             ParseError: If any mandatory summary field is missing.
         """
         full_text = "\n".join(page.extract_text() or "" for page in pages)
+        first_page_text = pages[0].extract_text() or ""
 
-        due_match = _RE_DUE_DATE.search(full_text)
-        if not due_match:
-            raise ParseError("帳單摘要缺失", reason="找不到繳費截止日")
-        due_date = date(
-            int(due_match.group(1)),
-            int(due_match.group(2)),
-            int(due_match.group(3)),
-        )
+        last_page_text = pages[-1].extract_text() or ""
 
-        total_match = _RE_TOTAL_AMOUNT.search(full_text)
-        if not total_match:
-            raise ParseError("帳單摘要缺失", reason="找不到應繳總額")
-        total_amount = int(total_match.group(1).replace(",", ""))
-
-        month_match = _RE_BILLING_MONTH.search(full_text)
-        if not month_match:
+        billing_month = _extract_billing_month_roc(first_page_text)
+        if billing_month is None:
+            billing_month = _extract_billing_month_labeled(full_text)
+        if billing_month is None:
             raise ParseError("帳單摘要缺失", reason="找不到帳單月份")
-        billing_month = f"{month_match.group(1)}-{month_match.group(2)}"
+
+        due_date = _extract_due_date_labeled(full_text)
+        if due_date is None:
+            due_date = _extract_due_date_roc(last_page_text)
+        if due_date is None:
+            raise ParseError("帳單摘要缺失", reason="找不到繳費截止日")
+
+        total_amount = _extract_total_amount_labeled(full_text)
+        if total_amount is None:
+            total_amount = _extract_total_amount_dollar(last_page_text)
+        if total_amount is None:
+            raise ParseError("帳單摘要缺失", reason="找不到應繳總額")
 
         return billing_month, total_amount, due_date
 
@@ -109,26 +137,61 @@ class CtbcV1Parser(BankParser):
         pages: list[pdfplumber.page.Page],
         billing_year: int,
     ) -> tuple[TransactionItem, ...]:
-        """Extract transaction items from all pages' tables.
+        """Extract transaction items from all pages.
 
-        Skips malformed rows with a warning log instead of raising.
+        Tries table extraction first (labeled format), then
+        text line parsing (ROC format). Skips malformed rows.
         """
-        items: list[TransactionItem] = []
+        items = _extract_transactions_table(pages, billing_year)
+        if items:
+            return tuple(items)
 
-        for page in pages:
-            for table in page.extract_tables():
-                if not _is_transaction_table(table):
-                    continue
-                for row in table[1:]:
-                    item = _parse_transaction_row(row, billing_year)
-                    if item is not None:
-                        items.append(item)
-
+        items = _extract_transactions_roc(pages)
         return tuple(items)
 
 
+# -- Labeled format helpers (synthetic test PDFs) --
+
+
+def _extract_billing_month_labeled(text: str) -> str | None:
+    match = _RE_BILLING_MONTH.search(text)
+    if not match:
+        return None
+    return f"{match.group(1)}-{match.group(2)}"
+
+
+def _extract_due_date_labeled(text: str) -> date | None:
+    match = _RE_DUE_DATE.search(text)
+    if not match:
+        return None
+    return date(int(match.group(1)), int(match.group(2)), int(match.group(3)))
+
+
+def _extract_total_amount_labeled(text: str) -> int | None:
+    match = _RE_TOTAL_AMOUNT.search(text)
+    if not match:
+        return None
+    return int(match.group(1).replace(",", ""))
+
+
+def _extract_transactions_table(
+    pages: list[pdfplumber.page.Page],
+    billing_year: int,
+) -> list[TransactionItem]:
+    """Extract transactions from tables (labeled/test format)."""
+    items: list[TransactionItem] = []
+    for page in pages:
+        for table in page.extract_tables():
+            if not _is_transaction_table(table):
+                continue
+            for row in table[1:]:
+                item = _parse_transaction_row(row, billing_year)
+                if item is not None:
+                    items.append(item)
+    return items
+
+
 def _is_transaction_table(table: list[list[str | None]]) -> bool:
-    """Check if a table looks like a transaction table by header keywords."""
     if not table:
         return False
     header = [str(cell or "") for cell in table[0]]
@@ -140,10 +203,6 @@ def _parse_transaction_row(
     row: list[str | None],
     year: int,
 ) -> TransactionItem | None:
-    """Parse a single table row into a TransactionItem.
-
-    Returns None (with warning log) if the row is malformed.
-    """
     try:
         cells = [str(cell or "").strip() for cell in row]
         if len(cells) < 5:
@@ -162,7 +221,6 @@ def _parse_transaction_row(
             return None
 
         amount = int(raw_amount.replace(",", ""))
-
         posting_date = _parse_mmdd(raw_posting_date, year)
         is_valid_card = raw_card_last4.isdigit() and len(raw_card_last4) == 4
         card_last4 = raw_card_last4 if is_valid_card else None
@@ -180,11 +238,95 @@ def _parse_transaction_row(
 
 
 def _parse_mmdd(raw: str, year: int) -> date | None:
-    """Parse MM/DD string to date using the billing statement year."""
     match = _RE_DATE_MMDD.match(raw)
     if not match:
         return None
     return date(year, int(match.group(1)), int(match.group(2)))
+
+
+# -- ROC format helpers (real CTBC PDFs) --
+
+
+def _extract_billing_month_roc(first_page_text: str) -> str | None:
+    """Extract billing month from first-line ROC format: '115 03 1 / 3'."""
+    match = _RE_BILLING_LINE_ROC.search(first_page_text)
+    if not match:
+        return None
+    roc_year = int(match.group(1))
+    month = int(match.group(2))
+    ad_year = roc_year + _ROC_OFFSET
+    return f"{ad_year}-{month:02d}"
+
+
+def _extract_due_date_roc(text: str) -> date | None:
+    """Extract due date from ROC date format: '115/03/28'.
+
+    Expects text from the payment slip page (last page). Uses the last
+    ROC date found on that page to avoid matching transaction dates.
+    """
+    matches = _RE_ROC_DATE.findall(text)
+    if not matches:
+        return None
+    roc_year, month, day = matches[-1]
+    return _roc_to_date(int(roc_year), int(month), int(day))
+
+
+def _extract_total_amount_dollar(text: str) -> int | None:
+    """Extract total amount from dollar-prefixed format on payment slip page.
+
+    Expects text from the last page where '$AMOUNT' is the total payable.
+    """
+    match = _RE_DOLLAR_AMOUNT.search(text)
+    if not match:
+        return None
+    return int(match.group(1).replace(",", ""))
+
+
+def _extract_transactions_roc(
+    pages: list[pdfplumber.page.Page],
+) -> list[TransactionItem]:
+    """Extract transactions from text lines in ROC date format.
+
+    Pattern: 'YYY/MM/DD YYY/MM/DD AMOUNT CARD4 CURRENCY'
+    Merchant names are not extractable (rendered as images in real PDFs).
+    """
+    items: list[TransactionItem] = []
+    for page in pages:
+        text = page.extract_text() or ""
+        for match in _RE_TRANSACTION_LINE_ROC.finditer(text):
+            item = _parse_roc_transaction(match)
+            if item is not None:
+                items.append(item)
+    return items
+
+
+def _parse_roc_transaction(match: re.Match[str]) -> TransactionItem | None:
+    """Parse a single ROC-format transaction line."""
+    try:
+        raw_trans = match.group(1)
+        raw_posting = match.group(2)
+        raw_amount = match.group(3)
+        card_last4 = match.group(4)
+        # group(5) is currency code (TW, US, etc.) -- not stored separately
+
+        ty, tm, td = raw_trans.split("/")
+        trans_date = _roc_to_date(int(ty), int(tm), int(td))
+
+        py_, pm, pd = raw_posting.split("/")
+        posting_date = _roc_to_date(int(py_), int(pm), int(pd))
+
+        amount = int(raw_amount.replace(",", ""))
+
+        return TransactionItem(
+            trans_date=trans_date,
+            merchant="",
+            amount=amount,
+            posting_date=posting_date,
+            card_last4=card_last4,
+        )
+    except (ValueError, IndexError):
+        logger.warning("跳過無法解析的 ROC 交易行: %s", match.group(0))
+        return None
 
 
 # Module-level registration
