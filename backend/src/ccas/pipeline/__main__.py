@@ -9,7 +9,7 @@ import json
 import sys
 
 from ccas.pipeline.options import PipelineOptions
-from ccas.pipeline.orchestrator import run_pipeline
+from ccas.pipeline.orchestrator import STAGE_ORDER, run_pipeline
 from ccas.pipeline.summary import PipelineSummary
 from ccas.storage.database import get_engine, get_session_factory
 
@@ -62,6 +62,23 @@ def _parse_args(argv: list[str] | None = None) -> PipelineOptions:
         metavar="MM",
         help="Filter Gmail messages by month (1-12).",
     )
+    stage_names = ", ".join(STAGE_ORDER)
+    parser.add_argument(
+        "--from",
+        type=str,
+        default=None,
+        dest="from_stage",
+        metavar="STAGE",
+        help=f"Start from this stage (inclusive). Stages: {stage_names}",
+    )
+    parser.add_argument(
+        "--to",
+        type=str,
+        default=None,
+        dest="to_stage",
+        metavar="STAGE",
+        help=f"Stop after this stage (inclusive). Stages: {stage_names}",
+    )
     args = parser.parse_args(argv)
     if args.year is not None and not (2000 <= args.year <= 2099):
         parser.error(f"year must be between 2000 and 2099, got {args.year}")
@@ -70,6 +87,8 @@ def _parse_args(argv: list[str] | None = None) -> PipelineOptions:
         bank_code=args.bank,
         year=args.year,
         month=args.month,
+        from_stage=args.from_stage,
+        to_stage=args.to_stage,
     )
 
 

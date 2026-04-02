@@ -18,12 +18,16 @@ class PipelineOptions:
         bank_code: 僅處理指定銀行（None 表示全部）。
         year: 篩選年份。
         month: 篩選月份（1-12）。
+        from_stage: 從指定階段開始執行（None 表示從頭）。
+        to_stage: 執行到指定階段停止（None 表示到最後）。
     """
 
     force: bool = False
     bank_code: str | None = None
     year: int | None = None
     month: int | None = None
+    from_stage: str | None = None
+    to_stage: str | None = None
 
     def __post_init__(self) -> None:
         if self.month is not None and not (1 <= self.month <= 12):
@@ -94,6 +98,8 @@ class PipelineOptions:
             "bank_code": self.bank_code,
             "year": self.year,
             "month": self.month,
+            "from_stage": self.from_stage,
+            "to_stage": self.to_stage,
         }
 
     @classmethod
@@ -106,4 +112,6 @@ class PipelineOptions:
             bank_code=data.get("bank_code"),  # type: ignore[arg-type]
             year=data.get("year"),  # type: ignore[arg-type]
             month=data.get("month"),  # type: ignore[arg-type]
+            from_stage=data.get("from_stage"),  # type: ignore[arg-type]
+            to_stage=data.get("to_stage"),  # type: ignore[arg-type]
         )

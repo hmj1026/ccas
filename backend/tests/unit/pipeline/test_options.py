@@ -133,6 +133,28 @@ class TestGmailDateFilter:
         assert result == "after:2026/01/31 before:2026/03/01"
 
 
+class TestStageFields:
+    def test_default_stages_none(self):
+        opts = PipelineOptions()
+        assert opts.from_stage is None
+        assert opts.to_stage is None
+
+    def test_from_stage_only(self):
+        opts = PipelineOptions(from_stage="decrypt")
+        assert opts.from_stage == "decrypt"
+        assert opts.to_stage is None
+
+    def test_to_stage_only(self):
+        opts = PipelineOptions(to_stage="parse")
+        assert opts.to_stage == "parse"
+        assert opts.from_stage is None
+
+    def test_both_stages(self):
+        opts = PipelineOptions(from_stage="decrypt", to_stage="classify")
+        assert opts.from_stage == "decrypt"
+        assert opts.to_stage == "classify"
+
+
 class TestSerialization:
     def test_to_dict(self):
         opts = PipelineOptions(force=True, bank_code="CTBC", year=2026, month=3)
@@ -142,7 +164,15 @@ class TestSerialization:
             "bank_code": "CTBC",
             "year": 2026,
             "month": 3,
+            "from_stage": None,
+            "to_stage": None,
         }
+
+    def test_to_dict_with_stages(self):
+        opts = PipelineOptions(from_stage="parse", to_stage="notify")
+        d = opts.to_dict()
+        assert d["from_stage"] == "parse"
+        assert d["to_stage"] == "notify"
 
     def test_from_dict(self):
         d = {"force": True, "bank_code": "CTBC", "year": 2026, "month": 3}
@@ -151,6 +181,14 @@ class TestSerialization:
         assert opts.bank_code == "CTBC"
         assert opts.year == 2026
         assert opts.month == 3
+        assert opts.from_stage is None
+        assert opts.to_stage is None
+
+    def test_from_dict_with_stages(self):
+        d = {"from_stage": "decrypt", "to_stage": "classify"}
+        opts = PipelineOptions.from_dict(d)
+        assert opts.from_stage == "decrypt"
+        assert opts.to_stage == "classify"
 
     def test_from_dict_none(self):
         opts = PipelineOptions.from_dict(None)
@@ -162,5 +200,10 @@ class TestSerialization:
 
     def test_round_trip(self):
         original = PipelineOptions(force=True, bank_code="ESUN", year=2025)
+        restored = PipelineOptions.from_dict(original.to_dict())
+        assert restored == original
+
+    def test_round_trip_with_stages(self):
+        original = PipelineOptions(from_stage="parse", to_stage="classify")
         restored = PipelineOptions.from_dict(original.to_dict())
         assert restored == original

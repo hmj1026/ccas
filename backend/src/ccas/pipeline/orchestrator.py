@@ -21,6 +21,50 @@ from ccas.pipeline.summary import FailedItem, PipelineSummary, StageSummary
 
 logger = logging.getLogger(__name__)
 
+STAGE_ORDER: tuple[str, ...] = ("ingest", "decrypt", "parse", "classify", "notify")
+
+
+def _validate_stage_range(
+    from_stage: str | None = None,
+    to_stage: str | None = None,
+) -> tuple[str, ...]:
+    """Validate from/to stage names and return the stages to execute.
+
+    Args:
+        from_stage: Start stage (inclusive). None means first stage.
+        to_stage: End stage (inclusive). None means last stage.
+
+    Returns:
+        Tuple of stage names to execute, in order.
+
+    Raises:
+        ValueError: If stage names are invalid or from_stage is after to_stage.
+    """
+    valid_names = ", ".join(STAGE_ORDER)
+
+    from_idx = 0
+    if from_stage is not None:
+        if from_stage not in STAGE_ORDER:
+            raise ValueError(
+                f"無效的階段名稱: '{from_stage}'。有效名稱: {valid_names}"
+            )
+        from_idx = STAGE_ORDER.index(from_stage)
+
+    to_idx = len(STAGE_ORDER) - 1
+    if to_stage is not None:
+        if to_stage not in STAGE_ORDER:
+            raise ValueError(
+                f"無效的階段名稱: '{to_stage}'。有效名稱: {valid_names}"
+            )
+        to_idx = STAGE_ORDER.index(to_stage)
+
+    if from_idx > to_idx:
+        raise ValueError(
+            f"from_stage '{from_stage}' 必須在 to_stage '{to_stage}' 之前或相同"
+        )
+
+    return STAGE_ORDER[from_idx : to_idx + 1]
+
 
 def _ingest_stage_summary(s: IngestionSummary) -> StageSummary:
     return StageSummary(
@@ -85,15 +129,42 @@ def _collect_failures(*stage_summaries: StageSummary) -> tuple[FailedItem, ...]:
     return tuple(items)
 
 
+async def _run_stage(
+    stage_name: str,
+    session: AsyncSession,
+    options: PipelineOptions | None,
+    stage_num: int,
+    total_stages: int,
+) -> StageSummary:
+    """Execute a single pipeline stage and return its summary."""
+    logger.info("Pipeline stage %d/%d: %s", stage_num, total_stages, stage_name)
+
+    if stage_name == "ingest":
+        result = await run_ingestion_job(session, options)
+        return _ingest_stage_summary(result)
+    if stage_name == "decrypt":
+        result = await run_decryption_job(session, options)
+        return _decrypt_stage_summary(result)
+    if stage_name == "parse":
+        result = await run_parse_job(session, options)
+        return _parse_stage_summary(result)
+    if stage_name == "classify":
+        result = await run_classify_job(session)
+        return _classify_stage_summary(result)
+    # notify
+    result = await run_notify_job(session)
+    return _notify_stage_summary(result)
+
+
 async def run_pipeline(
     session: AsyncSession,
     options: PipelineOptions | None = None,
 ) -> PipelineSummary:
-    """執行五階段 pipeline 並回傳結構化摘要。
+    """執行 pipeline 並回傳結構化摘要。
 
-    各階段依序執行：ingest -> decrypt -> parse -> classify -> notify。
-    每階段部分失敗不阻斷後續階段。前一階段成功輸出作為後一階段輸入
-    （透過 DB 狀態欄位串接）。
+    根據 options.from_stage / to_stage 決定執行範圍，
+    預設執行全部五階段：ingest -> decrypt -> parse -> classify -> notify。
+    每階段部分失敗不阻斷後續階段。
 
     Args:
         session: 非同步 DB Session。
@@ -102,55 +173,29 @@ async def run_pipeline(
     Returns:
         PipelineSummary 包含各階段統計與總耗時。
     """
+    from_stage = options.from_stage if options else None
+    to_stage = options.to_stage if options else None
+    stages_to_run = _validate_stage_range(from_stage, to_stage)
+
     start = time.monotonic()
 
-    # Stage 1: Ingest
-    logger.info("Pipeline stage 1/5: ingest")
-    ingest_result = await run_ingestion_job(session, options)
-    ingest_ss = _ingest_stage_summary(ingest_result)
-
-    # Stage 2: Decrypt
-    logger.info("Pipeline stage 2/5: decrypt")
-    decrypt_result = await run_decryption_job(session, options)
-    decrypt_ss = _decrypt_stage_summary(decrypt_result)
-
-    # Stage 3: Parse
-    logger.info("Pipeline stage 3/5: parse")
-    parse_result = await run_parse_job(session, options)
-    parse_ss = _parse_stage_summary(parse_result)
-
-    # Stage 4: Classify
-    logger.info("Pipeline stage 4/5: classify")
-    classify_result = await run_classify_job(session)
-    classify_ss = _classify_stage_summary(classify_result)
-
-    # Stage 5: Notify (send notifications for newly parsed bills)
-    logger.info("Pipeline stage 5/5: notify")
-    # Collect IDs of newly parsed bills from parse stage
-    # Parse stage creates bills via DB; we notify for all successfully parsed items
-    notify_result = await run_notify_job(session)
-    notify_ss = _notify_stage_summary(notify_result)
+    stage_summaries: list[StageSummary] = []
+    for i, stage_name in enumerate(stages_to_run, 1):
+        ss = await _run_stage(stage_name, session, options, i, len(stages_to_run))
+        stage_summaries.append(ss)
 
     elapsed = time.monotonic() - start
-    failures = _collect_failures(ingest_ss, decrypt_ss, parse_ss, notify_ss)
+    failures = _collect_failures(*stage_summaries)
 
     summary = PipelineSummary(
-        stages=(ingest_ss, decrypt_ss, parse_ss, classify_ss, notify_ss),
+        stages=tuple(stage_summaries),
         total_seconds=round(elapsed, 2),
         failures=failures,
     )
 
-    logger.info(
-        (
-            "Pipeline completed in %.2fs: ingest=%d decrypt=%d "
-            "parse=%d classify=%d notify=%d"
-        ),
-        elapsed,
-        ingest_result.staged_count,
-        decrypt_result.decrypted_count,
-        parse_result.parsed_count,
-        classify_result.classified_count,
-        notify_result.sent_count,
+    counts_str = " ".join(
+        f"{ss.stage}={sum(ss.counts.values())}" for ss in stage_summaries
     )
+    logger.info("Pipeline completed in %.2fs: %s", elapsed, counts_str)
 
     return summary
