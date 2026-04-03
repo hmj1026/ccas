@@ -75,6 +75,18 @@ The repo defines 12 skills in `.claude/skills/`: 10 OpenSpec workflow skills (ea
 
 ## Development Commands
 
+### Docker (recommended, includes tesseract OCR)
+
+```bash
+docker compose up --build                  # Start all services (dev mode)
+./scripts/pipeline.sh --bank CTBC          # Run pipeline in Docker
+./scripts/pipeline.sh --from parse --force # Pipeline with stage control
+./scripts/test.sh                          # Run all tests in Docker
+./scripts/test.sh tests/unit/ -v           # Unit tests only
+```
+
+### Local (uv, no OCR unless tesseract installed)
+
 ```bash
 # Dependencies
 uv sync                                    # Install all deps
@@ -106,7 +118,7 @@ uv run python -m ccas.pipeline --from parse --to classify  # Stage range
 uv run python -m ccas.pipeline --from decrypt              # From stage to end
 
 # Server
-./scripts/start.sh                         # Backend + frontend (recommended)
+./scripts/start.sh                         # Backend + frontend
 uv run uvicorn ccas.api.app:create_app --factory --reload  # Backend only
 
 # Seed Data

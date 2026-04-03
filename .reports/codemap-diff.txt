@@ -1,19 +1,39 @@
 Codemap Generation Report
 =========================
-Date: 2026-04-01
-Type: Initial generation (no prior codemaps)
+Date: 2026-04-03
+Type: Incremental update (prior: 2026-04-01)
 
-Files scanned: 90 (67 Python, 23 TypeScript/TSX)
-Total backend LOC: ~6000
-Codemaps created: 5
+Files scanned: 92 (69 Python, 23 TypeScript/TSX)
+Total backend LOC: ~6490 (was ~6021, +7.8%)
+Codemaps updated: 5
 
-Created:
-  docs/CODEMAPS/architecture.md  (~600 tokens) - System overview, data flow, entry points
-  docs/CODEMAPS/backend.md       (~800 tokens) - API routes, pipeline stages, module inventory
-  docs/CODEMAPS/frontend.md      (~400 tokens) - Page tree, components, state management
-  docs/CODEMAPS/data.md          (~600 tokens) - 6 tables, relationships, 3 migrations
-  docs/CODEMAPS/dependencies.md  (~450 tokens) - Gmail, Telegram, Redis, Docker, packages
+Changes since last scan (2026-04-01):
+  Files added:
+    - backend/src/ccas/parser/ocr.py (pytesseract OCR fallback)
+    - backend/alembic/versions/ca5a1f05744d_add_bill_is_notified_column.py
 
-No prior codemaps to diff against.
-No architecture changes detected (baseline).
-No staleness warnings (all docs freshly generated).
+  Files modified:
+    - backend/src/ccas/storage/models.py (added is_notified to Bill)
+    - backend/src/ccas/pipeline/orchestrator.py (stage range --from/--to)
+    - backend/src/ccas/parser/registry.py, parser/job.py (OCR integration)
+    - backend/src/ccas/api/routers/auth.py (session handling updates)
+    - backend/src/ccas/bot/job.py (is_notified flag usage)
+    - backend/pyproject.toml (+pytesseract, +pymupdf dev, coverage 50->80%)
+
+  New dependencies:
+    - pytesseract>=0.3.13 (runtime, OCR fallback)
+    - pymupdf>=1.27.2.2 (dev, PDF rendering for tests)
+
+  Architecture changes:
+    - New migration: ca5a1f05744d (bill.is_notified column)
+    - Pipeline now supports --from/--to stage range execution
+    - Parser module gained OCR fallback (pytesseract)
+    - Coverage threshold raised from 50% to 80%
+
+  Module LOC changes:
+    - parser: 836 -> 1192 (+42%, ocr.py + ctbc_v1 enhancements)
+    - pipeline: 569 -> 637 (+12%, stage range options)
+    - api: 1129 -> 1163 (+3%, auth updates)
+    - Others: minimal change
+
+Staleness warnings: None (all docs updated this session)

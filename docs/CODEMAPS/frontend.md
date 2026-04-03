@@ -1,4 +1,4 @@
-<!-- Generated: 2026-04-01 | Files scanned: 23 | Token estimate: ~400 -->
+<!-- Generated: 2026-04-03 | Files scanned: 23 | Token estimate: ~400 -->
 
 # Frontend
 
@@ -44,8 +44,8 @@ components/
 
 ## API Client
 
-`lib/api-client.ts` — unified fetch wrapper: `apiGet`, `apiPost`, `apiPatch`, `apiDelete`
+`lib/api-client.ts` -- unified fetch wrapper: `apiGet`, `apiPost`, `apiPatch`, `apiDelete`
 
 ## Types
 
-`lib/types.ts` — TypeScript interfaces matching backend Pydantic schemas
+`lib/types.ts` -- TypeScript interfaces matching backend Pydantic schemas

@@ -4,11 +4,10 @@
 
 ## 前置需求
 
-- Python 3.12+
-- [uv](https://docs.astral.sh/uv/) (Python 套件管理)
-- Node.js 18+ 和 pnpm
+- Docker Engine 24+ 和 Docker Compose v2（推薦）
+- Python 3.12+、[uv](https://docs.astral.sh/uv/)（本地開發用）
+- Node.js 18+ 和 pnpm（前端開發用）
 - Git
-- Redis（可選，排程用）
 
 ## 1. 取得專案
 
@@ -26,6 +25,9 @@ cp config/banks.example.yaml config/banks.yaml
 
 編輯 `.env`，填入必要變數（詳見 [使用者操作手冊](user-guide.md#2-設定環境變數)）。
 
+本機開發時，路徑變數預設使用 `./data/`，實際會解析到 `backend/data/`。
+Docker Compose 啟動時會再覆寫成容器內的 `/data/` 掛載點。
+
 驗證環境變數：
 ```bash
 ./scripts/check-env.sh
@@ -38,16 +40,76 @@ cp config/banks.example.yaml config/banks.yaml
 ./scripts/setup.sh
 ```
 
-此腳本會：驗證環境變數 → 安裝依賴 → Gmail OAuth 認證 → 資料庫 migration → 同步銀行設定。
+此腳本會：驗證環境變數 -> 安裝依賴 -> Gmail OAuth 認證 -> 資料庫 migration -> 同步銀行設定。
 
-## 4. 啟動開發伺服器
+## 4. 啟動開發伺服器（Docker，推薦）
 
-一鍵啟動 backend + frontend：
+```bash
+docker compose up --build
+```
+
+Docker Compose 會自動合併 `docker-compose.override.yml`，以開發模式啟動：
+- **Backend**: uvicorn with `--reload`、tesseract OCR 已內建
+- **Frontend**: Vite dev server（port 5173，hot reload）
+- **Redis**: 本地容器
+
+Dev 模式將 `backend/data/` 掛載到容器的 `/data/`，原始碼變更即時生效。
+
+### 服務位址
+
+| 服務 | 位址 |
+|------|------|
+| Backend API | http://127.0.0.1:8000 |
+| Frontend | http://localhost:5173 |
+| API Docs | http://127.0.0.1:8000/docs |
+
+### Docker 內執行 Pipeline
+
+```bash
+# 透過便利腳本（推薦）
+./scripts/pipeline.sh --bank CTBC
+./scripts/pipeline.sh --from parse --to classify --force
+
+# 或直接 docker compose exec
+docker compose exec backend uv run python -m ccas.pipeline --bank CTBC
+```
+
+### Docker 內執行測試
+
+```bash
+# 透過便利腳本（推薦）
+./scripts/test.sh
+./scripts/test.sh tests/unit/ -v
+./scripts/test.sh --cov --cov-report=term-missing
+
+# 或直接 docker compose exec
+docker compose exec backend uv run pytest
+```
+
+### Production 模式（僅 base compose）
+
+```bash
+docker compose -f docker-compose.yaml up --build
+```
+
+此指令不合併 override，僅啟動 backend、scheduler、bot、redis（不含 frontend）。
+Frontend 僅供開發驗證資料，production 透過 Telegram bot 存取。
+詳見 [部署指南](deployment-guide.md)。
+
+## 5. 本地開發（進階，無 Docker）
+
+不使用 Docker 時，部分功能受限：
+- tesseract OCR 需手動安裝（`apt-get install tesseract-ocr tesseract-ocr-chi-tra`）
+- 未安裝 tesseract 時 merchant OCR 會略過（graceful fallback）
+
+### 腳本啟動
+
 ```bash
 ./scripts/start.sh
 ```
 
-或分別啟動：
+### 分別啟動
+
 ```bash
 # Terminal 1: Backend
 cd backend && uv run uvicorn ccas.api.app:create_app --factory --reload
@@ -56,12 +118,7 @@ cd backend && uv run uvicorn ccas.api.app:create_app --factory --reload
 cd frontend && pnpm dev
 ```
 
-服務位址：
-- Backend: http://127.0.0.1:8000
-- Frontend: http://localhost:5173
-- API docs: http://127.0.0.1:8000/docs
-
-## 5. 架構總覽
+## 6. 架構總覽
 
 ### 技術棧
 
@@ -70,6 +127,7 @@ cd frontend && pnpm dev
 | Backend | Python 3.12, FastAPI, SQLAlchemy (async), Alembic |
 | Database | SQLite (WAL mode) |
 | Frontend | React, Vite, TypeScript, Tailwind CSS |
+| OCR | tesseract-ocr + chi-tra（Docker 內建） |
 | Integrations | Gmail API, Telegram Bot |
 
 ### Pipeline 五階段
@@ -81,7 +139,7 @@ Gmail Inbox
     |
 [DECRYPT]  -> 解密 PDF (pikepdf + bank-specific password)
     |
-[PARSE]    -> Bill + Transaction (pdfplumber 提取資料)
+[PARSE]    -> Bill + Transaction (pdfplumber + tesseract OCR 提取資料)
     |
 [CLASSIFY] -> Transaction.category (關鍵字分類)
     |
@@ -104,7 +162,7 @@ backend/src/ccas/
   storage/      # SQLAlchemy models + database
 ```
 
-## 6. 測試
+## 7. 測試
 
 ```bash
 cd backend
@@ -125,7 +183,9 @@ uv run pytest tests/integration/
 uv run pytest -x
 ```
 
-## 7. 程式碼品質
+在 Docker 環境中測試（含 OCR）：`./scripts/test.sh`
+
+## 8. 程式碼品質
 
 ```bash
 cd backend
@@ -140,7 +200,7 @@ uv run ruff format .
 uv run pyright
 ```
 
-## 8. 資料庫 Migration
+## 9. 資料庫 Migration
 
 ```bash
 cd backend
@@ -152,7 +212,7 @@ uv run alembic upgrade head
 uv run alembic revision --autogenerate -m "description"
 ```
 
-## 9. Seed Data
+## 10. Seed Data
 
 ```bash
 # 新增測試資料
@@ -162,7 +222,7 @@ uv run python scripts/seed.py
 uv run python scripts/seed.py --reset
 ```
 
-## 10. Pipeline CLI
+## 11. Pipeline CLI
 
 ```bash
 cd backend
@@ -180,7 +240,7 @@ uv run python -m ccas.pipeline --force
 uv run python -m ccas.pipeline --from parse --to classify
 ```
 
-## 11. 貢獻指南
+## 12. 貢獻指南
 
 ### Branching
 

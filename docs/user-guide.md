@@ -33,6 +33,26 @@ cp .env.example .env
 | `GMAIL_TOKEN_PATH` | Gmail token 儲存路徑 | `./data/token.json` |
 | `STAGING_DIR` | PDF 暫存目錄 | `./data/staging` |
 
+本機直接執行腳本時，以上 `./data/...` 會解析到 `backend/data/...`。
+若用 Docker Compose 啟動，容器內會覆寫成 `/data/...` 掛載點。
+
+### 可選環境變數
+
+以下變數皆有預設值，可依需求覆寫：
+
+| 變數 | 預設值 | 說明 |
+|------|--------|------|
+| `DATABASE_URL` | `sqlite+aiosqlite:///./data/ccas.db` | 資料庫連線字串 |
+| `API_HOST` | `0.0.0.0` | API 伺服器綁定位址 |
+| `API_PORT` | `8000` | API 伺服器連接埠 |
+| `FRONTEND_ORIGINS` | `http://127.0.0.1:5173,http://localhost:5173` | CORS 允許來源 |
+| `REDIS_URL` | `redis://localhost:6379/0` | Redis 連線字串 |
+| `LOG_LEVEL` | `INFO` | 日誌等級（DEBUG / INFO / WARNING / ERROR） |
+| `LOG_FORMAT` | `json` | 日誌格式（json / text） |
+| `API_SESSION_COOKIE_NAME` | `ccas_session` | 瀏覽器 session cookie 名稱 |
+| `API_SESSION_MAX_AGE` | `43200`（12 小時） | Session 有效時間（秒） |
+| `API_COOKIE_SECURE` | `False` | 是否僅透過 HTTPS 傳送 cookie |
+
 ## 3. 設定 Gmail API
 
 1. 前往 [Google Cloud Console](https://console.cloud.google.com/)
@@ -62,22 +82,35 @@ cp config/banks.example.yaml config/banks.yaml
 
 ## 6. 啟動服務（Docker）
 
+### 開發模式
+
 ```bash
-docker-compose up
+docker compose up
 ```
 
 首次啟動會自動：
 - 驗證環境變數
+- 檢查 OCR（tesseract）可用性
 - 套用資料庫 migration
-- 啟動 backend（API）、frontend（Web 介面）、Redis
+- 啟動 backend（API）、frontend（Vite dev server）、Redis
 
 驗證服務正常：
 ```bash
-# Backend health check
 curl http://localhost:8000/health
-
-# Frontend（瀏覽器開啟）
 open http://localhost:5173
+```
+
+### Production 模式
+
+適用於部署到遠端伺服器（詳見 [部署指南](deployment-guide.md)）：
+
+```bash
+docker compose -f docker-compose.yaml up -d --build
+```
+
+Production 模式僅啟動 backend、scheduler、bot、redis（不含 frontend），透過 Telegram bot 存取資料：
+```bash
+curl http://localhost:8000/health   # backend health check
 ```
 
 ## 7. 執行 Pipeline
@@ -118,7 +151,7 @@ Pipeline 階段順序：`ingest` → `decrypt` → `parse` → `classify` → `n
 
 ## 8. 查看報表
 
-1. 開啟瀏覽器 http://localhost:5173
+1. 開啟瀏覽器 http://localhost:5173（僅開發模式可用）
 2. 使用 `.env` 中的 `API_TOKEN` 登入
 3. 瀏覽各頁面：帳單列表、交易明細、分析圖表
 

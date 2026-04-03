@@ -1,4 +1,4 @@
-<!-- Generated: 2026-04-01 | Files scanned: 91 | Token estimate: ~600 -->
+<!-- Generated: 2026-04-03 | Files scanned: 92 | Token estimate: ~600 -->
 
 # Architecture
 
@@ -11,17 +11,17 @@ Credit card bill automation: ingest PDF statements from Gmail, decrypt, parse, c
 ```
 Gmail ──> Ingestor ──> Decryptor ──> Parser ──> Classifier ──> Notifier
            (PDF)       (pikepdf)    (pdfplumber)  (keyword)    (Telegram)
-             │                          │              │
-             v                          v              v
-        StagedAttachment           Bill + Transaction  category field
-           (status tracking)        (SQLite)           (updated)
+             │                       + OCR          │
+             v                          │            v
+        StagedAttachment           Bill + Txn     category field
+           (status tracking)        (SQLite)       (updated)
 ```
 
 ## Entry Points
 
 | Entry | Module | Command |
 |-------|--------|---------|
-| REST API | `ccas.api.app:create_app()` | `uv run fastapi dev` |
+| REST API | `ccas.api.app:create_app()` | `uv run uvicorn ccas.api.app:create_app --factory` |
 | Pipeline CLI | `ccas.pipeline.__main__:main()` | `uv run python -m ccas.pipeline` |
 | Scheduler | `ccas.scheduler.__main__:main()` | `uv run python -m ccas.scheduler` |
 | Telegram Bot | `ccas.bot.__main__:main()` | `uv run python -m ccas.bot` |
@@ -36,7 +36,7 @@ Gmail ──> Ingestor ──> Decryptor ──> Parser ──> Classifier ─�
 | Frontend | React 19, Vite 8, TypeScript, Tailwind, shadcn |
 | Package Mgmt | uv (backend), pnpm (frontend) |
 | Linting | ruff (lint+format), pyright (types) |
-| Testing | pytest + pytest-cov, Vitest |
+| Testing | pytest + pytest-cov (80% min), Vitest |
 | External | Gmail API, Telegram Bot API, Redis (job queue) |
 | Infra | Docker Compose |
 
@@ -44,13 +44,13 @@ Gmail ──> Ingestor ──> Decryptor ──> Parser ──> Classifier ─�
 
 ```
 backend/src/ccas/
-├── api/          REST endpoints (FastAPI)
+├── api/          REST endpoints (FastAPI) + security headers middleware
 ├── bot/          Telegram bot commands & notifications
 ├── classifier/   Transaction categorization
 ├── decryptor/    PDF password decryption
 ├── ingestor/     Gmail PDF download & staging
-├── parser/       PDF table extraction (bank-specific)
-├── pipeline/     5-stage orchestrator
+├── parser/       PDF extraction (bank-specific) + OCR fallback (pytesseract + tesseract)
+├── pipeline/     5-stage orchestrator with stage range control (--from/--to)
 ├── scheduler/    APScheduler cron jobs
 ├── storage/      SQLAlchemy models, database, queries
 ├── tools/        Bank configs, Gmail auth helpers

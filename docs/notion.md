@@ -1,263 +1,307 @@
-# 信用卡帳單自動化管理系統 (CCAS) 規格文件
+# 信用卡帳單自動化管理系統 (CCAS) 專案方向
 
-> **Credit Card Automation System v1.0** | 建立日期：2026-03-26 | 更新日期：2026-03-27
-
----
-
-## 1. 專案概述
-
-本專案旨在解決多張信用卡（5+ 家銀行）導致的「帳單分散」、「格式不一」、「容易漏繳」等問題。透過 Gmail API 自動抓取帳單 PDF 附件，利用版本化的 Rule-based Parser（責任鏈模式）提取消費明細與繳款資訊，以關鍵字規則自動分類消費，並提供 Telegram Bot 即時通知（優先）及 React Dashboard 進行消費分析。
-
-### 1.1 核心目標
-
-- 自動化：每日排程自動抓取、解析、儲存帳單
-- 可追蹤：所有消費明細結構化儲存，支援歷史查詢
-- 即時通知：Telegram Bot 提供繳費提醒和消費摘要
-- 分析洞察：Dashboard 提供消費趨勢、類別分布、銀行比較
+> **Credit Card Automation System v1.1** | 建立日期：2026-03-26 | 更新日期：2026-04-03
 
 ---
 
-## 2. 技術棧
+## 1. 這份文件的定位
 
-| 層級 | 技術 |
+本文件用來說明 CCAS 的產品願景、目前落地狀態與近期實作方向。
+
+它**不是**系統行為的最終權威來源。
+
+- `openspec/specs/`：功能行為與系統約束的 SSOT
+- `CLAUDE.md`：開發流程、指令與 repo 工作方式的 SSOT
+- `docs/notion.md`：產品方向、階段目標、現況摘要
+
+---
+
+## 2. 產品願景
+
+CCAS 的長期目標，是把分散在 Gmail、PDF、聊天提醒與人工記帳之間的信用卡帳單流程，整理成一條可以持續運行的自動化管線：
+
+1. 自動從 Gmail 擷取帳單附件
+2. 依銀行規則解密與解析 PDF
+3. 將帳單與交易明細結構化儲存
+4. 自動分類消費
+5. 透過 Telegram 與 Dashboard 提供提醒、查詢與分析
+
+### 2.1 長期目標
+
+- 自動化：降低人工下載、整理、提醒的工作量
+- 可追蹤：每筆帳單與交易都有可查詢的結構化資料
+- 可營運：系統可在本機或遠端主機穩定部署與日常使用
+- 可擴張：先從單一銀行做穩，再逐步擴展到多家銀行
+
+---
+
+## 3. 當前產品現況
+
+目前專案**不是**「多家銀行已完整支援的成熟產品」，而是：
+
+- 已完成一條以 **CTBC 為主** 的端到端帳單處理主線
+- 已有 Telegram Bot、Dashboard、API、Pipeline、分類與 OCR 基礎能力
+- 正在從「本機可開發」走向「可穩定部署的自架 MVP」
+
+### 3.1 目前已落地能力
+
+- Gmail API 抓取 PDF 附件
+- PDF 解密與 staging 流程
+- CTBC parser 與 OCR 商戶辨識
+- 消費分類與 seed data
+- Telegram 通知與帳單互動
+- React Dashboard 五頁面
+- FastAPI REST API
+- RQ + Redis 背景工作模型
+- SQLite + Alembic schema 管理
+- Docker 本機與生產部署能力正在收斂
+
+### 3.2 目前尚未達成的能力
+
+- 多家銀行的實際 parser 落地仍未完成
+- 人工審查流程目前仍偏底層狀態與記錄，沒有完整操作介面
+- 遠端部署流程仍在整理中
+- 文件仍有部分從早期規劃沿用、尚未完全同步到現況
+
+### 3.3 當前主線判斷
+
+短期內不應把 CCAS 當成「先做廣度」的多銀行平台，而應視為：
+
+**先把 CTBC 做成可穩定使用、可部署、可維護的 MVP，再逐步擴張到其他銀行。**
+
+---
+
+## 4. 技術方向
+
+| 層級 | 目前方向 |
 |------|------|
-| Backend | Python 3.12+, FastAPI, SQLAlchemy, APScheduler |
-| PDF 解析 | pdfplumber + pikepdf (解密) + tabula-py (表格) |
+| Backend | Python 3.12+, FastAPI, SQLAlchemy, Alembic |
+| Queue / Scheduler | RQ + Redis 為主，APScheduler 僅作獨立 scheduler 選項 |
+| PDF 解析 | pdfplumber + pikepdf，必要時以 OCR 補足 |
+| OCR | pytesseract + tesseract-ocr + chi_tra |
 | Frontend | React + Vite + TypeScript + Tailwind + shadcn/ui + Recharts |
 | Bot | python-telegram-bot |
-| Gmail | google-api-python-client (Gmail API) |
-| Database | SQLite |
-| Package Manager | uv (Python), pnpm (Frontend) |
-| Testing | pytest (Backend), vitest (Frontend) |
+| Gmail | google-api-python-client |
+| Database | SQLite (WAL mode) |
+| Package Manager | uv, pnpm |
+| Testing | pytest, vitest |
 | Deploy | Docker + Docker Compose |
 
----
+### 4.1 技術說明
 
-## 3. 系統架構與流程
-
-### 3.1 模組組成
-
-1. **Ingestor (抓取層)**：對接 Gmail API，根據銀行設定過濾帳單郵件並下載 PDF 附件。
-2. **Parser Engine (解析層)**：採用**責任鏈模式 (Chain of Responsibility)**，每家銀行獨立 parser 目錄，支援版本化（v1, v2...），新版格式不影響舊版。
-3. **Classifier (分類層)**：基於關鍵字規則的消費自動分類引擎，使用可維護的商家-類別映射表。
-4. **Storage (儲存層)**：使用 SQLite + SQLAlchemy ORM 儲存結構化帳單與消費明細。
-5. **Interface (交互層)**：
-    - **Telegram Bot**（優先）：即時提醒、消費查詢、繳費狀態標記。
-    - **React Dashboard**：消費趨勢分析、明細篩選、帳單管理。
-6. **API (服務層)**：FastAPI 提供 RESTful API，前後端分離。
-7. **Scheduler (排程層)**：APScheduler 管理每日自動抓取與通知任務。
-
-### 3.2 運作流程
-
-1. 每日排程啟動（APScheduler 觸發 `run_pipeline()`）
-2. **Ingest**: 登入 Gmail 搜尋新帳單（根據 bank_configs 中的 gmail_filter），下載 PDF 附件到 staging 區
-3. **Decrypt**: 讀取 `bank_configs.pdf_password_rule` 解密加密 PDF（pikepdf），未加密 PDF 直接透通
-4. **Parse**: 依序調用該銀行的 Parser（從 active_parser_version 開始，再 fallback 由新到舊）
-5. 所有版本失敗 → 標記為 `parse_failed`，進入人工審查佇列
-6. **Classify**: 解析成功 → 關鍵字分類消費明細（規則來自 categories 資料表）
-7. 存入資料庫（Bill + Transaction 原子寫入）
-8. **Notify**: 發送 Telegram 通知（新帳單、解析失敗）
-9. 各階段獨立容錯，單筆失敗不中止整批
+- `tabula-py` 目前仍在依賴清單中，但當前 parser 主線已偏向 `pdfplumber + OCR`，不再把 tabula 視為主要解析策略。
+- 排程模型以 **RQ worker 與 Redis** 為主，避免在 FastAPI process 內直接承載排程與長任務。
+- OCR 已從實驗性能力進入主線，特別是 CTBC 商戶名稱辨識。
 
 ---
 
-## 4. 資料庫設計 (Schema)
+## 5. 系統架構
 
-### 4.1 `bills` (帳單主表)
+### 5.1 模組組成
 
-| 欄位名稱 | 型態 | 說明 |
-|:---------|:-----|:-----|
-| `id` | INTEGER | Primary Key, 自動遞增 |
-| `bank_code` | TEXT | 銀行代碼 (如: `CTBC`, `CATHAY`, `ESUN`) |
-| `billing_month` | TEXT | 帳單月份 (格式: `YYYY-MM`) |
-| `total_amount` | INTEGER | 應繳總金額 |
-| `due_date` | DATE | 繳款截止日 |
-| `is_paid` | BOOLEAN | 0: 未繳, 1: 已繳 (預設 0) |
-| `file_path` | TEXT | PDF 原始檔案路徑 |
-| `created_at` | DATETIME | 資料匯入時間 |
+1. **Ingestor**：根據 `bank_config` 從 Gmail 搜尋並下載 PDF
+2. **Decryptor**：依銀行密碼規則解密 PDF
+3. **Parser Engine**：依銀行與版本選擇 parser，輸出 `ParseResult`
+4. **Classifier**：用關鍵字規則對交易分類
+5. **Storage**：SQLite + SQLAlchemy ORM
+6. **API**：FastAPI 提供 Dashboard 與外部操作端點
+7. **Bot**：Telegram 指令、通知與帳單狀態互動
+8. **Worker / Scheduler**：RQ worker 執行背景工作；定期觸發可由外部 cron 或獨立 scheduler 負責
+9. **Frontend Dashboard**：Overview、Transactions、Analytics、Bills、Settings
 
-### 4.2 `transactions` (消費明細表)
+### 5.2 當前標準流程
 
-| 欄位名稱 | 型態 | 說明 |
-|:---------|:-----|:-----|
-| `id` | INTEGER | Primary Key, 自動遞增 |
-| `bill_id` | INTEGER | Foreign Key (關聯 `bills.id`) |
-| `trans_date` | DATE | 消費日期 |
-| `posting_date` | DATE | 入帳日期 (nullable，部分銀行區分消費日與入帳日) |
-| `merchant` | TEXT | 商家名稱 |
-| `amount` | INTEGER | 台幣金額 |
-| `currency` | TEXT | 原始幣別 (TWD/USD/JPY...) |
-| `original_amount` | INTEGER | 原始幣別金額 (TWD 時為 null) |
-| `card_last4` | TEXT | 卡號後四碼 |
-| `installment_current` | INTEGER | 目前期數 (非分期時為 null) |
-| `installment_total` | INTEGER | 總期數 (非分期時為 null) |
-| `category` | TEXT | 自動分類結果 |
-| `note` | TEXT | 備註 |
-| `created_at` | DATETIME | 建立時間 |
+1. 由 API 觸發 pipeline，或由外部 cron / 獨立 scheduler 觸發
+2. **Ingest**：根據 `gmail_filter` 抓取附件到 staging
+3. **Decrypt**：依 `pdf_password_rule` 解密
+4. **Parse**：選擇對應 parser；CTBC 已支援 OCR 商戶辨識
+5. **Classify**：依關鍵字分類
+6. **Persist**：寫入 `Bill` 與 `Transaction`
+7. **Notify**：查詢 `is_notified = False` 的帳單，發送 Telegram 後標記完成
 
-### 4.3 `categories` (商家分類映射表)
+### 5.3 容錯方向
 
-| 欄位名稱 | 型態 | 說明 |
-|:---------|:-----|:-----|
-| `id` | INTEGER | Primary Key, 自動遞增 |
-| `keyword` | TEXT | 商家關鍵字 (如: "全聯", "7-ELEVEN") |
-| `category` | TEXT | 消費類別 (如: "日用品", "餐飲") |
-
-### 4.4 `bank_configs` (銀行設定表)
-
-| 欄位名稱 | 型態 | 說明 |
-|:---------|:-----|:-----|
-| `id` | INTEGER | Primary Key, 自動遞增 |
-| `bank_code` | TEXT | 銀行代碼 (UNIQUE) |
-| `bank_name` | TEXT | 銀行名稱 |
-| `gmail_filter` | TEXT | Gmail 搜尋關鍵字 (如: "from:service@ctbcbank.com subject:帳單") |
-| `pdf_password_rule` | TEXT | 密碼規則描述 (如: "身分證後四碼", "生日 MMDD") |
-| `active_parser_version` | TEXT | 目前使用的 parser 版本 (如: "v2") |
-| `is_active` | BOOLEAN | 是否啟用 (預設 true，停用後 ingestor 與 parser 不處理此銀行) |
+- 各階段盡量獨立容錯，單筆失敗不拖垮整批
+- parser 與 pipeline 失敗需保留足夠的結構化 log
+- 需要人工介入的案件先以狀態與失敗資訊標記，後續再補更完整的 review workflow
 
 ---
 
-## 5. Parser 版本化設計
+## 6. 目前資料模型重點
 
-### 5.1 目錄結構
+### 6.1 `bills`
 
-```
-parser/
-  base.py              # AbstractParser 抽象基類
-  registry.py          # ParserRegistry 版本鏈解析
-  result.py            # ParseResult 資料類別
-  banks/
-    ctbc/
-      __init__.py
-      v1.py            # CTBC 2024 格式
-      v2.py            # CTBC 2026 新格式
-    cathay/
-      __init__.py
-      v1.py
-    esun/
-      __init__.py
-      v1.py
-```
+目前重點欄位包括：
 
-### 5.2 解析流程
+- `bank_code`
+- `billing_month`
+- `total_amount`
+- `due_date`
+- `is_paid`
+- `is_notified`
+- `file_path`
+- `created_at`
 
-1. `ParserRegistry` 根據 `bank_code` 找到該銀行所有 parser 版本
-2. 從最新版本開始嘗試：`v2.can_parse(pdf)` → 若 False → `v1.can_parse(pdf)`
-3. 找到能解析的版本 → 執行 `parse(pdf)` → 返回 `ParseResult`
-4. 全部版本失敗 → 標記 `parse_failed`，進入人工審查佇列
+其中：
 
-### 5.3 新增/更新 Parser
+- `is_paid`：繳費狀態
+- `is_notified`：Telegram 通知狀態，避免重複發送
 
-當銀行改變 PDF 格式時：
-1. 在該銀行目錄下新增 `v{n+1}.py`
-2. 實作 `can_parse()` 與 `parse()` 方法
-3. Registry 自動偵測新版本，下次解析時優先使用
+### 6.2 `transactions`
 
----
+目前重點欄位包括：
 
-## 6. Telegram Bot 指令
+- `trans_date`
+- `posting_date`
+- `merchant`
+- `amount`
+- `currency`
+- `original_amount`
+- `card_last4`
+- `installment_current`
+- `installment_total`
+- `category`
+- `note`
 
-| 指令 | 功能 |
-|------|------|
-| `/status [all\|unpaid\|paid]` | 查看本月帳單繳費狀態（預設 all，可篩選未繳/已繳） |
-| `/upcoming` | 查看 7 天內即將到期的帳單 |
-| `/paid {bill_id}` | 標記帳單已繳 |
-| `/summary {YYYY-MM}` | 查看指定月份消費摘要 |
-| `/category {YYYY-MM}` | 依類別查看消費分布 |
+### 6.3 其他核心表
 
-### 6.1 主動通知
-
-- 帳單到期前 3 天、1 天自動提醒
-- 新帳單解析完成時通知
-- 解析失敗時通知（需人工處理）
+- `categories`：分類規則
+- `bank_configs`：銀行啟用狀態、Gmail filter、PDF 密碼規則、active parser version
 
 ---
 
-## 7. Dashboard 頁面
+## 7. Parser 策略
 
-| 頁面 | 功能 |
-|------|------|
-| Overview | 本月消費總覽、繳費狀態卡片、即將到期帳單 |
-| Transactions | 可搜尋/篩選的消費明細表、CSV 匯出 |
-| Analytics | 月趨勢圖 (line)、類別分布 (pie)、銀行比較 (bar) |
-| Bills | 帳單列表、繳費狀態切換、PDF 檔案連結 |
-| Settings | 銀行設定管理、分類關鍵字管理 |
+### 7.1 目標策略
+
+Parser 保持版本化設計，允許同一家銀行有多個 parser 版本共存，讓新舊 PDF 格式可以並行支援。
+
+### 7.2 當前實況
+
+- CTBC 是目前最完整、最接近可用的 parser 主線
+- OCR 已用於 CTBC 商戶名稱辨識
+- 多銀行 parser 仍是中期目標，不應在文件中表述成已完成能力
+
+### 7.3 實作原則
+
+- 優先使用可穩定取得的文字資訊
+- 必要時使用 OCR 補足圖片型欄位
+- parser 失敗時保留足夠資訊，以利後續修正與人工處理
 
 ---
 
-## 8. 專案結構
+## 8. 使用者介面方向
 
-```
-ccas/
-  backend/
-    src/ccas/
-      ingestor/              # Gmail API 整合
-        gmail_client.py      # OAuth + 郵件抓取
-        filter.py            # 帳單郵件過濾
-        downloader.py        # PDF 下載 + 解密
-      parser/
-        base.py              # AbstractParser
-        registry.py          # ParserRegistry
-        result.py            # ParseResult
-        banks/               # 各銀行 parser
-      storage/
-        models.py            # SQLAlchemy models
-        repository.py        # Repository pattern
-        database.py          # Engine + session
-      decryptor/
-        service.py           # PDF 解密服務 (pikepdf)
-      classifier/
-        engine.py            # 關鍵字分類引擎 (規則來源為 categories 資料表)
-      pipeline/
-        orchestrator.py      # Pipeline 串接 (ingest->decrypt->parse->classify->notify)
-      bot/
-        handlers.py          # Bot 指令處理
-        notifications.py     # 主動通知
-      api/
-        routes/              # FastAPI routes
-        schemas.py           # Pydantic schemas
-        app.py               # App factory
-      scheduler/
-        jobs.py              # 排程任務
-      core/
-        exceptions.py        # 共用例外階層 (CcasError)
-        logging.py           # 結構化日誌 (JSON formatter, secret redaction)
-      config.py              # 設定管理
-    tests/
-      unit/                  # 純單元測試
-      integration/           # 整合測試
-      e2e/                   # 端到端 pipeline 測試
-    pyproject.toml
-    Dockerfile
-  frontend/
-    src/
-      pages/                 # 頁面元件
-      components/            # 共用元件
-      api/                   # API client
-      types/                 # TypeScript 型別
-    Dockerfile
-  docker-compose.yaml
-  openspec/                  # OpenSpec 工作流
-  docs/                      # 文件
+### 8.1 Telegram Bot
+
+Bot 仍是高優先級介面，因為它直接承接：
+
+- 新帳單通知
+- 繳費提醒
+- 帳單狀態互動
+- 摘要查詢
+
+### 8.2 Dashboard
+
+Dashboard 是第二條主要介面，負責：
+
+- 消費總覽
+- 明細查詢與篩選
+- 分析圖表
+- 帳單管理
+- 設定管理
+
+### 8.3 當前建議
+
+不要再把 Bot 和 Dashboard 描述成二選一。較合理的產品定位是：
+
+- **Bot**：即時提醒與快速操作
+- **Dashboard**：查詢、分析與管理
+
+---
+
+## 9. 近期實作方向
+
+### 9.1 Phase 1：CTBC MVP 穩定化
+
+目標是讓單一銀行流程可以穩定日常使用：
+
+- CTBC parser 與 OCR 穩定
+- pipeline / notify / classification 關鍵路徑可運行
+- 必要 seed data 與預設 bank config 完整
+- E2E 驗證可重複執行
+
+### 9.2 Phase 2：部署與營運能力
+
+目標是讓系統可以在遠端主機自架：
+
+- production Docker Compose
+- frontend nginx `/api` proxy
+- credential mount 策略
+- deployment guide
+- dev / prod compose 邊界清楚
+
+### 9.3 Phase 3：開發者體驗與維運工具
+
+- 本機一鍵啟動與 env validation
+- DB / Redis GUI 工具
+- 更完整的排錯文件
+- 更清楚的 seed / reset / health check 流程
+
+### 9.4 Phase 4：多銀行擴張
+
+- 第二家以上銀行 parser
+- parser 驗證資料集
+- 更完整的人工審查與例外處理流程
+
+---
+
+## 10. 專案結構摘要
+
+```text
+backend/src/ccas/
+  api/                FastAPI routes
+  bot/                Telegram bot 與通知
+  classifier/         消費分類
+  decryptor/          PDF 解密
+  ingestor/           Gmail 抓取
+  parser/             parser registry、CTBC parser、OCR
+  pipeline/           orchestrator、worker、summary、options
+  scheduler/          獨立 scheduler 入口
+  storage/            database、models、queries
+
+frontend/src/
+  pages/              5 個主要頁面
+  components/         layout 與共用 UI
+  lib/                API client、types、utils
+
+config/
+  bank-code-registry.yaml
+  banks.example.yaml
+
+scripts/
+  setup.sh
+  start.sh
+  check-env.sh
+  docker-entrypoint.sh
 ```
 
 ---
 
-## 9. 開發方法
+## 11. 開發原則
 
-- **TDD (Test-Driven Development)**：所有功能先寫測試再實作
-- **OpenSpec 驅動**：每個開發階段對應一個 OpenSpec change
-- **Docker 化**：開發與部署環境一致
+- TDD 優先
+- OpenSpec 驅動
+- 先收斂單一主線，再擴張功能廣度
+- 文件需區分「願景」與「已落地能力」
+- Docker 開發與部署流程要盡量一致
 
-### 9.1 開發階段
+---
 
-1. Foundation Setup -- 專案初始化、DB models、Docker、Seed Data
-2. Backend API -- FastAPI RESTful API（含 Bearer Token 認證）
-3. Gmail Ingestor -- Gmail 整合、OAuth token 刷新、retry 策略
-4. PDF Decryptor -- PDF 解密（pikepdf）、密碼規則、staging 狀態管理
-5. Parser Engine -- 解析引擎核心、版本化機制、due_date 提取
-6. Keyword Classifier -- 消費分類引擎（規則來自 categories 資料表）
-7. Telegram Bot -- Bot 指令與通知、retry 策略
-8. Frontend Dashboard -- React Dashboard（5 頁面）
-9. Pipeline Scheduler -- Pipeline 串接（5 階段）、APScheduler、繳費提醒排程
-10. Integration & Polish -- 端對端測試、例外階層、結構化日誌、錯誤處理
+## 12. 目前最需要避免的誤解
+
+- 不是所有銀行都已經落地
+- APScheduler 不是目前主排程模型
+- tabula 不是目前 parser 主軸
+- `notion.md` 不是功能真相的最終來源
+- 專案短期目標不是「先做 5+ 家銀行」，而是「先把 CTBC 自架 MVP 做穩」

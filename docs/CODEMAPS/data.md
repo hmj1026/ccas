@@ -1,4 +1,4 @@
-<!-- Generated: 2026-04-01 | Files scanned: 5 | Token estimate: ~600 -->
+<!-- Generated: 2026-04-03 | Files scanned: 5 | Token estimate: ~600 -->
 
 # Data
 
@@ -19,6 +19,7 @@ ORM: SQLAlchemy 2.0 (`Mapped[T]` style) in `backend/src/ccas/storage/models.py`
 | total_amount | int | TWD cents |
 | due_date | date | |
 | is_paid | bool | |
+| is_notified | bool | default False, set after Telegram notify |
 | file_path | str? | |
 | created_at | datetime | |
 | **UQ** | (bank_code, billing_month) | |
@@ -77,3 +78,4 @@ Bill 1--* PaymentReminder
 | 2b407df3b1b5 | Initial tables (bills, transactions, categories, bank_configs) |
 | 08828cd4e8ca | Add staged_attachments |
 | c3a1f5e8d9b2 | Add payment_reminders |
+| ca5a1f05744d | Add bill.is_notified column |

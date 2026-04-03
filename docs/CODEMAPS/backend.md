@@ -1,4 +1,4 @@
-<!-- Generated: 2026-04-01 | Files scanned: 68 | Token estimate: ~800 -->
+<!-- Generated: 2026-04-03 | Files scanned: 69 | Token estimate: ~800 -->
 
 # Backend
 
@@ -47,29 +47,30 @@ Health:
 
 ## Pipeline Stages
 
-`run_pipeline()` in `pipeline/orchestrator.py` executes sequentially:
+`run_pipeline()` in `pipeline/orchestrator.py` executes sequentially.
+Supports `--from`/`--to` stage range via `PipelineOptions`.
 
 | # | Stage | Module | Key File (LOC) |
 |---|-------|--------|-----------------|
-| 1 | Ingest | `ingestor/` | `job.py` (262), `gmail_client.py` (184) |
-| 2 | Decrypt | `decryptor/` | `job.py` (156), `decrypt.py` (68) |
-| 3 | Parse | `parser/` | `job.py` (215), `banks/ctbc_v1.py` (191) |
-| 4 | Classify | `classifier/` | `job.py` (116), `engine.py` (71) |
-| 5 | Notify | `bot/` | `notifications.py` (160), `job.py` (83) |
+| 1 | Ingest | `ingestor/` | `job.py`, `gmail_client.py` |
+| 2 | Decrypt | `decryptor/` | `job.py`, `decrypt.py` |
+| 3 | Parse | `parser/` | `job.py`, `banks/ctbc_v1.py`, `ocr.py` (fallback) |
+| 4 | Classify | `classifier/` | `job.py`, `engine.py` |
+| 5 | Notify | `bot/` | `notifications.py`, `job.py` (auto-query is_notified=False) |
 
 ## Module Inventory
 
 | Module | Files | LOC | Purpose |
 |--------|-------|-----|---------|
-| api | 12 | 1129 | FastAPI routes, schemas, deps |
-| bot | 10 | 892 | Telegram commands, notifications, formatting |
+| api | 12 | 1163 | FastAPI routes, schemas, deps, security headers middleware |
+| parser | 9 | 1192 | PDF extraction, bank parsers, OCR fallback (pytesseract), non-transaction filtering |
+| bot | 10 | 900 | Telegram commands, notifications, auto-query pending bills (is_notified=False) |
 | ingestor | 6 | 736 | Gmail download, staging, retry |
-| parser | 8 | 836 | PDF extraction, bank-specific parsers |
-| pipeline | 7 | 569 | Orchestrator, worker, CLI, options |
-| classifier | 5 | 327 | Keyword engine, rules |
-| decryptor | 5 | 306 | PDF password resolution, decryption |
-| scheduler | 4 | 237 | APScheduler, reminders |
-| storage | 4 | 250 | ORM models, async DB session, queries |
+| pipeline | 7 | 637 | Orchestrator, worker, CLI, options, stage range |
 | tools | 3 | 409 | Bank configs (YAML), Gmail auth |
+| classifier | 5 | 327 | Keyword engine, rules |
+| decryptor | 5 | 308 | PDF password resolution, decryption |
+| storage | 4 | 251 | ORM models, async DB session, queries |
+| scheduler | 4 | 237 | APScheduler, reminders |
 | core | 4 | 330 | config, errors, log, __init__ |
-| **Total** | **68** | **~6021** | |
+| **Total** | **69** | **~6490** | |
