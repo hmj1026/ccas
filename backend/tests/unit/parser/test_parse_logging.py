@@ -6,9 +6,7 @@ pdf_filename, bank_code, error_type, and error_detail fields.
 
 import logging
 from pathlib import Path
-from unittest.mock import MagicMock, patch
-
-import pytest
+from unittest.mock import MagicMock
 
 from ccas.parser.base import ParseError
 from ccas.parser.job import _try_parse

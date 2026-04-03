@@ -128,9 +128,7 @@ def _try_parse(
         ", ".join(f"{p.bank_code}/{p.version}" for p in candidates),
         extra={
             "pdf_filename": pdf_filename,
-            "attempted_parsers": [
-                f"{p.bank_code}/{p.version}" for p in candidates
-            ],
+            "attempted_parsers": [f"{p.bank_code}/{p.version}" for p in candidates],
         },
     )
     return False, None, "; ".join(errors)
@@ -182,10 +180,7 @@ async def _process_attachment(
 
     if not success:
         pdf_filename = attachment.original_filename or "unknown"
-        error_msg = (
-            f"所有 parser 皆失敗 ({bank_code}/{pdf_filename}): "
-            f"{error_detail}"
-        )
+        error_msg = f"所有 parser 皆失敗 ({bank_code}/{pdf_filename}): {error_detail}"
         summary.failed_count += 1
         summary.errors.append(error_msg)
         logger.error(

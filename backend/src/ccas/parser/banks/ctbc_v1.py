@@ -17,6 +17,7 @@ import pdfplumber
 import pdfplumber.page
 
 from ccas.parser.base import BankParser, ParseError
+from ccas.parser.ocr import extract_text_from_image, is_ocr_available
 from ccas.parser.registry import registry
 from ccas.parser.result import ParseResult, TransactionItem
 
@@ -44,6 +45,20 @@ _RE_DOLLAR_AMOUNT = re.compile(r"\$\s*([\d,]+)")
 _RE_TRANSACTION_LINE_ROC = re.compile(
     r"(\d{3}/\d{2}/\d{2})\s+(\d{3}/\d{2}/\d{2})\s+([\d,]+)\s+(\d{4})\s+([A-Z]{2,4})"
 )
+
+# Known non-transaction text that OCR may extract from section headers.
+# "帳單分期" intentionally covers all sub-variants (帳單分期入帳, etc.)
+_NON_TRANSACTION_MERCHANTS: frozenset[str] = frozenset(
+    {
+        "消費暨收費摘要表",
+        "帳單分期",
+    }
+)
+
+
+def _is_non_transaction_merchant(merchant: str) -> bool:
+    """Check if merchant text matches a known non-transaction header."""
+    return any(keyword in merchant for keyword in _NON_TRANSACTION_MERCHANTS)
 
 
 def _roc_to_date(roc_year: int, month: int, day: int) -> date:
@@ -88,14 +103,17 @@ class CtbcV1Parser(BankParser):
     def _identify(self, text: str) -> bool:
         """Check if first-page text contains CTBC statement markers.
 
-        Accepts either:
+        Accepts any of:
         - All Chinese keywords (labeled/synthetic PDFs), OR
-        - ctbc.tw URL plus ROC billing month header (real PDFs)
+        - ROC billing month header (real PDFs, all years)
+
+        The ROC header pattern ``NNN MM P / T`` (e.g. ``115 03 1 / 3``)
+        is specific to CTBC statements and sufficient for identification.
+        Older PDFs (ROC 106-110) lack the ctbc.tw URL present in newer ones.
         """
         has_keywords = all(kw in text for kw in _CTBC_KEYWORDS)
-        has_url = _CTBC_URL_MARKER in text
         has_roc_header = _RE_BILLING_LINE_ROC.search(text) is not None
-        return has_keywords or (has_url and has_roc_header)
+        return has_keywords or has_roc_header
 
     def _extract_summary(
         self, pages: list[pdfplumber.page.Page]
@@ -282,25 +300,120 @@ def _extract_total_amount_dollar(text: str) -> int | None:
     return int(match.group(1).replace(",", ""))
 
 
+# Merchant image detection thresholds (CTBC PDF layout-specific).
+# Merchant name images start at x ~ 125, distinguishable from icons/logos
+# by their minimum width.
+_MERCHANT_IMG_X0_MIN = 120.0
+_MERCHANT_IMG_X0_MAX = 135.0
+_MERCHANT_IMG_MIN_WIDTH = 30.0
+
+
+def _find_merchant_images(
+    page: pdfplumber.page.Page,
+) -> list[dict[str, float]]:
+    """Find merchant name images in the transaction area.
+
+    CTBC PDFs render merchant names as images at x ~ 125.
+    Returns a list of image bounding boxes sorted by y position.
+    """
+    return sorted(
+        [
+            img
+            for img in page.images
+            if _MERCHANT_IMG_X0_MIN < float(img["x0"]) < _MERCHANT_IMG_X0_MAX
+            and float(img["width"]) > _MERCHANT_IMG_MIN_WIDTH
+        ],
+        key=lambda img: float(img["top"]),
+    )
+
+
+def _ocr_merchant_image(
+    page: pdfplumber.page.Page,
+    img_bbox: dict[str, float],
+) -> str:
+    """Crop a merchant image region and OCR it.
+
+    Returns the recognized text, or empty string on failure.
+    """
+    if not is_ocr_available():
+        return ""
+
+    try:
+        x0 = float(img_bbox["x0"])
+        top = float(img_bbox["top"])
+        x1 = float(img_bbox["x1"])
+        bottom = float(img_bbox["bottom"])
+        cropped = page.crop((x0, top, x1, bottom))
+        pil_image = cropped.to_image(resolution=300).original
+        return extract_text_from_image(pil_image)
+    except (ValueError, AttributeError, OSError):
+        logger.warning(
+            "商戶圖片 OCR 失敗: x=%.0f y=%.0f",
+            img_bbox["x0"],
+            img_bbox["top"],
+            exc_info=True,
+        )
+        return ""
+
+
+def _match_merchant_to_transaction(
+    merchant_images: list[dict[str, float]],
+    page: pdfplumber.page.Page,
+    used_indices: set[int],
+) -> str:
+    """Assign the next unused merchant image to a transaction.
+
+    Merchant images and transaction lines appear in the same top-to-bottom
+    order, so we assign them sequentially by encounter order.
+    """
+    if not merchant_images:
+        return ""
+
+    for i, img in enumerate(merchant_images):
+        if i not in used_indices:
+            used_indices.add(i)
+            return _ocr_merchant_image(page, img)
+
+    return ""
+
+
 def _extract_transactions_roc(
     pages: list[pdfplumber.page.Page],
 ) -> list[TransactionItem]:
     """Extract transactions from text lines in ROC date format.
 
     Pattern: 'YYY/MM/DD YYY/MM/DD AMOUNT CARD4 CURRENCY'
-    Merchant names are not extractable (rendered as images in real PDFs).
+    Merchant names are extracted via OCR from embedded images when
+    tesseract is available; otherwise falls back to empty string.
     """
     items: list[TransactionItem] = []
     for page in pages:
         text = page.extract_text() or ""
+        merchant_images = _find_merchant_images(page)
+        used_indices: set[int] = set()
+
         for match in _RE_TRANSACTION_LINE_ROC.finditer(text):
-            item = _parse_roc_transaction(match)
+            merchant = _match_merchant_to_transaction(
+                merchant_images, page, used_indices
+            )
+            if _is_non_transaction_merchant(merchant):
+                logger.debug(
+                    "跳過非交易行（已知標題）：merchant=%s, line=%s",
+                    merchant,
+                    match.group(0),
+                )
+                continue
+            item = _parse_roc_transaction(match, merchant=merchant)
             if item is not None:
                 items.append(item)
     return items
 
 
-def _parse_roc_transaction(match: re.Match[str]) -> TransactionItem | None:
+def _parse_roc_transaction(
+    match: re.Match[str],
+    *,
+    merchant: str = "",
+) -> TransactionItem | None:
     """Parse a single ROC-format transaction line."""
     try:
         raw_trans = match.group(1)
@@ -319,7 +432,7 @@ def _parse_roc_transaction(match: re.Match[str]) -> TransactionItem | None:
 
         return TransactionItem(
             trans_date=trans_date,
-            merchant="",
+            merchant=merchant,
             amount=amount,
             posting_date=posting_date,
             card_last4=card_last4,

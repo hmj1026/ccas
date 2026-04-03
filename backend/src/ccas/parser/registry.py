@@ -36,9 +36,7 @@ class _ParserRegistry:
         """
         key = (parser.bank_code.upper(), parser.version)
         self._parsers[key] = parser
-        logger.debug(
-            "parser 已註冊: %s/%s", parser.bank_code, parser.version
-        )
+        logger.debug("parser 已註冊: %s/%s", parser.bank_code, parser.version)
 
     def get_versions(self, bank_code: str) -> list[BankParser]:
         """取得某家銀行所有已註冊的 parser，依版本由新到舊排序。

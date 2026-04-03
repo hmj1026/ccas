@@ -11,6 +11,7 @@ from unittest.mock import MagicMock, patch
 import pdfplumber.page
 import pytest
 
+from ccas.parser.banks.ctbc_v1 import _is_non_transaction_merchant
 from ccas.parser.base import ParseError
 
 from .conftest import (
@@ -238,9 +239,10 @@ class TestIdentifyRoc:
         parser = _make_parser()
         assert parser._identify("some text https://ctbc.tw/link") is False
 
-    def test_rejects_roc_header_without_url(self):
+    def test_accepts_roc_header_without_url(self):
+        """Older CTBC PDFs (ROC 106-110) have ROC header but no ctbc.tw URL."""
         parser = _make_parser()
-        assert parser._identify("115 03 1 / 3\nsome text") is False
+        assert parser._identify("115 03 1 / 3\nsome text") is True
 
 
 class TestExtractSummaryRoc:
@@ -311,3 +313,63 @@ class TestExtractTransactionsRoc:
         )
 
         assert len(txns) == 0
+
+    def test_filters_non_transaction_merchant(self):
+        """Transactions with known header merchant names are filtered out."""
+        parser = _make_parser()
+        text = "115/02/09 115/02/11 28 6713 TW\n115/02/12 115/02/23 75 6713 TW\n"
+        page = make_mock_page(text)
+
+        merchants = iter(["消費暨收費摘要表", "全聯福利中心"])
+        with patch(
+            "ccas.parser.banks.ctbc_v1._match_merchant_to_transaction",
+            side_effect=lambda *_a, **_kw: next(merchants),
+        ):
+            txns = parser._extract_transactions(
+                cast(list[pdfplumber.page.Page], [page]), 2026
+            )
+
+        assert len(txns) == 1
+        assert txns[0].merchant == "全聯福利中心"
+        assert txns[0].amount == 75
+
+    def test_filter_does_not_shift_subsequent_merchants(self):
+        """After a filtered merchant, subsequent real merchants stay aligned."""
+        parser = _make_parser()
+        text = (
+            "115/02/09 115/02/11 28 6713 TW\n"
+            "115/02/12 115/02/23 75 6713 TW\n"
+            "115/02/14 115/02/25 150 6713 TW\n"
+        )
+        page = make_mock_page(text)
+
+        merchants = iter(["消費暨收費摘要表", "全聯福利中心", "統一超商"])
+        with patch(
+            "ccas.parser.banks.ctbc_v1._match_merchant_to_transaction",
+            side_effect=lambda *_a, **_kw: next(merchants),
+        ):
+            txns = parser._extract_transactions(
+                cast(list[pdfplumber.page.Page], [page]), 2026
+            )
+
+        assert len(txns) == 2
+        assert txns[0].merchant == "全聯福利中心"
+        assert txns[1].merchant == "統一超商"
+
+
+class TestIsNonTransactionMerchant:
+    """Tests for the _is_non_transaction_merchant helper."""
+
+    @pytest.mark.parametrize(
+        "merchant",
+        ["消費暨收費摘要表", "帳單分期入帳", "帳單分期"],
+    )
+    def test_rejects_known_headers(self, merchant: str):
+        assert _is_non_transaction_merchant(merchant) is True
+
+    @pytest.mark.parametrize(
+        "merchant",
+        ["全聯福利中心", "統一超商", "本行扣繳", ""],
+    )
+    def test_accepts_real_merchants(self, merchant: str):
+        assert _is_non_transaction_merchant(merchant) is False
