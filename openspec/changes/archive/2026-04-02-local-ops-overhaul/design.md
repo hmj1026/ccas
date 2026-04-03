@@ -1,11 +1,10 @@
 ## Context
 
-CCAS 本地部署目前需要手動開兩個終端機分別啟動 backend 和 frontend，`.env` 驗證散落在 `setup.sh`（嚴格）和 `config.py`（寬鬆）之間不一致。Pipeline 只支援全量執行或 `--force` 強制重跑全部，無法指定階段。文件只有一份混合對象的新手指南。CTBC parser 的 ROC 格式將商戶名稱預設為空字串，但實際 PDF 中消費明細載要欄位是可提取的文字。
+CCAS 本地部署目前需要手動開兩個終端機分別啟動 backend 和 frontend，`.env` 驗證散落在 `setup.sh`（嚴格）和 `config.py`（寬鬆）之間不一致。Pipeline 只支援全量執行或 `--force` 強制重跑全部，無法指定階段。文件只有一份混合對象的新手指南。
 
 現有架構：
 - 啟動：`scripts/start.sh`（只啟動 backend）+ `cd frontend && pnpm dev`（手動）
 - Pipeline：5 階段循序執行（ingest → decrypt → parse → classify → notify），`PipelineOptions` 為 frozen dataclass
-- CTBC parser：兩種格式（labeled/ROC），ROC 格式用 regex 逐行解析，merchant 欄位硬編碼 `""`
 - 日誌：`JsonFormatter` + `RedactingFilter`，各模組用 `logging.getLogger(__name__)`
 
 ## Goals / Non-Goals
@@ -15,7 +14,6 @@ CCAS 本地部署目前需要手動開兩個終端機分別啟動 backend 和 fr
 - 使用者一條 `docker-compose up` 完成全部服務啟動
 - 獨立 env 驗證命令，可被啟動腳本和 Docker entrypoint 呼叫
 - Pipeline 支援 `--from`/`--to` 階段控制，可接續或只做單一範圍
-- CTBC ROC 格式正確提取商戶名稱
 - Parse 失敗有結構化 log（PDF 檔名、欄位、原因）
 - 文件分為開發者版和使用者版
 
@@ -23,7 +21,6 @@ CCAS 本地部署目前需要手動開兩個終端機分別啟動 backend 和 fr
 - 不引入 process manager（PM2、supervisord）或新的外部依賴
 - 不改變 pipeline 的循序執行架構（不做並行化）
 - 不修改資料庫 schema
-- 不重寫整個 parser 框架，只修正 CTBC ROC 格式的商戶提取邏輯
 - 不做 production deployment 自動化（本次只涵蓋本地開發/使用）
 
 ## Decisions
@@ -75,15 +72,7 @@ python -m ccas.pipeline --to parse                      # 只跑 ingest → decr
 **替代方案**：`--stage X --only`（只跑單一階段）。
 **否決原因**：`--from`/`--to` 更靈活，能表達範圍；單一階段等同 `--from X --to X`。
 
-### D5: CTBC 商戶名稱提取 — 修正 ROC regex 解析
-
-目前 ROC 格式的 regex 只匹配數字欄位（日期、金額、卡號、幣別），商戶名稱文字在同一行或相鄰行但未被捕獲。
-
-修正方式：擴展 `_extract_roc_transactions()` 的解析邏輯，在匹配交易數字行後，向前或向後搜尋相鄰的文字行作為 merchant name。具體策略需根據 pdfplumber 提取的文字佈局決定（消費明細載要欄位的文字位置）。
-
-`TransactionItem.merchant` 從硬編碼 `""` 改為提取到的文字，提取失敗時 fallback 為 `""`（不影響整體 parse 流程）。
-
-### D6: Parse 失敗結構化 logging
+### D5: Parse 失敗結構化 logging
 
 在 `parser/job.py` 的 `_process_attachment()` 中增強 error logging：
 - 每次 parse 嘗試記錄：parser 名稱、bank_code、PDF 檔名
@@ -92,7 +81,7 @@ python -m ccas.pipeline --to parse                      # 只跑 ingest → decr
 
 使用 `logger.error()` 的 `extra` dict 傳遞結構化欄位，`JsonFormatter` 自動序列化。
 
-### D7: 文件結構
+### D6: 文件結構
 
 | 文件 | 對象 | 內容 |
 |------|------|------|
@@ -101,7 +90,7 @@ python -m ccas.pipeline --to parse                      # 只跑 ingest → decr
 
 `docs/beginner-setup-guide.md` 刪除。`CLAUDE.md` 中的文件引用更新。
 
-### D8: Seed data 管理
+### D7: Seed data 管理
 
 完善現有 `backend/scripts/seed.py`，確保可透過 `uv run python backend/scripts/seed.py` 快速建立測試資料（bills + transactions）。加入 `--reset` flag 清除再重建。
 
@@ -109,7 +98,6 @@ python -m ccas.pipeline --to parse                      # 只跑 ingest → decr
 
 | Risk | Mitigation |
 |------|-----------|
-| CTBC 商戶名稱在不同月份 PDF 中佈局不一致 | fallback 為空字串，不影響整體 parse；增加 logging 便於後續修正 |
 | `start.sh` background 子程序管理在不同 shell 中行為差異 | 使用 POSIX-compatible trap + wait，避免 bash-only 語法 |
 | `--from`/`--to` 跳過前置階段但 DB 無對應資料 | 文件說明：跳過 ingest 時需確保 staging 中已有 PDF；各階段空輸入時回傳零計數不報錯 |
 | 刪除 beginner-setup-guide.md 為 breaking change | 新文件涵蓋所有原有內容，CLAUDE.md 同步更新引用 |

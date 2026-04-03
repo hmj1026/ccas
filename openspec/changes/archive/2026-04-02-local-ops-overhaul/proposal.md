@@ -1,6 +1,6 @@
 ## Why
 
-CCAS 本地部署流程分散在多個腳本與終端機，pipeline 只支援全量重跑或 `--force` 強制重新下載/解析，缺乏階段級控制。文件僅有一份混合對象的新手指南，開發者與使用者的需求未分離。此外 CTBC 真實帳單的消費名稱可直接提取但目前被忽略，parse 失敗時也缺少結構化 log 協助排查。
+CCAS 本地部署流程分散在多個腳本與終端機，pipeline 只支援全量重跑或 `--force` 強制重新下載/解析，缺乏階段級控制。文件僅有一份混合對象的新手指南，開發者與使用者的需求未分離，parse 失敗時也缺少結構化 log 協助排查。
 
 ## What Changes
 
@@ -17,7 +17,6 @@ CCAS 本地部署流程分散在多個腳本與終端機，pipeline 只支援全
 - `--force` 與階段控制配合：只重置指定範圍內的階段資料
 
 ### Parser 改進
-- CTBC ROC 格式：提取消費明細載要欄位中的商戶名稱文字（不再預設空字串）
 - Parse 失敗時輸出結構化 log：包含 PDF 檔名、失敗階段、缺失欄位、錯誤原因
 - Parser 格式選擇過程加入 logging（哪個 parser 被嘗試、哪個匹配成功）
 
@@ -39,7 +38,6 @@ CCAS 本地部署流程分散在多個腳本與終端機，pipeline 只支援全
 
 ### Modified Capabilities
 - `pipeline-orchestration`: 新增 `--from`/`--to` 階段控制參數，per-stage force 語意
-- `ctbc-parser`: ROC 格式商戶名稱提取（消費明細載要欄位文字提取）
 - `error-handling-patterns`: parse 失敗結構化 logging（PDF 檔名、欄位、原因）
 
 ## Impact
@@ -49,5 +47,4 @@ CCAS 本地部署流程分散在多個腳本與終端機，pipeline 只支援全
 - **Database**: 無 schema 變更
 - **Docker**: `docker-compose.yaml` 加入 env 驗證 entrypoint，不影響現有 service 定義
 - **文件**: beginner-setup-guide.md 刪除為 **breaking change**，CLAUDE.md 需更新文件引用
-- **Parser**: ctbc_v1 output 變更（merchant 欄位從空字串 → 實際值），下游 classify 和 API 受益
 - **Dependencies**: 無新增外部依賴
