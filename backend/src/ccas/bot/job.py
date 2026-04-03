@@ -1,7 +1,7 @@
 """批次通知 job 入口模組。
 
 提供 run_notify_job() 作為 pipeline 的通知階段，
-對新解析的帳單發送 Telegram 通知。
+自動查詢未通知帳單並發送 Telegram 通知。
 """
 
 import logging
@@ -36,40 +36,52 @@ class NotifySummary:
 
 async def run_notify_job(
     session: AsyncSession,
-    *,
-    bill_ids: list[int] | None = None,
 ) -> NotifySummary:
-    """對指定帳單發送 Telegram 新帳單通知。
+    """查詢未通知帳單並發送 Telegram 通知。
+
+    自動查詢 is_notified=False 的帳單，發送成功後標記為已通知。
 
     Args:
         session: 非同步 DB Session。
-        bill_ids: 要通知的帳單 ID 清單。若為 None 或空則略過。
 
     Returns:
         NotifySummary 統計摘要。
     """
     summary = NotifySummary()
 
-    if not bill_ids:
+    stmt = select(Bill).where(Bill.is_notified.is_(False))
+    result = await session.execute(stmt)
+    bills = list(result.scalars().all())
+
+    if not bills:
+        logger.info("沒有未通知的帳單，跳過通知")
         return summary
 
     settings = get_settings()
     bank_names = await fetch_bank_names(session)
 
-    stmt = select(Bill).where(Bill.id.in_(bill_ids))
-    result = await session.execute(stmt)
-    bills = list(result.scalars().all())
-
     for bill in bills:
+        bill_id = bill.id
+        bill_code = bill.bank_code
+        bill_month = bill.billing_month
         try:
-            bank_name = bank_names.get(bill.bank_code, bill.bank_code)
+            bank_name = bank_names.get(bill_code, bill_code)
             text = render_new_bill_notification(bill, bank_name)
             await send_message(
                 settings.telegram_bot_token, settings.telegram_chat_id, text
             )
+            bill.is_notified = True
+            await session.commit()
             summary.sent_count += 1
+            logger.info(
+                "通知成功: bill #%d (%s/%s)",
+                bill_id,
+                bill_code,
+                bill_month,
+            )
         except Exception as exc:
-            error_msg = f"通知失敗 (bill #{bill.id}): {exc}"
+            await session.rollback()
+            error_msg = f"通知失敗 (bill #{bill_id}): {exc}"
             summary.failed_count += 1
             summary.errors.append(error_msg)
             logger.error(error_msg)

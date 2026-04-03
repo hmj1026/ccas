@@ -6,6 +6,7 @@ from pathlib import Path
 
 import pytest
 
+from ccas import config as config_module
 from ccas.config import Settings
 
 _REQUIRED_ENV = {
@@ -13,6 +14,12 @@ _REQUIRED_ENV = {
     "TELEGRAM_CHAT_ID": "12345",
     "API_TOKEN": "test-api-token",
 }
+_PATH_ENV_KEYS = (
+    "DATABASE_URL",
+    "GMAIL_CREDENTIALS_PATH",
+    "GMAIL_TOKEN_PATH",
+    "STAGING_DIR",
+)
 
 
 def _write_dotenv(path: Path, pairs: dict[str, str]) -> None:
@@ -39,6 +46,8 @@ def _make_settings(
     """
     for k, v in _REQUIRED_ENV.items():
         monkeypatch.setenv(k, v)
+    for key in _PATH_ENV_KEYS:
+        monkeypatch.delenv(key, raising=False)
 
     kwargs: dict[str, object] = {}
     if env_file_content is not None:
@@ -54,6 +63,14 @@ def _make_settings(
         kwargs["_env_file"] = env_file_arg
 
     return Settings(**kwargs)  # pyright: ignore[reportCallIssue]
+
+
+def _sqlite_absolute_url(path: Path) -> str:
+    return f"sqlite+aiosqlite:///{path.resolve().as_posix()}"
+
+
+def _backend_root() -> Path:
+    return Path(config_module.__file__).resolve().parents[2]
 
 
 class TestEnvMapWithCustomEnvFile:
@@ -112,3 +129,69 @@ class TestEnvMapWithNoneEnvFile:
         monkeypatch.setenv("PDF_PASSWORD_FUBON", "env_val")
         settings = _make_settings(monkeypatch, tmp_path, env_file_arg=None)
         assert settings._env_map.get("PDF_PASSWORD_FUBON") == "env_val"
+
+
+class TestPathNormalization:
+    """Path-like settings should be anchored consistently."""
+
+    def test_defaults_resolve_under_backend_root(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        settings = _make_settings(monkeypatch, tmp_path, env_file_arg=None)
+        backend_root = _backend_root()
+
+        assert settings.database_url == _sqlite_absolute_url(
+            backend_root / "data/ccas.db"
+        )
+        assert settings.gmail_credentials_path == str(
+            (backend_root / "data/credentials.json").resolve()
+        )
+        assert settings.gmail_token_path == str(
+            (backend_root / "data/token.json").resolve()
+        )
+        assert settings.staging_dir == str((backend_root / "data/staging").resolve())
+
+    def test_relative_overrides_resolve_under_backend_root(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        settings = _make_settings(
+            monkeypatch,
+            tmp_path,
+            env_file_content={
+                "DATABASE_URL": "sqlite+aiosqlite:///./custom/ccas.db",
+                "GMAIL_CREDENTIALS_PATH": "./secrets/credentials.json",
+                "GMAIL_TOKEN_PATH": "./secrets/token.json",
+                "STAGING_DIR": "./custom/staging",
+            },
+        )
+        backend_root = _backend_root()
+
+        assert settings.database_url == _sqlite_absolute_url(
+            backend_root / "custom/ccas.db"
+        )
+        assert settings.gmail_credentials_path == str(
+            (backend_root / "secrets/credentials.json").resolve()
+        )
+        assert settings.gmail_token_path == str(
+            (backend_root / "secrets/token.json").resolve()
+        )
+        assert settings.staging_dir == str((backend_root / "custom/staging").resolve())
+
+    def test_absolute_overrides_are_preserved(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        settings = _make_settings(
+            monkeypatch,
+            tmp_path,
+            env_file_content={
+                "DATABASE_URL": "sqlite+aiosqlite:////data/ccas.db",
+                "GMAIL_CREDENTIALS_PATH": "/data/credentials.json",
+                "GMAIL_TOKEN_PATH": "/data/token.json",
+                "STAGING_DIR": "/data/staging",
+            },
+        )
+
+        assert settings.database_url == "sqlite+aiosqlite:////data/ccas.db"
+        assert settings.gmail_credentials_path == "/data/credentials.json"
+        assert settings.gmail_token_path == "/data/token.json"
+        assert settings.staging_dir == "/data/staging"

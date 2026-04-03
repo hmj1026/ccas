@@ -34,8 +34,9 @@ class TestAuthRouter:
         monkeypatch.setenv("API_TOKEN", "test-token")
         get_settings.cache_clear()
 
+        request = _make_request()
         response = Response()
-        await create_session(SessionLoginRequest(token="test-token"), response)
+        await create_session(request, SessionLoginRequest(token="test-token"), response)
 
         set_cookie = response.headers["set-cookie"]
         assert "ccas_session=test-token" in set_cookie

@@ -9,9 +9,13 @@ from pathlib import Path
 from typing import Any
 
 from dotenv import dotenv_values
-from pydantic import PrivateAttr
+from pydantic import PrivateAttr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic_settings.sources.types import ENV_FILE_SENTINEL, DotenvType
+
+_APP_ROOT = Path(__file__).resolve().parents[2]
+_DEFAULT_ENV_FILES = (_APP_ROOT / ".env", _APP_ROOT.parent / ".env")
+_SQLITE_ASYNC_PREFIX = "sqlite+aiosqlite:///"
 
 
 class Settings(BaseSettings):
@@ -36,17 +40,17 @@ class Settings(BaseSettings):
     """
 
     model_config = SettingsConfigDict(
-        env_file="../.env",
+        env_file=_DEFAULT_ENV_FILES,
         env_file_encoding="utf-8",
         extra="ignore",
     )
 
-    database_url: str = "sqlite+aiosqlite:///data/ccas.db"
+    database_url: str = "sqlite+aiosqlite:///./data/ccas.db"
     telegram_bot_token: str
     telegram_chat_id: str
-    gmail_credentials_path: str = "/data/credentials.json"
-    gmail_token_path: str = "/data/token.json"
-    staging_dir: str = "data/staging"
+    gmail_credentials_path: str = "./data/credentials.json"
+    gmail_token_path: str = "./data/token.json"
+    staging_dir: str = "./data/staging"
     log_level: str = "INFO"
     log_format: str = "json"
     api_host: str = "0.0.0.0"
@@ -75,8 +79,23 @@ class Settings(BaseSettings):
 
         os.environ takes precedence over .env file values.
         """
-        env_file = self.model_config.get("env_file", "../.env")
+        env_file = self.model_config.get("env_file", _DEFAULT_ENV_FILES)
         _build_env_map(self, env_file)
+
+    @field_validator(
+        "gmail_credentials_path",
+        "gmail_token_path",
+        "staging_dir",
+        mode="after",
+    )
+    @classmethod
+    def _normalize_path_settings(cls, value: str) -> str:
+        return str(_resolve_path_value(value))
+
+    @field_validator("database_url", mode="after")
+    @classmethod
+    def _normalize_database_url(cls, value: str) -> str:
+        return _normalize_sqlite_url(value)
 
     def get_pdf_password(self, bank_code: str) -> str | None:
         """取得指定銀行的 PDF 解密密碼。
@@ -121,6 +140,25 @@ def _build_env_map(
     merged = {k: v for k, v in file_values.items() if v is not None}
     merged.update(os.environ)
     object.__setattr__(settings, "_env_map", merged)
+
+
+def _resolve_path_value(value: str | Path) -> Path:
+    path = Path(value).expanduser()
+    if path.is_absolute():
+        return path.resolve()
+    return (_APP_ROOT / path).resolve()
+
+
+def _normalize_sqlite_url(value: str) -> str:
+    if not value.startswith(_SQLITE_ASYNC_PREFIX):
+        return value
+
+    raw_path = value.removeprefix(_SQLITE_ASYNC_PREFIX)
+    if raw_path == ":memory:" or raw_path.startswith("/"):
+        return value
+
+    normalized = _resolve_path_value(raw_path)
+    return f"{_SQLITE_ASYNC_PREFIX}{normalized.as_posix()}"
 
 
 @lru_cache(maxsize=1)

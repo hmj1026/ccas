@@ -4,8 +4,9 @@
 包含健康檢查端點及業務 API 路由（含 Bearer Token 認證）。
 """
 
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from ccas.api.deps import verify_token
 from ccas.api.routers import (
@@ -20,6 +21,15 @@ from ccas.api.routers import (
 from ccas.config import get_settings
 
 
+class _SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):  # type: ignore[override]
+        response: Response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        return response
+
+
 def create_app() -> FastAPI:
     """建立並回傳 FastAPI 應用程式實例。
 
@@ -27,6 +37,7 @@ def create_app() -> FastAPI:
     """
     settings_obj = get_settings()
     app = FastAPI(title="CCAS", version="0.1.0")
+    app.add_middleware(_SecurityHeadersMiddleware)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings_obj.get_frontend_origins(),

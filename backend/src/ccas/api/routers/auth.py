@@ -1,10 +1,14 @@
 """Browser session auth endpoints."""
 
+import logging
+
 from fastapi import APIRouter, HTTPException, Request, Response, status
 
 from ccas.api.deps import get_session_cookie_token, is_valid_api_token
 from ccas.api.schemas import ApiResponse, SessionLoginRequest, SessionStatus
 from ccas.config import get_settings
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -42,10 +46,15 @@ async def get_session_status(request: Request):
 
 
 @router.post("/session", status_code=status.HTTP_204_NO_CONTENT)
-async def create_session(body: SessionLoginRequest, response: Response):
+async def create_session(
+    request: Request, body: SessionLoginRequest, response: Response
+):
     """以 API token 建立 browser session cookie。"""
+    remote_addr = request.client.host if request.client else "unknown"
     if not is_valid_api_token(body.token):
+        logger.warning("auth_failed: remote_addr=%s", remote_addr)
         raise HTTPException(status_code=401, detail="Invalid token")
+    logger.info("session_created: remote_addr=%s", remote_addr)
     _set_session_cookie(response, body.token)
     response.status_code = status.HTTP_204_NO_CONTENT
     return response
