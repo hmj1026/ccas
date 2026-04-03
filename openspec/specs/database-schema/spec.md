@@ -5,11 +5,19 @@ TBD - created by archiving change foundation-setup. Update Purpose after archive
 ## Requirements
 ### Requirement: 帳單主表資料模型
 
-系統 SHALL 維持 `Bill` 資料模型的既有欄位與唯一約束，且 `created_at` 的 Python 端預設值 SHALL 由 naive `datetime.utcnow()` 改為 timezone-aware 的 `datetime.now(UTC)`。
+系統 SHALL 維持 `Bill` 資料模型的既有欄位與唯一約束，新增 `is_notified` 欄位追蹤通知狀態，且 `created_at` 的 Python 端預設值 SHALL 由 naive `datetime.utcnow()` 改為 timezone-aware 的 `datetime.now(UTC)`。
 
 #### MODIFIED Scenario: 建立帳單紀錄
 - **WHEN** 建立一筆 `Bill`
 - **THEN** `created_at` 會自動設定為 timezone-aware UTC datetime（`datetime.now(UTC)`），而非 naive datetime
+
+#### ADDED Scenario: 新帳單預設未通知
+- **WHEN** 建立新的 Bill 記錄
+- **THEN** `is_notified` SHALL 預設為 `False`
+
+#### ADDED Scenario: 既有帳單視為已通知
+- **WHEN** Alembic migration 套用至既有資料庫
+- **THEN** 所有現有 Bill 的 `is_notified` SHALL 設為 `True`（避免舊帳單重發通知）
 
 ### Requirement: 消費明細資料表模型
 
@@ -69,4 +77,3 @@ TBD - created by archiving change foundation-setup. Update Purpose after archive
 #### Scenario: 啟用 WAL mode
 - **WHEN** 建立資料庫連線時
 - **THEN** 引擎會自動透過 `sqlite_synchronous` pragma 啟用 WAL，`PRAGMA journal_mode` 會回傳 `wal`
-

@@ -48,6 +48,7 @@ class Bill(Base):
     total_amount: Mapped[int] = mapped_column(Integer, nullable=False)
     due_date: Mapped[date] = mapped_column(Date, nullable=False)
     is_paid: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_notified: Mapped[bool] = mapped_column(Boolean, default=False)
     file_path: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
 
