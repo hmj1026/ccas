@@ -63,7 +63,7 @@ async def run_classify_job(session: AsyncSession) -> ClassifySummary:
         await update_transaction_category(session, txn.id, category)
         classified_count += 1
 
-    await session.flush()
+    await session.commit()
 
     logger.info("分類完成：%d 筆交易已分類", classified_count)
     return ClassifySummary(
@@ -102,7 +102,7 @@ async def run_reclassify_job(session: AsyncSession) -> ClassifySummary:
         await update_transaction_category(session, txn.id, new_category)
         classified_count += 1
 
-    await session.flush()
+    await session.commit()
 
     logger.info(
         "重跑分類完成：%d 筆更新, %d 筆未變動",

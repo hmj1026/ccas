@@ -7,9 +7,10 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # In Docker, env vars are already set via docker-compose env_file.
-# We source /dev/null so check-env.sh skips .env sourcing but still checks
-# the process environment against .env.example.
-export ENV_FILE="/dev/null"
+# Create an empty file so check-env.sh sources nothing but still
+# validates the process environment against .env.example.
+ENV_FILE="$(mktemp)"
+export ENV_FILE
 export EXAMPLE_FILE="/app/.env.example"
 
 if [[ -f "$SCRIPT_DIR/check-env.sh" && -f "$EXAMPLE_FILE" ]]; then
@@ -18,6 +19,14 @@ if [[ -f "$SCRIPT_DIR/check-env.sh" && -f "$EXAMPLE_FILE" ]]; then
     printf '[ERROR] 環境變數驗證失敗。請檢查 docker-compose.yaml 的 env_file 或 environment 設定。\n' >&2
     exit 1
   }
+fi
+
+printf '==> 檢查 OCR 可用性\n'
+if command -v tesseract >/dev/null 2>&1; then
+  printf '[INFO] tesseract OCR 已安裝: %s\n' "$(tesseract --version 2>&1 | head -1)"
+else
+  printf '[WARNING] tesseract OCR 未安裝。商戶名稱 OCR 功能將停用。\n' >&2
+  printf '[WARNING] 安裝方式: apt-get install tesseract-ocr tesseract-ocr-chi-tra\n' >&2
 fi
 
 printf '==> 套用資料庫 migration\n'

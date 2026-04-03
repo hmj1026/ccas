@@ -1,11 +1,12 @@
 # 複製為 config/banks.yaml 後再編輯。
 # bank_code 只能使用 config/bank-code-registry.yaml 裡定義的代碼。
 #
-# 範例：
-# banks:
-#   - bank_code: CTBC
-#     gmail_filter: "from:service@ctbcbank.com subject:信用卡"
-#     active_parser_version: v1
-#     is_active: true
+# gmail_filter: Gmail 搜尋語法，用於篩選該銀行的帳單郵件。
+# active_parser_version: 使用的 parser 版本（CTBC 目前為 v1）。
+# is_active: 是否啟用（false 表示暫時停用）。
 
-banks: []
+banks:
+  - bank_code: CTBC
+    gmail_filter: "from:service@ctbcbank.com subject:信用卡"
+    active_parser_version: v1
+    is_active: true

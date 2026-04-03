@@ -44,17 +44,66 @@ async def seed_bank_configs(session: AsyncSession) -> None:
 
 
 async def seed_categories(session: AsyncSession) -> None:
-    """寫入消費分類關鍵字對照範例資料。"""
+    """寫入消費分類關鍵字對照範例資料。
+
+    涵蓋 CTBC 帳單常見的消費類別。
+    """
     categories = [
+        # 日用品 / 超市
         Category(keyword="全聯", category="日用品"),
         Category(keyword="家樂福", category="日用品"),
-        Category(keyword="麥當勞", category="美食"),
-        Category(keyword="星巴克", category="飲料"),
-        Category(keyword="台灣大哥大", category="通訊"),
+        Category(keyword="大潤發", category="日用品"),
+        Category(keyword="好市多", category="日用品"),
+        Category(keyword="COSTCO", category="日用品"),
+        Category(keyword="寶雅", category="日用品"),
+        Category(keyword="屈臣氏", category="日用品"),
+        Category(keyword="康是美", category="日用品"),
+        # 超商
+        Category(keyword="統一超商", category="超商"),
+        Category(keyword="7-ELEVEN", category="超商"),
+        Category(keyword="全家", category="超商"),
+        Category(keyword="萊爾富", category="超商"),
+        Category(keyword="OK超商", category="超商"),
+        Category(keyword="ICP", category="超商"),
+        # 餐飲
+        Category(keyword="麥當勞", category="餐飲"),
+        Category(keyword="星巴克", category="餐飲"),
+        Category(keyword="摩斯", category="餐飲"),
+        Category(keyword="肯德基", category="餐飲"),
+        Category(keyword="UBER EATS", category="餐飲"),
+        Category(keyword="FOODPANDA", category="餐飲"),
+        # 交通
         Category(keyword="中油", category="交通"),
+        Category(keyword="台灣中油", category="交通"),
+        Category(keyword="UBER", category="交通"),
+        Category(keyword="台灣大車隊", category="交通"),
+        Category(keyword="高鐵", category="交通"),
+        Category(keyword="台鐵", category="交通"),
+        Category(keyword="悠遊卡", category="交通"),
+        # 通訊
+        Category(keyword="台灣大哥大", category="通訊"),
+        Category(keyword="中華電信", category="通訊"),
+        Category(keyword="遠傳", category="通訊"),
+        # 娛樂 / 訂閱
         Category(keyword="NETFLIX", category="娛樂"),
         Category(keyword="SPOTIFY", category="娛樂"),
-        Category(keyword="UBER", category="交通"),
+        Category(keyword="YOUTUBE", category="娛樂"),
+        Category(keyword="DISNEY", category="娛樂"),
+        Category(keyword="APPLE", category="娛樂"),
+        Category(keyword="GOOGLE", category="娛樂"),
+        # 購物
+        Category(keyword="蝦皮", category="購物"),
+        Category(keyword="SHOPEE", category="購物"),
+        Category(keyword="MOMO", category="購物"),
+        Category(keyword="PCHOME", category="購物"),
+        Category(keyword="AMAZON", category="購物"),
+        Category(keyword="博客來", category="購物"),
+        # 百貨
+        Category(keyword="SOGO", category="百貨"),
+        Category(keyword="新光三越", category="百貨"),
+        Category(keyword="統一時代", category="百貨"),
+        Category(keyword="MITSUI", category="百貨"),
+        Category(keyword="LaLaport", category="百貨"),
     ]
     session.add_all(categories)
     await session.commit()

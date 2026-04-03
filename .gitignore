@@ -52,6 +52,7 @@ backend/data/staging/
 # Credentials (Gmail OAuth tokens)
 backend/data/credentials.json
 backend/data/token.json
+credentials/
 
 # Node.js
 node_modules/

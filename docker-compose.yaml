@@ -1,10 +1,17 @@
+x-shared-env: &shared-env
+  DATABASE_URL: "sqlite+aiosqlite:////data/ccas.db"
+  STAGING_DIR: "/data/staging"
+  GMAIL_CREDENTIALS_PATH: "/data/credentials.json"
+  GMAIL_TOKEN_PATH: "/data/token.json"
+  REDIS_URL: redis://redis:6379/0
+
 services:
   backend:
     build:
       context: ./backend
       target: production
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     volumes:
       - ccas-data:/data
       - ./scripts:/scripts:ro
@@ -12,7 +19,7 @@ services:
     env_file:
       - ./.env
     environment:
-      REDIS_URL: redis://redis:6379/0
+      <<: *shared-env
     entrypoint: ["/scripts/docker-entrypoint.sh"]
     depends_on:
       redis:
@@ -34,7 +41,7 @@ services:
     env_file:
       - ./.env
     environment:
-      REDIS_URL: redis://redis:6379/0
+      <<: *shared-env
     depends_on:
       redis:
         condition: service_healthy
@@ -50,21 +57,12 @@ services:
     env_file:
       - ./.env
     environment:
-      REDIS_URL: redis://redis:6379/0
+      <<: *shared-env
     depends_on:
       redis:
         condition: service_healthy
     restart: unless-stopped
     command: ["uv", "run", "python", "-m", "ccas.bot"]
-
-  frontend:
-    build:
-      context: ./frontend
-      target: dev
-    ports:
-      - "5173:5173"
-    env_file:
-      - ./.env
 
   redis:
     image: redis:7-alpine

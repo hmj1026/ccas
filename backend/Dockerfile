@@ -7,6 +7,9 @@ RUN uv sync --no-dev --no-editable
 
 # Stage: dev — hot reload, source bind-mounted at runtime
 FROM python:3.12-slim AS dev
+RUN apt-get update -qq \
+    && apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-chi-tra \
+    && rm -rf /var/lib/apt/lists/*
 RUN pip install uv
 WORKDIR /app
 COPY --from=builder /app/.venv ./.venv
@@ -14,11 +17,15 @@ COPY pyproject.toml uv.lock ./
 COPY src/ ./src/
 COPY alembic/ ./alembic/
 COPY alembic.ini ./
+RUN uv sync --extra dev
 EXPOSE 8000
 CMD ["uv", "run", "uvicorn", "ccas.api.app:create_app", "--host", "0.0.0.0", "--port", "8000", "--factory", "--reload"]
 
 # Stage: production — non-root user, health check
 FROM python:3.12-slim AS production
+RUN apt-get update -qq \
+    && apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-chi-tra \
+    && rm -rf /var/lib/apt/lists/*
 RUN groupadd -g 1001 appgroup && useradd -u 1001 -g appgroup -s /bin/sh -m appuser
 RUN pip install uv
 WORKDIR /app

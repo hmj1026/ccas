@@ -187,7 +187,7 @@ class TestNotifyStage:
         with patch("ccas.bot.job.send_message", mock_send):
             from ccas.bot.job import run_notify_job
 
-            summary = await run_notify_job(db_session, bill_ids=[bill.id])
+            summary = await run_notify_job(db_session)
 
         assert summary.sent_count == 1
         assert summary.failed_count == 0

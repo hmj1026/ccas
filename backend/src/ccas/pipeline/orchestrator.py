@@ -45,17 +45,13 @@ def _validate_stage_range(
     from_idx = 0
     if from_stage is not None:
         if from_stage not in STAGE_ORDER:
-            raise ValueError(
-                f"無效的階段名稱: '{from_stage}'。有效名稱: {valid_names}"
-            )
+            raise ValueError(f"無效的階段名稱: '{from_stage}'。有效名稱: {valid_names}")
         from_idx = STAGE_ORDER.index(from_stage)
 
     to_idx = len(STAGE_ORDER) - 1
     if to_stage is not None:
         if to_stage not in STAGE_ORDER:
-            raise ValueError(
-                f"無效的階段名稱: '{to_stage}'。有效名稱: {valid_names}"
-            )
+            raise ValueError(f"無效的階段名稱: '{to_stage}'。有效名稱: {valid_names}")
         to_idx = STAGE_ORDER.index(to_stage)
 
     if from_idx > to_idx:
