@@ -93,7 +93,9 @@
       "Bash(gh run:*)",
       "Bash(bash ~/.claude/scripts/hooks/validate-python-ruff.sh /home/paul/projects/ccas/backend/tests/integration/test_settings_edge.py)",
       "Bash(echo \"--- exit code: $?\")",
-      "Bash(bash ~/.claude/scripts/hooks/validate-python-ruff.sh /home/paul/.claude/settings.json)"
+      "Bash(bash ~/.claude/scripts/hooks/validate-python-ruff.sh /home/paul/.claude/settings.json)",
+      "Bash(uv tool:*)",
+      "Bash(python -m pytest --collect-only -q)"
     ]
   },
   "hooks": {

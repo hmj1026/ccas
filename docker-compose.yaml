@@ -32,6 +32,24 @@ services:
       retries: 3
     restart: unless-stopped
 
+  worker:
+    build:
+      context: ./backend
+      target: production
+    volumes:
+      - ccas-data:/data
+    env_file:
+      - ./.env
+    environment:
+      <<: *shared-env
+    depends_on:
+      backend:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    command: ["uv", "run", "rq", "worker", "--url", "redis://redis:6379/0"]
+
   scheduler:
     build:
       context: ./backend
@@ -42,6 +60,7 @@ services:
       - ./.env
     environment:
       <<: *shared-env
+      SCHEDULER_API_BASE_URL: "http://backend:8000"
     depends_on:
       redis:
         condition: service_healthy
