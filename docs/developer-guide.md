@@ -164,39 +164,49 @@ backend/src/ccas/
 
 ## 7. 測試
 
+### 從專案根目錄執行（推薦）
+
+測試使用 in-memory SQLite，不需 Docker、tesseract 或 Redis。
+
 ```bash
-cd backend
-
-# 全部測試
-uv run pytest
-
-# 含 coverage
-uv run pytest --cov --cov-report=term-missing
-
-# 只跑 unit tests
-uv run pytest tests/unit/
-
-# 只跑 integration tests
-uv run pytest tests/integration/
-
-# 第一個失敗就停
-uv run pytest -x
+./scripts/dev-test.sh                      # 全部測試
+./scripts/dev-test.sh tests/unit/ -v       # 只跑 unit tests
+./scripts/dev-test.sh tests/integration/   # 只跑 integration tests
+./scripts/dev-test.sh --cov --cov-report=term-missing  # 含 coverage
+./scripts/dev-test.sh -x                   # 第一個失敗就停
 ```
 
-在 Docker 環境中測試（含 OCR）：`./scripts/test.sh`
+### 從 backend/ 目錄執行
+
+```bash
+cd backend
+uv run pytest
+uv run pytest tests/unit/
+```
+
+### Docker 環境（QA 或需 OCR 時）
+
+需先啟動容器（`docker compose up --build`）：
+
+```bash
+./scripts/test.sh                          # 全部測試（含 tesseract OCR）
+./scripts/test.sh tests/unit/ -v           # 只跑 unit tests
+```
 
 ## 8. 程式碼品質
 
+### 從專案根目錄（推薦）
+
+```bash
+./scripts/dev-lint.sh                      # ruff check + format check + pyright
+```
+
+### 從 backend/ 目錄
+
 ```bash
 cd backend
-
-# Lint
 uv run ruff check .
-
-# Format
 uv run ruff format .
-
-# Type check
 uv run pyright
 ```
 

@@ -75,59 +75,64 @@ The repo defines 12 skills in `.claude/skills/`: 10 OpenSpec workflow skills (ea
 
 ## Development Commands
 
-### Docker (recommended, includes tesseract OCR)
+> **環境選擇**：開發者（含 AI agent）使用 Local 指令；QA 測試使用 Docker 指令。
+> 所有本地指令從**專案根目錄**執行，無需 `cd backend`。
+
+### Local — 開發者日常（預設）
+
+測試使用 in-memory SQLite，不需 Docker、tesseract 或 Redis。
 
 ```bash
-docker compose up --build                  # Start all services (dev mode)
-./scripts/pipeline.sh --bank CTBC          # Run pipeline in Docker
-./scripts/pipeline.sh --from parse --force # Pipeline with stage control
-./scripts/test.sh                          # Run all tests in Docker
-./scripts/test.sh tests/unit/ -v           # Unit tests only
-```
-
-### Local (uv, no OCR unless tesseract installed)
-
-```bash
-# Dependencies
-uv sync                                    # Install all deps
-uv add <pkg>                               # Add runtime dep
-uv add --dev <pkg>                         # Add dev dep
-
 # Testing
-uv run pytest                              # All tests
-uv run pytest --cov --cov-report=term-missing  # With coverage
-uv run pytest tests/unit/                  # Unit only
-uv run pytest tests/integration/           # Integration only
-uv run pytest -x                           # Stop on first failure
+./scripts/dev-test.sh                      # All tests
+./scripts/dev-test.sh tests/unit/ -v       # Unit only
+./scripts/dev-test.sh tests/integration/   # Integration only
+./scripts/dev-test.sh --cov --cov-report=term-missing  # With coverage
+./scripts/dev-test.sh -x                   # Stop on first failure
 
 # Lint & Format
-uv run ruff check .                        # Lint
-uv run ruff format .                       # Format
-uv run pyright                             # Type check
+./scripts/dev-lint.sh                      # ruff check + format + pyright
 
-# Database
-uv run alembic upgrade head                # Apply migrations
-uv run alembic revision --autogenerate -m "<description>"
+# Dependencies (需 cd backend)
+cd backend && uv sync                      # Install all deps
+cd backend && uv add <pkg>                 # Add runtime dep
+cd backend && uv add --dev <pkg>           # Add dev dep
 
-# Pipeline
-uv run python -m ccas.pipeline             # Run full pipeline
-uv run python -m ccas.pipeline --bank CTBC # Single bank only
-uv run python -m ccas.pipeline --force     # Force re-download/re-parse
-uv run python -m ccas.pipeline --force --bank CTBC --year 2026 --month 3
-uv run python -m ccas.pipeline --from parse --to classify  # Stage range
-uv run python -m ccas.pipeline --from decrypt              # From stage to end
+# Database (需 cd backend)
+cd backend && uv run alembic upgrade head
+cd backend && uv run alembic revision --autogenerate -m "<description>"
+
+# Pipeline (本地無 tesseract 時 OCR 自動略過)
+cd backend && uv run python -m ccas.pipeline --bank CTBC
+cd backend && uv run python -m ccas.pipeline --force --bank CTBC --year 2026 --month 3
+cd backend && uv run python -m ccas.pipeline --from parse --to classify
 
 # Server
 ./scripts/start.sh                         # Backend + frontend
-uv run uvicorn ccas.api.app:create_app --factory --reload  # Backend only
+cd backend && uv run uvicorn ccas.api.app:create_app --factory --reload
 
 # Seed Data
-uv run python scripts/seed.py             # Add test data
-uv run python scripts/seed.py --reset     # Reset and re-seed
+cd backend && uv run python scripts/seed.py             # Add test data
+cd backend && uv run python scripts/seed.py --reset     # Reset and re-seed
 
 # Env Validation
 ./scripts/check-env.sh                    # Check .env for missing vars
 ```
+
+### Docker — QA 測試（含 tesseract OCR）
+
+需先啟動容器：`docker compose up --build`
+
+```bash
+docker compose up --build                  # Start all services
+./scripts/test.sh                          # Run all tests in Docker
+./scripts/test.sh tests/unit/ -v           # Unit tests only
+./scripts/pipeline.sh --bank CTBC          # Run pipeline (with OCR)
+./scripts/pipeline.sh --from parse --force # Pipeline with stage control
+```
+
+> **注意**：`scripts/test.sh` 和 `scripts/pipeline.sh` 使用 `docker compose exec`，
+> 若容器未啟動會報錯。詳見 [QA 測試指南](docs/qa-testing-guide.md)。
 
 ## ECC Agent & Skill Reference
 
