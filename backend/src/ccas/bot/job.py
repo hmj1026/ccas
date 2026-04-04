@@ -7,7 +7,8 @@
 import logging
 from dataclasses import dataclass, field
 
-from sqlalchemy import select, update as sa_update
+from sqlalchemy import select
+from sqlalchemy import update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ccas.bot.client import send_message
@@ -66,8 +67,7 @@ async def run_notify_job(
     # Pre-extract all scalar attributes before any session.commit/rollback to avoid
     # lazy-loading expired ORM objects (MissingGreenlet) on subsequent iterations.
     bill_rows = [
-        (b.id, b.bank_code, b.billing_month, b.total_amount, b.due_date)
-        for b in bills
+        (b.id, b.bank_code, b.billing_month, b.total_amount, b.due_date) for b in bills
     ]
 
     for bill_id, bill_code, bill_month, bill_total, bill_due in bill_rows:
