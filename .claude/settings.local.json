@@ -57,7 +57,8 @@
       "Bash(cat dist/assets/index-*.js)",
       "Bash(npx rollup-plugin-visualizer:*)",
       "Bash(du -sh node_modules/recharts node_modules/react-dom node_modules/lucide-react node_modules/@base-ui node_modules/d3-*)",
-      "Bash(pnpm build:*)"
+      "Bash(pnpm build:*)",
+      "Bash(head -30 /Users/paul/Project/ccas/backend/src/ccas/api/*.py)"
     ]
   },
   "hooks": {
