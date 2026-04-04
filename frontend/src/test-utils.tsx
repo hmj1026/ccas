@@ -15,6 +15,7 @@ function createTestQueryClient() {
   })
 }
 
+// eslint-disable-next-line react-refresh/only-export-components -- test utility, not a component file
 function TestProviders({
   children,
   initialEntries = ['/'],

@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
-import { FormEvent, useState } from 'react'
+import { type FormEvent, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router'
 import { apiPost } from '@/lib/api-client'
 import type { ApiResponse } from '@/lib/types'

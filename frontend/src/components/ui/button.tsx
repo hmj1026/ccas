@@ -68,4 +68,5 @@ function Button({
   )
 }
 
+// eslint-disable-next-line react-refresh/only-export-components -- shadcn/ui standard: buttonVariants is co-exported with Button
 export { Button, buttonVariants }
