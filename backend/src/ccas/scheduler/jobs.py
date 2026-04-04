@@ -19,7 +19,7 @@ def trigger_pipeline_via_api() -> None:
     base_url = (
         settings.scheduler_api_base_url.rstrip("/")
         if settings.scheduler_api_base_url
-        else f"http://{settings.api_host}:{settings.api_port}"
+        else f"http://127.0.0.1:{settings.api_port}"
     )
     url = f"{base_url}/api/pipeline/trigger"
     headers = {"Authorization": f"Bearer {settings.api_token}"}
@@ -30,6 +30,7 @@ def trigger_pipeline_via_api() -> None:
         logger.info("Pipeline triggered via API: %s", response.json())
     except Exception as exc:
         logger.error("Failed to trigger pipeline via API: %s", exc)
+        raise
 
 
 def run_payment_reminders_sync() -> dict[str, int]:
