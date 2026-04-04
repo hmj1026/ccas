@@ -4,6 +4,8 @@ import base64
 import logging
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from ccas.ingestor.gmail_client import (
     _extract_pdf_attachments,
     download_attachment,
@@ -221,36 +223,74 @@ class TestSearchMessagesPagination:
         assert len(result) == 1
 
     @patch("ccas.ingestor.gmail_client.call_with_retry")
-    def test_stops_at_max_pages_with_warning(self, mock_retry, caplog):
-        """達到分頁上限時應停止並記錄 warning。"""
-        from ccas.ingestor.gmail_client import _MAX_PAGES
-
-        # Build side effects for _MAX_PAGES + 1 pages (should stop at _MAX_PAGES)
+    def test_paginates_beyond_old_limit(self, mock_retry):
+        """應能取得超過舊上限 (10 頁) 的所有郵件。"""
+        num_pages = 15
         page_responses = []
-        all_msg_ids = []
-        for i in range(_MAX_PAGES + 1):
-            msg_id = f"msg-{i:03d}"
-            all_msg_ids.append(msg_id)
-            response: dict = {"messages": [{"id": msg_id}]}
-            if i < _MAX_PAGES:  # All but last have nextPageToken
+        for i in range(num_pages):
+            response: dict = {"messages": [{"id": f"msg-{i:03d}"}]}
+            if i < num_pages - 1:
                 response["nextPageToken"] = f"token-{i + 1}"
             page_responses.append(response)
 
-        # Message detail responses for messages that should be fetched
         detail_responses = [
             _make_message_payload(
                 f"msg-{i:03d}", [_pdf_part(f"bill{i}.pdf", f"att-{i}")]
             )
-            for i in range(_MAX_PAGES)
+            for i in range(num_pages)
         ]
 
-        mock_retry.side_effect = page_responses[:_MAX_PAGES] + detail_responses
+        mock_retry.side_effect = page_responses + detail_responses
+
+        result = search_messages(MagicMock(), "from:bank@example.com")
+
+        assert len(result) == num_pages
+
+    @patch("ccas.ingestor.gmail_client.call_with_retry")
+    def test_mid_page_failure_preserves_fetched_results(self, mock_retry, caplog):
+        """分頁中途失敗時，應保留已成功取得的頁面並繼續處理。"""
+        from googleapiclient.errors import HttpError
+
+        mock_retry.side_effect = [
+            # Page 1: success
+            {"messages": [{"id": "msg-001"}], "nextPageToken": "token-2"},
+            # Page 2: failure
+            HttpError(MagicMock(status=503), b"Service Unavailable"),
+            # msg-001 detail (still processed)
+            _make_message_payload("msg-001", [_pdf_part("bill1.pdf", "att-1")]),
+        ]
 
         with caplog.at_level(logging.WARNING, logger="ccas.ingestor.gmail_client"):
             result = search_messages(MagicMock(), "from:bank@example.com")
 
-        assert len(result) == _MAX_PAGES
-        assert any(
-            "分頁" in record.message or "page" in record.message.lower()
-            for record in caplog.records
+        assert len(result) == 1
+        assert result[0].message_id == "msg-001"
+        assert any("分頁中途失敗" in r.message for r in caplog.records)
+
+    @patch("ccas.ingestor.gmail_client.call_with_retry")
+    def test_first_page_failure_raises(self, mock_retry):
+        """第一頁就失敗時，應直接拋出例外。"""
+        from googleapiclient.errors import HttpError
+
+        mock_retry.side_effect = HttpError(
+            MagicMock(status=500), b"Internal Server Error"
         )
+
+        with pytest.raises(HttpError):
+            search_messages(MagicMock(), "from:bank@example.com")
+
+    @patch(
+        "ccas.ingestor.gmail_client._MAX_PAGES_SAFETY",
+        3,
+    )
+    @patch("ccas.ingestor.gmail_client.call_with_retry")
+    def test_safety_limit_raises_runtime_error(self, mock_retry):
+        """超過安全上限應 raise RuntimeError。"""
+        # All 3 pages have nextPageToken → triggers safety limit
+        mock_retry.side_effect = [
+            {"messages": [{"id": f"msg-{i}"}], "nextPageToken": f"token-{i + 1}"}
+            for i in range(3)
+        ]
+
+        with pytest.raises(RuntimeError, match="安全上限"):
+            search_messages(MagicMock(), "from:bank@example.com")

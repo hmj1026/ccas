@@ -5,6 +5,7 @@ google-api-python-client 的模組。
 """
 
 import base64
+import collections.abc
 import email.utils
 import logging
 from dataclasses import dataclass
@@ -133,7 +134,36 @@ def _extract_pdf_attachments(
     return attachments
 
 
-_MAX_PAGES = 10
+_MAX_PAGES_SAFETY = 100
+
+
+def _iter_message_refs(
+    service, gmail_filter: str
+) -> collections.abc.Iterator[list[dict]]:
+    """逐頁 yield Gmail message refs。
+
+    Raises:
+        RuntimeError: 分頁數超過安全上限。
+    """
+    page_token: str | None = None
+    for _page in range(_MAX_PAGES_SAFETY):
+        request_kwargs: dict = {"userId": "me", "q": gmail_filter}
+        if page_token:
+            request_kwargs["pageToken"] = page_token
+
+        messages_response = call_with_retry(
+            lambda kwargs=request_kwargs: (
+                service.users().messages().list(**kwargs).execute()
+            )
+        )
+
+        refs = messages_response.get("messages", [])
+        if refs:
+            yield refs
+        page_token = messages_response.get("nextPageToken")
+        if not page_token:
+            return
+    raise RuntimeError(f"Gmail 搜尋分頁超過安全上限 ({_MAX_PAGES_SAFETY} 頁)")
 
 
 def search_messages(service, gmail_filter: str) -> list[GmailMessage]:
@@ -148,25 +178,18 @@ def search_messages(service, gmail_filter: str) -> list[GmailMessage]:
         不含 PDF 附件的郵件會被過濾掉。
     """
     all_message_refs: list[dict] = []
-    page_token: str | None = None
-
-    for page in range(_MAX_PAGES):
-        request_kwargs: dict = {"userId": "me", "q": gmail_filter}
-        if page_token:
-            request_kwargs["pageToken"] = page_token
-
-        messages_response = call_with_retry(
-            lambda kwargs=request_kwargs: (
-                service.users().messages().list(**kwargs).execute()
-            )
+    try:
+        for page_refs in _iter_message_refs(service, gmail_filter):
+            all_message_refs.extend(page_refs)
+    except RuntimeError:
+        raise
+    except Exception:
+        if not all_message_refs:
+            raise
+        logger.warning(
+            "Gmail 分頁中途失敗，已取得 %d 筆訊息，繼續處理",
+            len(all_message_refs),
         )
-
-        all_message_refs.extend(messages_response.get("messages", []))
-        page_token = messages_response.get("nextPageToken")
-        if not page_token:
-            break
-    else:
-        logger.warning("Gmail 搜尋分頁達到上限 (%d 頁)，可能有未取回的郵件", _MAX_PAGES)
 
     if not all_message_refs:
         return []
