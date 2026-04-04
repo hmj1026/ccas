@@ -16,7 +16,12 @@ logger = logging.getLogger(__name__)
 def trigger_pipeline_via_api() -> None:
     """透過 API 端點觸發 pipeline（供 APScheduler 呼叫）。"""
     settings = get_settings()
-    url = f"http://{settings.api_host}:{settings.api_port}/api/pipeline/trigger"
+    base_url = (
+        settings.scheduler_api_base_url.rstrip("/")
+        if settings.scheduler_api_base_url
+        else f"http://{settings.api_host}:{settings.api_port}"
+    )
+    url = f"{base_url}/api/pipeline/trigger"
     headers = {"Authorization": f"Bearer {settings.api_token}"}
 
     try:
