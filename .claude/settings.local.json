@@ -51,7 +51,8 @@
       "Bash(tesseract --version)",
       "Bash(pnpm install:*)",
       "Bash(npm list:*)",
-      "Bash(pnpm list:*)"
+      "Bash(pnpm list:*)",
+      "Bash(node:*)"
     ]
   },
   "hooks": {
