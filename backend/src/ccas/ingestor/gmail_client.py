@@ -82,33 +82,58 @@ def _parse_message_date(headers: list[dict]) -> datetime:
     return datetime.utcnow()
 
 
+_MAX_MIME_DEPTH = 10
+
+
+def _collect_pdf_parts(
+    message_id: str,
+    part: dict,
+    message_date: datetime,
+    out: list[GmailAttachmentMeta],
+    depth: int = 0,
+) -> None:
+    """遞迴搜尋 MIME part 中的 PDF 附件。
+
+    Args:
+        message_id: Gmail message ID.
+        part: MIME part dict.
+        message_date: 郵件日期.
+        out: 收集結果的 list（原地修改）.
+        depth: 目前遞迴深度.
+    """
+    if depth > _MAX_MIME_DEPTH:
+        return
+
+    if _is_pdf_part(part):
+        body = part.get("body", {})
+        attachment_id = body.get("attachmentId")
+        if attachment_id:
+            out.append(
+                GmailAttachmentMeta(
+                    message_id=message_id,
+                    attachment_id=attachment_id,
+                    filename=part["filename"],
+                    message_date=message_date,
+                    size=body.get("size", 0),
+                )
+            )
+        return
+
+    for sub in part.get("parts", []):
+        _collect_pdf_parts(message_id, sub, message_date, out, depth + 1)
+
+
 def _extract_pdf_attachments(
     message_id: str, payload: dict, message_date: datetime
 ) -> list[GmailAttachmentMeta]:
     """從 message payload 提取 PDF 附件 metadata。"""
     attachments: list[GmailAttachmentMeta] = []
-    parts = payload.get("parts", [])
-
-    for part in parts:
-        if not _is_pdf_part(part):
-            continue
-
-        body = part.get("body", {})
-        attachment_id = body.get("attachmentId")
-        if not attachment_id:
-            continue
-
-        attachments.append(
-            GmailAttachmentMeta(
-                message_id=message_id,
-                attachment_id=attachment_id,
-                filename=part["filename"],
-                message_date=message_date,
-                size=body.get("size", 0),
-            )
-        )
-
+    for part in payload.get("parts", []):
+        _collect_pdf_parts(message_id, part, message_date, attachments)
     return attachments
+
+
+_MAX_PAGES = 10
 
 
 def search_messages(service, gmail_filter: str) -> list[GmailMessage]:
@@ -122,17 +147,33 @@ def search_messages(service, gmail_filter: str) -> list[GmailMessage]:
         符合條件的 GmailMessage 清單，每個 message 只包含 PDF 附件。
         不含 PDF 附件的郵件會被過濾掉。
     """
-    messages_response = call_with_retry(
-        lambda: service.users().messages().list(userId="me", q=gmail_filter).execute()
-    )
+    all_message_refs: list[dict] = []
+    page_token: str | None = None
 
-    message_ids = messages_response.get("messages", [])
-    if not message_ids:
+    for page in range(_MAX_PAGES):
+        request_kwargs: dict = {"userId": "me", "q": gmail_filter}
+        if page_token:
+            request_kwargs["pageToken"] = page_token
+
+        messages_response = call_with_retry(
+            lambda kwargs=request_kwargs: (
+                service.users().messages().list(**kwargs).execute()
+            )
+        )
+
+        all_message_refs.extend(messages_response.get("messages", []))
+        page_token = messages_response.get("nextPageToken")
+        if not page_token:
+            break
+    else:
+        logger.warning("Gmail 搜尋分頁達到上限 (%d 頁)，可能有未取回的郵件", _MAX_PAGES)
+
+    if not all_message_refs:
         return []
 
     result: list[GmailMessage] = []
 
-    for msg_ref in message_ids:
+    for msg_ref in all_message_refs:
         msg_id = msg_ref["id"]
         msg_data = call_with_retry(
             lambda _id=msg_id: (

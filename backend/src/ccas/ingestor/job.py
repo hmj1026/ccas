@@ -113,7 +113,8 @@ async def _process_attachment(
         session, attachment.message_id, attachment.attachment_id
     )
     if existing is not None:
-        if not force:
+        is_failed_retry = existing.status == "failed"
+        if not force and not is_failed_retry:
             summary.skipped_count += 1
             logger.debug(
                 "略過已存在的附件：%s/%s",
@@ -122,12 +123,19 @@ async def _process_attachment(
             )
             return
 
-        # Force mode: defer cleanup until download succeeds
-        logger.info(
-            "Force 模式：重新下載 %s/%s",
-            attachment.message_id,
-            attachment.attachment_id,
-        )
+        if is_failed_retry:
+            logger.info(
+                "自動重試 failed 附件：%s/%s",
+                attachment.message_id,
+                attachment.attachment_id,
+            )
+        else:
+            # Force mode: defer cleanup until download succeeds
+            logger.info(
+                "Force 模式：重新下載 %s/%s",
+                attachment.message_id,
+                attachment.attachment_id,
+            )
 
     staged_path = build_staged_path(
         staging_dir, bank_code, attachment.message_id, attachment.filename
