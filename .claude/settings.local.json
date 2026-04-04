@@ -52,7 +52,12 @@
       "Bash(pnpm install:*)",
       "Bash(npm list:*)",
       "Bash(pnpm list:*)",
-      "Bash(node:*)"
+      "Bash(node:*)",
+      "Bash(npx vite:*)",
+      "Bash(cat dist/assets/index-*.js)",
+      "Bash(npx rollup-plugin-visualizer:*)",
+      "Bash(du -sh node_modules/recharts node_modules/react-dom node_modules/lucide-react node_modules/@base-ui node_modules/d3-*)",
+      "Bash(pnpm build:*)"
     ]
   },
   "hooks": {
