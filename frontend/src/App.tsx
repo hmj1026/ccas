@@ -4,16 +4,18 @@
  * 設定 React Query 與 React Router，先驗證 session，再載入 dashboard 路由。
  */
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { useState } from 'react'
+import { lazy, Suspense, useState } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router'
 import AuthGuard from '@/components/auth-guard'
 import Layout from '@/components/layout'
+import { LoadingState } from '@/components/shared/states'
 import LoginPage from '@/pages/login'
-import OverviewPage from '@/pages/overview'
-import TransactionsPage from '@/pages/transactions'
-import AnalyticsPage from '@/pages/analytics'
-import BillsPage from '@/pages/bills'
-import SettingsPage from '@/pages/settings'
+
+const OverviewPage = lazy(() => import('@/pages/overview'))
+const TransactionsPage = lazy(() => import('@/pages/transactions'))
+const AnalyticsPage = lazy(() => import('@/pages/analytics'))
+const BillsPage = lazy(() => import('@/pages/bills'))
+const SettingsPage = lazy(() => import('@/pages/settings'))
 
 function createQueryClient() {
   return new QueryClient({
@@ -42,11 +44,11 @@ function App() {
             }
           >
             <Route index element={<Navigate to="/overview" replace />} />
-            <Route path="overview" element={<OverviewPage />} />
-            <Route path="transactions" element={<TransactionsPage />} />
-            <Route path="analytics" element={<AnalyticsPage />} />
-            <Route path="bills" element={<BillsPage />} />
-            <Route path="settings" element={<SettingsPage />} />
+            <Route path="overview" element={<Suspense fallback={<LoadingState />}><OverviewPage /></Suspense>} />
+            <Route path="transactions" element={<Suspense fallback={<LoadingState />}><TransactionsPage /></Suspense>} />
+            <Route path="analytics" element={<Suspense fallback={<LoadingState />}><AnalyticsPage /></Suspense>} />
+            <Route path="bills" element={<Suspense fallback={<LoadingState />}><BillsPage /></Suspense>} />
+            <Route path="settings" element={<Suspense fallback={<LoadingState />}><SettingsPage /></Suspense>} />
           </Route>
         </Routes>
       </BrowserRouter>
