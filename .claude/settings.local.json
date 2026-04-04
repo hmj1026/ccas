@@ -89,7 +89,11 @@
       "Bash(npm install:*)",
       "Bash(pnpm add:*)",
       "Bash(pnpm test:*)",
-      "Bash(pnpm vitest:*)"
+      "Bash(pnpm vitest:*)",
+      "Bash(gh run:*)",
+      "Bash(bash ~/.claude/scripts/hooks/validate-python-ruff.sh /home/paul/projects/ccas/backend/tests/integration/test_settings_edge.py)",
+      "Bash(echo \"--- exit code: $?\")",
+      "Bash(bash ~/.claude/scripts/hooks/validate-python-ruff.sh /home/paul/.claude/settings.json)"
     ]
   },
   "hooks": {
