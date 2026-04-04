@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -49,7 +50,7 @@ class ParseSummary:
 
 
 def _try_parse(
-    candidates: list[BankParser], pdf_path: Path
+    candidates: Sequence[BankParser], pdf_path: Path
 ) -> tuple[bool, ParseResult | None, str]:
     """依序嘗試候選 parser，回傳第一個成功的結果。
 

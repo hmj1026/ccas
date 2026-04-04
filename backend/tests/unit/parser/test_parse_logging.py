@@ -8,11 +8,12 @@ import logging
 from pathlib import Path
 from unittest.mock import MagicMock
 
-from ccas.parser.base import ParseError
+from ccas.parser.base import BankParser, ParseError
 from ccas.parser.job import _try_parse
+from ccas.parser.result import ParseResult
 
 
-class _FakeParser:
+class _FakeParser(BankParser):
     def __init__(
         self,
         bank_code: str = "TEST",
@@ -28,10 +29,10 @@ class _FakeParser:
     def can_parse(self, pdf_path: Path) -> bool:
         return self._can_parse_result
 
-    def parse(self, pdf_path: Path):
+    def parse(self, pdf_path: Path) -> ParseResult:
         if self._parse_error:
             raise self._parse_error
-        return MagicMock()
+        return MagicMock(spec=ParseResult)  # type: ignore[return-value]
 
 
 class TestTryParseLogging:
