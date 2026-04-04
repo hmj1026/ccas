@@ -80,7 +80,7 @@ def _parse_message_date(headers: list[dict]) -> datetime:
         if header.get("name", "").lower() == "date":
             parsed = email.utils.parsedate_to_datetime(header["value"])
             return parsed.astimezone(UTC).replace(tzinfo=None)
-    return datetime.utcnow()
+    return datetime.now(UTC).replace(tzinfo=None)
 
 
 _MAX_MIME_DEPTH = 10
@@ -182,7 +182,7 @@ def search_messages(service, gmail_filter: str) -> list[GmailMessage]:
         for page_refs in _iter_message_refs(service, gmail_filter):
             all_message_refs.extend(page_refs)
     except RuntimeError:
-        raise
+        raise  # safety limit from _iter_message_refs — must not be swallowed
     except Exception:
         if not all_message_refs:
             raise
