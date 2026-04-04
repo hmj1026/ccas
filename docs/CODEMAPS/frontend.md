@@ -1,4 +1,4 @@
-<!-- Generated: 2026-04-03 | Files scanned: 23 | Token estimate: ~400 -->
+<!-- Generated: 2026-04-04 | Files scanned: 23 | Token estimate: ~500 -->
 
 # Frontend
 
@@ -23,8 +23,14 @@ React 19, Vite 8, TypeScript 5.9, Tailwind 4.2, shadcn, TanStack React Query 5, 
 App (QueryClient + BrowserRouter)
 └── AuthGuard (session check)
     └── Layout (sidebar nav)
-        └── <Page />
+        └── Suspense (LoadingState fallback)
+            └── <Page /> (React.lazy code-split)
 ```
+
+## Code Splitting
+
+5 pages lazy-loaded via `React.lazy()` + `<Suspense fallback={<LoadingState />}>`:
+`overview`, `transactions`, `analytics`, `bills`, `settings`
 
 ## Shared Components
 

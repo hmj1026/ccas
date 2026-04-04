@@ -48,7 +48,7 @@ staged --> decrypted --> parsed       (success path)
 
 給第一次接觸這個專案的人，建議先看完整教學：
 
-- [CCAS 新手上手指南](docs/beginner-setup-guide.md)
+- [開發者指南](docs/developer-guide.md)
 - [Bank Code 對照表](docs/bank-codes.md)
 
 ### 前置需求
@@ -175,8 +175,10 @@ ccas/
 | Job | 內容 |
 |-----|------|
 | `backend-lint` | `ruff check` lint、`ruff format --check` 格式檢查、`pyright` 型別檢查 |
+| `backend-test` | `pytest tests/unit/` 單元測試（coverage ≥ 70%） |
+| `frontend-lint-test` | `pnpm lint` + `pnpm build`（含 TypeScript 檢查）+ `pnpm test` |
 
-工具鏈：`astral-sh/setup-uv@v4`、Python 3.12、`uv sync --frozen --all-extras`
+工具鏈：`astral-sh/setup-uv@v4`、Python 3.12、`uv sync --frozen --all-extras`（後端）；`pnpm/action-setup@v4`、Node.js 22（前端）
 <!-- AUTO-GENERATED END -->
 
 ## OpenSpec 工作流

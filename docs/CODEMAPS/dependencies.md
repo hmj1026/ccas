@@ -1,4 +1,4 @@
-<!-- Generated: 2026-04-03 | Files scanned: 92 | Token estimate: ~500 -->
+<!-- Generated: 2026-04-04 | Files scanned: 94 | Token estimate: ~500 -->
 
 # Dependencies
 
@@ -25,9 +25,10 @@
 
 ```
 backend   (FastAPI + uvicorn, port 8000)
+worker    (RQ worker, processes pipeline jobs from Redis queue)
 scheduler (APScheduler cron)
 bot       (Telegram bot)
-frontend  (Vite dev server, port 5173)
+frontend  (Vite dev server, port 5173, dev override only)
 redis     (port 6379)
 ```
 
