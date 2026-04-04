@@ -1,5 +1,6 @@
 {
   "enabledPlugins": {
+    "everything-claude-code@everything-claude-code": true,
     "codex@openai-codex": true
   }
 }
