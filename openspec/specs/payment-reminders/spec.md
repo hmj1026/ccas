@@ -43,3 +43,20 @@ TBD - created by archiving change pipeline-scheduler. Update Purpose after archi
 - **WHEN** 建立一筆 `PaymentReminder`
 - **THEN** `sent_at` 會自動設定為 timezone-aware UTC datetime
 
+### Requirement: Notify stage 在 chat_id 未設定時優雅跳過
+`run_notify_job()` SHALL 在處理任何帳單前檢查 `settings.telegram_chat_id`，若為空則不嘗試發送任何 Telegram 訊息。
+
+#### Scenario: telegram_chat_id 為空
+- **WHEN** `TELEGRAM_CHAT_ID` 環境變數未設定或為空字串
+- **THEN** notify job SHALL 立即回傳 `NotifySummary(sent_count=0, failed_count=0, errors=[])`
+- **THEN** SHALL 寫入 INFO log 說明跳過原因
+- **THEN** pipeline exit code SHALL 為 0（無失敗）
+
+### Requirement: Notify stage 單個帳單失敗不影響後續帳單
+`run_notify_job()` SHALL 確保在單個帳單通知失敗並 rollback session 後，後續帳單仍能繼續處理，不因 ORM lazy loading 問題而 crash。
+
+#### Scenario: 第一個帳單通知失敗，後續帳單繼續處理
+- **WHEN** 第一個帳單的 `send_message` 拋出 exception
+- **THEN** `run_notify_job()` SHALL 在 summary.failed_count 記錄該失敗
+- **THEN** 後續帳單 SHALL 繼續嘗試發送，不拋出 `MissingGreenlet` exception
+
