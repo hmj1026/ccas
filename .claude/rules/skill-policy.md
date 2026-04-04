@@ -15,14 +15,5 @@
 - **execution-policy 優先**：透過任務分類路由後，以 execution-policy 的 agent 流程為準，不再重複觸發本優先順序
 - **同名 skill 以專案內版本為準**：若本地 `.claude/skills/` 有同名版本，優先於全域 ECC skill
 
-## ECC Agent 快速查詢
-
-| Agent | Slash Command | 何時使用 |
-|-------|--------------|---------|
-| `python-reviewer` | `/python-review` | 任何 Python 程式碼修改後（強制後置步驟） |
-| `tdd-guide` | `/tdd` | 新功能、bug fix 前後（寫測試/驗測試） |
-| `database-reviewer` | — | SQLAlchemy model 修改、Alembic migration |
-| `security-reviewer` | — | 認證、輸入驗證、密鑰、API endpoints |
-| `build-error-resolver` | `/build-fix` | ruff/pyright/pytest 報錯無法快速修復時 |
-
-> 強制後置步驟的完整規則詳見 `execution-policy.md`。
+> 強制後置步驟規則詳見 `execution-policy.md`。
+> 完整 ECC Agent 列表見 `CLAUDE.md`。
