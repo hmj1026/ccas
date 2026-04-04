@@ -8,17 +8,38 @@ echo "  [CCAS] Session Retrospective Checklist"
 echo "================================================================"
 echo ""
 
-# Check which agents were used
-echo "[CHECK] Agents used in this session:"
-echo "  - Did you run python-reviewer (/python-review)? (for Python code changes)"
-echo "  - Did you run tdd-guide (/tdd)? (for new features/tests)"
-echo "  - Did you run database-reviewer? (for SQL/Alembic changes)"
-echo "  - Did you run security-reviewer? (for auth/input validation)"
+# Dynamically suggest agents based on what changed (vs HEAD)
+PROJECT_ROOT="${PROJECT_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
+CHANGED_PY=$(git -C "$PROJECT_ROOT" diff --name-only HEAD 2>/dev/null | grep -c '\.py$' || true)
+CHANGED_TEST=$(git -C "$PROJECT_ROOT" diff --name-only HEAD 2>/dev/null | grep -c 'test_.*\.py$' || true)
+CHANGED_SQL=$(git -C "$PROJECT_ROOT" diff --name-only HEAD 2>/dev/null | grep -cE '(models|alembic)' || true)
+CHANGED_AUTH=$(git -C "$PROJECT_ROOT" diff --name-only HEAD 2>/dev/null | grep -cE '(auth|token|security|verify)' || true)
+
+SUGGESTIONS=0
+echo "[AGENTS] 根據本次修改，建議確認執行的後置步驟："
+if [ "$CHANGED_PY" -gt 0 ]; then
+    echo "  → /python-review  (Python 程式碼有修改)"
+    SUGGESTIONS=$((SUGGESTIONS + 1))
+fi
+if [ "$CHANGED_PY" -gt 0 ] && [ "$CHANGED_TEST" -eq 0 ]; then
+    echo "  → /tdd            (Python 修改但無測試更新)"
+    SUGGESTIONS=$((SUGGESTIONS + 1))
+fi
+if [ "$CHANGED_SQL" -gt 0 ]; then
+    echo "  → database-reviewer  (models/alembic 有修改)"
+    SUGGESTIONS=$((SUGGESTIONS + 1))
+fi
+if [ "$CHANGED_AUTH" -gt 0 ]; then
+    echo "  → security-reviewer  (認證/安全相關有修改)"
+    SUGGESTIONS=$((SUGGESTIONS + 1))
+fi
+if [ "$SUGGESTIONS" -eq 0 ]; then
+    echo "  (無 Python/SQL/Auth 修改，hooks 靜態分析已足夠)"
+fi
 echo ""
 
 # Check MEMORY.md (dynamically resolve Claude project memory path)
-PROJECT_ROOT_MEM=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
-ENCODED_PATH=$(echo "$PROJECT_ROOT_MEM" | tr '/' '-')
+ENCODED_PATH=$(echo "$PROJECT_ROOT" | tr '/' '-')
 MEMORY_FILE="$HOME/.claude/projects/$ENCODED_PATH/memory/MEMORY.md"
 if [ -f "$MEMORY_FILE" ]; then
     MEMORY_MOD=$(stat -f %m "$MEMORY_FILE" 2>/dev/null || stat -c %Y "$MEMORY_FILE" 2>/dev/null)
@@ -37,7 +58,6 @@ fi
 echo ""
 
 # Check git status
-PROJECT_ROOT="${PROJECT_ROOT:-$(pwd)}"
 echo "[CHECK] Git status:"
 STAGED=$(git -C "$PROJECT_ROOT" diff --cached --name-only 2>/dev/null | wc -l)
 UNSTAGED=$(git -C "$PROJECT_ROOT" diff --name-only 2>/dev/null | wc -l)
@@ -53,15 +73,6 @@ if [ $STAGED -gt 0 ]; then
     echo "   git commit -m \"your message\""
 fi
 echo ""
-
-# Check if Python source changed but no test files changed
-PY_CHANGED=$(git -C "$PROJECT_ROOT" diff --name-only HEAD 2>/dev/null | grep -c '\.py$' || true)
-TEST_CHANGED=$(git -C "$PROJECT_ROOT" diff --name-only HEAD 2>/dev/null | grep -c 'test_.*\.py$' || true)
-if [ "$PY_CHANGED" -gt 0 ] && [ "$TEST_CHANGED" -eq 0 ]; then
-    echo "[WARN] Python source files changed but no test files were modified"
-    echo "   -> Consider adding/updating tests for your changes"
-    echo ""
-fi
 
 # Check if Alembic migrations were added but not applied
 NEW_MIGRATIONS=$(git -C "$PROJECT_ROOT" diff --name-only HEAD 2>/dev/null | grep -c 'alembic/versions/' || true)

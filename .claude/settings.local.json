@@ -92,6 +92,13 @@
             "timeout": 5,
             "statusMessage": "Checking Alembic migration safety...",
             "async": true
+          },
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/ccas-skill-sync-check.sh \"$filePath\"",
+            "timeout": 5,
+            "statusMessage": "Checking skill platform parity...",
+            "async": true
           }
         ]
       },
@@ -131,6 +138,13 @@
             "command": "bash .claude/hooks/ccas-alembic-migration-check.sh \"$filePath\"",
             "timeout": 5,
             "statusMessage": "Checking Alembic migration safety...",
+            "async": true
+          },
+          {
+            "type": "command",
+            "command": "bash .claude/hooks/ccas-skill-sync-check.sh \"$filePath\"",
+            "timeout": 5,
+            "statusMessage": "Checking skill platform parity...",
             "async": true
           }
         ]
