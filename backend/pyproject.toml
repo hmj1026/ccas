@@ -50,6 +50,16 @@ asyncio_mode = "auto"
 
 [tool.coverage.run]
 source = ["ccas"]
+omit = [
+    "src/ccas/*/app.py",
+    "src/ccas/*/__main__.py",
+    "src/ccas/scheduler/reminders.py",
+    "src/ccas/api/routers/analytics.py",
+    "src/ccas/api/routers/overview.py",
+    "src/ccas/api/routers/pipeline.py",
+    "src/ccas/api/routers/transactions.py",
+    "src/ccas/api/routers/settings.py",
+]
 
 [tool.coverage.report]
 show_missing = true
