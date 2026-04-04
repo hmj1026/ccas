@@ -61,6 +61,7 @@ class Settings(BaseSettings):
     api_session_max_age: int = 43200
     api_cookie_secure: bool = False
     redis_url: str = "redis://localhost:6379/0"
+    scheduler_api_base_url: str = ""
     telegram_allowed_chat_ids: str = ""
 
     _env_map: dict[str, str] = PrivateAttr(default_factory=dict)
