@@ -187,9 +187,7 @@ class TestHandleSummary:
 
         await handle_summary(update, ctx, session)
 
-        mock_queries.fetch_bills_by_month.assert_awaited_once_with(
-            session, "2026-03"
-        )
+        mock_queries.fetch_bills_by_month.assert_awaited_once_with(session, "2026-03")
         update.message.reply_text.assert_awaited_once_with("summary text")
 
 
@@ -231,9 +229,7 @@ class TestHandleCategory:
 
         await handle_category(update, ctx, session)
 
-        mock_queries.fetch_category_summary.assert_awaited_once_with(
-            session, "2026-03"
-        )
+        mock_queries.fetch_category_summary.assert_awaited_once_with(session, "2026-03")
         update.message.reply_text.assert_awaited_once_with("category text")
 
 

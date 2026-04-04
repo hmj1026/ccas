@@ -46,9 +46,7 @@ class TestRunPipelineSync:
 
         result = run_pipeline_sync({"force": True, "bank_code": "CTBC"})
 
-        mock_from_dict.assert_called_once_with(
-            {"force": True, "bank_code": "CTBC"}
-        )
+        mock_from_dict.assert_called_once_with({"force": True, "bank_code": "CTBC"})
         assert result["total_seconds"] == 1.5
         assert len(result["stages"]) == 2
         assert result["stages"][0]["stage"] == "ingest"

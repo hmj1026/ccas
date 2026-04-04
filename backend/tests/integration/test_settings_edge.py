@@ -68,9 +68,7 @@ async def test_list_banks_empty(client: AsyncClient, db_session: AsyncSession):
 # -- Categories edge cases --
 
 
-async def test_update_category_not_found(
-    client: AsyncClient, db_session: AsyncSession
-):
+async def test_update_category_not_found(client: AsyncClient, db_session: AsyncSession):
     """更新不存在的分類回傳 404。"""
     response = await client.patch(
         "/api/settings/categories/999",
