@@ -3,9 +3,8 @@
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ccas.storage.models import BankConfig, Category
+from ccas.storage.models import Category
 from tests.integration.conftest import auth_headers, make_ctbc_bank_config
-
 
 # -- Banks edge cases --
 

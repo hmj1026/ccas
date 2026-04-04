@@ -5,10 +5,12 @@
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
-
 from ccas.pipeline.summary import FailedItem, PipelineSummary, StageSummary
-from ccas.pipeline.worker import mark_manual_review, on_failure_handler, run_pipeline_sync
+from ccas.pipeline.worker import (
+    mark_manual_review,
+    on_failure_handler,
+    run_pipeline_sync,
+)
 
 
 def _make_summary() -> PipelineSummary:
