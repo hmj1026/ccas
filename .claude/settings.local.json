@@ -48,7 +48,10 @@
       "Bash(netstat -tlnp)",
       "Bash(dpkg -l)",
       "Bash(sudo apt-get:*)",
-      "Bash(tesseract --version)"
+      "Bash(tesseract --version)",
+      "Bash(pnpm install:*)",
+      "Bash(npm list:*)",
+      "Bash(pnpm list:*)"
     ]
   },
   "hooks": {
