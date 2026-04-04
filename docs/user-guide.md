@@ -26,9 +26,9 @@ cp .env.example .env
 | 變數 | 說明 | 範例 |
 |------|------|------|
 | `API_TOKEN` | API 認證 token（自訂一組安全字串） | `my-secret-token-2026` |
-| `TELEGRAM_BOT_TOKEN` | Telegram Bot token（從 BotFather 取得） | `123456:ABC-DEF...` |
-| `TELEGRAM_CHAT_ID` | Telegram 聊天室 ID | `123456789` |
-| `TELEGRAM_ALLOWED_CHAT_IDS` | 允許的聊天室 ID（可同 CHAT_ID） | `123456789` |
+| `TELEGRAM_BOT_TOKEN` | Telegram Bot token（從 @BotFather 取得） | `123456:ABC-DEF...` |
+| `TELEGRAM_CHAT_ID` | Pipeline 通知目標 chat ID（見[第 4 節](#4-設定-telegram-bot)） | `123456789` |
+| `TELEGRAM_ALLOWED_CHAT_IDS` | Bot 指令白名單 chat ID，逗號分隔 | `123456789,-1001234567890` |
 | `GMAIL_CREDENTIALS_PATH` | Google OAuth 憑證路徑 | `./data/credentials.json` |
 | `GMAIL_TOKEN_PATH` | Gmail token 儲存路徑 | `./data/token.json` |
 | `STAGING_DIR` | PDF 暫存目錄 | `./data/staging` |
@@ -62,15 +62,41 @@ cp .env.example .env
 
 ## 4. 設定 Telegram Bot
 
-1. 在 Telegram 搜尋 `@BotFather`
-2. 輸入 `/newbot`，依指示建立 bot
-3. 記下 bot token，填入 `.env` 的 `TELEGRAM_BOT_TOKEN`
-4. 對 bot 傳送任意訊息
-5. 用以下指令取得 chat ID：
-   ```
-   curl https://api.telegram.org/bot<YOUR_TOKEN>/getUpdates
-   ```
-6. 將 chat ID 填入 `TELEGRAM_CHAT_ID` 和 `TELEGRAM_ALLOWED_CHAT_IDS`
+### 建立 Bot
+
+1. 在 Telegram 搜尋 `@BotFather`，輸入 `/newbot`，依指示建立 bot
+2. 記下 bot token，填入 `.env` 的 `TELEGRAM_BOT_TOKEN`
+
+### 取得 Chat ID
+
+對 bot 傳送任意訊息後，執行 helper script：
+
+```bash
+./scripts/get-telegram-chat-id.sh
+```
+
+腳本會自動讀取 `.env` 中的 token 並列出所有聊天室 ID。也可直接帶入 token：
+
+```bash
+./scripts/get-telegram-chat-id.sh "123456:ABC-DEF..."
+```
+
+**群組 Chat ID**：將 bot 加入群組，在群組內傳送訊息，再執行腳本即可看到群組 ID（負數，例如 `-1001234567890`）。
+
+> **注意**：若 bot 服務正在執行中（`docker compose up`），webhook 會攔截訊息導致 `getUpdates` 無結果。請先停止 bot 服務（`docker compose stop bot`），再執行腳本。
+
+**替代方式**：在 Telegram 中對 `@userinfobot` 傳送訊息可取得個人 chat ID；對 `@RawDataBot` 傳送或轉發訊息可取得任意 chat ID。
+
+### 填入 .env
+
+| 變數 | 用途 | 範例 |
+|------|------|------|
+| `TELEGRAM_CHAT_ID` | Pipeline notify 階段傳送通知的目標聊天室 | `123456789` |
+| `TELEGRAM_ALLOWED_CHAT_IDS` | 允許使用 bot 指令（`/status`、`/summary` 等）的聊天室白名單，逗號分隔 | `123456789,-1001234567890` |
+
+- `TELEGRAM_CHAT_ID`：留空則 notify 階段不傳送 Telegram 通知，其他階段不受影響
+- `TELEGRAM_ALLOWED_CHAT_IDS`：留空則所有 bot 指令被靜默忽略（bot 仍會啟動但不回應）
+- 兩者可填不同值——例如通知發到個人私訊、但群組也能使用 bot 指令
 
 ## 5. 設定銀行帳單篩選
 
@@ -179,5 +205,5 @@ docker-compose down
 
 ### Telegram 通知未送達
 - 確認 bot token 正確
-- 確認 chat ID 正確
+- 確認 chat ID 正確：執行 `./scripts/get-telegram-chat-id.sh` 驗證
 - 測試 bot 連線：`curl https://api.telegram.org/bot<TOKEN>/getMe`

@@ -224,7 +224,12 @@ async def run_ingestion_job(
 
     active_banks = await _fetch_active_banks(session, options)
     if not active_banks:
-        logger.info("沒有啟用中的銀行設定，跳過 ingestion")
+        msg = (
+            "[Ingest] 未找到任何啟用的銀行設定。"
+            "請先執行 python -m ccas.tools.bank_configs --apply 初始化銀行設定。"
+        )
+        logger.warning(msg)
+        summary.errors.append(msg)
         return summary
 
     force = options.force if options else False

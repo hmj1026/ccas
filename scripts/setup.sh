@@ -19,6 +19,14 @@ fail() {
   exit 1
 }
 
+warn_env() {
+  local var_name="$1"
+  local fix_message="$2"
+  if [[ -z "${!var_name:-}" ]]; then
+    printf '\n[WARN] %s 未設定：%s\n' "$var_name" "$fix_message" >&2
+  fi
+}
+
 require_file() {
   local file_path="$1"
   local fix_message="$2"
@@ -47,8 +55,8 @@ set +a
 
 require_env "API_TOKEN" "缺少 API_TOKEN。請編輯 $ENV_FILE 後重試。"
 require_env "TELEGRAM_BOT_TOKEN" "缺少 TELEGRAM_BOT_TOKEN。請先向 BotFather 申請 token，再編輯 $ENV_FILE。"
-require_env "TELEGRAM_CHAT_ID" "缺少 TELEGRAM_CHAT_ID。請先對 bot 傳訊息並用 getUpdates 查出 chat id，再編輯 $ENV_FILE。"
-require_env "TELEGRAM_ALLOWED_CHAT_IDS" "缺少 TELEGRAM_ALLOWED_CHAT_IDS。請至少填入和 TELEGRAM_CHAT_ID 相同的值。"
+warn_env "TELEGRAM_CHAT_ID" "notify stage 將無法發送 Telegram 通知，其他 stage 不受影響。執行 ./scripts/get-telegram-chat-id.sh 取得 chat ID。"
+warn_env "TELEGRAM_ALLOWED_CHAT_IDS" "Telegram Bot 命令功能將受限。執行 ./scripts/get-telegram-chat-id.sh 取得 chat ID（多個用逗號分隔）。"
 require_env "GMAIL_CREDENTIALS_PATH" "缺少 GMAIL_CREDENTIALS_PATH。請編輯 $ENV_FILE 後重試。"
 require_env "GMAIL_TOKEN_PATH" "缺少 GMAIL_TOKEN_PATH。請編輯 $ENV_FILE 後重試。"
 require_env "STAGING_DIR" "缺少 STAGING_DIR。請編輯 $ENV_FILE 後重試。"
@@ -56,6 +64,16 @@ require_env "STAGING_DIR" "缺少 STAGING_DIR。請編輯 $ENV_FILE 後重試。
 require_file "$GMAIL_CREDENTIALS_PATH" "找不到 credentials.json：$GMAIL_CREDENTIALS_PATH。請把 Google Cloud 下載的 OAuth 憑證放到這個路徑，或修改 .env 的 GMAIL_CREDENTIALS_PATH。"
 
 mkdir -p "$(dirname "$GMAIL_TOKEN_PATH")" "$STAGING_DIR"
+
+step "檢查系統相依性"
+command -v tesseract >/dev/null 2>&1 || fail "需要 tesseract OCR（解析 PDF 用）。請執行: brew install tesseract"
+TESSDATA_DIR="$(tesseract --print-parameters 2>/dev/null | grep -i TESSDATA_PREFIX | awk '{print $2}' || echo '/opt/homebrew/share/tessdata')"
+if [[ -z "$TESSDATA_DIR" || ! -f "${TESSDATA_DIR}/chi_tra.traineddata" ]]; then
+  # fallback check
+  if [[ ! -f "/opt/homebrew/share/tessdata/chi_tra.traineddata" ]]; then
+    fail "需要 Tesseract Traditional Chinese 語言包。請執行: brew install tesseract-lang"
+  fi
+fi
 
 step "安裝後端依賴"
 UV_CACHE_DIR="$UV_CACHE_DIR" uv sync

@@ -7,6 +7,6 @@
 
 banks:
   - bank_code: CTBC
-    gmail_filter: "from:service@ctbcbank.com subject:信用卡"
+    gmail_filter: "from:ebill@estats.ctbcbank.com subject:信用卡電子帳單"
     active_parser_version: v1
     is_active: true

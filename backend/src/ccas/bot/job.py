@@ -7,11 +7,10 @@
 import logging
 from dataclasses import dataclass, field
 
-from sqlalchemy import select
+from sqlalchemy import select, update as sa_update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ccas.bot.client import send_message
-from ccas.bot.notifications import render_new_bill_notification
 from ccas.config import get_settings
 from ccas.storage.models import Bill
 from ccas.storage.queries import fetch_bank_names
@@ -49,6 +48,11 @@ async def run_notify_job(
     """
     summary = NotifySummary()
 
+    settings = get_settings()
+    if not settings.telegram_chat_id:
+        logger.info("TELEGRAM_CHAT_ID 未設定，跳過 notify stage")
+        return summary
+
     stmt = select(Bill).where(Bill.is_notified.is_(False))
     result = await session.execute(stmt)
     bills = list(result.scalars().all())
@@ -57,20 +61,32 @@ async def run_notify_job(
         logger.info("沒有未通知的帳單，跳過通知")
         return summary
 
-    settings = get_settings()
     bank_names = await fetch_bank_names(session)
 
-    for bill in bills:
-        bill_id = bill.id
-        bill_code = bill.bank_code
-        bill_month = bill.billing_month
+    # Pre-extract all scalar attributes before any session.commit/rollback to avoid
+    # lazy-loading expired ORM objects (MissingGreenlet) on subsequent iterations.
+    bill_rows = [
+        (b.id, b.bank_code, b.billing_month, b.total_amount, b.due_date)
+        for b in bills
+    ]
+
+    for bill_id, bill_code, bill_month, bill_total, bill_due in bill_rows:
         try:
             bank_name = bank_names.get(bill_code, bill_code)
-            text = render_new_bill_notification(bill, bank_name)
+            text = (
+                f"新帳單已解析\n\n"
+                f"銀行：{bank_name}\n"
+                f"帳單月份：{bill_month}\n"
+                f"應繳金額：${bill_total:,}\n"
+                f"到期日：{bill_due}"
+            )
             await send_message(
                 settings.telegram_bot_token, settings.telegram_chat_id, text
             )
-            bill.is_notified = True
+            # Use UPDATE query to mark notified (avoids touching expired ORM object)
+            await session.execute(
+                sa_update(Bill).where(Bill.id == bill_id).values(is_notified=True)
+            )
             await session.commit()
             summary.sent_count += 1
             logger.info(
