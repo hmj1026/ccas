@@ -1,5 +1,6 @@
 /**
  * Analytics 頁面 -- 月趨勢、類別分布與銀行比較圖表。
+ * 預設：全部資料（不篩選）；年度/月份互斥。
  */
 import { useQuery } from '@tanstack/react-query'
 import { useSearchParams } from 'react-router'
@@ -21,7 +22,9 @@ import {
 import { apiGet } from '@/lib/api-client'
 import type { ApiResponse, TrendItem, CategoryItem, BankItem } from '@/lib/types'
 import { LoadingState, ErrorState, EmptyState } from '@/components/shared/states'
+import { FilterBar, type FilterBarParams, type FilterKey } from '@/components/shared/filter-bar'
 
+/** Recharts Cell 顏色陣列，對應 CSS 變數 `--chart-1` 至 `--chart-5`。 */
 const COLORS = [
   'var(--chart-1)',
   'var(--chart-2)',
@@ -30,31 +33,75 @@ const COLORS = [
   'var(--chart-5)',
 ]
 
+/** 趨勢圖回溯月數選項（近 6 / 12 / 24 個月）。 */
+const TREND_MONTHS_OPTIONS = [6, 12, 24] as const
+
 function AnalyticsPage() {
   const [searchParams, setSearchParams] = useSearchParams()
+  const year = searchParams.get('year') ?? ''
   const month = searchParams.get('month') ?? ''
+  const bankCode = searchParams.get('bank_code') ?? ''
+  const trendMonths = Number(searchParams.get('trend_months') ?? '12')
+
+  const filterValues: FilterBarParams = {
+    year, month, bankCode, status: '', category: '', q: '',
+  }
+
+  /**
+   * 篩選列變更 callback；將指定維度寫入 URL search params。
+   *
+   * @param key - 變更的篩選維度
+   * @param value - 新的篩選值，空字串時刪除該參數
+   */
+  function handleFilterChange(key: FilterKey, value: string) {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev)
+      const paramKey = key === 'bankCode' ? 'bank_code' : key
+      if (value) {
+        next.set(paramKey, value)
+      } else {
+        next.delete(paramKey)
+      }
+      return next
+    })
+  }
+
+  /**
+   * 趨勢圖回溯月數變更 callback；更新 `trend_months` URL 參數。
+   *
+   * @param value - 選取的月數（字串）
+   */
+  function handleTrendMonths(value: string) {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev)
+      next.set('trend_months', value)
+      return next
+    })
+  }
 
   const trendQuery = useQuery({
-    queryKey: ['analytics', 'trend'],
+    queryKey: ['analytics', 'trend', trendMonths],
     queryFn: () =>
       apiGet<ApiResponse<readonly TrendItem[]>>('/api/analytics/trend', {
-        months: 6,
+        months: trendMonths,
       }),
   })
 
   const categoriesQuery = useQuery({
-    queryKey: ['analytics', 'categories', month],
+    queryKey: ['analytics', 'categories', year, month],
     queryFn: () =>
       apiGet<ApiResponse<readonly CategoryItem[]>>('/api/analytics/categories', {
         month: month || undefined,
+        year: year ? Number(year) : undefined,
       }),
   })
 
   const banksQuery = useQuery({
-    queryKey: ['analytics', 'banks', month],
+    queryKey: ['analytics', 'banks', year, month],
     queryFn: () =>
       apiGet<ApiResponse<readonly BankItem[]>>('/api/analytics/banks', {
         month: month || undefined,
+        year: year ? Number(year) : undefined,
       }),
   })
 
@@ -72,32 +119,36 @@ function AnalyticsPage() {
   const categories = categoriesQuery.data?.data ?? []
   const banks = banksQuery.data?.data ?? []
 
+  const periodLabel = month || (year ? `${year} 年` : '全部')
+
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-2xl font-bold">消費分析</h1>
-        <input
-          type="month"
-          value={month}
-          onChange={(e) =>
-            setSearchParams((prev) => {
-              const next = new URLSearchParams(prev)
-              if (e.target.value) {
-                next.set('month', e.target.value)
-              } else {
-                next.delete('month')
-              }
-              return next
-            })
-          }
-          className="h-8 rounded-lg border border-input bg-background px-3 text-sm"
-          aria-label="月份篩選"
+        <FilterBar
+          show={['year', 'month', 'bank']}
+          values={filterValues}
+          onChange={handleFilterChange}
         />
       </div>
 
       {/* Trend chart */}
       <section className="rounded-lg border border-border p-4">
-        <h2 className="mb-4 text-lg font-semibold">月消費趨勢</h2>
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-lg font-semibold">月消費趨勢</h2>
+          <select
+            value={trendMonths}
+            onChange={(e) => handleTrendMonths(e.target.value)}
+            className="h-7 rounded border border-input bg-background px-2 text-sm"
+            aria-label="趨勢回溯月數"
+          >
+            {TREND_MONTHS_OPTIONS.map((m) => (
+              <option key={m} value={m}>
+                近 {m} 個月
+              </option>
+            ))}
+          </select>
+        </div>
         {trend.length === 0 ? (
           <EmptyState message="尚無趨勢資料" />
         ) : (
@@ -121,7 +172,12 @@ function AnalyticsPage() {
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Category distribution */}
         <section className="rounded-lg border border-border p-4">
-          <h2 className="mb-4 text-lg font-semibold">類別分布</h2>
+          <h2 className="mb-4 text-lg font-semibold">
+            類別分布
+            <span className="ml-2 text-sm font-normal text-muted-foreground">
+              {periodLabel}
+            </span>
+          </h2>
           {categories.length === 0 ? (
             <EmptyState message="尚無類別資料" />
           ) : (
@@ -152,7 +208,12 @@ function AnalyticsPage() {
 
         {/* Bank comparison */}
         <section className="rounded-lg border border-border p-4">
-          <h2 className="mb-4 text-lg font-semibold">銀行比較</h2>
+          <h2 className="mb-4 text-lg font-semibold">
+            銀行比較
+            <span className="ml-2 text-sm font-normal text-muted-foreground">
+              {periodLabel}
+            </span>
+          </h2>
           {banks.length === 0 ? (
             <EmptyState message="尚無銀行資料" />
           ) : (

@@ -17,6 +17,10 @@ import { LoadingState, ErrorState, EmptyState } from '@/components/shared/states
 
 // -- Bank Config Section --
 
+/**
+ * 銀行設定管理區塊。
+ * 顯示所有銀行設定列表，並提供啟用/停用切換功能。
+ */
 function BankConfigSection() {
   const queryClient = useQueryClient()
   const { data, isLoading, error } = useQuery({
@@ -56,6 +60,13 @@ function BankConfigSection() {
   )
 }
 
+/**
+ * 單列銀行設定，顯示銀行名稱、代碼、Gmail 篩選條件，並提供啟用/停用按鈕。
+ *
+ * @param bank - 銀行設定資料
+ * @param onUpdate - 更新設定的 callback
+ * @param isPending - mutation 進行中時禁用按鈕
+ */
 function BankConfigRow({
   bank,
   onUpdate,
@@ -88,6 +99,11 @@ function BankConfigRow({
 
 // -- Category Keyword Section --
 
+/**
+ * 分類關鍵字管理區塊。
+ * 顯示現有關鍵字規則列表，並提供新增與刪除功能。
+ * 新增時驗證關鍵字與分類欄位均非空。
+ */
 function CategoryKeywordSection() {
   const queryClient = useQueryClient()
   const [newKeyword, setNewKeyword] = useState('')
@@ -119,6 +135,10 @@ function CategoryKeywordSection() {
     },
   })
 
+  /**
+   * 驗證欄位非空後送出新增分類關鍵字請求。
+   * 任一欄位為空時提早返回，不送出請求。
+   */
   function handleAdd() {
     if (!newKeyword.trim() || !newCategory.trim()) return
     createCategory.mutate({
@@ -195,6 +215,9 @@ function CategoryKeywordSection() {
 
 // -- Settings Page --
 
+/**
+ * 設定頁面，整合銀行設定與分類關鍵字兩個管理區塊。
+ */
 function SettingsPage() {
   return (
     <div className="space-y-8">

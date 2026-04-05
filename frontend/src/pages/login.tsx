@@ -1,3 +1,7 @@
+/**
+ * Login 頁面 -- 以 API Token 建立瀏覽器 session。
+ * 登入成功後重導至原先欲存取的路徑，或預設至 `/overview`。
+ */
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { type FormEvent, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router'
@@ -5,12 +9,17 @@ import { apiPost } from '@/lib/api-client'
 import type { ApiResponse } from '@/lib/types'
 import { Button } from '@/components/ui/button'
 
+/** React Router location state，記錄登入前的來源路徑以供重導。 */
 type LocationState = {
   readonly from?: {
     readonly pathname?: string
   }
 }
 
+/**
+ * 登入頁面元件。
+ * 使用者輸入 API Token 後送出，成功則設定 session 並重導回來源頁。
+ */
 function LoginPage() {
   const navigate = useNavigate()
   const location = useLocation()
@@ -32,6 +41,11 @@ function LoginPage() {
     },
   })
 
+  /**
+   * 表單送出 handler；驗證 token 非空後呼叫登入 mutation。
+   *
+   * @param event - 表單提交事件
+   */
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     if (!token.trim()) {

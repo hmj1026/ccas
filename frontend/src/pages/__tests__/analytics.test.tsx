@@ -43,25 +43,15 @@ describe('AnalyticsPage', () => {
 
   it('renders charts when data is available', async () => {
     mockApiGet.mockImplementation((path: string) => {
-      if (path.includes('trend')) {
-        return Promise.resolve({
-          success: true,
-          data: [{ month: '2026-01', total: 10000 }],
-          message: '',
-        })
-      }
-      if (path.includes('categories')) {
-        return Promise.resolve({
-          success: true,
-          data: [{ category: '餐飲', total: 5000 }],
-          message: '',
-        })
-      }
-      return Promise.resolve({
-        success: true,
-        data: [{ bank_code: 'CTBC', bank_name: '中國信託', total: 8000 }],
-        message: '',
-      })
+      if (path === '/api/analytics/years')
+        return Promise.resolve({ success: true, data: [2026], message: '' })
+      if (path === '/api/settings/banks')
+        return Promise.resolve({ success: true, data: [], message: '' })
+      if (path.includes('trend'))
+        return Promise.resolve({ success: true, data: [{ month: '2026-01', total: 10000 }], message: '' })
+      if (path.includes('categories'))
+        return Promise.resolve({ success: true, data: [{ category: '餐飲', total: 5000 }], message: '' })
+      return Promise.resolve({ success: true, data: [{ bank_code: 'CTBC', bank_name: '中國信託', total: 8000 }], message: '' })
     })
 
     renderWithProviders(<AnalyticsPage />)
@@ -75,10 +65,10 @@ describe('AnalyticsPage', () => {
   })
 
   it('shows empty states when no data', async () => {
-    mockApiGet.mockResolvedValue({
-      success: true,
-      data: [],
-      message: '',
+    mockApiGet.mockImplementation((path: string) => {
+      if (path === '/api/analytics/years' || path === '/api/settings/banks')
+        return Promise.resolve({ success: true, data: [], message: '' })
+      return Promise.resolve({ success: true, data: [], message: '' })
     })
 
     renderWithProviders(<AnalyticsPage />)
@@ -91,7 +81,11 @@ describe('AnalyticsPage', () => {
   })
 
   it('shows error state on failure', async () => {
-    mockApiGet.mockRejectedValue(new Error('Server error'))
+    mockApiGet.mockImplementation((path: string) => {
+      if (path === '/api/analytics/years' || path === '/api/settings/banks')
+        return Promise.resolve({ success: true, data: [], message: '' })
+      return Promise.reject(new Error('Server error'))
+    })
 
     renderWithProviders(<AnalyticsPage />)
 

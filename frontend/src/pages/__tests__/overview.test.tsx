@@ -13,6 +13,36 @@ vi.mock('@/lib/api-client', () => ({
 import { apiGet } from '@/lib/api-client'
 const mockApiGet = vi.mocked(apiGet)
 
+const MOCK_OVERVIEW = {
+  success: true,
+  data: {
+    month: '2026-03',
+    total_spending: 50000,
+    total_paid: 30000,
+    total_unpaid: 20000,
+    upcoming_bills: [
+      {
+        id: 1,
+        bank_code: 'CTBC',
+        bank_name: '中國信託',
+        billing_month: '2026-03',
+        total_amount: 20000,
+        due_date: '2026-04-15',
+        is_paid: false,
+      },
+    ],
+  },
+  message: '',
+}
+
+function setupMocks(overviewData = MOCK_OVERVIEW) {
+  mockApiGet.mockImplementation((path: string) => {
+    if (path === '/api/analytics/years') return Promise.resolve({ success: true, data: [2026], message: '' })
+    if (path === '/api/settings/banks') return Promise.resolve({ success: true, data: [], message: '' })
+    return Promise.resolve(overviewData)
+  })
+}
+
 beforeEach(() => {
   vi.clearAllMocks()
 })
@@ -25,28 +55,7 @@ describe('OverviewPage', () => {
   })
 
   it('renders overview data', async () => {
-    mockApiGet.mockResolvedValue({
-      success: true,
-      data: {
-        month: '2026-03',
-        total_spending: 50000,
-        total_paid: 30000,
-        total_unpaid: 20000,
-        upcoming_bills: [
-          {
-            id: 1,
-            bank_code: 'CTBC',
-            bank_name: '中國信託',
-            billing_month: '2026-03',
-            total_amount: 20000,
-            due_date: '2026-04-15',
-            is_paid: false,
-          },
-        ],
-      },
-      message: '',
-    })
-
+    setupMocks()
     renderWithProviders(<OverviewPage />)
 
     await waitFor(() => {
@@ -60,12 +69,7 @@ describe('OverviewPage', () => {
   })
 
   it('shows empty state when no data', async () => {
-    mockApiGet.mockResolvedValue({
-      success: true,
-      data: null,
-      message: '',
-    })
-
+    setupMocks({ success: true, data: null as never, message: '' })
     renderWithProviders(<OverviewPage />)
 
     await waitFor(() => {
@@ -74,8 +78,11 @@ describe('OverviewPage', () => {
   })
 
   it('shows error state on failure', async () => {
-    mockApiGet.mockRejectedValue(new Error('Network error'))
-
+    mockApiGet.mockImplementation((path: string) => {
+      if (path === '/api/analytics/years') return Promise.resolve({ success: true, data: [], message: '' })
+      if (path === '/api/settings/banks') return Promise.resolve({ success: true, data: [], message: '' })
+      return Promise.reject(new Error('Network error'))
+    })
     renderWithProviders(<OverviewPage />)
 
     await waitFor(() => {

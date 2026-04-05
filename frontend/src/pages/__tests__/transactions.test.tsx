@@ -42,9 +42,17 @@ const MOCK_RESPONSE = {
   },
 }
 
+function setupMocks(txResponse = MOCK_RESPONSE) {
+  mockApiGet.mockImplementation((path: string) => {
+    if (path === '/api/analytics/years') return Promise.resolve({ success: true, data: [2026], message: '' })
+    if (path === '/api/settings/banks') return Promise.resolve({ success: true, data: [], message: '' })
+    return Promise.resolve(txResponse)
+  })
+}
+
 beforeEach(() => {
   vi.clearAllMocks()
-  mockApiGet.mockResolvedValue(MOCK_RESPONSE)
+  setupMocks()
 })
 
 describe('TransactionsPage', () => {
@@ -65,10 +73,7 @@ describe('TransactionsPage', () => {
   })
 
   it('shows empty state when no data', async () => {
-    mockApiGet.mockResolvedValue({
-      ...MOCK_RESPONSE,
-      data: [],
-    })
+    setupMocks({ ...MOCK_RESPONSE, data: [] })
 
     renderWithProviders(<TransactionsPage />)
 

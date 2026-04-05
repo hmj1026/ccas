@@ -1,5 +1,5 @@
 /**
- * Bills 頁面測試 -- 載入、篩選、query param 同步與付款狀態切換。
+ * Bills 頁面測試 -- 載入、篩選、分頁與付款狀態切換。
  */
 import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -16,7 +16,7 @@ import { apiGet, apiPatch } from '@/lib/api-client'
 const mockApiGet = vi.mocked(apiGet)
 const mockApiPatch = vi.mocked(apiPatch)
 
-const MOCK_BILLS = {
+const MOCK_BILLS_RESPONSE = {
   success: true,
   data: [
     {
@@ -32,11 +32,28 @@ const MOCK_BILLS = {
     },
   ],
   message: '',
+  pagination: {
+    page: 1,
+    page_size: 20,
+    total: 1,
+    total_pages: 1,
+  },
+}
+
+const MOCK_YEARS = { success: true, data: [2026, 2025], message: '' }
+const MOCK_BANKS = {
+  success: true,
+  data: [{ id: 1, bank_code: 'CTBC', bank_name: '中國信託', gmail_filter: '', active_parser_version: 'v1', is_active: true }],
+  message: '',
 }
 
 beforeEach(() => {
   vi.clearAllMocks()
-  mockApiGet.mockResolvedValue(MOCK_BILLS)
+  mockApiGet.mockImplementation((path: string) => {
+    if (path === '/api/analytics/years') return Promise.resolve(MOCK_YEARS)
+    if (path === '/api/settings/banks') return Promise.resolve(MOCK_BANKS)
+    return Promise.resolve(MOCK_BILLS_RESPONSE)
+  })
 })
 
 describe('BillsPage', () => {
@@ -56,8 +73,19 @@ describe('BillsPage', () => {
     expect(screen.getByText('PDF')).toBeInTheDocument()
   })
 
+  it('shows total count', async () => {
+    renderWithProviders(<BillsPage />)
+    await waitFor(() => {
+      expect(screen.getByText('共 1 筆')).toBeInTheDocument()
+    })
+  })
+
   it('shows empty state when no bills', async () => {
-    mockApiGet.mockResolvedValue({ ...MOCK_BILLS, data: [] })
+    mockApiGet.mockImplementation((path: string) => {
+      if (path === '/api/analytics/years') return Promise.resolve(MOCK_YEARS)
+      if (path === '/api/settings/banks') return Promise.resolve(MOCK_BANKS)
+      return Promise.resolve({ ...MOCK_BILLS_RESPONSE, data: [], pagination: { ...MOCK_BILLS_RESPONSE.pagination, total: 0 } })
+    })
 
     renderWithProviders(<BillsPage />)
 
@@ -79,11 +107,40 @@ describe('BillsPage', () => {
     })
   })
 
+  it('passes year filter to API', async () => {
+    renderWithProviders(<BillsPage />, {
+      initialEntries: ['/bills?year=2025'],
+    })
+
+    await waitFor(() => {
+      expect(mockApiGet).toHaveBeenCalledWith(
+        '/api/bills',
+        expect.objectContaining({ year: 2025 }),
+      )
+    })
+  })
+
+  it('shows pagination controls when multiple pages', async () => {
+    mockApiGet.mockImplementation((path: string) => {
+      if (path === '/api/analytics/years') return Promise.resolve(MOCK_YEARS)
+      if (path === '/api/settings/banks') return Promise.resolve(MOCK_BANKS)
+      return Promise.resolve({ ...MOCK_BILLS_RESPONSE, pagination: { page: 1, page_size: 20, total: 50, total_pages: 3 } })
+    })
+
+    renderWithProviders(<BillsPage />)
+
+    await waitFor(() => {
+      expect(screen.getByText('1 / 3')).toBeInTheDocument()
+    })
+    expect(screen.getByLabelText('上一頁')).toBeDisabled()
+    expect(screen.getByLabelText('下一頁')).not.toBeDisabled()
+  })
+
   it('toggles paid status on button click', async () => {
     const user = userEvent.setup()
     mockApiPatch.mockResolvedValue({
       success: true,
-      data: { ...MOCK_BILLS.data[0], is_paid: true },
+      data: { ...MOCK_BILLS_RESPONSE.data[0], is_paid: true },
       message: '',
     })
 

@@ -1,14 +1,22 @@
 /**
  * Bills 頁面 -- 帳單列表、付款狀態切換與 PDF 連結。
+ * 預設：全部帳單，依 billing_month 降序。
  */
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { ExternalLink, Check, Clock } from 'lucide-react'
+import { ExternalLink, Check, Clock, ChevronLeft, ChevronRight } from 'lucide-react'
 import { useSearchParams } from 'react-router'
 import { apiGet, apiPatch } from '@/lib/api-client'
-import type { ApiResponse, BillItem } from '@/lib/types'
+import type { ApiResponse, BillItem, PaginatedResponse } from '@/lib/types'
 import { Button } from '@/components/ui/button'
 import { LoadingState, ErrorState, EmptyState } from '@/components/shared/states'
+import { FilterBar, type FilterBarParams, type FilterKey } from '@/components/shared/filter-bar'
 
+/**
+ * 將數字金額格式化為帶千分位的新台幣字串。
+ *
+ * @param amount - 金額（整數，單位 TWD）
+ * @returns 格式化字串，例如 `$1,234`
+ */
 function formatAmount(amount: number): string {
   return `$${amount.toLocaleString()}`
 }
@@ -17,15 +25,46 @@ function BillsPage() {
   const queryClient = useQueryClient()
   const [searchParams, setSearchParams] = useSearchParams()
 
+  const year = searchParams.get('year') ?? ''
   const month = searchParams.get('month') ?? ''
-  const status = searchParams.get('status') ?? 'all'
+  const bankCode = searchParams.get('bank_code') ?? ''
+  const status = searchParams.get('status') ?? ''
+  const page = Number(searchParams.get('page') ?? '1')
+
+  const filterValues: FilterBarParams = {
+    year, month, bankCode, status, category: '', q: '',
+  }
+
+  /**
+   * 篩選列變更 callback；將指定維度寫入 URL search params 並重置分頁至第 1 頁。
+   *
+   * @param key - 變更的篩選維度
+   * @param value - 新的篩選值，空字串時刪除該參數
+   */
+  function handleFilterChange(key: FilterKey, value: string) {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev)
+      const paramKey = key === 'bankCode' ? 'bank_code' : key
+      if (value) {
+        next.set(paramKey, value)
+      } else {
+        next.delete(paramKey)
+      }
+      next.delete('page')
+      return next
+    })
+  }
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ['bills', month, status],
+    queryKey: ['bills', year, month, bankCode, status, page],
     queryFn: () =>
-      apiGet<ApiResponse<readonly BillItem[]>>('/api/bills', {
+      apiGet<PaginatedResponse<BillItem>>('/api/bills', {
+        year: year ? Number(year) : undefined,
         month: month || undefined,
-        status,
+        bank_code: bankCode || undefined,
+        status: status || undefined,
+        page,
+        page_size: 20,
       }),
   })
 
@@ -38,42 +77,36 @@ function BillsPage() {
     },
   })
 
-  function updateParam(key: string, value: string) {
+  /**
+   * 更新 URL 中的分頁參數；第 1 頁時刪除 `page` 參數保持 URL 乾淨。
+   *
+   * @param p - 目標頁碼
+   */
+  function setPage(p: number) {
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev)
-      if (value && value !== 'all') {
-        next.set(key, value)
-      } else {
-        next.delete(key)
-      }
+      if (p === 1) next.delete('page')
+      else next.set('page', String(p))
       return next
     })
   }
+
+  const pagination = data?.pagination
 
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-bold">帳單管理</h1>
 
-      {/* Filters */}
-      <div className="flex flex-wrap gap-2">
-        <input
-          type="month"
-          value={month}
-          onChange={(e) => updateParam('month', e.target.value)}
-          className="h-8 rounded-lg border border-input bg-background px-3 text-sm"
-          aria-label="月份篩選"
-        />
-        <select
-          value={status}
-          onChange={(e) => updateParam('status', e.target.value)}
-          className="h-8 rounded-lg border border-input bg-background px-3 text-sm"
-          aria-label="付款狀態篩選"
-        >
-          <option value="all">全部</option>
-          <option value="paid">已繳</option>
-          <option value="unpaid">未繳</option>
-        </select>
-      </div>
+      <FilterBar
+        show={['year', 'month', 'bank', 'status']}
+        values={filterValues}
+        onChange={handleFilterChange}
+        extra={
+          pagination && (
+            <span className="text-sm text-muted-foreground">共 {pagination.total} 筆</span>
+          )
+        }
+      />
 
       {/* Bill list */}
       {isLoading ? (
@@ -90,15 +123,11 @@ function BillsPage() {
               className="flex items-center justify-between rounded-lg border border-border p-4"
             >
               <div className="space-y-1">
-                <p className="font-medium">
-                  {bill.bank_name ?? bill.bank_code}
-                </p>
+                <p className="font-medium">{bill.bank_name ?? bill.bank_code}</p>
                 <p className="text-sm text-muted-foreground">
                   {bill.billing_month} / 到期日: {bill.due_date}
                 </p>
-                <p className="text-lg font-bold">
-                  {formatAmount(bill.total_amount)}
-                </p>
+                <p className="text-lg font-bold">{formatAmount(bill.total_amount)}</p>
               </div>
 
               <div className="flex items-center gap-2">
@@ -121,9 +150,7 @@ function BillsPage() {
                   onClick={() =>
                     togglePaid.mutate({ id: bill.id, is_paid: !bill.is_paid })
                   }
-                  aria-label={
-                    bill.is_paid ? '標記為未繳' : '標記為已繳'
-                  }
+                  aria-label={bill.is_paid ? '標記為未繳' : '標記為已繳'}
                 >
                   {bill.is_paid ? (
                     <>
@@ -140,6 +167,33 @@ function BillsPage() {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Pagination */}
+      {pagination && pagination.total_pages > 1 && (
+        <div className="flex items-center justify-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={page <= 1}
+            onClick={() => setPage(page - 1)}
+            aria-label="上一頁"
+          >
+            <ChevronLeft className="size-4" />
+          </Button>
+          <span className="text-sm">
+            {page} / {pagination.total_pages}
+          </span>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={page >= pagination.total_pages}
+            onClick={() => setPage(page + 1)}
+            aria-label="下一頁"
+          >
+            <ChevronRight className="size-4" />
+          </Button>
         </div>
       )}
     </div>

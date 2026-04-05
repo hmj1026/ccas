@@ -1,14 +1,24 @@
 /**
  * Transactions 頁面 -- 交易查詢、篩選、分頁與 CSV 匯出。
+ * 預設：全部交易，依 trans_date 降序。
  */
 import { useQuery } from '@tanstack/react-query'
-import { Download, Search, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Download, ChevronLeft, ChevronRight } from 'lucide-react'
 import { useSearchParams } from 'react-router'
 import { apiGet, apiFetchBlob } from '@/lib/api-client'
 import type { PaginatedResponse, TransactionItem } from '@/lib/types'
 import { Button } from '@/components/ui/button'
 import { LoadingState, ErrorState, EmptyState } from '@/components/shared/states'
+import { FilterBar, type FilterBarParams, type FilterKey } from '@/components/shared/filter-bar'
 
+/**
+ * 將金額格式化為帶幣別前綴的字串。
+ * TWD 顯示 `$`，其他幣別顯示幣別代碼。
+ *
+ * @param amount - 金額數值
+ * @param currency - 幣別代碼，例如 `"TWD"`、`"USD"`
+ * @returns 格式化字串，例如 `$1,234` 或 `USD 50`
+ */
 function formatAmount(amount: number, currency: string): string {
   return `${currency === 'TWD' ? '$' : currency + ' '}${amount.toLocaleString()}`
 }
@@ -16,6 +26,7 @@ function formatAmount(amount: number, currency: string): string {
 function TransactionsPage() {
   const [searchParams, setSearchParams] = useSearchParams()
 
+  const year = searchParams.get('year') ?? ''
   const month = searchParams.get('month') ?? ''
   const bankCode = searchParams.get('bank_code') ?? ''
   const category = searchParams.get('category') ?? ''
@@ -23,10 +34,35 @@ function TransactionsPage() {
   const page = Number(searchParams.get('page') ?? '1')
   const pageSize = 20
 
+  const filterValues: FilterBarParams = {
+    year, month, bankCode, status: '', category, q,
+  }
+
+  /**
+   * 篩選列變更 callback；將指定維度寫入 URL search params 並重置分頁至第 1 頁。
+   *
+   * @param key - 變更的篩選維度
+   * @param value - 新的篩選值，空字串時刪除該參數
+   */
+  function handleFilterChange(key: FilterKey, value: string) {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev)
+      const paramKey = key === 'bankCode' ? 'bank_code' : key
+      if (value) {
+        next.set(paramKey, value)
+      } else {
+        next.delete(paramKey)
+      }
+      next.delete('page')
+      return next
+    })
+  }
+
   const { data, isLoading, error } = useQuery({
-    queryKey: ['transactions', month, bankCode, category, q, page],
+    queryKey: ['transactions', year, month, bankCode, category, q, page],
     queryFn: () =>
       apiGet<PaginatedResponse<TransactionItem>>('/api/transactions', {
+        year: year ? Number(year) : undefined,
         month: month || undefined,
         bank_code: bankCode || undefined,
         category: category || undefined,
@@ -36,21 +72,13 @@ function TransactionsPage() {
       }),
   })
 
-  function updateParam(key: string, value: string) {
-    setSearchParams((prev) => {
-      const next = new URLSearchParams(prev)
-      if (value) {
-        next.set(key, value)
-      } else {
-        next.delete(key)
-      }
-      if (key !== 'page') next.delete('page')
-      return next
-    })
-  }
-
+  /**
+   * 下載目前篩選條件的交易記錄為 CSV 檔案。
+   * 動態產生帶篩選條件的檔名（含月份或年度）。
+   */
   async function handleExportCsv() {
     const blob = await apiFetchBlob('/api/transactions/export', {
+      year: year ? Number(year) : undefined,
       month: month || undefined,
       bank_code: bankCode || undefined,
       category: category || undefined,
@@ -59,9 +87,23 @@ function TransactionsPage() {
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `transactions${month ? `-${month}` : ''}.csv`
+    a.download = `transactions${month ? `-${month}` : year ? `-${year}` : ''}.csv`
     a.click()
     URL.revokeObjectURL(url)
+  }
+
+  /**
+   * 更新 URL 中的分頁參數；第 1 頁時刪除 `page` 參數保持 URL 乾淨。
+   *
+   * @param p - 目標頁碼
+   */
+  function updatePage(p: number) {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev)
+      if (p === 1) next.delete('page')
+      else next.set('page', String(p))
+      return next
+    })
   }
 
   return (
@@ -74,43 +116,11 @@ function TransactionsPage() {
         </Button>
       </div>
 
-      {/* Filters */}
-      <div className="flex flex-wrap gap-2">
-        <input
-          type="month"
-          value={month}
-          onChange={(e) => updateParam('month', e.target.value)}
-          className="h-8 rounded-lg border border-input bg-background px-3 text-sm"
-          aria-label="月份篩選"
-        />
-        <input
-          type="text"
-          placeholder="銀行代碼"
-          value={bankCode}
-          onChange={(e) => updateParam('bank_code', e.target.value)}
-          className="h-8 w-28 rounded-lg border border-input bg-background px-3 text-sm"
-          aria-label="銀行篩選"
-        />
-        <input
-          type="text"
-          placeholder="分類"
-          value={category}
-          onChange={(e) => updateParam('category', e.target.value)}
-          className="h-8 w-28 rounded-lg border border-input bg-background px-3 text-sm"
-          aria-label="分類篩選"
-        />
-        <div className="relative">
-          <Search className="absolute left-2.5 top-2 size-4 text-muted-foreground" />
-          <input
-            type="text"
-            placeholder="搜尋商家..."
-            value={q}
-            onChange={(e) => updateParam('q', e.target.value)}
-            className="h-8 w-44 rounded-lg border border-input bg-background pl-8 pr-3 text-sm"
-            aria-label="商家搜尋"
-          />
-        </div>
-      </div>
+      <FilterBar
+        show={['year', 'month', 'bank', 'category', 'q']}
+        values={filterValues}
+        onChange={handleFilterChange}
+      />
 
       {/* Table */}
       {isLoading ? (
@@ -159,7 +169,7 @@ function TransactionsPage() {
                   variant="outline"
                   size="icon-xs"
                   disabled={page <= 1}
-                  onClick={() => updateParam('page', String(page - 1))}
+                  onClick={() => updatePage(page - 1)}
                   aria-label="上一頁"
                 >
                   <ChevronLeft className="size-4" />
@@ -171,7 +181,7 @@ function TransactionsPage() {
                   variant="outline"
                   size="icon-xs"
                   disabled={page >= data.pagination.total_pages}
-                  onClick={() => updateParam('page', String(page + 1))}
+                  onClick={() => updatePage(page + 1)}
                   aria-label="下一頁"
                 >
                   <ChevronRight className="size-4" />
