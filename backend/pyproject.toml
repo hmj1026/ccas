@@ -24,16 +24,6 @@ dependencies = [
     "pytesseract>=0.3.13",
 ]
 
-[project.optional-dependencies]
-dev = [
-    "pytest",
-    "pytest-cov",
-    "pytest-asyncio",
-    "httpx",
-    "ruff",
-    "pyright",
-]
-
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
@@ -80,5 +70,11 @@ pythonVersion = "3.12"
 [dependency-groups]
 dev = [
     "fpdf2>=2.8.7",
+    "httpx",
     "pymupdf>=1.27.2.2",
+    "pyright",
+    "pytest",
+    "pytest-asyncio",
+    "pytest-cov",
+    "ruff",
 ]

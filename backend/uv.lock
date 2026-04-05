@@ -104,20 +104,16 @@ dependencies = [
     { name = "uvicorn", extra = ["standard"] },
 ]
 
-[package.optional-dependencies]
+[package.dev-dependencies]
 dev = [
+    { name = "fpdf2" },
     { name = "httpx" },
+    { name = "pymupdf" },
     { name = "pyright" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "pytest-cov" },
     { name = "ruff" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "fpdf2" },
-    { name = "pymupdf" },
 ]
 
 [package.metadata]
@@ -128,31 +124,30 @@ requires-dist = [
     { name = "fastapi", extras = ["standard"] },
     { name = "google-api-python-client" },
     { name = "google-auth-oauthlib" },
-    { name = "httpx", marker = "extra == 'dev'" },
     { name = "pdfplumber" },
     { name = "pikepdf" },
     { name = "pydantic-settings" },
-    { name = "pyright", marker = "extra == 'dev'" },
     { name = "pytesseract", specifier = ">=0.3.13" },
-    { name = "pytest", marker = "extra == 'dev'" },
-    { name = "pytest-asyncio", marker = "extra == 'dev'" },
-    { name = "pytest-cov", marker = "extra == 'dev'" },
     { name = "python-dotenv", specifier = ">=1.2.2" },
     { name = "python-telegram-bot" },
     { name = "pyyaml" },
     { name = "redis" },
     { name = "rq" },
-    { name = "ruff", marker = "extra == 'dev'" },
     { name = "sqlalchemy", extras = ["asyncio"] },
     { name = "tabula-py" },
     { name = "uvicorn", extras = ["standard"] },
 ]
-provides-extras = ["dev"]
 
 [package.metadata.requires-dev]
 dev = [
     { name = "fpdf2", specifier = ">=2.8.7" },
+    { name = "httpx" },
     { name = "pymupdf", specifier = ">=1.27.2.2" },
+    { name = "pyright" },
+    { name = "pytest" },
+    { name = "pytest-asyncio" },
+    { name = "pytest-cov" },
+    { name = "ruff" },
 ]
 
 [[package]]
