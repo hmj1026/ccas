@@ -98,12 +98,35 @@ async def seed_categories(session: AsyncSession) -> None:
         Category(keyword="PCHOME", category="購物"),
         Category(keyword="AMAZON", category="購物"),
         Category(keyword="博客來", category="購物"),
+        Category(keyword="IKEA", category="購物"),
+        Category(keyword="迪卡儂", category="購物"),
+        Category(keyword="特力屋", category="購物"),
         # 百貨
         Category(keyword="SOGO", category="百貨"),
         Category(keyword="新光三越", category="百貨"),
         Category(keyword="統一時代", category="百貨"),
         Category(keyword="MITSUI", category="百貨"),
         Category(keyword="LaLaport", category="百貨"),
+        Category(keyword="新光三越百貨股份有限公", category="百貨"),
+        Category(keyword="麗北綜合百貨", category="百貨"),
+        Category(keyword="三井奧特萊斯", category="百貨"),
+        Category(keyword="三新奧特來斯", category="百貨"),
+        # 日用品補充
+        Category(keyword="無印良品", category="日用品"),
+        Category(keyword="無印", category="日用品"),
+        # 餐飲補充
+        Category(keyword="優食台灣股份有限公司", category="餐飲"),
+        # 超商補充
+        Category(keyword="統一超繳款", category="超商"),
+        # 醫療
+        Category(keyword="中國醫藥大學附設醫院", category="醫療"),
+        Category(keyword="附設醫院", category="醫療"),
+        # 費用
+        Category(keyword="本行扣繳", category="費用"),
+        Category(keyword="帳分利息", category="費用"),
+        # 回饋
+        Category(keyword="現金回饋", category="回饋"),
+        Category(keyword="消費回饋金", category="回饋"),
     ]
     session.add_all(categories)
     await session.commit()
@@ -117,7 +140,7 @@ async def seed_bills_and_transactions(session: AsyncSession) -> None:
         total_amount=28500,
         due_date=date(2026, 4, 15),
         is_paid=False,
-        file_path="/data/pdfs/ctbc_2026_03.pdf",
+        file_path=None,
         created_at=datetime(2026, 3, 28, 10, 0, 0),
     )
     session.add(bill)
@@ -140,7 +163,7 @@ async def seed_bills_and_transactions(session: AsyncSession) -> None:
             amount=380,
             currency="TWD",
             card_last4="1234",
-            category="飲料",
+            category="餐飲",
         ),
         Transaction(
             bill_id=bill.id,
