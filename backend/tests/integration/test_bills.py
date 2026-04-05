@@ -37,8 +37,47 @@ async def _seed_bills(session: AsyncSession) -> tuple[int, int]:
     return bill1.id, bill2.id
 
 
-async def test_list_bills_all(client: AsyncClient, db_session: AsyncSession):
-    """查詢全部帳單。"""
+async def test_list_bills_year_filter(client: AsyncClient, db_session: AsyncSession):
+    """year 篩選應只回傳該年度帳單。"""
+    await _seed_bills(db_session)
+
+    response = await client.get("/api/bills?year=2026", headers=auth_headers())
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert len(data) == 2
+    assert all(b["billing_month"].startswith("2026-") for b in data)
+
+
+async def test_list_bills_bank_filter(client: AsyncClient, db_session: AsyncSession):
+    """bank_code 篩選應只回傳該銀行帳單。"""
+    await _seed_bills(db_session)
+
+    response = await client.get("/api/bills?bank_code=CTBC", headers=auth_headers())
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert all(b["bank_code"] == "CTBC" for b in data)
+
+
+async def test_list_bills_no_month_returns_all(
+    client: AsyncClient, db_session: AsyncSession
+):
+    """省略 month 參數應回傳所有帳單（含分頁）。"""
+    await _seed_bills(db_session)
+
+    response = await client.get("/api/bills", headers=auth_headers())
+    assert response.status_code == 200
+    body = response.json()
+    assert body["success"] is True
+    assert len(body["data"]) == 2
+    assert "pagination" in body
+    assert body["pagination"]["total"] == 2
+    # 預設依 billing_month desc 排序
+    assert body["data"][0]["billing_month"] == "2026-03"
+    assert body["data"][1]["billing_month"] == "2026-02"
+
+
+async def test_list_bills_by_month(client: AsyncClient, db_session: AsyncSession):
+    """指定 month 篩選時只回傳該月帳單。"""
     await _seed_bills(db_session)
 
     response = await client.get("/api/bills?month=2026-03", headers=auth_headers())
@@ -46,6 +85,7 @@ async def test_list_bills_all(client: AsyncClient, db_session: AsyncSession):
     data = response.json()["data"]
     assert len(data) == 1
     assert data[0]["bank_code"] == "CTBC"
+    assert data[0]["billing_month"] == "2026-03"
 
 
 async def test_list_bills_unpaid(client: AsyncClient, db_session: AsyncSession):
@@ -69,6 +109,30 @@ async def test_list_bills_paid(client: AsyncClient, db_session: AsyncSession):
     )
     data = response.json()["data"]
     assert len(data) == 0  # 2026-03 only has unpaid
+
+
+async def test_list_bills_pagination(client: AsyncClient, db_session: AsyncSession):
+    """分頁參數正確分割資料。"""
+    bank = make_ctbc_bank_config()
+    db_session.add(bank)
+    for i in range(1, 6):
+        db_session.add(
+            Bill(
+                bank_code="CTBC",
+                billing_month=f"2026-{i:02d}",
+                total_amount=i * 1000,
+                due_date=date(2026, i, 15),
+            )
+        )
+    await db_session.commit()
+
+    response = await client.get("/api/bills?page=1&page_size=2", headers=auth_headers())
+    body = response.json()
+    assert len(body["data"]) == 2
+    assert body["pagination"]["total"] == 5
+    assert body["pagination"]["total_pages"] == 3
+    assert body["pagination"]["page"] == 1
+    assert body["pagination"]["page_size"] == 2
 
 
 async def test_update_bill_paid(client: AsyncClient, db_session: AsyncSession):
@@ -192,10 +256,10 @@ async def test_download_pdf_file_missing(
         assert response.status_code == 404
 
 
-async def test_download_pdf_rejects_path_outside_staging_root(
+async def test_download_pdf_path_outside_staging_root_returns_404(
     client: AsyncClient, db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
 ):
-    """帳單 PDF 若不在 staging 根目錄下應拒絕存取。"""
+    """帳單 PDF 路徑不在 staging 根目錄下時，rebase 後檔案不存在應回傳 404。"""
     from ccas.config import get_settings
 
     with tempfile.TemporaryDirectory() as allowed_dir:
@@ -219,6 +283,6 @@ async def test_download_pdf_rejects_path_outside_staging_root(
             response = await client.get(
                 f"/api/bills/{bill.id}/pdf", headers=auth_headers()
             )
-            assert response.status_code == 403
+            assert response.status_code == 404
         finally:
             Path(outside_path).unlink(missing_ok=True)

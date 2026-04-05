@@ -9,7 +9,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ccas.api.deps import CommonMonthParams, PaginationParams, get_month_params
+from ccas.api.deps import PaginationParams
 from ccas.api.schemas import (
     PaginatedResponse,
     PaginationMeta,
@@ -22,17 +22,21 @@ router = APIRouter(prefix="/api", tags=["transactions"])
 
 
 def _build_filter_stmt(
-    month: str,
+    month: str | None,
+    year: int | None,
     bank_code: str | None,
     category: str | None,
     q: str | None,
 ):
-    """建立共用的交易查詢條件。"""
+    """建立共用的交易查詢條件。month 優先於 year。"""
     stmt = (
         select(Transaction, Bill.bank_code, Bill.billing_month)
         .join(Bill, Transaction.bill_id == Bill.id)
-        .where(Bill.billing_month == month)
     )
+    if month is not None:
+        stmt = stmt.where(Bill.billing_month == month)
+    elif year is not None:
+        stmt = stmt.where(Bill.billing_month.startswith(f"{year}-"))
     if bank_code:
         stmt = stmt.where(Bill.bank_code == bank_code)
     if category:
@@ -62,7 +66,12 @@ def _to_item(row) -> TransactionItem:
 
 @router.get("/transactions", response_model=PaginatedResponse[TransactionItem])
 async def list_transactions(
-    month_params: CommonMonthParams = Depends(get_month_params),
+    month: str | None = Query(
+        default=None,
+        description="月份（YYYY-MM），與 year 互斥，month 優先",
+        pattern=r"^\d{4}-(0[1-9]|1[0-2])$",
+    ),
+    year: int | None = Query(default=None, ge=2000, le=2099, description="年度篩選"),
     pagination: PaginationParams = Depends(),
     bank_code: str | None = Query(default=None),
     category: str | None = Query(default=None),
@@ -70,8 +79,8 @@ async def list_transactions(
     sort: str = Query(default="trans_date_desc", description="排序"),
     session: AsyncSession = Depends(get_db_session),
 ):
-    """查詢交易明細，支援篩選與分頁。"""
-    base = _build_filter_stmt(month_params.month, bank_code, category, q)
+    """查詢交易明細，支援月份、年度、銀行、分類篩選與分頁。"""
+    base = _build_filter_stmt(month, year, bank_code, category, q)
 
     # 排序
     sort_column, sort_dir = _parse_sort(sort)
@@ -100,14 +109,19 @@ async def list_transactions(
 
 @router.get("/transactions/export")
 async def export_transactions(
-    month_params: CommonMonthParams = Depends(get_month_params),
+    month: str | None = Query(
+        default=None,
+        description="月份（YYYY-MM），與 year 互斥，month 優先",
+        pattern=r"^\d{4}-(0[1-9]|1[0-2])$",
+    ),
+    year: int | None = Query(default=None, ge=2000, le=2099, description="年度篩選"),
     bank_code: str | None = Query(default=None),
     category: str | None = Query(default=None),
     q: str | None = Query(default=None),
     session: AsyncSession = Depends(get_db_session),
 ):
     """匯出交易明細為 CSV（UTF-8 with BOM）。"""
-    base = _build_filter_stmt(month_params.month, bank_code, category, q)
+    base = _build_filter_stmt(month, year, bank_code, category, q)
     base = base.order_by(Transaction.trans_date)
     result = await session.execute(base)
     items = [_to_item(row) for row in result.all()]
@@ -142,8 +156,7 @@ async def export_transactions(
             ]
         )
 
-    # 檔名
-    filename = f"ccas-transactions-{month_params.month}"
+    filename = f"ccas-transactions-{month or 'all'}"
     if bank_code:
         filename += f"-{bank_code}"
     filename += ".csv"

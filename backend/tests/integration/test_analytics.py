@@ -93,6 +93,45 @@ async def test_categories(client: AsyncClient, db_session: AsyncSession):
     assert categories["日用"] == 4000
 
 
+async def test_categories_no_month_returns_all(
+    client: AsyncClient, db_session: AsyncSession
+):
+    """省略 month 應彙總所有月份類別。"""
+    await _seed_analytics_data(db_session)
+
+    response = await client.get("/api/analytics/categories", headers=auth_headers())
+    assert response.status_code == 200
+    data = response.json()["data"]
+    categories = {item["category"]: item["total"] for item in data}
+    # bill3 (2026-02) has no transactions in seed, so only 3 categories from 2026-03
+    assert categories["餐飲"] == 6000
+    assert categories["購物"] == 5000
+    assert categories["日用"] == 4000
+
+
+async def test_categories_year_filter(client: AsyncClient, db_session: AsyncSession):
+    """year 篩選應只回傳該年度類別。"""
+    await _seed_analytics_data(db_session)
+
+    response = await client.get(
+        "/api/analytics/categories?year=2026", headers=auth_headers()
+    )
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert len(data) == 3  # 2026 has 餐飲/購物/日用
+
+
+async def test_years_endpoint(client: AsyncClient, db_session: AsyncSession):
+    """years 端點回傳有資料的年份清單（降序）。"""
+    await _seed_analytics_data(db_session)
+
+    response = await client.get("/api/analytics/years", headers=auth_headers())
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert 2026 in data
+    assert data == sorted(data, reverse=True)
+
+
 async def test_banks(client: AsyncClient, db_session: AsyncSession):
     """回傳指定月份按銀行彙總。"""
     await _seed_analytics_data(db_session)
@@ -107,3 +146,18 @@ async def test_banks(client: AsyncClient, db_session: AsyncSession):
     assert banks["CTBC"]["total"] == 10000
     assert banks["CTBC"]["bank_name"] == "中國信託"
     assert banks["ESUN"]["total"] == 5000
+
+
+async def test_banks_no_month_returns_all(
+    client: AsyncClient, db_session: AsyncSession
+):
+    """省略 month 應彙總所有月份各銀行帳單。"""
+    await _seed_analytics_data(db_session)
+
+    response = await client.get("/api/analytics/banks", headers=auth_headers())
+    assert response.status_code == 200
+    data = response.json()["data"]
+    banks = {item["bank_code"]: item["total"] for item in data}
+    # CTBC: 10000 (2026-03) + 8000 (2026-02) = 18000; ESUN: 5000 (2026-03)
+    assert banks["CTBC"] == 18000
+    assert banks["ESUN"] == 5000

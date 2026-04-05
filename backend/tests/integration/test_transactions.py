@@ -50,6 +50,69 @@ async def _seed_transactions(session: AsyncSession):
     await session.commit()
 
 
+async def _seed_multi_month_transactions(session: AsyncSession):
+    """建立跨月帳單與交易，用於無月份篩選測試。"""
+    bill_feb = Bill(
+        bank_code="CTBC",
+        billing_month="2026-02",
+        total_amount=1000,
+        due_date=date(2026, 3, 15),
+    )
+    bill_mar = Bill(
+        bank_code="CTBC",
+        billing_month="2026-03",
+        total_amount=2000,
+        due_date=date(2026, 4, 15),
+    )
+    session.add_all([bill_feb, bill_mar])
+    await session.flush()
+
+    session.add_all([
+        Transaction(
+            bill_id=bill_feb.id,
+            trans_date=date(2026, 2, 10),
+            merchant="全聯",
+            amount=500,
+            currency="TWD",
+        ),
+        Transaction(
+            bill_id=bill_mar.id,
+            trans_date=date(2026, 3, 5),
+            merchant="星巴克",
+            amount=200,
+            currency="TWD",
+        ),
+    ])
+    await session.commit()
+
+
+async def test_list_transactions_year_filter(
+    client: AsyncClient, db_session: AsyncSession
+):
+    """year 篩選應只回傳該年度交易。"""
+    await _seed_multi_month_transactions(db_session)
+
+    response = await client.get("/api/transactions?year=2026", headers=auth_headers())
+    assert response.status_code == 200
+    body = response.json()
+    assert body["pagination"]["total"] == 2
+    assert all(item["billing_month"].startswith("2026-") for item in body["data"])
+
+
+async def test_list_transactions_no_month_returns_all(
+    client: AsyncClient, db_session: AsyncSession
+):
+    """省略 month 參數應回傳所有月份的交易。"""
+    await _seed_multi_month_transactions(db_session)
+
+    response = await client.get("/api/transactions", headers=auth_headers())
+    assert response.status_code == 200
+    body = response.json()
+    assert body["pagination"]["total"] == 2
+    months = {item["billing_month"] for item in body["data"]}
+    assert months == {"2026-02", "2026-03"}
+
+
 async def test_list_transactions(client: AsyncClient, db_session: AsyncSession):
     """查詢交易列表含分頁資訊。"""
     await _seed_transactions(db_session)
@@ -142,6 +205,17 @@ async def test_export_csv_with_bank_code(client: AsyncClient, db_session: AsyncS
     assert (
         "ccas-transactions-2026-03-CTBC.csv" in response.headers["content-disposition"]
     )
+
+
+async def test_export_csv_no_month_uses_all_filename(
+    client: AsyncClient, db_session: AsyncSession
+):
+    """無月份篩選時 CSV 檔名使用 'all'。"""
+    await _seed_transactions(db_session)
+
+    response = await client.get("/api/transactions/export", headers=auth_headers())
+    assert response.status_code == 200
+    assert "ccas-transactions-all.csv" in response.headers["content-disposition"]
 
 
 async def test_invalid_month_format(client: AsyncClient, db_session: AsyncSession):

@@ -14,6 +14,14 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
 def _set_session_cookie(response: Response, token: str) -> None:
+    """Set an HttpOnly session cookie on the response.
+
+    Uses settings for cookie name, max-age, and secure flag.
+
+    Args:
+        response: FastAPI Response to attach the cookie to.
+        token: The API token value to store in the cookie.
+    """
     settings = get_settings()
     response.set_cookie(
         key=settings.api_session_cookie_name,
@@ -27,6 +35,14 @@ def _set_session_cookie(response: Response, token: str) -> None:
 
 
 def _clear_session_cookie(response: Response) -> None:
+    """Delete the session cookie from the response.
+
+    Uses the same cookie attributes (name, secure, samesite) as _set_session_cookie
+    to ensure the browser removes the existing cookie.
+
+    Args:
+        response: FastAPI Response to clear the cookie on.
+    """
     settings = get_settings()
     response.delete_cookie(
         key=settings.api_session_cookie_name,

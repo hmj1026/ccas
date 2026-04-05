@@ -2,11 +2,10 @@
 
 from datetime import date, timedelta
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ccas.api.deps import CommonMonthParams, get_month_params
 from ccas.api.schemas import ApiResponse, OverviewData, UpcomingBillItem
 from ccas.storage.database import get_db_session
 from ccas.storage.models import Bill
@@ -17,11 +16,32 @@ router = APIRouter(prefix="/api", tags=["overview"])
 
 @router.get("/overview", response_model=ApiResponse[OverviewData])
 async def get_overview(
-    params: CommonMonthParams = Depends(get_month_params),
+    month: str | None = Query(
+        default=None,
+        description="月份（YYYY-MM），省略則預設當月；當月無資料時 fallback 最近有資料月份",
+        pattern=r"^\d{4}-(0[1-9]|1[0-2])$",
+    ),
     session: AsyncSession = Depends(get_db_session),
 ):
     """取得指定月份的摘要卡片資料與即將到期帳單。"""
-    month = params.month
+    if month is None:
+        today = date.today()
+        current_month = today.strftime("%Y-%m")
+        # 確認當月是否有帳單，無則 fallback 最近有資料月份
+        has_current = (
+            await session.execute(
+                select(Bill.id).where(Bill.billing_month == current_month).limit(1)
+            )
+        ).scalar_one_or_none()
+        if has_current is not None:
+            month = current_month
+        else:
+            latest = (
+                await session.execute(
+                    select(Bill.billing_month).order_by(Bill.billing_month.desc()).limit(1)
+                )
+            ).scalar_one_or_none()
+            month = latest or current_month
     bank_names = await fetch_bank_names(session)
 
     # 月份摘要
