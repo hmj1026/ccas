@@ -127,3 +127,31 @@ EXPECTED_ROC_DUE_DATE = date(2026, 3, 28)
 EXPECTED_BILLING_MONTH = "2026-03"
 EXPECTED_TOTAL_AMOUNT = 12345
 EXPECTED_DUE_DATE = date(2026, 4, 15)
+
+# -- 2-page zero-balance bill fixtures (ROC format, no payment slip page) --
+
+CTBC_ROC_ZERO_BALANCE_PAGE1_TEXT = (
+    "113 01 1 / 2\n"
+    "402\n"
+    "113/01 7.58\n"
+    "i APP\n"
+    "80,000\n"
+    "/ 80,000/ 80,000\n"
+    "0 7.58%\n"
+    "113/01\n"
+    "0 ( )\n"
+)
+
+CTBC_ROC_ZERO_BALANCE_TXN_PAGE_TEXT = (
+    "2 / 2\n"
+    "113/01/10 460 0 0 460 0 +0\n"
+    "112/12/28 -460\n"
+    "(02)2745-8080\n"
+)
+
+# -- Garbled CID text (simulates old 2014 PDF embedded-font encoding) --
+
+CTBC_GARBLED_TEXT = (
+    "(cid:12)(cid:45)(cid:78)(cid:90)(cid:11)(cid:22)(cid:33)"
+    "(cid:5)(cid:7)(cid:3)"
+)

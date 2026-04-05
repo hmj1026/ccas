@@ -16,11 +16,14 @@ from ccas.parser.base import ParseError
 
 from .conftest import (
     CTBC_FIRST_PAGE_TEXT,
+    CTBC_GARBLED_TEXT,
     CTBC_INSTALLMENT_ROW,
     CTBC_NON_CTBC_PAGE_TEXT,
     CTBC_ROC_FIRST_PAGE_TEXT,
     CTBC_ROC_PAYMENT_PAGE_TEXT,
     CTBC_ROC_TXN_PAGE_TEXT,
+    CTBC_ROC_ZERO_BALANCE_PAGE1_TEXT,
+    CTBC_ROC_ZERO_BALANCE_TXN_PAGE_TEXT,
     CTBC_SUMMARY_MISSING_DUE_DATE_TEXT,
     CTBC_SUMMARY_MISSING_TOTAL_TEXT,
     CTBC_TABLE_HEADER_ROW,
@@ -373,3 +376,173 @@ class TestIsNonTransactionMerchant:
     )
     def test_accepts_real_merchants(self, merchant: str):
         assert _is_non_transaction_merchant(merchant) is False
+
+
+# -- New tests for OCR normalization, zero-balance bills, and garbled PDFs --
+
+
+class TestNormalizeOcrMerchant:
+    """Tests for the _normalize_ocr_merchant helper."""
+
+    @pytest.mark.parametrize(
+        "raw,expected",
+        [
+            ("Pi一金家便利商店", "全家便利商店"),
+            ("Pi一全家便利商店", "全家便利商店"),
+            ("Pi一了Y一ELEVEN", "7-ELEVEN"),
+            ("Pi一了Y了一ELEVEN", "7-ELEVEN"),
+            ("PIiI一了Y一ELEVEN", "7-ELEVEN"),
+            ("連加未麥芝勞", "麥當勞"),
+            ("台灣麥當馮餐廳一489", "麥當勞餐廳一489"),
+            ("無印恨品", "無印良品"),
+            ("全聯福利中心", "全聯福利中心"),  # no-op for clean input
+            ("", ""),
+        ],
+    )
+    def test_normalizes_known_ocr_errors(self, raw: str, expected: str):
+        from ccas.parser.banks.ctbc_v1 import _normalize_ocr_merchant
+
+        assert _normalize_ocr_merchant(raw) == expected
+
+
+class TestIsGarbled:
+    """Tests for the _is_garbled helper."""
+
+    def test_detects_garbled_text(self):
+        from ccas.parser.banks.ctbc_v1 import _is_garbled
+
+        assert _is_garbled(CTBC_GARBLED_TEXT) is True
+
+    def test_clean_text_not_garbled(self):
+        from ccas.parser.banks.ctbc_v1 import _is_garbled
+
+        assert _is_garbled(CTBC_ROC_FIRST_PAGE_TEXT) is False
+
+    def test_empty_text_not_garbled(self):
+        from ccas.parser.banks.ctbc_v1 import _is_garbled
+
+        assert _is_garbled("") is False
+
+    def test_few_cid_tokens_not_garbled(self):
+        from ccas.parser.banks.ctbc_v1 import _is_garbled
+
+        assert _is_garbled("(cid:1)(cid:2)(cid:3)") is False
+
+
+class TestExtractTotalAmountPage1:
+    """Tests for _extract_total_amount_page1."""
+
+    def test_extracts_zero_amount(self):
+        from ccas.parser.banks.ctbc_v1 import _extract_total_amount_page1
+
+        assert _extract_total_amount_page1(CTBC_ROC_ZERO_BALANCE_PAGE1_TEXT) == 0
+
+    def test_extracts_nonzero_amount(self):
+        from ccas.parser.banks.ctbc_v1 import _extract_total_amount_page1
+
+        text = (
+            "115 03 1 / 3\n402\n115/04 7.7\ni APP\n80,000\n"
+            "/ 80,000/ 80,000\n( ) 2,967 7.7%\n115/04\n1,000 ( )\n"
+        )
+        assert _extract_total_amount_page1(text) == 2967
+
+    def test_returns_none_when_no_rate_line(self):
+        from ccas.parser.banks.ctbc_v1 import _extract_total_amount_page1
+
+        assert _extract_total_amount_page1("no useful content here") is None
+
+    def test_does_not_misidentify_credit_limit(self):
+        from ccas.parser.banks.ctbc_v1 import _extract_total_amount_page1
+
+        # "80,000" appears on page 1 but without a rate% suffix — must not match it
+        result = _extract_total_amount_page1(CTBC_ROC_ZERO_BALANCE_PAGE1_TEXT)
+        assert result != 80000
+
+
+class TestExtractDueDatePage1:
+    """Tests for _extract_due_date_page1."""
+
+    def test_extracts_year_month_defaults_to_day28(self):
+        from ccas.parser.banks.ctbc_v1 import _extract_due_date_page1
+
+        result = _extract_due_date_page1(CTBC_ROC_ZERO_BALANCE_PAGE1_TEXT)
+        assert result == date(2024, 1, 28)
+
+    def test_returns_none_when_no_roc_year_month(self):
+        from ccas.parser.banks.ctbc_v1 import _extract_due_date_page1
+
+        assert _extract_due_date_page1("no dates here") is None
+
+    def test_does_not_match_full_roc_date(self):
+        from ccas.parser.banks.ctbc_v1 import _extract_due_date_page1
+
+        # A page with only full NNN/MM/DD dates should not be matched by year+month regex
+        text_with_full_dates = "113/01/15\n113/01/20\n"
+        result = _extract_due_date_page1(text_with_full_dates)
+        assert result is None
+
+
+class TestExtractSummaryZeroBalanceFallback:
+    """Integration test: 2-page zero-balance bill uses page1 fallbacks."""
+
+    def test_two_page_zero_balance_parses_correctly(self):
+        parser = _make_parser()
+        page1 = make_mock_page(CTBC_ROC_ZERO_BALANCE_PAGE1_TEXT)
+        page2 = make_mock_page(CTBC_ROC_ZERO_BALANCE_TXN_PAGE_TEXT)
+
+        billing_month, total_amount, due_date = parser._extract_summary([page1, page2])
+
+        assert billing_month == "2024-01"
+        assert total_amount == 0
+        assert due_date.day == 28
+        assert due_date.month == 1
+        assert due_date.year == 2024
+
+
+class TestCanParseOcrFallback:
+    """Tests for can_parse() OCR fallback on garbled PDFs."""
+
+    def test_can_parse_uses_ocr_when_text_fails(self):
+        """can_parse returns True when pdfplumber text fails but OCR identifies CTBC."""
+        from unittest.mock import MagicMock, patch as _patch
+        from pathlib import Path
+
+        from ccas.parser.banks.ctbc_v1 import CtbcV1Parser
+
+        parser = CtbcV1Parser()
+        mock_page = MagicMock()
+        mock_page.extract_text.return_value = CTBC_GARBLED_TEXT
+        mock_pdf = MagicMock()
+        mock_pdf.__enter__ = MagicMock(return_value=mock_pdf)
+        mock_pdf.__exit__ = MagicMock(return_value=False)
+        mock_pdf.pages = [mock_page]
+
+        with _patch("ccas.parser.banks.ctbc_v1.pdfplumber") as mock_plumber, _patch(
+            "ccas.parser.banks.ctbc_v1.is_ocr_available", return_value=True
+        ), _patch(
+            "ccas.parser.banks.ctbc_v1._ocr_page_full",
+            return_value=CTBC_ROC_FIRST_PAGE_TEXT,
+        ):
+            mock_plumber.open.return_value = mock_pdf
+            assert parser.can_parse(Path("dummy.pdf")) is True
+
+    def test_can_parse_returns_false_when_both_text_and_ocr_fail(self):
+        """can_parse returns False when both pdfplumber and OCR yield unrecognized text."""
+        from unittest.mock import MagicMock, patch as _patch
+        from pathlib import Path
+
+        from ccas.parser.banks.ctbc_v1 import CtbcV1Parser
+
+        parser = CtbcV1Parser()
+        mock_page = MagicMock()
+        mock_page.extract_text.return_value = CTBC_GARBLED_TEXT
+        mock_pdf = MagicMock()
+        mock_pdf.__enter__ = MagicMock(return_value=mock_pdf)
+        mock_pdf.__exit__ = MagicMock(return_value=False)
+        mock_pdf.pages = [mock_page]
+
+        with _patch("ccas.parser.banks.ctbc_v1.pdfplumber") as mock_plumber, _patch(
+            "ccas.parser.banks.ctbc_v1.is_ocr_available", return_value=True
+        ), _patch("ccas.parser.banks.ctbc_v1._ocr_page_full", return_value=""):
+            mock_plumber.open.return_value = mock_pdf
+            assert parser.can_parse(Path("dummy.pdf")) is False

@@ -46,6 +46,69 @@ _RE_TRANSACTION_LINE_ROC = re.compile(
     r"(\d{3}/\d{2}/\d{2})\s+(\d{3}/\d{2}/\d{2})\s+([\d,]+)\s+(\d{4})\s+([A-Z]{2,4})"
 )
 
+# Garbled font detection: PDFs with embedded/non-unicode fonts produce (cid:N) tokens
+_RE_CID = re.compile(r"\(cid:\d+\)")
+
+# OCR legacy format (old CTBC PDFs, embedded fonts, 300-dpi OCR text)
+_RE_BILLING_MONTH_OCR_LEGACY = re.compile(r"(\d{2,3})年\s*(\d{2})月")
+_RE_DUE_DATE_OCR_LEGACY = re.compile(r"繳款截止日\s+(\d{3})/(\d{2})/(\d{2})")
+_RE_TOTAL_AMOUNT_OCR_LEGACY = re.compile(r"本期應繳總金額\s+([\d,]+)")
+
+# 2-page zero-balance bill: rate line "NNN/MM RATE" on page 1
+_RE_PAGE1_RATE_LINE = re.compile(r"^\d{3}/\d{2}\s+([\d.]+)$", re.MULTILINE)
+# ROC year+month only (no day), negative lookahead avoids matching full NNN/MM/DD dates
+_RE_ROC_YEAR_MONTH = re.compile(r"\b(\d{3})/(\d{2})\b(?!/)")
+
+# -- OCR merchant name normalization rules --
+
+_OCR_MERCHANT_NORMALIZATION_RULES: tuple[tuple[str, str], ...] = (
+    ("Pi一金家便利商店", "全家便利商店"),
+    ("Pi一全家便利商店", "全家便利商店"),
+    (r"Pi一了Y[一了]+ELEVEN", "7-ELEVEN"),
+    (r"PIiI一了Y一ELEVEN", "7-ELEVEN"),
+    ("連加未麥芝勞", "麥當勞"),
+    ("台灣麥當馮", "麥當勞"),
+    ("無印恨品", "無印良品"),
+)
+
+
+def _normalize_ocr_merchant(text: str) -> str:
+    """Apply known OCR error corrections to a merchant name string."""
+    for pattern, replacement in _OCR_MERCHANT_NORMALIZATION_RULES:
+        text = re.sub(pattern, replacement, text)
+    return text.strip()
+
+
+def _is_garbled(text: str) -> bool:
+    """Return True if text is predominantly CID-encoded garbage.
+
+    More than 5 (cid:N) tokens indicates the PDF uses embedded fonts
+    that pdfplumber cannot decode — OCR fallback is needed.
+    """
+    return len(_RE_CID.findall(text)) > 5
+
+
+def _ocr_page_full(page: pdfplumber.page.Page) -> str:
+    """OCR an entire page for identification / full-text extraction.
+
+    Uses --psm 3 (auto page layout) at 300 dpi to handle older PDFs
+    with embedded fonts whose text cannot be decoded by pdfplumber.
+    Returns empty string if OCR is unavailable or fails.
+    """
+    if not is_ocr_available():
+        return ""
+    try:
+        import pytesseract  # noqa: PLC0415
+
+        pil_image = page.to_image(resolution=300).original
+        return pytesseract.image_to_string(
+            pil_image, lang="chi_tra", config="--psm 3"
+        ).strip()
+    except (RuntimeError, OSError, AttributeError):
+        logger.debug("整頁 OCR 失敗（用於識別）", exc_info=True)
+        return ""
+
+
 # Known non-transaction text that OCR may extract from section headers.
 # "帳單分期" intentionally covers all sub-variants (帳單分期入帳, etc.)
 _NON_TRANSACTION_MERCHANTS: frozenset[str] = frozenset(
@@ -78,8 +141,15 @@ class CtbcV1Parser(BankParser):
             with pdfplumber.open(pdf_path) as pdf:
                 if not pdf.pages:
                     return False
-                text = pdf.pages[0].extract_text() or ""
-                return self._identify(text)
+                page = pdf.pages[0]
+                text = page.extract_text() or ""
+                if self._identify(text):
+                    return True
+                # Fallback: OCR page 1 for PDFs with garbled/embedded font encoding
+                if is_ocr_available():
+                    ocr_text = _ocr_page_full(page)
+                    return self._identify(ocr_text)
+                return False
         except Exception:
             logger.debug("無法開啟 PDF: %s", pdf_path, exc_info=True)
             return False
@@ -127,24 +197,44 @@ class CtbcV1Parser(BankParser):
         """
         full_text = "\n".join(page.extract_text() or "" for page in pages)
         first_page_text = pages[0].extract_text() or ""
-
         last_page_text = pages[-1].extract_text() or ""
+
+        # Fallback: if font encoding is garbled, re-extract all pages via OCR
+        if _is_garbled(full_text):
+            logger.info("偵測到亂碼字型，改用 OCR 全頁解析")
+            full_text = "\n".join(_ocr_page_full(p) for p in pages)
+            first_page_text = _ocr_page_full(pages[0]) if pages else ""
+            last_page_text = _ocr_page_full(pages[-1]) if pages else ""
 
         billing_month = _extract_billing_month_roc(first_page_text)
         if billing_month is None:
             billing_month = _extract_billing_month_labeled(full_text)
         if billing_month is None:
+            billing_month = _extract_billing_month_ocr_legacy(full_text)
+        if billing_month is None:
             raise ParseError("帳單摘要缺失", reason="找不到帳單月份")
 
         due_date = _extract_due_date_labeled(full_text)
         if due_date is None:
-            due_date = _extract_due_date_roc(last_page_text)
+            due_date = _extract_due_date_ocr_legacy(full_text)
+        if due_date is None:
+            # _extract_due_date_roc is only reliable when the last page is a
+            # payment slip (identified by the presence of a $AMOUNT marker).
+            # For 2-page bills the last page is a transaction page — skip it.
+            if _extract_total_amount_dollar(last_page_text) is not None:
+                due_date = _extract_due_date_roc(last_page_text)
+        if due_date is None:
+            due_date = _extract_due_date_page1(first_page_text)
         if due_date is None:
             raise ParseError("帳單摘要缺失", reason="找不到繳費截止日")
 
         total_amount = _extract_total_amount_labeled(full_text)
         if total_amount is None:
+            total_amount = _extract_total_amount_ocr_legacy(full_text)
+        if total_amount is None:
             total_amount = _extract_total_amount_dollar(last_page_text)
+        if total_amount is None:
+            total_amount = _extract_total_amount_page1(first_page_text)
         if total_amount is None:
             raise ParseError("帳單摘要缺失", reason="找不到應繳總額")
 
@@ -172,6 +262,14 @@ class CtbcV1Parser(BankParser):
 
 
 def _extract_billing_month_labeled(text: str) -> str | None:
+    """Extract billing month from labeled format: '帳單月份：YYYY年MM月'.
+
+    Args:
+        text: Full PDF text from labeled/synthetic test PDFs.
+
+    Returns:
+        Billing month string in 'YYYY-MM' format, or None if not found.
+    """
     match = _RE_BILLING_MONTH.search(text)
     if not match:
         return None
@@ -179,6 +277,14 @@ def _extract_billing_month_labeled(text: str) -> str | None:
 
 
 def _extract_due_date_labeled(text: str) -> date | None:
+    """Extract due date from labeled format: '繳費截止日：YYYY/MM/DD'.
+
+    Args:
+        text: Full PDF text from labeled/synthetic test PDFs.
+
+    Returns:
+        Due date as a Python date, or None if not found.
+    """
     match = _RE_DUE_DATE.search(text)
     if not match:
         return None
@@ -186,6 +292,14 @@ def _extract_due_date_labeled(text: str) -> date | None:
 
 
 def _extract_total_amount_labeled(text: str) -> int | None:
+    """Extract total payable amount from labeled format: '本期應繳總額：NT$N,NNN'.
+
+    Args:
+        text: Full PDF text from labeled/synthetic test PDFs.
+
+    Returns:
+        Total amount as an integer (TWD), or None if not found.
+    """
     match = _RE_TOTAL_AMOUNT.search(text)
     if not match:
         return None
@@ -210,6 +324,17 @@ def _extract_transactions_table(
 
 
 def _is_transaction_table(table: list[list[str | None]]) -> bool:
+    """Return True if the table header contains the expected transaction keywords.
+
+    Checks that both '交易日' and '金額' appear in the joined header row text,
+    distinguishing transaction tables from other tables in the PDF.
+
+    Args:
+        table: Raw table data extracted by pdfplumber, rows of optional strings.
+
+    Returns:
+        True if the table looks like a transaction detail table.
+    """
     if not table:
         return False
     header = [str(cell or "") for cell in table[0]]
@@ -221,6 +346,19 @@ def _parse_transaction_row(
     row: list[str | None],
     year: int,
 ) -> TransactionItem | None:
+    """Parse a single labeled-format table row into a TransactionItem.
+
+    Expected columns: [trans_date (MM/DD), posting_date (MM/DD), card_last4,
+    merchant, amount]. Rows with fewer than 5 columns or unparseable dates
+    are skipped with a warning log.
+
+    Args:
+        row: Raw table row cells (may contain None).
+        year: Calendar year to combine with MM/DD dates.
+
+    Returns:
+        TransactionItem on success, or None if the row should be skipped.
+    """
     try:
         cells = [str(cell or "").strip() for cell in row]
         if len(cells) < 5:
@@ -256,6 +394,15 @@ def _parse_transaction_row(
 
 
 def _parse_mmdd(raw: str, year: int) -> date | None:
+    """Parse an 'MM/DD' string into a Python date using the given year.
+
+    Args:
+        raw: Date string in 'MM/DD' format.
+        year: Calendar year to use for the resulting date.
+
+    Returns:
+        Parsed date, or None if the string does not match 'MM/DD'.
+    """
     match = _RE_DATE_MMDD.match(raw)
     if not match:
         return None
@@ -295,6 +442,74 @@ def _extract_total_amount_dollar(text: str) -> int | None:
     Expects text from the last page where '$AMOUNT' is the total payable.
     """
     match = _RE_DOLLAR_AMOUNT.search(text)
+    if not match:
+        return None
+    return int(match.group(1).replace(",", ""))
+
+
+_RE_PAGE1_AMOUNT_GENERIC = re.compile(r"^(\d[\d,]*)\s+[\d.]+%$", re.MULTILINE)
+
+
+def _extract_total_amount_page1(first_page_text: str) -> int | None:
+    """Extract total_amount from page 1 for zero-balance 2-page bills.
+
+    First tries to find the interest rate on the rate line (e.g. '113/01 7.58')
+    and match 'AMOUNT RATE%' specifically.  Falls back to a generic
+    'AMOUNT RATE%' line pattern when no rate line exists (newer format).
+    Returns 0 for zero-balance months; None if the pattern cannot be found.
+    """
+    rate_match = _RE_PAGE1_RATE_LINE.search(first_page_text)
+    if rate_match:
+        rate_str = rate_match.group(1)
+        amount_re = re.compile(rf"(\d[\d,]*)\s+{re.escape(rate_str)}%")
+        matches = amount_re.findall(first_page_text)
+        if matches:
+            return int(matches[-1].replace(",", ""))
+    # Fallback: match any "NUMBER RATE%" line on page 1 (e.g. "0 15%")
+    matches = _RE_PAGE1_AMOUNT_GENERIC.findall(first_page_text)
+    if not matches:
+        return None
+    return int(matches[-1].replace(",", ""))
+
+
+def _extract_due_date_page1(first_page_text: str) -> date | None:
+    """Extract due date from page 1 when no payment slip page exists.
+
+    For 2-page bills the due date appears as year+month only (e.g. '113/01').
+    Defaults to day 28 per CTBC standard due day.
+    """
+    matches = _RE_ROC_YEAR_MONTH.findall(first_page_text)
+    if not matches:
+        return None
+    roc_year_str, month_str = matches[-1]
+    return _roc_to_date(int(roc_year_str), int(month_str), 28)
+
+
+# -- OCR legacy format helpers (old CTBC PDFs with garbled font encoding) --
+
+
+def _extract_billing_month_ocr_legacy(text: str) -> str | None:
+    """Extract billing month from old CTBC OCR text: '103年 09月'."""
+    match = _RE_BILLING_MONTH_OCR_LEGACY.search(text)
+    if not match:
+        return None
+    roc_year = int(match.group(1))
+    month = int(match.group(2))
+    ad_year = roc_year + _ROC_OFFSET
+    return f"{ad_year}-{month:02d}"
+
+
+def _extract_due_date_ocr_legacy(text: str) -> date | None:
+    """Extract due date from old CTBC OCR text: '繳款截止日 103/09/28'."""
+    match = _RE_DUE_DATE_OCR_LEGACY.search(text)
+    if not match:
+        return None
+    return _roc_to_date(int(match.group(1)), int(match.group(2)), int(match.group(3)))
+
+
+def _extract_total_amount_ocr_legacy(text: str) -> int | None:
+    """Extract total amount from old CTBC OCR text: '本期應繳總金額 133'."""
+    match = _RE_TOTAL_AMOUNT_OCR_LEGACY.search(text)
     if not match:
         return None
     return int(match.group(1).replace(",", ""))
@@ -345,7 +560,7 @@ def _ocr_merchant_image(
         bottom = float(img_bbox["bottom"])
         cropped = page.crop((x0, top, x1, bottom))
         pil_image = cropped.to_image(resolution=300).original
-        return extract_text_from_image(pil_image)
+        return _normalize_ocr_merchant(extract_text_from_image(pil_image))
     except (ValueError, AttributeError, OSError):
         logger.warning(
             "商戶圖片 OCR 失敗: x=%.0f y=%.0f",
