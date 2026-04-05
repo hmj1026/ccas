@@ -29,9 +29,8 @@ def _build_filter_stmt(
     q: str | None,
 ):
     """建立共用的交易查詢條件。month 優先於 year。"""
-    stmt = (
-        select(Transaction, Bill.bank_code, Bill.billing_month)
-        .join(Bill, Transaction.bill_id == Bill.id)
+    stmt = select(Transaction, Bill.bank_code, Bill.billing_month).join(
+        Bill, Transaction.bill_id == Bill.id
     )
     if month is not None:
         stmt = stmt.where(Bill.billing_month == month)

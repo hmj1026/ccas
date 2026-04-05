@@ -519,11 +519,13 @@ class TestCanParseOcrFallback:
         mock_pdf.__exit__ = MagicMock(return_value=False)
         mock_pdf.pages = [mock_page]
 
-        with _patch("ccas.parser.banks.ctbc_v1.pdfplumber") as mock_plumber, _patch(
-            "ccas.parser.banks.ctbc_v1.is_ocr_available", return_value=True
-        ), _patch(
-            "ccas.parser.banks.ctbc_v1._ocr_page_full",
-            return_value=CTBC_ROC_FIRST_PAGE_TEXT,
+        with (
+            _patch("ccas.parser.banks.ctbc_v1.pdfplumber") as mock_plumber,
+            _patch("ccas.parser.banks.ctbc_v1.is_ocr_available", return_value=True),
+            _patch(
+                "ccas.parser.banks.ctbc_v1._ocr_page_full",
+                return_value=CTBC_ROC_FIRST_PAGE_TEXT,
+            ),
         ):
             mock_plumber.open.return_value = mock_pdf
             assert parser.can_parse(Path("dummy.pdf")) is True
@@ -545,8 +547,10 @@ class TestCanParseOcrFallback:
         mock_pdf.__exit__ = MagicMock(return_value=False)
         mock_pdf.pages = [mock_page]
 
-        with _patch("ccas.parser.banks.ctbc_v1.pdfplumber") as mock_plumber, _patch(
-            "ccas.parser.banks.ctbc_v1.is_ocr_available", return_value=True
-        ), _patch("ccas.parser.banks.ctbc_v1._ocr_page_full", return_value=""):
+        with (
+            _patch("ccas.parser.banks.ctbc_v1.pdfplumber") as mock_plumber,
+            _patch("ccas.parser.banks.ctbc_v1.is_ocr_available", return_value=True),
+            _patch("ccas.parser.banks.ctbc_v1._ocr_page_full", return_value=""),
+        ):
             mock_plumber.open.return_value = mock_pdf
             assert parser.can_parse(Path("dummy.pdf")) is False

@@ -67,22 +67,24 @@ async def _seed_multi_month_transactions(session: AsyncSession):
     session.add_all([bill_feb, bill_mar])
     await session.flush()
 
-    session.add_all([
-        Transaction(
-            bill_id=bill_feb.id,
-            trans_date=date(2026, 2, 10),
-            merchant="全聯",
-            amount=500,
-            currency="TWD",
-        ),
-        Transaction(
-            bill_id=bill_mar.id,
-            trans_date=date(2026, 3, 5),
-            merchant="星巴克",
-            amount=200,
-            currency="TWD",
-        ),
-    ])
+    session.add_all(
+        [
+            Transaction(
+                bill_id=bill_feb.id,
+                trans_date=date(2026, 2, 10),
+                merchant="全聯",
+                amount=500,
+                currency="TWD",
+            ),
+            Transaction(
+                bill_id=bill_mar.id,
+                trans_date=date(2026, 3, 5),
+                merchant="星巴克",
+                amount=200,
+                currency="TWD",
+            ),
+        ]
+    )
     await session.commit()
 
 

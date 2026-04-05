@@ -143,15 +143,11 @@ CTBC_ROC_ZERO_BALANCE_PAGE1_TEXT = (
 )
 
 CTBC_ROC_ZERO_BALANCE_TXN_PAGE_TEXT = (
-    "2 / 2\n"
-    "113/01/10 460 0 0 460 0 +0\n"
-    "112/12/28 -460\n"
-    "(02)2745-8080\n"
+    "2 / 2\n113/01/10 460 0 0 460 0 +0\n112/12/28 -460\n(02)2745-8080\n"
 )
 
 # -- Garbled CID text (simulates old 2014 PDF embedded-font encoding) --
 
 CTBC_GARBLED_TEXT = (
-    "(cid:12)(cid:45)(cid:78)(cid:90)(cid:11)(cid:22)(cid:33)"
-    "(cid:5)(cid:7)(cid:3)"
+    "(cid:12)(cid:45)(cid:78)(cid:90)(cid:11)(cid:22)(cid:33)(cid:5)(cid:7)(cid:3)"
 )
