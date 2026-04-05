@@ -476,7 +476,8 @@ class TestExtractDueDatePage1:
     def test_does_not_match_full_roc_date(self):
         from ccas.parser.banks.ctbc_v1 import _extract_due_date_page1
 
-        # A page with only full NNN/MM/DD dates should not be matched by year+month regex
+        # A page with only full NNN/MM/DD dates should not be matched
+        # by year+month regex
         text_with_full_dates = "113/01/15\n113/01/20\n"
         result = _extract_due_date_page1(text_with_full_dates)
         assert result is None
@@ -504,8 +505,9 @@ class TestCanParseOcrFallback:
 
     def test_can_parse_uses_ocr_when_text_fails(self):
         """can_parse returns True when pdfplumber text fails but OCR identifies CTBC."""
-        from unittest.mock import MagicMock, patch as _patch
         from pathlib import Path
+        from unittest.mock import MagicMock
+        from unittest.mock import patch as _patch
 
         from ccas.parser.banks.ctbc_v1 import CtbcV1Parser
 
@@ -527,9 +529,11 @@ class TestCanParseOcrFallback:
             assert parser.can_parse(Path("dummy.pdf")) is True
 
     def test_can_parse_returns_false_when_both_text_and_ocr_fail(self):
-        """can_parse returns False when both pdfplumber and OCR yield unrecognized text."""
-        from unittest.mock import MagicMock, patch as _patch
+        """can_parse returns False when both pdfplumber and OCR yield
+        unrecognized text."""
         from pathlib import Path
+        from unittest.mock import MagicMock
+        from unittest.mock import patch as _patch
 
         from ccas.parser.banks.ctbc_v1 import CtbcV1Parser
 

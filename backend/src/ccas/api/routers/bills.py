@@ -35,7 +35,8 @@ def _resolve_bill_pdf_path(file_path: str, allowed_root: str) -> Path:
     try:
         pdf_path.relative_to(root_path)
     except ValueError:
-        # Path was stored in a different environment (e.g., local absolute path in Docker).
+        # Path was stored in a different environment
+        # (e.g., local absolute path in Docker).
         # Rebase using the last two path components: {bank_code}/{filename}.
         parts = pdf_path.parts
         if len(parts) >= 2:
@@ -43,7 +44,9 @@ def _resolve_bill_pdf_path(file_path: str, allowed_root: str) -> Path:
         try:
             pdf_path.relative_to(root_path)
         except ValueError as exc:
-            raise HTTPException(status_code=403, detail="PDF 路徑不在允許範圍內") from exc
+            raise HTTPException(
+                status_code=403, detail="PDF 路徑不在允許範圍內"
+            ) from exc
 
     if not pdf_path.is_file():
         raise HTTPException(status_code=404, detail="PDF 檔案不存在")

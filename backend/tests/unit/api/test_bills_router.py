@@ -32,7 +32,9 @@ class TestResolveBillPdfPath:
         assert exc_info.value.status_code == 404
 
     def test_rebases_path_from_different_environment(self, tmp_path: Path):
-        """Docker 環境下，以本機路徑儲存的 file_path 應自動 rebase 到目前 staging_dir。"""
+        """Docker 環境下，以本機路徑儲存的 file_path
+        應自動 rebase 到目前 staging_dir。
+        """
         docker_staging = tmp_path / "data" / "staging"
         bill_dir = docker_staging / "CTBC"
         bill_dir.mkdir(parents=True)
@@ -40,7 +42,9 @@ class TestResolveBillPdfPath:
         pdf.write_bytes(b"%PDF-1.4 test")
 
         # Simulate a path stored when running locally under a different root
-        local_path = "/Users/paul/Project/ccas/backend/data/staging/CTBC/abc123_bill.pdf"
+        local_path = (
+            "/Users/paul/Project/ccas/backend/data/staging/CTBC/abc123_bill.pdf"
+        )
 
         result = _resolve_bill_pdf_path(local_path, str(docker_staging))
 

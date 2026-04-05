@@ -43,7 +43,9 @@ async def _check_prerequisites(session: AsyncSession, bank_code: str | None) -> 
         label = f"bank_code={bank_code}" if bank_code else "任何銀行"
         print(f"  [警告] 找不到 BankConfig（{label}），parse 可能失敗")
 
-    cat_count = (await session.execute(select(func.count()).select_from(Category))).scalar_one()
+    cat_count = (
+        await session.execute(select(func.count()).select_from(Category))
+    ).scalar_one()
     if cat_count == 0:
         print("  [警告] Categories 資料表為空，classify 結果將全為 NULL")
 
@@ -54,8 +56,12 @@ async def clear_bills_and_transactions(session: AsyncSession) -> tuple[int, int]
     Returns:
         (bill_count, txn_count) 已刪除的筆數。
     """
-    txn_count = (await session.execute(select(func.count()).select_from(Transaction))).scalar_one()
-    bill_count = (await session.execute(select(func.count()).select_from(Bill))).scalar_one()
+    txn_count = (
+        await session.execute(select(func.count()).select_from(Transaction))
+    ).scalar_one()
+    bill_count = (
+        await session.execute(select(func.count()).select_from(Bill))
+    ).scalar_one()
 
     await session.execute(delete(Transaction))
     await session.execute(delete(Bill))
@@ -145,9 +151,15 @@ async def main(*, bank_code: str | None = None) -> None:
         print(f"  Classified: {classify_summary.classified_count} transaction(s)")
 
         # Final counts
-        final_bills = (await session.execute(select(func.count()).select_from(Bill))).scalar_one()
-        final_txns = (await session.execute(select(func.count()).select_from(Transaction))).scalar_one()
-        print(f"Done. DB now has {final_bills} bill(s) and {final_txns} transaction(s).")
+        final_bills = (
+            await session.execute(select(func.count()).select_from(Bill))
+        ).scalar_one()
+        final_txns = (
+            await session.execute(select(func.count()).select_from(Transaction))
+        ).scalar_one()
+        print(
+            f"Done. DB now has {final_bills} bill(s) and {final_txns} transaction(s)."
+        )
 
     await engine.dispose()
 

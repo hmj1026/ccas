@@ -18,7 +18,10 @@ router = APIRouter(prefix="/api", tags=["overview"])
 async def get_overview(
     month: str | None = Query(
         default=None,
-        description="月份（YYYY-MM），省略則預設當月；當月無資料時 fallback 最近有資料月份",
+        description=(
+            "月份（YYYY-MM），省略則預設當月；"
+            "當月無資料時 fallback 最近有資料月份"
+        ),
         pattern=r"^\d{4}-(0[1-9]|1[0-2])$",
     ),
     session: AsyncSession = Depends(get_db_session),
