@@ -1,4 +1,4 @@
-<!-- Generated: 2026-04-04 | Files scanned: 23 | Token estimate: ~500 -->
+<!-- Generated: 2026-04-05 | Files scanned: 23 | Token estimate: ~500 -->
 
 # Frontend
 
@@ -36,10 +36,11 @@ App (QueryClient + BrowserRouter)
 
 ```
 components/
-├── auth-guard.tsx      Session verification HOC
-├── layout.tsx          Sidebar navigation shell
-├── shared/states.tsx   LoadingState, ErrorState, EmptyState
-└── ui/button.tsx       shadcn button
+├── auth-guard.tsx        Session verification HOC
+├── layout.tsx            Sidebar navigation shell
+├── shared/states.tsx     LoadingState, ErrorState, EmptyState
+├── shared/filter-bar.tsx Shared month/bank/status filter controls
+└── ui/button.tsx         shadcn button
 ```
 
 ## State Management

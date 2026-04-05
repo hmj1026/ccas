@@ -1,4 +1,4 @@
-<!-- Generated: 2026-04-04 | Files scanned: 69 | Token estimate: ~800 -->
+<!-- Generated: 2026-04-05 | Files scanned: 69 | Token estimate: ~800 -->
 
 # Backend
 
@@ -25,6 +25,7 @@ Transactions:
   GET    /transactions/export  transactions.py (CSV/Excel)
 
 Analytics:
+  GET    /analytics/years      analytics.py (available years)
   GET    /analytics/trend      analytics.py (by category/month)
   GET    /analytics/categories analytics.py (breakdown)
   GET    /analytics/banks      analytics.py (per-bank)

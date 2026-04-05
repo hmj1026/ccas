@@ -76,7 +76,7 @@ docker compose up --build
 開啟新 terminal：
 
 ```bash
-docker exec -it ccas-backend-1 uv run python scripts/seed.py --reset
+docker exec -it ccas-backend-1 uv run python /app/scripts/seed.py --reset
 ```
 
 此命令會寫入：
@@ -103,7 +103,7 @@ docker exec -it ccas-backend-1 uv run python scripts/seed.py --reset
 | Bills | 帳單列表 | 顯示 seed 的 1 張帳單 |
 | Bills | 標記已繳 | 切換 is_paid 狀態 |
 | Transactions | 交易列表 | 顯示 5 筆交易、支援分頁 |
-| Transactions | 更新分類 | 修改交易的消費類別 |
+| Transactions | CSV 匯出 | 點擊匯出按鈕下載 CSV 檔案 |
 | Analytics | 分類統計 | 依分類顯示消費金額圖表 |
 | Analytics | 日趨勢 | 顯示消費時間分布 |
 | Analytics | 商家排名 | 按金額排序的商家列表 |
@@ -118,31 +118,33 @@ docker exec -it ccas-backend-1 uv run python scripts/seed.py --reset
 
 | 方法 | 端點 | 說明 |
 |------|------|------|
-| POST | `/api/auth/login` | 登入（body: `{"token": "your-api-token"}`) |
-| POST | `/api/auth/logout` | 登出 |
+| GET | `/api/auth/session` | 檢查目前 session 是否已登入 |
+| POST | `/api/auth/session` | 登入（body: `{"token": "your-api-token"}`，回傳 204） |
+| DELETE | `/api/auth/session` | 登出（回傳 204） |
 
 #### 帳單
 
 | 方法 | 端點 | 說明 |
 |------|------|------|
-| GET | `/api/bills` | 帳單列表（支援 page, per_page） |
-| GET | `/api/bills/{bill_id}` | 單筆帳單 |
+| GET | `/api/bills` | 帳單列表（支援 month、year、bank_code、status、page、per_page） |
 | PATCH | `/api/bills/{bill_id}` | 更新帳單（標記已繳） |
+| GET | `/api/bills/{bill_id}/pdf` | 下載帳單原始 PDF |
 
 #### 交易
 
 | 方法 | 端點 | 說明 |
 |------|------|------|
 | GET | `/api/transactions` | 交易列表（支援 page, per_page） |
-| PATCH | `/api/transactions/{txn_id}` | 更新交易分類 |
+| GET | `/api/transactions/export` | 匯出交易明細為 CSV（UTF-8 BOM） |
 
 #### 分析
 
 | 方法 | 端點 | 說明 |
 |------|------|------|
-| GET | `/api/analytics/spending-by-category` | 分類消費統計 |
-| GET | `/api/analytics/daily-spending` | 每日消費趨勢 |
-| GET | `/api/analytics/merchant-ranking` | 商家消費排名 |
+| GET | `/api/analytics/years` | 可選年度清單 |
+| GET | `/api/analytics/trend` | 月消費趨勢（最近 N 個月，預設 6） |
+| GET | `/api/analytics/categories` | 分類消費統計（需 `?month=YYYY-MM`） |
+| GET | `/api/analytics/banks` | 銀行消費比較（需 `?month=YYYY-MM`） |
 
 #### 設定
 
@@ -185,18 +187,21 @@ Pipeline 階段順序：`ingest` -> `decrypt` -> `parse` -> `classify` -> `notif
 
 ### D. 自動化測試
 
+> 自動化測試需在**本機**執行（production container 不含 `tests/` 目錄與開發套件）。  
+> 前置需求：本機安裝 Python 3.12+ 與 uv。
+
 ```bash
-# 執行全部 495 個自動化測試
-docker exec -it ccas-backend-1 uv run pytest -q
+# 執行全部自動化測試（本機）
+./scripts/test.sh -q
 
 # 只跑 unit 測試（較快）
-docker exec -it ccas-backend-1 uv run pytest tests/unit/ -q
+./scripts/test.sh tests/unit/ -q
 
 # 跑 E2E 測試
-docker exec -it ccas-backend-1 uv run pytest tests/e2e/ -q
+./scripts/test.sh tests/e2e/ -q
 
 # 含覆蓋率報告
-docker exec -it ccas-backend-1 uv run pytest --cov --cov-report=term-missing
+./scripts/test.sh --cov --cov-report=term-missing
 ```
 
 ---
@@ -233,7 +238,7 @@ docker exec -it ccas-backend-1 uv run pytest --cov --cov-report=term-missing
 
 ```bash
 # 重置 seed 資料（保留 schema）
-docker exec -it ccas-backend-1 uv run python scripts/seed.py --reset
+docker exec -it ccas-backend-1 uv run python /app/scripts/seed.py --reset
 
 # 完全重建（清除所有容器和資料）
 docker compose down -v
