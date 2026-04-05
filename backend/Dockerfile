@@ -34,6 +34,7 @@ COPY --chown=appuser:appgroup pyproject.toml uv.lock ./
 COPY --chown=appuser:appgroup alembic/ ./alembic/
 COPY --chown=appuser:appgroup alembic.ini ./
 COPY --chown=appuser:appgroup src/ ./src/
+RUN mkdir -p /data && chown appuser:appgroup /data
 USER appuser
 EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \

@@ -59,7 +59,8 @@
       "Bash(du -sh node_modules/recharts node_modules/react-dom node_modules/lucide-react node_modules/@base-ui node_modules/d3-*)",
       "Bash(pnpm build:*)",
       "Bash(head -30 /Users/paul/Project/ccas/backend/src/ccas/api/*.py)",
-      "Bash(bash -n /Users/paul/Project/ccas/scripts/get-telegram-chat-id.sh)"
+      "Bash(bash -n /Users/paul/Project/ccas/scripts/get-telegram-chat-id.sh)",
+      "Bash(lsof -nP -iTCP:5173 -sTCP:LISTEN)"
     ]
   },
   "hooks": {
