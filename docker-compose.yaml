@@ -4,6 +4,7 @@ x-shared-env: &shared-env
   GMAIL_CREDENTIALS_PATH: "/data/credentials.json"
   GMAIL_TOKEN_PATH: "/data/token.json"
   REDIS_URL: redis://redis:6379/0
+  LOG_DIR: "/logs"
 
 services:
   backend:
@@ -17,10 +18,12 @@ services:
       - ./scripts:/scripts:ro
       - ./backend/scripts:/app/scripts:ro
       - ./.env.example:/app/.env.example:ro
+      - ./logs:/logs
     env_file:
       - ./.env
     environment:
       <<: *shared-env
+      LOG_FILE_PREFIX: "ccas-backend"
     entrypoint: ["/scripts/docker-entrypoint.sh"]
     depends_on:
       redis:
@@ -39,10 +42,12 @@ services:
       target: production
     volumes:
       - ./backend/data:/data
+      - ./logs:/logs
     env_file:
       - ./.env
     environment:
       <<: *shared-env
+      LOG_FILE_PREFIX: "ccas-worker"
     depends_on:
       backend:
         condition: service_healthy
@@ -59,11 +64,13 @@ services:
       target: production
     volumes:
       - ./backend/data:/data
+      - ./logs:/logs
     env_file:
       - ./.env
     environment:
       <<: *shared-env
       SCHEDULER_API_BASE_URL: "http://backend:8000"
+      LOG_FILE_PREFIX: "ccas-scheduler"
     depends_on:
       redis:
         condition: service_healthy
@@ -78,10 +85,12 @@ services:
       target: production
     volumes:
       - ./backend/data:/data
+      - ./logs:/logs
     env_file:
       - ./.env
     environment:
       <<: *shared-env
+      LOG_FILE_PREFIX: "ccas-bot"
     depends_on:
       redis:
         condition: service_healthy
