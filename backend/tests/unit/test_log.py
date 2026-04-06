@@ -2,10 +2,34 @@
 
 import json
 import logging
+from logging.handlers import RotatingFileHandler
+from pathlib import Path
 
 import pytest
 
 from ccas.log import JsonFormatter, RedactingFilter, configure_logging
+
+
+def _make_mock_settings(
+    *,
+    level: str = "INFO",
+    fmt: str = "json",
+    log_dir: str = "",
+    log_file_max_bytes: int = 10_485_760,
+    log_file_backup_count: int = 5,
+    log_file_prefix: str = "ccas",
+) -> object:
+    """建立模擬 Settings 物件供 configure_logging 測試使用。"""
+    from unittest.mock import MagicMock
+
+    s = MagicMock()
+    s.log_level = level
+    s.log_format = fmt
+    s.log_dir = log_dir
+    s.log_file_max_bytes = log_file_max_bytes
+    s.log_file_backup_count = log_file_backup_count
+    s.log_file_prefix = log_file_prefix
+    return s
 
 
 class TestJsonFormatter:
@@ -153,42 +177,123 @@ class TestRedactingFilter:
 class TestConfigureLogging:
     """configure_logging 整合測試。"""
 
-    @staticmethod
-    def _mock_settings(level: str = "INFO", fmt: str = "json") -> object:
-        from unittest.mock import MagicMock
-
-        s = MagicMock()
-        s.log_level = level
-        s.log_format = fmt
-        return s
-
     def test_sets_log_level(self) -> None:
-        configure_logging(self._mock_settings("DEBUG"))  # type: ignore[arg-type]
+        configure_logging(_make_mock_settings(level="DEBUG"))  # type: ignore[arg-type]
         root = logging.getLogger()
         assert root.level == logging.DEBUG
 
     def test_json_format_uses_json_formatter(self) -> None:
-        configure_logging(self._mock_settings())  # type: ignore[arg-type]
+        configure_logging(_make_mock_settings())  # type: ignore[arg-type]
         root = logging.getLogger()
         assert len(root.handlers) == 1
         assert isinstance(root.handlers[0].formatter, JsonFormatter)
 
     def test_text_format_uses_standard_formatter(self) -> None:
-        configure_logging(self._mock_settings(fmt="text"))  # type: ignore[arg-type]
+        configure_logging(_make_mock_settings(fmt="text"))  # type: ignore[arg-type]
         root = logging.getLogger()
         assert len(root.handlers) == 1
         assert not isinstance(root.handlers[0].formatter, JsonFormatter)
 
     def test_redacting_filter_attached(self) -> None:
-        configure_logging(self._mock_settings())  # type: ignore[arg-type]
+        configure_logging(_make_mock_settings())  # type: ignore[arg-type]
         root = logging.getLogger()
         handler = root.handlers[0]
         filter_types = [type(f) for f in handler.filters]
         assert RedactingFilter in filter_types
 
     def test_idempotent_no_duplicate_handlers(self) -> None:
-        s = self._mock_settings()
+        s = _make_mock_settings()
         configure_logging(s)  # type: ignore[arg-type]
         configure_logging(s)  # type: ignore[arg-type]
         root = logging.getLogger()
         assert len(root.handlers) == 1
+
+
+class TestFileHandler:
+    """RotatingFileHandler 相關測試。"""
+
+    def test_no_file_handler_when_log_dir_empty(self) -> None:
+        """5.1: log_dir 為空時不建立 file handler。"""
+        configure_logging(_make_mock_settings(log_dir=""))  # type: ignore[arg-type]
+        root = logging.getLogger()
+        assert len(root.handlers) == 1
+        assert isinstance(root.handlers[0], logging.StreamHandler)
+        assert not isinstance(root.handlers[0], RotatingFileHandler)
+
+    def test_file_handler_created_when_log_dir_set(self, tmp_path: Path) -> None:
+        """5.2: log_dir 非空時建立 RotatingFileHandler 並正確設定參數。"""
+        configure_logging(
+            _make_mock_settings(
+                log_dir=str(tmp_path),
+                log_file_max_bytes=5_000_000,
+                log_file_backup_count=3,
+            )  # type: ignore[arg-type]
+        )
+        root = logging.getLogger()
+        file_handlers = [h for h in root.handlers if isinstance(h, RotatingFileHandler)]
+        assert len(file_handlers) == 1
+        fh = file_handlers[0]
+        assert fh.maxBytes == 5_000_000
+        assert fh.backupCount == 3
+
+    def test_file_handler_has_redacting_filter(self, tmp_path: Path) -> None:
+        """5.3: file handler 掛載 RedactingFilter。"""
+        configure_logging(
+            _make_mock_settings(log_dir=str(tmp_path))  # type: ignore[arg-type]
+        )
+        root = logging.getLogger()
+        file_handlers = [h for h in root.handlers if isinstance(h, RotatingFileHandler)]
+        assert len(file_handlers) == 1
+        filter_types = [type(f) for f in file_handlers[0].filters]
+        assert RedactingFilter in filter_types
+
+    def test_log_dir_created_if_not_exists(self, tmp_path: Path) -> None:
+        """5.4: 日誌目錄不存在時自動建立。"""
+        new_dir = tmp_path / "nested" / "logs"
+        assert not new_dir.exists()
+        configure_logging(
+            _make_mock_settings(log_dir=str(new_dir))  # type: ignore[arg-type]
+        )
+        assert new_dir.exists()
+
+    def test_log_file_prefix_affects_filename(self, tmp_path: Path) -> None:
+        """5.5: log_file_prefix 參數影響檔名。"""
+        configure_logging(
+            _make_mock_settings(
+                log_dir=str(tmp_path),
+                log_file_prefix="ccas-worker",
+            )  # type: ignore[arg-type]
+        )
+        root = logging.getLogger()
+        file_handlers = [h for h in root.handlers if isinstance(h, RotatingFileHandler)]
+        assert len(file_handlers) == 1
+        assert file_handlers[0].baseFilename.endswith("ccas-worker.log")
+
+    def test_file_handler_idempotent_when_log_dir_set(self, tmp_path: Path) -> None:
+        """連續呼叫兩次 configure_logging 時只保留一個 RotatingFileHandler。"""
+        s = _make_mock_settings(log_dir=str(tmp_path))
+        configure_logging(s)  # type: ignore[arg-type]
+        configure_logging(s)  # type: ignore[arg-type]
+        root = logging.getLogger()
+        file_handlers = [h for h in root.handlers if isinstance(h, RotatingFileHandler)]
+        assert len(file_handlers) == 1
+
+    def test_file_handler_uses_json_formatter(self, tmp_path: Path) -> None:
+        """file handler 繼承與 StreamHandler 相同的 formatter 類型。"""
+        configure_logging(
+            _make_mock_settings(log_dir=str(tmp_path), fmt="json")  # type: ignore[arg-type]
+        )
+        root = logging.getLogger()
+        file_handlers = [h for h in root.handlers if isinstance(h, RotatingFileHandler)]
+        assert len(file_handlers) == 1
+        assert isinstance(file_handlers[0].formatter, JsonFormatter)
+
+    def test_file_handler_uses_text_formatter(self, tmp_path: Path) -> None:
+        """log_format=text 時 file handler 使用標準 Formatter。"""
+        configure_logging(
+            _make_mock_settings(log_dir=str(tmp_path), fmt="text")  # type: ignore[arg-type]
+        )
+        root = logging.getLogger()
+        file_handlers = [h for h in root.handlers if isinstance(h, RotatingFileHandler)]
+        assert len(file_handlers) == 1
+        assert not isinstance(file_handlers[0].formatter, JsonFormatter)

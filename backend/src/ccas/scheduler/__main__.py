@@ -10,16 +10,14 @@ import sys
 
 from apscheduler.schedulers.blocking import BlockingScheduler
 
+from ccas.log import configure_logging
 from ccas.scheduler.jobs import run_payment_reminders_sync, trigger_pipeline_via_api
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
-)
 logger = logging.getLogger(__name__)
 
 
 def main() -> None:
+    configure_logging()
     """啟動 APScheduler 排程器。
 
     註冊的工作：

@@ -9,6 +9,8 @@ import json
 import logging
 import re
 from datetime import UTC, datetime
+from logging.handlers import RotatingFileHandler
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -123,3 +125,16 @@ def configure_logging(settings: Settings | None = None) -> None:
     handler.addFilter(RedactingFilter())
 
     root.addHandler(handler)
+
+    # 當 log_dir 非空時，同時寫入檔案
+    if settings.log_dir:
+        log_path = Path(settings.log_dir)
+        log_path.mkdir(parents=True, exist_ok=True)
+        file_handler = RotatingFileHandler(
+            log_path / f"{settings.log_file_prefix}.log",
+            maxBytes=settings.log_file_max_bytes,
+            backupCount=settings.log_file_backup_count,
+        )
+        file_handler.setFormatter(handler.formatter)
+        file_handler.addFilter(RedactingFilter())
+        root.addHandler(file_handler)

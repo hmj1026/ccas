@@ -18,6 +18,7 @@ openspec/*.log
 # Logs
 *.log
 logs/
+!logs/.gitkeep
 
 # Environment
 .env

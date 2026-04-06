@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from dotenv import dotenv_values
-from pydantic import PrivateAttr, field_validator
+from pydantic import Field, PrivateAttr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic_settings.sources.types import ENV_FILE_SENTINEL, DotenvType
 
@@ -53,6 +53,10 @@ class Settings(BaseSettings):
     staging_dir: str = "./data/staging"
     log_level: str = "INFO"
     log_format: str = "json"
+    log_dir: str = ""
+    log_file_max_bytes: int = Field(default=10_485_760, gt=0)
+    log_file_backup_count: int = Field(default=5, ge=0)
+    log_file_prefix: str = "ccas"
     api_host: str = "0.0.0.0"
     api_port: int = 8000
     api_token: str
