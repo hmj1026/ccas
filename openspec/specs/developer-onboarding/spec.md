@@ -171,14 +171,6 @@ Registry SHALL 至少涵蓋以下銀行代碼：CTBC, CATHAY, ESUN, TAISHIN, FUB
 
 文件 SHALL 包含「已合併/停止發卡」區段，說明花旗銀行消金業務併入星展銀行等歷史變更。
 
-### Requirement: Log persistence variables in .env.example
-
-`.env.example` 文件說明日誌持久化相關環境變數。
-
-#### Scenario: .env.example documents LOG_DIR
-- **WHEN** 開發者查閱 `.env.example`
-- **THEN** 可看到 `LOG_DIR`、`LOG_FILE_MAX_BYTES`、`LOG_FILE_BACKUP_COUNT`、`LOG_FILE_PREFIX` 的說明與預設值
-
 #### Scenario: 所有 registry 銀行出現在文件中
 
 - **WHEN** 比對 registry 與 `docs/bank-codes.md`
@@ -188,4 +180,32 @@ Registry SHALL 至少涵蓋以下銀行代碼：CTBC, CATHAY, ESUN, TAISHIN, FUB
 
 - **WHEN** 使用者在文件中搜尋「花旗」
 - **THEN** SHALL 找到花旗消金業務已於 2023 年併入星展銀行的說明
+
+### Requirement: Log persistence variables in .env.example
+
+`.env.example` SHALL 文件說明日誌持久化相關環境變數。
+
+#### Scenario: .env.example documents LOG_DIR
+
+- **WHEN** 開發者查閱 `.env.example`
+- **THEN** 可看到 `LOG_DIR`、`LOG_FILE_MAX_BYTES`、`LOG_FILE_BACKUP_COUNT`、`LOG_FILE_PREFIX` 的說明與預設值
+
+### Requirement: Development tools documentation
+
+開發者文件 SHALL 包含 GUI 工具的使用說明章節，涵蓋：
+
+1. 可用的 GUI 工具清單與用途
+2. 各工具的存取 URL
+3. redis-commander 連線確認方式
+4. 常見問題排解（port 衝突、資料庫檔案不存在）
+
+#### Scenario: 開發者查閱 GUI 工具說明
+
+- **WHEN** 開發者開啟開發文件
+- **THEN** 可找到 SQLite Web GUI 和 redis-commander 的存取方式與啟動指令
+
+#### Scenario: Port 衝突處理
+
+- **WHEN** 預設 port 與其他本地服務衝突
+- **THEN** 文件提供修改 port 映射的方法說明
 
