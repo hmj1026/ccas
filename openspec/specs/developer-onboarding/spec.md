@@ -171,6 +171,14 @@ Registry SHALL 至少涵蓋以下銀行代碼：CTBC, CATHAY, ESUN, TAISHIN, FUB
 
 文件 SHALL 包含「已合併/停止發卡」區段，說明花旗銀行消金業務併入星展銀行等歷史變更。
 
+### Requirement: Log persistence variables in .env.example
+
+`.env.example` 文件說明日誌持久化相關環境變數。
+
+#### Scenario: .env.example documents LOG_DIR
+- **WHEN** 開發者查閱 `.env.example`
+- **THEN** 可看到 `LOG_DIR`、`LOG_FILE_MAX_BYTES`、`LOG_FILE_BACKUP_COUNT`、`LOG_FILE_PREFIX` 的說明與預設值
+
 #### Scenario: 所有 registry 銀行出現在文件中
 
 - **WHEN** 比對 registry 與 `docs/bank-codes.md`
