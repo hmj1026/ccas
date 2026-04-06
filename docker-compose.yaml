@@ -134,5 +134,32 @@ services:
       retries: 5
     restart: unless-stopped
 
+  # --- Dev Tools (opt-in: docker compose --profile dev-tools up) ---
+
+  sqlite-web:
+    profiles: [dev-tools]
+    image: coleifer/sqlite-web@sha256:1e5b86237968ed747554f951c6df2fc2fe4bf4ef070b8ca23d553d7f6c6426f7
+    ports:
+      - "127.0.0.1:8088:8080"
+    volumes:
+      - ./backend/data:/data:ro
+    depends_on:
+      backend:
+        condition: service_healthy
+    command: ["sqlite_web", "/data/ccas.db", "--host", "0.0.0.0", "--port", "8080", "--read-only"]
+    restart: "no"
+
+  redis-commander:
+    profiles: [dev-tools]
+    image: rediscommander/redis-commander@sha256:19cd0c49f418779fa2822a0496c5e6516d0c792effc39ed20089e6268477e40a
+    ports:
+      - "127.0.0.1:8081:8081"
+    environment:
+      REDIS_HOSTS: local:redis:6379
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: "no"
+
 volumes:
   ccas-redis:
