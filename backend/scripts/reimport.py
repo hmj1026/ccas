@@ -15,8 +15,10 @@ Usage:
 
 import argparse
 import asyncio
+from typing import Any, cast
 
 from sqlalchemy import delete, func, select, update
+from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from ccas.classifier.job import run_classify_job
@@ -93,7 +95,7 @@ async def reset_staged_statuses(
 
     result = await session.execute(stmt)
     await session.commit()
-    return result.rowcount
+    return cast(CursorResult[Any], result).rowcount
 
 
 def _parse_args() -> argparse.Namespace:
