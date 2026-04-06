@@ -5,8 +5,8 @@
 
 ## 2. 更新 DB
 
-- [ ] 2.1 執行 `python -m ccas.tools.bank_configs --apply` 將新 filter 寫入 DB
+- [x] 2.1 執行 `python -m ccas.tools.bank_configs --apply` 將新 filter 寫入 DB
 
 ## 3. 驗證
 
-- [ ] 3.1 執行 `python -m ccas.pipeline --bank CTBC`，確認 ingest stage `staged > 0`（找到 CTBC 信用卡電子帳單）
+- [x] 3.1 執行 `python -m ccas.pipeline --bank CTBC`，確認 ingest stage `staged > 0`（找到 CTBC 信用卡電子帳單）

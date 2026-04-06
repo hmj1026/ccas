@@ -14,7 +14,7 @@ CCAS 目前僅使用 `StreamHandler` 將日誌輸出至 stdout。容器重啟後
 - 日誌同時寫入 stdout 和檔案，容器重啟後可回溯
 - 檔案自動 rotation 避免磁碟空間無限成長
 - 統一所有模組（API、worker、scheduler、bot）使用 `configure_logging()`
-- Docker 環境下 logs 透過 named volume 持久化
+- Docker 環境下 logs 透過 bind mount（`./logs:/logs`）持久化，專案根目錄保留 `logs/.gitkeep`
 - 設定項可透過環境變數調整，不需重新建置映像
 
 **Non-Goals:**
@@ -35,36 +35,39 @@ CCAS 目前僅使用 `StreamHandler` 將日誌輸出至 stdout。容器重啟後
 
 `RotatingFileHandler` 掛載與 `StreamHandler` 相同的 `JsonFormatter`/`TextFormatter` 和 `RedactingFilter`，確保機敏資訊遮罩在檔案中同樣生效。
 
-### D3: 新增 3 個 Settings 欄位
+### D3: 新增 4 個 Settings 欄位
 
-| 欄位 | 環境變數 | 預設值 | 說明 |
-|------|---------|--------|------|
-| `log_dir` | `LOG_DIR` | `""` (空字串=停用) | 日誌目錄路徑 |
-| `log_file_max_bytes` | `LOG_FILE_MAX_BYTES` | `10485760` (10 MB) | 單檔上限 |
-| `log_file_backup_count` | `LOG_FILE_BACKUP_COUNT` | `5` | 保留備份數 |
+| 欄位 | 環境變數 | 預設值 | 驗證 | 說明 |
+|------|---------|--------|------|------|
+| `log_dir` | `LOG_DIR` | `""` (空字串=停用) | — | 日誌目錄路徑 |
+| `log_file_max_bytes` | `LOG_FILE_MAX_BYTES` | `10485760` (10 MB) | `gt=0` | 單檔上限 |
+| `log_file_backup_count` | `LOG_FILE_BACKUP_COUNT` | `5` | `ge=0` | 保留備份數 |
+| `log_file_prefix` | `LOG_FILE_PREFIX` | `"ccas"` | — | 日誌檔名前綴 |
 
 `log_dir` 為空字串時不建立 file handler，行為與目前完全相同（向後相容）。
 
-### D4: 日誌檔名固定為 `ccas.log`
+### D4: 日誌檔名由 `log_file_prefix` 決定
 
-放在 `log_dir` 下。Rotation 產生 `ccas.log.1`, `ccas.log.2`...。不以日期命名，簡化管理。
+檔名為 `{log_file_prefix}.log`，放在 `log_dir` 下。Rotation 產生 `{prefix}.log.1`, `{prefix}.log.2`...。Docker 環境中各服務透過 `LOG_FILE_PREFIX` 環境變數設定獨立前綴（`ccas-backend`、`ccas-worker`、`ccas-scheduler`、`ccas-bot`）。
 
 ### D5: Scheduler 改用 `configure_logging()`
 
 移除 `scheduler/__main__.py` 的 `logging.basicConfig()` 呼叫，改為 `configure_logging()`。
 
-### D6: Docker volume 配置
+### D6: Docker bind mount 配置
+
+專案根目錄下 `logs/` 目錄透過 `.gitkeep` 追蹤於 git，`.gitignore` 排除日誌檔內容。Docker Compose 使用 bind mount 而非 named volume，方便開發者從 host 直接查看日誌。
 
 ```yaml
-volumes:
-  ccas-logs:
-
 # 所有服務加入
 volumes:
-  - ccas-logs:/logs
+  - ./logs:/logs
 
 # shared-env 加入
 LOG_DIR: "/logs"
+
+# 各服務獨立前綴
+LOG_FILE_PREFIX: "ccas-backend"  # / ccas-worker / ccas-scheduler / ccas-bot
 ```
 
 ## Risks / Trade-offs

@@ -6,4 +6,4 @@
 
 #### Scenario: .env.example documents LOG_DIR
 - **WHEN** 開發者查閱 `.env.example`
-- **THEN** 可看到 `LOG_DIR`、`LOG_FILE_MAX_BYTES`、`LOG_FILE_BACKUP_COUNT` 的說明與預設值
+- **THEN** 可看到 `LOG_DIR`、`LOG_FILE_MAX_BYTES`、`LOG_FILE_BACKUP_COUNT`、`LOG_FILE_PREFIX` 的說明與預設值
