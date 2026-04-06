@@ -107,18 +107,55 @@ Verify that an implementation matches the change artifacts (specs, tasks, design
      - Add SUGGESTION: "Code pattern deviation: <details>"
      - Recommendation: "Consider following project pattern: <example>"
 
-8. **Generate Verification Report**
+8. **Verify Archive Readiness (Spec Sync Pre-check)**
+
+   For each delta spec in `openspec/changes/<name>/specs/*/spec.md`:
+
+   a. **Read delta spec** — identify sections (`## ADDED Requirements`, `## MODIFIED Requirements`, etc.) and extract requirement headers under each section.
+
+   b. **Read corresponding main spec** at `openspec/specs/<capability>/spec.md` (may not exist). Extract existing requirement headers.
+
+   c. **Check operation/header consistency:**
+
+      - **MODIFIED but header missing in main spec**: The delta marks a requirement as MODIFIED, but `### Requirement: <name>` does not exist in the main spec. This means the delta should use ADDED instead.
+        → Add CRITICAL: "Delta spec `<capability>` marks '<requirement>' as MODIFIED, but it does not exist in main spec. Change to ADDED."
+
+      - **ADDED but header already exists in main spec**: The delta marks a requirement as ADDED, but `### Requirement: <name>` already exists in the main spec. This could indicate a previous failed archive that partially wrote the main spec without rolling back.
+        → Add CRITICAL: "Delta spec `<capability>` marks '<requirement>' as ADDED, but it already exists in main spec. Either delete the stale main spec entry (if from a failed archive) or change to MODIFIED."
+
+   d. **Validate delta spec requirements format:**
+
+      For each `### Requirement:` block in the delta spec:
+      - Check body contains `SHALL` or `MUST` keyword → CRITICAL if missing: "Requirement '<name>' in delta spec lacks SHALL/MUST keyword"
+      - Check at least one `#### Scenario:` exists under it → CRITICAL if missing: "Requirement '<name>' in delta spec has no scenarios"
+      - Check each scenario has `**WHEN**` and `**THEN**` → WARNING if missing
+
+   e. **Validate main spec requirements format (pre-merge check):**
+
+      For each existing `### Requirement:` block in the main spec (if it exists):
+      - Check body contains `SHALL` or `MUST` keyword → WARNING if missing: "Main spec `<capability>` requirement '<name>' lacks SHALL/MUST — archive validation will fail"
+      - Check at least one `#### Scenario:` exists → WARNING if missing: "Main spec `<capability>` requirement '<name>' has no scenarios — archive validation will fail"
+
+      This catches pre-existing main spec issues that would cause the merged result to fail validation.
+
+   f. **Check for orphaned main specs from partial syncs:**
+
+      If `openspec/specs/<capability>/spec.md` contains "TBD - created by archiving change <name>" in the Purpose section, but the change is still active (not archived), this indicates a previous failed archive left a stale file.
+      → Add WARNING: "Main spec `<capability>` appears to be a stale artifact from a previous failed archive of this change"
+
+9. **Generate Verification Report**
 
    **Summary Scorecard**:
    ```
    ## Verification Report: <change-name>
 
    ### Summary
-   | Dimension    | Status           |
-   |--------------|------------------|
-   | Completeness | X/Y tasks, N reqs|
-   | Correctness  | M/N reqs covered |
-   | Coherence    | Followed/Issues  |
+   | Dimension         | Status           |
+   |-------------------|------------------|
+   | Completeness      | X/Y tasks, N reqs|
+   | Correctness       | M/N reqs covered |
+   | Coherence         | Followed/Issues  |
+   | Archive Readiness | Sync OK/Issues   |
    ```
 
    **Issues by Priority**:
