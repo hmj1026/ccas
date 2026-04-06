@@ -32,7 +32,7 @@ function BillsPage() {
   const page = Number(searchParams.get('page') ?? '1')
 
   const filterValues: FilterBarParams = {
-    year, month, bankCode, status, category: '', q: '',
+    year, month, bank: bankCode, status, category: '', q: '',
   }
 
   /**
@@ -44,7 +44,7 @@ function BillsPage() {
   function handleFilterChange(key: FilterKey, value: string) {
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev)
-      const paramKey = key === 'bankCode' ? 'bank_code' : key
+      const paramKey = key === 'bank' ? 'bank_code' : key
       if (value) {
         next.set(paramKey, value)
       } else {

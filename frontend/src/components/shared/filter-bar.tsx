@@ -17,7 +17,7 @@ export interface FilterBarParams {
   /** 月份篩選，格式為 YYYY-MM，與 year 互斥。 */
   month: string
   /** 銀行代碼篩選（BankConfigItem.bank_code）。 */
-  bankCode: string
+  bank: string
   /** 付款狀態篩選：`"paid"` | `"unpaid"` | `""`（全部）。 */
   status: string
   /** 分類文字篩選。 */
@@ -121,8 +121,8 @@ export function FilterBar({ show, values, onChange, extra }: FilterBarProps) {
 
       {show.includes('bank') && (
         <select
-          value={values.bankCode}
-          onChange={(e) => onChange('bankCode', e.target.value)}
+          value={values.bank}
+          onChange={(e) => onChange('bank', e.target.value)}
           className="h-8 rounded-lg border border-input bg-background px-3 text-sm"
           aria-label="銀行篩選"
         >

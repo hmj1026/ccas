@@ -25,7 +25,7 @@ function OverviewPage() {
   const month = searchParams.get('month') ?? ''
 
   const filterValues: FilterBarParams = {
-    year: '', month, bankCode: '', status: '', category: '', q: '',
+    year: '', month, bank: '', status: '', category: '', q: '',
   }
 
   /**
@@ -38,9 +38,9 @@ function OverviewPage() {
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev)
       if (value) {
-        next.set(key === 'bankCode' ? 'bank_code' : key, value)
+        next.set(key === 'bank' ? 'bank_code' : key, value)
       } else {
-        next.delete(key === 'bankCode' ? 'bank_code' : key)
+        next.delete(key === 'bank' ? 'bank_code' : key)
       }
       return next
     })

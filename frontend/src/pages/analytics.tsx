@@ -44,7 +44,7 @@ function AnalyticsPage() {
   const trendMonths = Number(searchParams.get('trend_months') ?? '12')
 
   const filterValues: FilterBarParams = {
-    year, month, bankCode, status: '', category: '', q: '',
+    year, month, bank: bankCode, status: '', category: '', q: '',
   }
 
   /**
@@ -56,7 +56,7 @@ function AnalyticsPage() {
   function handleFilterChange(key: FilterKey, value: string) {
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev)
-      const paramKey = key === 'bankCode' ? 'bank_code' : key
+      const paramKey = key === 'bank' ? 'bank_code' : key
       if (value) {
         next.set(paramKey, value)
       } else {
