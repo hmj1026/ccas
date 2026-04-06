@@ -2,5 +2,24 @@
   "enabledPlugins": {
     "everything-claude-code@everything-claude-code": true,
     "codex@openai-codex": true
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "file=$(jq -r '.tool_input.file_path // empty' 2>/dev/null); if [[ \"$file\" == *.py ]]; then cd /Users/paul/Project/ccas/backend && uv run ruff check && uv run ruff format --check; fi",
+            "statusMessage": "ruff check + format..."
+          },
+          {
+            "type": "command",
+            "command": "file=$(jq -r '.tool_input.file_path // empty' 2>/dev/null); if [[ \"$file\" == *.ts || \"$file\" == *.tsx ]]; then cd /Users/paul/Project/ccas/frontend && pnpm tsc --noEmit; fi",
+            "statusMessage": "tsc --noEmit..."
+          }
+        ]
+      }
+    ]
   }
 }
