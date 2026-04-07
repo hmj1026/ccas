@@ -7,6 +7,7 @@
  */
 import { useQuery } from '@tanstack/react-query'
 import { Search } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
 import { apiGet } from '@/lib/api-client'
 import type { ApiResponse, BankConfigItem } from '@/lib/types'
 
@@ -62,6 +63,48 @@ function useBanks() {
     queryFn: () => apiGet<ApiResponse<readonly BankConfigItem[]>>('/api/settings/banks'),
     staleTime: 5 * 60 * 1000,
   })
+}
+
+/**
+ * 延遲提交的文字輸入。
+ * 本地即時更新，blur 或 Enter 時才觸發 onCommit，避免每次 keystroke 觸發 API 查詢。
+ * 外部 value 變更（例如 URL params 重置）時自動同步。
+ */
+function DebouncedInput({
+  value: externalValue,
+  onCommit,
+  ...rest
+}: Omit<React.ComponentProps<'input'>, 'onChange' | 'onBlur' | 'onKeyDown' | 'value'> & {
+  readonly value: string
+  readonly onCommit: (value: string) => void
+}) {
+  const [localValue, setLocalValue] = useState(externalValue)
+  const committedRef = useRef(externalValue)
+
+  useEffect(() => {
+    setLocalValue(externalValue)
+    committedRef.current = externalValue
+  }, [externalValue])
+
+  function commit() {
+    const trimmed = localValue.trim()
+    if (trimmed !== committedRef.current) {
+      committedRef.current = trimmed
+      onCommit(trimmed)
+    }
+  }
+
+  return (
+    <input
+      {...rest}
+      value={localValue}
+      onChange={(e) => setLocalValue(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') commit()
+      }}
+    />
+  )
 }
 
 /**
@@ -149,11 +192,11 @@ export function FilterBar({ show, values, onChange, extra }: FilterBarProps) {
       )}
 
       {show.includes('category') && (
-        <input
+        <DebouncedInput
           type="text"
           placeholder="分類"
           value={values.category}
-          onChange={(e) => onChange('category', e.target.value)}
+          onCommit={(v) => onChange('category', v)}
           className="h-8 w-28 rounded-lg border border-input bg-background px-3 text-sm"
           aria-label="分類篩選"
         />
@@ -162,11 +205,11 @@ export function FilterBar({ show, values, onChange, extra }: FilterBarProps) {
       {show.includes('q') && (
         <div className="relative">
           <Search className="absolute left-2.5 top-2 size-4 text-muted-foreground" />
-          <input
+          <DebouncedInput
             type="text"
             placeholder="搜尋商家..."
             value={values.q}
-            onChange={(e) => onChange('q', e.target.value)}
+            onCommit={(v) => onChange('q', v)}
             className="h-8 w-44 rounded-lg border border-input bg-background pl-8 pr-3 text-sm"
             aria-label="商家搜尋"
           />
