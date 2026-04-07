@@ -117,7 +117,16 @@ cd backend && uv run python scripts/seed.py --reset     # Reset and re-seed
 
 # Env Validation
 ./scripts/check-env.sh                    # Check .env for missing vars
+
+# Git Hooks (Pre-CI)
+./scripts/setup-hooks.sh                  # Install pre-commit + pre-push hooks
+./scripts/pre-push.sh                     # Manually run full CI-equivalent checks
+RUN_FRONTEND=0 ./scripts/pre-push.sh     # Backend checks only
+RUN_BACKEND=0 ./scripts/pre-push.sh      # Frontend checks only
 ```
+
+> **Git Hooks**: `setup.sh` 會自動安裝 hooks。pre-commit 檢查 staged 檔案的 lint（< 10s），
+> pre-push 執行完整 CI 鏡像檢查。緊急繞過：`git commit --no-verify` / `git push --no-verify`。
 
 ### Docker — QA 測試（含 tesseract OCR）
 

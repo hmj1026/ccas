@@ -2,7 +2,6 @@
   "permissions": {
     "allow": [
       "Bash(openspec *)",
-
       "Bash(uv sync*)",
       "Bash(uv add *)",
       "Bash(uv run pytest*)",
@@ -15,7 +14,6 @@
       "Bash(uv tool:*)",
       "Bash(python3:*)",
       "Bash(python -m pytest:*)",
-
       "Bash(pnpm add:*)",
       "Bash(pnpm test:*)",
       "Bash(pnpm vitest:*)",
@@ -25,23 +23,18 @@
       "Bash(pnpm list:*)",
       "Bash(pnpm build:*)",
       "Bash(node:*)",
-
       "Bash(docker build:*)",
       "Bash(docker run:*)",
       "Bash(docker rmi:*)",
       "Bash(docker compose:*)",
       "Bash(docker --version)",
-
       "Bash(git:*)",
       "Bash(gh run:*)",
-
       "Bash(bash ./scripts/*)",
       "Bash(./scripts/*)",
       "Bash(shellcheck:*)",
       "Bash(chmod +x:*)",
-
       "Bash(cx:*)",
-
       "Bash(ls:*)",
       "Bash(find:*)",
       "Bash(grep:*)",
@@ -51,19 +44,21 @@
       "Bash(echo:*)",
       "Bash(rm:*)",
       "Bash(command -v:*)",
-
       "Bash(curl -s http://127.0.0.1:*)",
       "Bash(netstat -tlnp)",
       "Bash(lsof -nP -iTCP:5173 -sTCP:LISTEN)",
-
       "Bash(kill %1)",
       "Bash(pkill -f \"uvicorn ccas.api\")",
-
       "Bash(uv --version)",
       "Bash(tesseract --version)",
       "Bash(dpkg -l)",
       "Bash(sudo apt-get:*)",
-      "Bash(sudo chown:*)"
+      "Bash(sudo chown:*)",
+      "Bash(npx eslint:*)",
+      "Bash(bash -n scripts/pre-commit.sh)",
+      "Bash(bash -n scripts/pre-push.sh)",
+      "Bash(bash -n scripts/setup-hooks.sh)",
+      "Bash(bash -n scripts/setup.sh)"
     ]
   },
   "hooks": {
