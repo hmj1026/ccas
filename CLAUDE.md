@@ -145,29 +145,7 @@ docker compose up --build                  # Start all services
 
 ## ECC Agent & Skill Reference
 
-When implementing features in this project, use these ECC agents at the appropriate phase:
-
-| Phase | Agent | Slash Command | When |
-|-------|-------|--------------|------|
-| Planning | `planner` | `/plan` | Complex features, multi-file changes |
-| Architecture | `architect` | -- | System design decisions |
-| TDD | `tdd-guide` | `/tdd` | Before writing implementation code |
-| Code Review | `python-reviewer` | `/python-review` | After Python code changes |
-| Code Review | `code-reviewer` | `/code-review` | After any code changes |
-| Security | `security-reviewer` | -- | Auth, user input, API endpoints, secrets |
-| Database | `database-reviewer` | -- | SQLAlchemy queries, schema design, migrations |
-| Build Fix | `build-error-resolver` | `/build-fix` | Build or type errors |
-| Docs | `doc-updater` | `/update-docs` | Documentation updates |
-
-Relevant ECC skills for this project:
-- `python-patterns` -- Pythonic idioms, type hints, PEP 8
-- `python-testing` -- pytest, TDD, fixtures, mocking, parametrize
-- `backend-patterns` -- FastAPI routes, middleware, error handling
-- `api-design` -- REST resource naming, status codes, pagination
-- `database-migrations` -- Alembic patterns, zero-downtime migrations
-- `tdd-workflow` -- RED-GREEN-REFACTOR cycle
-- `security-review` -- OWASP Top 10, input validation
-- `docker-patterns` -- Docker Compose for local dev
+See `.claude/rules/execution-policy.md` for the full agent roster, mandatory post-steps, and task routing. Key agents: `python-reviewer`, `tdd-guide`, `database-reviewer`, `security-reviewer`.
 
 ## Environment Configuration
 
@@ -190,14 +168,4 @@ A single `.env` file at the **project root** is shared by backend and frontend:
 
 ## Multi-Platform Parity
 
-The 10 OpenSpec skills are defined in three formats:
-- `.claude/skills/<name>/SKILL.md` -- Claude Code (markdown with YAML frontmatter)
-- `.codex/skills/<name>/SKILL.md` -- Codex (same format, skills only)
-- `.gemini/skills/<name>/SKILL.md` -- Gemini (same format)
-
-Slash commands:
-- `.claude/commands/opsx/*.md` -- Claude Code commands
-- `.gemini/commands/opsx/*.toml` -- Gemini commands (TOML format)
-- Codex has no commands directory
-
-When modifying an OpenSpec skill, update all three platform skill definitions to maintain parity.
+When modifying an OpenSpec skill, update all three platforms: `.claude/skills/`, `.codex/skills/`, `.gemini/skills/`. See `.claude/rules/skill-parity.md` for full details.
