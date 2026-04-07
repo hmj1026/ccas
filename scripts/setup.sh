@@ -95,5 +95,8 @@ UV_CACHE_DIR="$UV_CACHE_DIR" uv run python -m ccas.tools.bank_configs \
   --registry ../config/bank-code-registry.yaml \
   --apply
 
+step "安裝 Git hooks"
+"$ROOT_DIR/scripts/setup-hooks.sh"
+
 printf '\n[OK] 初始化完成。\n'
 printf '下一步：執行 ./scripts/start.sh 啟動後端。\n'
