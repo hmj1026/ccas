@@ -33,6 +33,10 @@ const COLORS = [
   'var(--chart-5)',
 ]
 
+/** Tooltip 金額格式化器，hoisted 避免每次 render 重建。 */
+const currencyFormatter = (value: number | string | readonly (number | string)[] | undefined) =>
+  `$${Number(value).toLocaleString()}`
+
 /** 趨勢圖回溯月數選項（近 6 / 12 / 24 個月）。 */
 const TREND_MONTHS_OPTIONS = [6, 12, 24] as const
 
@@ -153,11 +157,11 @@ function AnalyticsPage() {
           <EmptyState message="尚無趨勢資料" />
         ) : (
           <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={[...trend]}>
+            <LineChart data={trend}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis dataKey="month" />
               <YAxis />
-              <Tooltip formatter={(value) => `$${Number(value).toLocaleString()}`} />
+              <Tooltip formatter={currencyFormatter} />
               <Line
                 type="monotone"
                 dataKey="total"
@@ -184,7 +188,7 @@ function AnalyticsPage() {
             <ResponsiveContainer width="100%" height={300}>
               <PieChart>
                 <Pie
-                  data={[...categories]}
+                  data={categories}
                   dataKey="total"
                   nameKey="category"
                   cx="50%"
@@ -199,7 +203,7 @@ function AnalyticsPage() {
                     />
                   ))}
                 </Pie>
-                <Tooltip formatter={(value) => `$${Number(value).toLocaleString()}`} />
+                <Tooltip formatter={currencyFormatter} />
                 <Legend />
               </PieChart>
             </ResponsiveContainer>
@@ -218,11 +222,11 @@ function AnalyticsPage() {
             <EmptyState message="尚無銀行資料" />
           ) : (
             <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={[...banks]}>
+              <BarChart data={banks}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey={(d: BankItem) => d.bank_name ?? d.bank_code} />
                 <YAxis />
-                <Tooltip formatter={(value) => `$${Number(value).toLocaleString()}`} />
+                <Tooltip formatter={currencyFormatter} />
                 <Bar dataKey="total" fill="var(--chart-3)" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>

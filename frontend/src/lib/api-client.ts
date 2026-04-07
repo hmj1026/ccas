@@ -4,16 +4,8 @@
 
 const API_BASE = import.meta.env.VITE_API_BASE ?? ''
 
-/**
- * 回傳所有 API 請求的標準 headers。
- *
- * @returns 包含 Content-Type 的 headers 物件
- */
-function getHeaders(): HeadersInit {
-  return {
-    'Content-Type': 'application/json',
-  }
-}
+/** 所有 JSON API 請求共用的標準 headers。 */
+const JSON_HEADERS: HeadersInit = { 'Content-Type': 'application/json' }
 
 /**
  * 解析 fetch Response，非 2xx 時拋出帶訊息的 Error。
@@ -61,7 +53,7 @@ export async function apiGet<T>(
     }
   }
   const response = await fetch(url.toString(), {
-    headers: getHeaders(),
+    headers: JSON_HEADERS,
     credentials: 'include',
   })
   return handleResponse<T>(response)
@@ -77,7 +69,7 @@ export async function apiGet<T>(
 export async function apiPost<T>(path: string, body: unknown): Promise<T> {
   const response = await fetch(`${API_BASE}${path}`, {
     method: 'POST',
-    headers: getHeaders(),
+    headers: JSON_HEADERS,
     body: JSON.stringify(body),
     credentials: 'include',
   })
@@ -94,7 +86,7 @@ export async function apiPost<T>(path: string, body: unknown): Promise<T> {
 export async function apiPut<T>(path: string, body: unknown): Promise<T> {
   const response = await fetch(`${API_BASE}${path}`, {
     method: 'PUT',
-    headers: getHeaders(),
+    headers: JSON_HEADERS,
     body: JSON.stringify(body),
     credentials: 'include',
   })
@@ -111,7 +103,7 @@ export async function apiPut<T>(path: string, body: unknown): Promise<T> {
 export async function apiPatch<T>(path: string, body: unknown): Promise<T> {
   const response = await fetch(`${API_BASE}${path}`, {
     method: 'PATCH',
-    headers: getHeaders(),
+    headers: JSON_HEADERS,
     body: JSON.stringify(body),
     credentials: 'include',
   })
@@ -127,7 +119,7 @@ export async function apiPatch<T>(path: string, body: unknown): Promise<T> {
 export async function apiDelete<T>(path: string): Promise<T> {
   const response = await fetch(`${API_BASE}${path}`, {
     method: 'DELETE',
-    headers: getHeaders(),
+    headers: JSON_HEADERS,
     credentials: 'include',
   })
   return handleResponse<T>(response)
@@ -155,7 +147,7 @@ export async function apiFetchBlob(
     }
   }
   const response = await fetch(url.toString(), {
-    headers: getHeaders(),
+    headers: JSON_HEADERS,
     credentials: 'include',
   })
   if (!response.ok) {
