@@ -65,12 +65,38 @@ cp .env.example .env
 ```
 
 編輯 `.env`，填入必要值：
-- `TELEGRAM_BOT_TOKEN` -- Telegram Bot API token
-- `TELEGRAM_CHAT_ID` -- notification target chat ID
-- `TELEGRAM_ALLOWED_CHAT_IDS` -- bot command allowlist
-- `API_TOKEN` -- API authentication Bearer token
-- `FRONTEND_ORIGINS` -- allowed browser origins for cookie-based dashboard login
-- `PDF_PASSWORD_<BANK_CODE>` -- per-bank PDF decryption passwords
+
+<!-- AUTO-GENERATED from .env.example -->
+| 變數 | 必填 | 說明 | 預設值 |
+|------|------|------|--------|
+| **資料庫** | | | |
+| `DATABASE_URL` | 否 | SQLite 連線字串 | `sqlite+aiosqlite:///./data/ccas.db` |
+| **Telegram** | | | |
+| `TELEGRAM_BOT_TOKEN` | 是* | Bot API token（從 @BotFather 取得）| — |
+| `TELEGRAM_CHAT_ID` | 是* | 通知目標 chat ID | — |
+| `TELEGRAM_ALLOWED_CHAT_IDS` | 是* | Bot 指令白名單（逗號分隔）| — |
+| **Gmail** | | | |
+| `GMAIL_CREDENTIALS_PATH` | 否 | OAuth credentials.json 路徑 | `./data/credentials.json` |
+| `GMAIL_TOKEN_PATH` | 否 | OAuth token.json 路徑 | `./data/token.json` |
+| `STAGING_DIR` | 否 | PDF staging 目錄 | `./data/staging` |
+| **API** | | | |
+| `API_TOKEN` | **是** | Bearer token（登入用）| — |
+| `API_HOST` | 否 | 監聽 host | `0.0.0.0` |
+| `API_PORT` | 否 | 監聽 port | `8000` |
+| `FRONTEND_ORIGINS` | 否 | CORS allowed origins | `http://127.0.0.1:5173,...` |
+| **Redis** | | | |
+| `REDIS_URL` | 否 | Redis 連線字串（prod 需修改）| `redis://localhost:6379/0` |
+| **排程器** | | | |
+| `SCHEDULER_API_BASE_URL` | 否 | 排程器呼叫 API 的 base URL | `http://127.0.0.1:{API_PORT}` |
+| **日誌** | | | |
+| `LOG_LEVEL` | 否 | 日誌等級 | `INFO` |
+| `LOG_FORMAT` | 否 | 輸出格式（`json` / `text`）| `json` |
+| `LOG_DIR` | 否 | 日誌檔案目錄（空 = 僅 stdout）| — |
+| **帳單 PDF 密碼** | | | |
+| `PDF_PASSWORD_<BANK_CODE>` | 是* | 各銀行 PDF 解密密碼 | — |
+
+*依實際需求填入；留空時對應功能停用。
+<!-- AUTO-GENERATED END -->
 
 ### 後端啟動
 
@@ -188,5 +214,3 @@ ccas/
 ```
 proposal -> specs -> design -> tasks -> implementation -> archive
 ```
-
-詳細的實作階段與相依關係，請參考 [docs/EXECUTION_ORDER.md](docs/EXECUTION_ORDER.md)。
