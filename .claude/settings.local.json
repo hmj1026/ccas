@@ -58,7 +58,8 @@
       "Bash(bash -n scripts/pre-commit.sh)",
       "Bash(bash -n scripts/pre-push.sh)",
       "Bash(bash -n scripts/setup-hooks.sh)",
-      "Bash(bash -n scripts/setup.sh)"
+      "Bash(bash -n scripts/setup.sh)",
+      "Bash(RUN_FRONTEND=0 ./scripts/pre-push.sh)"
     ]
   },
   "hooks": {
