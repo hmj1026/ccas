@@ -108,6 +108,7 @@ describe('TransactionsPage', () => {
 
     const searchInput = screen.getByLabelText('商家搜尋')
     await user.type(searchInput, 'star')
+    await user.keyboard('{Enter}')
 
     // Verify apiGet was called with q param
     await waitFor(() => {
