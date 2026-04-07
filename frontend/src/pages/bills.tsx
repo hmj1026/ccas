@@ -7,19 +7,10 @@ import { ExternalLink, Check, Clock, ChevronLeft, ChevronRight } from 'lucide-re
 import { useSearchParams } from 'react-router'
 import { apiGet, apiPatch } from '@/lib/api-client'
 import type { ApiResponse, BillItem, PaginatedResponse } from '@/lib/types'
+import { formatAmount } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { LoadingState, ErrorState, EmptyState } from '@/components/shared/states'
 import { FilterBar, type FilterBarParams, type FilterKey } from '@/components/shared/filter-bar'
-
-/**
- * 將數字金額格式化為帶千分位的新台幣字串。
- *
- * @param amount - 金額（整數，單位 TWD）
- * @returns 格式化字串，例如 `$1,234`
- */
-function formatAmount(amount: number): string {
-  return `$${amount.toLocaleString()}`
-}
 
 function BillsPage() {
   const queryClient = useQueryClient()

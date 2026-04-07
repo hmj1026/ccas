@@ -7,21 +7,10 @@ import { Download, ChevronLeft, ChevronRight } from 'lucide-react'
 import { useSearchParams } from 'react-router'
 import { apiGet, apiFetchBlob } from '@/lib/api-client'
 import type { PaginatedResponse, TransactionItem } from '@/lib/types'
+import { formatAmount } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { LoadingState, ErrorState, EmptyState } from '@/components/shared/states'
 import { FilterBar, type FilterBarParams, type FilterKey } from '@/components/shared/filter-bar'
-
-/**
- * 將金額格式化為帶幣別前綴的字串。
- * TWD 顯示 `$`，其他幣別顯示幣別代碼。
- *
- * @param amount - 金額數值
- * @param currency - 幣別代碼，例如 `"TWD"`、`"USD"`
- * @returns 格式化字串，例如 `$1,234` 或 `USD 50`
- */
-function formatAmount(amount: number, currency: string): string {
-  return `${currency === 'TWD' ? '$' : currency + ' '}${amount.toLocaleString()}`
-}
 
 function TransactionsPage() {
   const [searchParams, setSearchParams] = useSearchParams()

@@ -12,3 +12,16 @@ import { twMerge } from "tailwind-merge"
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
 }
+
+/**
+ * 將數字金額格式化為帶幣別前綴的字串。
+ * TWD 顯示 `$`，其他幣別顯示幣別代碼。
+ *
+ * @param amount - 金額數值
+ * @param currency - 幣別代碼，預設 `"TWD"`
+ * @returns 格式化字串，例如 `$1,234` 或 `USD 50`
+ */
+export function formatAmount(amount: number, currency = 'TWD'): string {
+  const prefix = currency === 'TWD' ? '$' : `${currency} `
+  return `${prefix}${amount.toLocaleString()}`
+}
