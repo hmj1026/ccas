@@ -46,7 +46,7 @@ class Settings(BaseSettings):
     )
 
     database_url: str = "sqlite+aiosqlite:///./data/ccas.db"
-    telegram_bot_token: str
+    telegram_bot_token: str = ""
     telegram_chat_id: str = ""
     gmail_credentials_path: str = "./data/credentials.json"
     gmail_token_path: str = "./data/token.json"
