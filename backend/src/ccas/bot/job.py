@@ -50,8 +50,8 @@ async def run_notify_job(
     summary = NotifySummary()
 
     settings = get_settings()
-    if not settings.telegram_chat_id:
-        logger.info("TELEGRAM_CHAT_ID 未設定，跳過 notify stage")
+    if not settings.telegram_bot_token or not settings.telegram_chat_id:
+        logger.info("TELEGRAM_BOT_TOKEN 或 TELEGRAM_CHAT_ID 未設定，跳過 notify stage")
         return summary
 
     stmt = select(Bill).where(Bill.is_notified.is_(False))
