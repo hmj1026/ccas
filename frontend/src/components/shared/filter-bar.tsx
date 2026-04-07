@@ -79,10 +79,15 @@ function DebouncedInput({
   readonly onCommit: (value: string) => void
 }) {
   const [localValue, setLocalValue] = useState(externalValue)
+  const [prevExternalValue, setPrevExternalValue] = useState(externalValue)
   const committedRef = useRef(externalValue)
 
-  useEffect(() => {
+  if (externalValue !== prevExternalValue) {
+    setPrevExternalValue(externalValue)
     setLocalValue(externalValue)
+  }
+
+  useEffect(() => {
     committedRef.current = externalValue
   }, [externalValue])
 
