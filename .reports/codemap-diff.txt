@@ -1,39 +1,31 @@
-Codemap Generation Report
-=========================
-Date: 2026-04-03
-Type: Incremental update (prior: 2026-04-01)
+Codemap Update Report — 2026-04-07
+====================================
 
-Files scanned: 92 (69 Python, 23 TypeScript/TSX)
-Total backend LOC: ~6490 (was ~6021, +7.8%)
-Codemaps updated: 5
+Files Updated
+-------------
+docs/CODEMAPS/architecture.md  — timestamp refresh (no structural changes)
+docs/CODEMAPS/backend.md        — timestamp + added Configuration (config.py Settings) section
+docs/CODEMAPS/frontend.md       — timestamp refresh (no structural changes)
+docs/CODEMAPS/data.md           — timestamp refresh (no structural changes)
+docs/CODEMAPS/dependencies.md   — timestamp + Docker services rework + dev-tools profile
 
-Changes since last scan (2026-04-01):
-  Files added:
-    - backend/src/ccas/parser/ocr.py (pytesseract OCR fallback)
-    - backend/alembic/versions/ca5a1f05744d_add_bill_is_notified_column.py
+Changes Detected Since 2026-04-04/05
+--------------------------------------
++ New config fields: redis_url, scheduler_api_base_url, log_dir, log_file_max_bytes,
+  log_file_backup_count, log_file_prefix (added during Docker/logging work 2026-04-07)
++ Docker backend service: /logs volume added
++ Docker redis: maxmemory 256mb, allkeys-lru, appendonly yes
++ Docker frontend: changed from Vite dev server (:5173) to nginx static (:8080)
++ Docker dev-tools profile: sqlite-web (:8088), redis-commander (:8081)
 
-  Files modified:
-    - backend/src/ccas/storage/models.py (added is_notified to Bill)
-    - backend/src/ccas/pipeline/orchestrator.py (stage range --from/--to)
-    - backend/src/ccas/parser/registry.py, parser/job.py (OCR integration)
-    - backend/src/ccas/api/routers/auth.py (session handling updates)
-    - backend/src/ccas/bot/job.py (is_notified flag usage)
-    - backend/pyproject.toml (+pytesseract, +pymupdf dev, coverage 50->80%)
+New Dependencies
+----------------
+None (all existing packages)
 
-  New dependencies:
-    - pytesseract>=0.3.13 (runtime, OCR fallback)
-    - pymupdf>=1.27.2.2 (dev, PDF rendering for tests)
+Architecture Changes
+--------------------
+None — same 5 pipeline stages, same 23 API endpoints, same 6 DB tables
 
-  Architecture changes:
-    - New migration: ca5a1f05744d (bill.is_notified column)
-    - Pipeline now supports --from/--to stage range execution
-    - Parser module gained OCR fallback (pytesseract)
-    - Coverage threshold raised from 50% to 80%
-
-  Module LOC changes:
-    - parser: 836 -> 1192 (+42%, ocr.py + ctbc_v1 enhancements)
-    - pipeline: 569 -> 637 (+12%, stage range options)
-    - api: 1129 -> 1163 (+3%, auth updates)
-    - Others: minimal change
-
-Staleness warnings: None (all docs updated this session)
+Staleness Warnings
+------------------
+None — all codemaps now dated 2026-04-07

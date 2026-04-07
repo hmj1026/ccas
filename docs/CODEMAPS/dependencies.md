@@ -1,4 +1,4 @@
-<!-- Generated: 2026-04-04 | Files scanned: 94 | Token estimate: ~500 -->
+<!-- Generated: 2026-04-07 | Files scanned: 94 | Token estimate: ~550 -->
 
 # Dependencies
 
@@ -18,18 +18,25 @@
 - **Library**: `python-telegram-bot`
 
 ### Redis
-- **Usage**: Job queue backend (APScheduler, RQ)
+- **Usage**: RQ job queue (pipeline) + APScheduler backend
+- **Config**: `maxmemory 256mb`, `allkeys-lru` eviction, `appendonly yes`
 - **Library**: `redis`
 
 ## Docker Compose Services
 
 ```
-backend   (FastAPI + uvicorn, port 8000)
-worker    (RQ worker, processes pipeline jobs from Redis queue)
-scheduler (APScheduler cron)
-bot       (Telegram bot)
-frontend  (Vite dev server, port 5173, dev override only)
-redis     (port 6379)
+backend    port 8000 (127.0.0.1), volumes: /data /logs /scripts
+worker     RQ worker, volumes: /data /logs (depends: backend, redis)
+scheduler  APScheduler cron, volumes: /data /logs (depends: redis)
+bot        Telegram bot, volumes: /data /logs (depends: redis)
+frontend   nginx static, port 8080 (127.0.0.1) (depends: backend)
+redis      port 6379 (127.0.0.1), named volume: ccas-redis
+```
+
+**dev-tools profile** (`docker compose --profile dev-tools up`):
+```
+sqlite-web       SQLite browser (read-only), port 8088
+redis-commander  Redis key browser, port 8081
 ```
 
 ## System Dependencies

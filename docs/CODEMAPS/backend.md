@@ -1,4 +1,4 @@
-<!-- Generated: 2026-04-05 | Files scanned: 69 | Token estimate: ~800 -->
+<!-- Generated: 2026-04-07 | Files scanned: 69 | Token estimate: ~900 -->
 
 # Backend
 
@@ -58,6 +58,19 @@ Supports `--from`/`--to` stage range via `PipelineOptions`.
 | 3 | Parse | `parser/` | `job.py`, `banks/ctbc_v1.py`, `ocr.py` (fallback) |
 | 4 | Classify | `classifier/` | `job.py`, `engine.py` |
 | 5 | Notify | `bot/` | `notifications.py`, `job.py` (auto-query is_notified=False) |
+
+## Configuration (config.py Settings)
+
+| Group | Key Fields |
+|-------|-----------|
+| Database | `database_url`, `staging_dir` |
+| Gmail | `gmail_credentials_path`, `gmail_token_path` |
+| Telegram | `telegram_bot_token`, `telegram_chat_id`, `telegram_allowed_chat_ids` |
+| API | `api_token`, `api_host`, `api_port`, `api_session_cookie_name`, `api_session_max_age`, `api_cookie_secure`, `frontend_origins` |
+| Redis | `redis_url` (default: `redis://localhost:6379/0`) |
+| Scheduler | `scheduler_api_base_url` |
+| Logging | `log_level`, `log_format`, `log_dir`, `log_file_max_bytes`, `log_file_backup_count`, `log_file_prefix` |
+| PDF Passwords | `get_pdf_password(bank_code)` → reads `PDF_PASSWORD_{BANK_CODE}` env var |
 
 ## Module Inventory
 
