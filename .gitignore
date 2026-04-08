@@ -70,3 +70,5 @@ docker-compose.override.yml
 
 # Claude Code plan files
 .claude/plans/
+
+compact-notes/
