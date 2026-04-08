@@ -106,6 +106,22 @@ cp config/banks.example.yaml config/banks.yaml
 
 編輯 `config/banks.yaml`，設定各銀行的 Gmail 篩選條件和 PDF 密碼。
 
+### 目前支援的銀行
+
+| 銀行 | bank_code | Gmail filter 範例 | PDF 密碼環境變數 |
+|------|-----------|-------------------|-----------------|
+| 中國信託 | `CTBC` | `from:ebill@estats.ctbcbank.com subject:信用卡電子帳單` | `PDF_PASSWORD_CTBC` |
+| 永豐銀行 | `SINOPAC` | `from:ebillservice@newebill.banksinopac.com.tw subject:永豐銀行信用卡 subject:電子帳單通知` | `PDF_PASSWORD_SINOPAC` |
+
+### 新增永豐銀行設定
+
+1. 在 `config/banks.yaml` 確認 SINOPAC 區塊已啟用（`is_active: true`）
+2. 在 `.env` 新增 PDF 密碼：
+   ```bash
+   PDF_PASSWORD_SINOPAC=你的身分證字號
+   ```
+3. Gmail filter 會自動匹配主旨格式為「永豐銀行信用卡YYYY年MM月份電子帳單通知」的郵件
+
 ## 6. 啟動服務（Docker）
 
 ### 開發模式

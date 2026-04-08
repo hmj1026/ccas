@@ -151,3 +151,42 @@ CTBC_ROC_ZERO_BALANCE_TXN_PAGE_TEXT = (
 CTBC_GARBLED_TEXT = (
     "(cid:12)(cid:45)(cid:78)(cid:90)(cid:11)(cid:22)(cid:33)(cid:5)(cid:7)(cid:3)"
 )
+
+# -- SINOPAC page text fixtures --
+
+SINOPAC_FIRST_PAGE_TEXT = (
+    "永豐銀行 信用卡帳單\n"
+    "SinoPac Bank Credit Card Statement\n"
+    "\n"
+    "2026年03月份帳單\n"
+    "繳費截止日：2026/04/20\n"
+    "本期應繳總額：NT$ 8,750\n"
+)
+
+SINOPAC_NON_SINOPAC_PAGE_TEXT = (
+    "國泰世華商業銀行 信用卡帳單\nCard Statement\n\n繳費截止日：2026/04/10\n"
+)
+
+SINOPAC_SUMMARY_MISSING_DUE_DATE_TEXT = (
+    "永豐銀行 信用卡帳單\n2026年03月份帳單\n本期應繳總額：NT$ 8,750\n"
+)
+
+SINOPAC_SUMMARY_MISSING_TOTAL_TEXT = (
+    "永豐銀行 信用卡帳單\n2026年03月份帳單\n繳費截止日：2026/04/20\n"
+)
+
+# -- SINOPAC table row fixtures --
+
+SINOPAC_TABLE_HEADER_ROW = ["交易日", "入帳日", "卡號末四碼", "交易說明", "金額"]
+
+SINOPAC_TRANSACTION_ROWS = [
+    ["03/01", "03/03", "5678", "全聯福利中心", "420"],
+    ["03/08", "03/10", "5678", "家樂福", "1,280"],
+    ["03/15", "03/17", "9012", "momo購物網", "2,350"],
+]
+
+# -- Expected parsed values --
+
+EXPECTED_SINOPAC_BILLING_MONTH = "2026-03"
+EXPECTED_SINOPAC_TOTAL_AMOUNT = 8750
+EXPECTED_SINOPAC_DUE_DATE = date(2026, 4, 20)
