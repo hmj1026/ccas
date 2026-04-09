@@ -15,10 +15,11 @@ from pathlib import Path
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ccas.config import get_settings
+from ccas.config import Settings, get_settings
 from ccas.ingestor.auth import load_credentials
 from ccas.ingestor.gmail_client import (
     GmailAttachmentMeta,
+    GmailMessage,
     build_gmail_service,
     download_attachment,
     search_messages,
@@ -192,6 +193,106 @@ async def _process_attachment(
             )
 
 
+async def _process_web_fetch(
+    session: AsyncSession,
+    bank_code: str,
+    message: GmailMessage,
+    staging_dir: str,
+    settings: Settings,
+    summary: IngestionSummary,
+    *,
+    force: bool = False,
+) -> None:
+    """處理無附件郵件的 web-fetch PDF 下載。
+
+    透過 FetcherRegistry 查找對應的 BankFetcher，
+    從 HTML 郵件內容中下載 PDF 帳單。
+    """
+    from ccas.ingestor.fetcher import fetcher_registry
+
+    fetcher = fetcher_registry.get(bank_code)
+    if fetcher is None:
+        return
+
+    assert message.html_body is not None  # noqa: S101
+    if not fetcher.can_fetch(message.html_body):
+        return
+
+    synthetic_attachment_id = f"web_fetch_{message.message_id}"
+
+    existing = await find_existing_staged(
+        session, message.message_id, synthetic_attachment_id
+    )
+    if existing is not None:
+        is_failed_retry = existing.status == "failed"
+        if not force and not is_failed_retry:
+            summary.skipped_count += 1
+            logger.debug("略過已存在的 web-fetch：%s", message.message_id)
+            return
+
+        if is_failed_retry:
+            logger.info("自動重試 failed web-fetch：%s", message.message_id)
+        else:
+            logger.info("Force 模式：重新 web-fetch %s", message.message_id)
+
+    credentials = {
+        "national_id": settings.get_bank_credential(bank_code, "NATIONAL_ID") or "",
+        "roc_birthday": settings.get_bank_credential(bank_code, "ROC_BIRTHDAY") or "",
+    }
+
+    staged_filename = f"{bank_code}_{message.message_id}.pdf"
+    staged_path = build_staged_path(
+        staging_dir, bank_code, message.message_id, staged_filename
+    )
+
+    try:
+        pdf_bytes = await asyncio.to_thread(
+            fetcher.fetch_pdf, message.html_body, credentials
+        )
+
+        target_dir = staged_path.parent
+        await asyncio.to_thread(lambda: target_dir.mkdir(parents=True, exist_ok=True))
+        await asyncio.to_thread(staged_path.write_bytes, pdf_bytes)
+
+        if existing is not None:
+            await _cleanup_old_staged_file(existing.staged_path)
+            await delete_staged_record(session, existing)
+
+        await create_staged_record(
+            session,
+            bank_code=bank_code,
+            message_id=message.message_id,
+            attachment_id=synthetic_attachment_id,
+            message_date=message.message_date,
+            original_filename=staged_filename,
+            staged_path=str(staged_path),
+            status="staged",
+            source_type="web_fetch",
+        )
+        summary.staged_count += 1
+        logger.info("已 web-fetch staged：%s -> %s", message.message_id, staged_path)
+
+    except Exception as exc:
+        error_msg = f"Web-fetch 失敗 ({bank_code}/{message.message_id}): {exc}"
+        summary.failed_count += 1
+        summary.errors.append(error_msg)
+        logger.error(error_msg, exc_info=True)
+
+        if existing is None:
+            await create_staged_record(
+                session,
+                bank_code=bank_code,
+                message_id=message.message_id,
+                attachment_id=synthetic_attachment_id,
+                message_date=message.message_date,
+                original_filename=staged_filename,
+                staged_path=None,
+                status="failed",
+                error_reason=str(exc),
+                source_type="web_fetch",
+            )
+
+
 async def run_ingestion_job(
     session: AsyncSession,
     options: PipelineOptions | None = None,
@@ -250,13 +351,24 @@ async def run_ingestion_job(
         summary.messages_found += len(messages)
 
         for message in messages:
-            for attachment in message.pdf_attachments:
-                await _process_attachment(
+            if message.pdf_attachments:
+                for attachment in message.pdf_attachments:
+                    await _process_attachment(
+                        session,
+                        service,
+                        bank.bank_code,
+                        attachment,
+                        settings.staging_dir,
+                        summary,
+                        force=force,
+                    )
+            elif message.html_body is not None:
+                await _process_web_fetch(
                     session,
-                    service,
                     bank.bank_code,
-                    attachment,
+                    message,
                     settings.staging_dir,
+                    settings,
                     summary,
                     force=force,
                 )

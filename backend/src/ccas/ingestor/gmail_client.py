@@ -46,11 +46,13 @@ class GmailMessage:
         message_id: Gmail message ID。
         message_date: 郵件日期。
         pdf_attachments: 該郵件中的 PDF 附件清單。
+        html_body: 郵件的 HTML 內容（僅當無 PDF 附件時填入）。
     """
 
     message_id: str
     message_date: datetime
     pdf_attachments: tuple[GmailAttachmentMeta, ...]
+    html_body: str | None = None
 
 
 def build_gmail_service(credentials: Credentials):
@@ -134,6 +136,36 @@ def _extract_pdf_attachments(
     return attachments
 
 
+def _extract_html_body(payload: dict, depth: int = 0) -> str | None:
+    """從 message payload 遞迴搜尋 HTML 內容。
+
+    Args:
+        payload: Gmail message payload（或其子 MIME part）。
+        depth: 目前遞迴深度。
+
+    Returns:
+        解碼後的 HTML 字串，若找不到則回傳 None。
+    """
+    if depth > _MAX_MIME_DEPTH:
+        return None
+
+    mime_type = payload.get("mimeType", "")
+
+    if mime_type == "text/html":
+        body = payload.get("body", {})
+        data = body.get("data")
+        if data:
+            return base64.urlsafe_b64decode(data).decode("utf-8", errors="replace")
+        return None
+
+    for part in payload.get("parts", []):
+        result = _extract_html_body(part, depth + 1)
+        if result is not None:
+            return result
+
+    return None
+
+
 _MAX_PAGES_SAFETY = 100
 
 
@@ -169,13 +201,15 @@ def _iter_message_refs(
 def search_messages(service, gmail_filter: str) -> list[GmailMessage]:
     """依 gmail_filter 搜尋 Gmail 郵件，並解析每封郵件的 PDF 附件。
 
+    含 PDF 附件的郵件以 pdf_attachments 回傳；不含 PDF 附件的郵件
+    會嘗試擷取 HTML 內容，供 web-fetch 流程使用。
+
     Args:
         service: Gmail API service 物件。
         gmail_filter: Gmail 搜尋語法字串。
 
     Returns:
-        符合條件的 GmailMessage 清單，每個 message 只包含 PDF 附件。
-        不含 PDF 附件的郵件會被過濾掉。
+        符合條件的 GmailMessage 清單。
     """
     all_message_refs: list[dict] = []
     try:
@@ -209,14 +243,16 @@ def search_messages(service, gmail_filter: str) -> list[GmailMessage]:
         message_date = _parse_message_date(headers)
 
         pdf_attachments = _extract_pdf_attachments(msg_id, payload, message_date)
+        html_body: str | None = None
         if not pdf_attachments:
-            continue
+            html_body = _extract_html_body(payload)
 
         result.append(
             GmailMessage(
                 message_id=msg_id,
                 message_date=message_date,
                 pdf_attachments=tuple(pdf_attachments),
+                html_body=html_body,
             )
         )
 

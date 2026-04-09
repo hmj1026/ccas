@@ -102,6 +102,7 @@ async def create_staged_record(
     staged_path: str | None,
     status: str,
     error_reason: str | None = None,
+    source_type: str = "attachment",
 ) -> StagedAttachment:
     """建立並持久化一筆 StagedAttachment 記錄。
 
@@ -115,6 +116,7 @@ async def create_staged_record(
         staged_path: staging 落地路徑（失敗時為 None）。
         status: 處理狀態（"staged" 或 "failed"）。
         error_reason: 失敗原因（成功時為 None）。
+        source_type: 來源類型（"attachment" 或 "web_fetch"）。
 
     Returns:
         新建的 StagedAttachment 記錄。
@@ -128,6 +130,7 @@ async def create_staged_record(
         staged_path=staged_path,
         status=status,
         error_reason=error_reason,
+        source_type=source_type,
     )
     session.add(record)
     await session.flush()

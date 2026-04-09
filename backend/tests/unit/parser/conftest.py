@@ -190,3 +190,184 @@ SINOPAC_TRANSACTION_ROWS = [
 EXPECTED_SINOPAC_BILLING_MONTH = "2026-03"
 EXPECTED_SINOPAC_TOTAL_AMOUNT = 8750
 EXPECTED_SINOPAC_DUE_DATE = date(2026, 4, 20)
+
+# -- CATHAY page text fixtures --
+
+CATHAY_FIRST_PAGE_TEXT = (
+    "國泰世華銀行\n"
+    "信用卡帳單\n"
+    "2026年03月份帳單\n"
+    "繳費截止日：2026/04/12\n"
+    "本期應繳總額：NT$ 4,830\n"
+)
+
+CATHAY_NON_CATHAY_PAGE_TEXT = "某某銀行\n信用卡帳單\n帳單月份：2026年03月\n"
+
+CATHAY_SUMMARY_MISSING_DUE_DATE_TEXT = (
+    "國泰世華銀行\n信用卡帳單\n2026年03月份帳單\n本期應繳總額：NT$ 4,830\n"
+)
+
+CATHAY_SUMMARY_MISSING_TOTAL_TEXT = (
+    "國泰世華銀行\n信用卡帳單\n2026年03月份帳單\n繳費截止日：2026/04/12\n"
+)
+
+CATHAY_TABLE_HEADER_ROW = ["交易日", "入帳日", "卡號末四碼", "交易說明", "金額"]
+
+CATHAY_TRANSACTION_ROWS = [
+    ["03/02", "03/04", "2345", "全家便利商店", "180"],
+    ["03/10", "03/12", "2345", "誠品書店", "1,450"],
+    ["03/18", "03/20", "6789", "好市多", "3,200"],
+]
+
+EXPECTED_CATHAY_BILLING_MONTH = "2026-03"
+EXPECTED_CATHAY_TOTAL_AMOUNT = 4830
+EXPECTED_CATHAY_DUE_DATE = date(2026, 4, 12)
+
+# -- FUBON page text fixtures --
+
+FUBON_FIRST_PAGE_TEXT = (
+    "台北富邦銀行\n"
+    "信用卡帳單\n"
+    "帳單月份：2026年03月\n"
+    "繳費截止日：2026/04/15\n"
+    "本期應繳總額：NT$ 15,800\n"
+)
+
+FUBON_NON_FUBON_PAGE_TEXT = "某某銀行\n信用卡帳單\n帳單月份：2026年03月\n"
+
+FUBON_SUMMARY_MISSING_DUE_DATE_TEXT = (
+    "台北富邦銀行\n信用卡帳單\n帳單月份：2026年03月\n本期應繳總額：NT$ 15,800\n"
+)
+
+FUBON_SUMMARY_MISSING_TOTAL_TEXT = (
+    "台北富邦銀行\n信用卡帳單\n帳單月份：2026年03月\n繳費截止日：2026/04/15\n"
+)
+
+FUBON_TABLE_HEADER_ROW = ["交易日", "入帳日", "卡號末四碼", "交易說明", "金額"]
+
+FUBON_TRANSACTION_ROWS = [
+    ["03/05", "03/07", "8899", "全聯福利中心", "680"],
+    ["03/10", "03/12", "8899", "台灣大哥大", "499"],
+    ["03/15", "03/17", "8899", "誠品書店", "1,250"],
+]
+
+FUBON_EXPECTED_BILLING_MONTH = "2026-03"
+FUBON_EXPECTED_TOTAL_AMOUNT = 15800
+FUBON_EXPECTED_DUE_DATE = date(2026, 4, 15)
+
+# -- ESUN page text fixtures --
+
+ESUN_FIRST_PAGE_TEXT = (
+    "玉山銀行 信用卡帳單\n"
+    "E.SUN Bank Credit Card Statement\n"
+    "\n"
+    "2026年03月份帳單\n"
+    "繳費截止日：2026/04/18\n"
+    "本期應繳總額：NT$ 7,620\n"
+)
+
+ESUN_NON_ESUN_PAGE_TEXT = (
+    "國泰世華商業銀行 信用卡帳單\nCard Statement\n\n繳費截止日：2026/04/10\n"
+)
+
+ESUN_SUMMARY_MISSING_DUE_DATE_TEXT = (
+    "玉山銀行 信用卡帳單\n2026年03月份帳單\n本期應繳總額：NT$ 7,620\n"
+)
+
+ESUN_SUMMARY_MISSING_TOTAL_TEXT = (
+    "玉山銀行 信用卡帳單\n2026年03月份帳單\n繳費截止日：2026/04/18\n"
+)
+
+# -- ESUN table row fixtures --
+
+ESUN_TABLE_HEADER_ROW = ["交易日", "入帳日", "卡號末四碼", "交易說明", "金額"]
+
+ESUN_TRANSACTION_ROWS = [
+    ["03/01", "03/03", "4567", "全家便利商店", "350"],
+    ["03/08", "03/10", "4567", "蝦皮購物", "1,280"],
+    ["03/15", "03/17", "8901", "NETFLIX.COM", "590"],
+]
+
+# -- Expected parsed values --
+
+EXPECTED_ESUN_BILLING_MONTH = "2026-03"
+EXPECTED_ESUN_TOTAL_AMOUNT = 7620
+EXPECTED_ESUN_DUE_DATE = date(2026, 4, 18)
+
+# -- TAISHIN page text fixtures --
+
+TAISHIN_FIRST_PAGE_TEXT = (
+    "台新銀行 信用卡帳單\n"
+    "Taishin Bank Credit Card Statement\n"
+    "\n"
+    "2026年03月份帳單\n"
+    "繳費截止日：2026/04/22\n"
+    "本期應繳總額：NT$ 9,380\n"
+)
+
+TAISHIN_NON_TAISHIN_PAGE_TEXT = (
+    "國泰世華商業銀行 信用卡帳單\nCard Statement\n\n繳費截止日：2026/04/10\n"
+)
+
+TAISHIN_SUMMARY_MISSING_DUE_DATE_TEXT = (
+    "台新銀行 信用卡帳單\n2026年03月份帳單\n本期應繳總額：NT$ 9,380\n"
+)
+
+TAISHIN_SUMMARY_MISSING_TOTAL_TEXT = (
+    "台新銀行 信用卡帳單\n2026年03月份帳單\n繳費截止日：2026/04/22\n"
+)
+
+# -- TAISHIN table row fixtures --
+
+TAISHIN_TABLE_HEADER_ROW = ["交易日", "入帳日", "卡號末四碼", "交易說明", "金額"]
+
+TAISHIN_TRANSACTION_ROWS = [
+    ["03/03", "03/05", "6789", "全聯福利中心", "520"],
+    ["03/10", "03/12", "6789", "大潤發", "2,360"],
+    ["03/20", "03/22", "1234", "星巴克", "280"],
+]
+
+# -- Expected parsed values --
+
+EXPECTED_TAISHIN_BILLING_MONTH = "2026-03"
+EXPECTED_TAISHIN_TOTAL_AMOUNT = 9380
+EXPECTED_TAISHIN_DUE_DATE = date(2026, 4, 22)
+
+# -- UBOT page text fixtures --
+
+UBOT_FIRST_PAGE_TEXT = (
+    "聯邦銀行 信用卡帳單\n"
+    "Union Bank of Taiwan Credit Card Statement\n"
+    "\n"
+    "2026年03月份帳單\n"
+    "繳費截止日：2026/04/18\n"
+    "本期應繳總額：NT$ 6,530\n"
+)
+
+UBOT_NON_UBOT_PAGE_TEXT = (
+    "國泰世華商業銀行 信用卡帳單\nCard Statement\n\n繳費截止日：2026/04/10\n"
+)
+
+UBOT_SUMMARY_MISSING_DUE_DATE_TEXT = (
+    "聯邦銀行 信用卡帳單\n2026年03月份帳單\n本期應繳總額：NT$ 6,530\n"
+)
+
+UBOT_SUMMARY_MISSING_TOTAL_TEXT = (
+    "聯邦銀行 信用卡帳單\n2026年03月份帳單\n繳費截止日：2026/04/18\n"
+)
+
+# -- UBOT table row fixtures --
+
+UBOT_TABLE_HEADER_ROW = ["交易日", "入帳日", "卡號末四碼", "交易說明", "金額"]
+
+UBOT_TRANSACTION_ROWS = [
+    ["03/05", "03/07", "3456", "7-ELEVEN", "120"],
+    ["03/12", "03/14", "3456", "全聯福利中心", "1,850"],
+    ["03/22", "03/24", "7890", "家樂福", "960"],
+]
+
+# -- Expected parsed values --
+
+EXPECTED_UBOT_BILLING_MONTH = "2026-03"
+EXPECTED_UBOT_TOTAL_AMOUNT = 6530
+EXPECTED_UBOT_DUE_DATE = date(2026, 4, 18)

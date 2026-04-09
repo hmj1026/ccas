@@ -16,6 +16,14 @@
 並設定 bank_code 與 version 屬性。
 """
 
-from . import ctbc_v1, sinopac_v1
+from . import cathay_v1, ctbc_v1, esun_v1, fubon_v1, sinopac_v1, taishin_v1, ubot_v1
 
-__all__ = ["ctbc_v1", "sinopac_v1"]
+__all__ = [
+    "cathay_v1",
+    "ctbc_v1",
+    "esun_v1",
+    "fubon_v1",
+    "sinopac_v1",
+    "taishin_v1",
+    "ubot_v1",
+]

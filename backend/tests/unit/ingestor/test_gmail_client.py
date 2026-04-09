@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from ccas.ingestor.gmail_client import (
+    _extract_html_body,
     _extract_pdf_attachments,
     download_attachment,
     search_messages,
@@ -87,15 +88,17 @@ class TestSearchMessages:
         assert result == []
 
     @patch("ccas.ingestor.gmail_client.call_with_retry")
-    def test_skips_message_without_pdf(self, mock_retry):
-        """郵件只有非 PDF 附件時，該郵件不出現在結果中。"""
+    def test_message_without_pdf_still_returned(self, mock_retry):
+        """郵件只有非 PDF 附件時，仍回傳但 pdf_attachments 為空。"""
         mock_retry.side_effect = [
             {"messages": [{"id": "msg-001"}]},
             _make_message_payload("msg-001", [_image_part()]),
         ]
 
         result = search_messages(MagicMock(), "from:bank@example.com")
-        assert result == []
+        assert len(result) == 1
+        assert result[0].pdf_attachments == ()
+        assert result[0].html_body is None  # image part is not HTML
 
     @patch("ccas.ingestor.gmail_client.call_with_retry")
     def test_multiple_pdfs_in_one_message(self, mock_retry):
@@ -294,3 +297,83 @@ class TestSearchMessagesPagination:
 
         with pytest.raises(RuntimeError, match="安全上限"):
             search_messages(MagicMock(), "from:bank@example.com")
+
+
+class TestExtractHtmlBody:
+    """_extract_html_body() tests."""
+
+    def test_extracts_html_from_flat_part(self):
+        """Extracts HTML from a flat text/html part."""
+        html_content = "<html><body>Hello</body></html>"
+        encoded = base64.urlsafe_b64encode(html_content.encode()).decode()
+        payload = {
+            "mimeType": "text/html",
+            "body": {"data": encoded},
+        }
+        result = _extract_html_body(payload)
+        assert result == html_content
+
+    def test_extracts_html_from_nested_multipart(self):
+        """Extracts HTML from nested multipart structure."""
+        html_content = "<html><body>Nested</body></html>"
+        encoded = base64.urlsafe_b64encode(html_content.encode()).decode()
+        payload = {
+            "mimeType": "multipart/alternative",
+            "parts": [
+                {"mimeType": "text/plain", "body": {"data": "plain text"}},
+                {"mimeType": "text/html", "body": {"data": encoded}},
+            ],
+        }
+        result = _extract_html_body(payload)
+        assert result == html_content
+
+    def test_returns_none_when_no_html(self):
+        """Returns None when no text/html part exists."""
+        payload = {
+            "mimeType": "multipart/mixed",
+            "parts": [
+                {"mimeType": "text/plain", "body": {"data": "text only"}},
+            ],
+        }
+        result = _extract_html_body(payload)
+        assert result is None
+
+    def test_returns_none_when_no_body_data(self):
+        """Returns None when HTML part has no data."""
+        payload = {
+            "mimeType": "text/html",
+            "body": {},
+        }
+        result = _extract_html_body(payload)
+        assert result is None
+
+    def test_search_messages_with_html_body(self):
+        """search_messages includes html_body for messages without PDF attachments."""
+        html_content = "<html><body>Bill Link</body></html>"
+        encoded = base64.urlsafe_b64encode(html_content.encode()).decode()
+
+        with patch("ccas.ingestor.gmail_client.call_with_retry") as mock_retry:
+            mock_retry.side_effect = [
+                {"messages": [{"id": "msg-html"}]},
+                {
+                    "id": "msg-html",
+                    "payload": {
+                        "headers": [
+                            {"name": "Date", "value": "Mon, 10 Mar 2026 10:00:00 +0800"}
+                        ],
+                        "mimeType": "multipart/alternative",
+                        "parts": [
+                            {
+                                "mimeType": "text/html",
+                                "filename": "",
+                                "body": {"data": encoded},
+                            },
+                        ],
+                    },
+                },
+            ]
+
+            result = search_messages(MagicMock(), "from:fubon@example.com")
+            assert len(result) == 1
+            assert result[0].html_body == html_content
+            assert result[0].pdf_attachments == ()
