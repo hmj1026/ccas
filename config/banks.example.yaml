@@ -15,3 +15,8 @@ banks:
     gmail_filter: "from:ebillservice@newebill.banksinopac.com.tw subject:永豐銀行信用卡 subject:電子帳單通知"
     active_parser_version: v1
     is_active: true
+
+  - bank_code: FUBON
+    gmail_filter: "from:rs@cf.taipeifubon.com.tw subject:台北富邦銀行 subject:信用卡帳單"
+    active_parser_version: v1
+    is_active: true

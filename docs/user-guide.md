@@ -112,6 +112,20 @@ cp config/banks.example.yaml config/banks.yaml
 |------|-----------|-------------------|-----------------|
 | 中國信託 | `CTBC` | `from:ebill@estats.ctbcbank.com subject:信用卡電子帳單` | `PDF_PASSWORD_CTBC` |
 | 永豐銀行 | `SINOPAC` | `from:ebillservice@newebill.banksinopac.com.tw subject:永豐銀行信用卡 subject:電子帳單通知` | `PDF_PASSWORD_SINOPAC` |
+| 玉山銀行 | `ESUN` | `from:estatement@esunbank.com subject:玉山銀行 subject:信用卡電子帳單` | `PDF_PASSWORD_ESUN` |
+| 聯邦銀行 | `UBOT` | `from:estatement@ebillv2.card.ubot.com.tw subject:聯邦銀行信用卡 subject:電子帳單` | `PDF_PASSWORD_UBOT` |
+| 國泰世華 | `CATHAY` | `from:service@pxbillrc01.cathaybk.com.tw subject:國泰世華銀行信用卡 subject:電子帳單` | `PDF_PASSWORD_CATHAY` |
+| 台新銀行 | `TAISHIN` | `from:webmaster@bhurecv.taishinbank.com.tw subject:台新信用卡電子帳單` | `PDF_PASSWORD_TAISHIN` |
+| 台北富邦 | `FUBON` | `from:rs@cf.taipeifubon.com.tw subject:台北富邦銀行 subject:信用卡帳單` | `PDF_PASSWORD_FUBON` |
+
+### 新增玉山銀行設定
+
+1. 在 `config/banks.yaml` 確認 ESUN 區塊已啟用（`is_active: true`）
+2. 在 `.env` 新增 PDF 密碼：
+   ```bash
+   PDF_PASSWORD_ESUN=你的身分證字號
+   ```
+3. Gmail filter 會自動匹配主旨格式為「玉山銀行YYYY年MM月信用卡電子帳單」的郵件
 
 ### 新增永豐銀行設定
 
@@ -121,6 +135,58 @@ cp config/banks.example.yaml config/banks.yaml
    PDF_PASSWORD_SINOPAC=你的身分證字號
    ```
 3. Gmail filter 會自動匹配主旨格式為「永豐銀行信用卡YYYY年MM月份電子帳單通知」的郵件
+
+### 新增聯邦銀行設定
+
+1. 在 `config/banks.yaml` 確認 UBOT 區塊已啟用（`is_active: true`）
+2. 在 `.env` 新增 PDF 密碼：
+   ```bash
+   PDF_PASSWORD_UBOT=你的身分證字號
+   ```
+3. Gmail filter 會自動匹配寄件者 `estatement@ebillv2.card.ubot.com.tw` 且主旨包含「聯邦銀行信用卡」+「電子帳單」的郵件
+
+### 新增國泰世華銀行設定
+
+1. 在 `config/banks.yaml` 確認 CATHAY 區塊已啟用（`is_active: true`）
+2. 在 `.env` 新增 PDF 密碼：
+   ```bash
+   PDF_PASSWORD_CATHAY=你的身分證字號
+   ```
+3. Gmail filter 會自動匹配寄件者 `service@pxbillrc01.cathaybk.com.tw` 且主旨格式為「國泰世華銀行信用卡YYYY年M月電子帳單」的郵件
+
+### 新增台新銀行設定
+
+1. 在 `config/banks.yaml` 確認 TAISHIN 區塊已啟用（`is_active: true`）
+2. 在 `.env` 新增 PDF 密碼：
+   ```bash
+   PDF_PASSWORD_TAISHIN=你的密碼
+   ```
+   密碼規則：身分證字號後 2 碼 + 生日月日 4 碼（共 6 碼）
+3. Gmail filter 會自動匹配寄件者 `webmaster@bhurecv.taishinbank.com.tw` 且主旨格式為「台新信用卡電子帳單 YYYY年M月」的郵件
+
+### 新增台北富邦銀行設定
+
+台北富邦銀行帳單郵件有兩種格式：
+
+- **格式 A**：郵件直接包含 PDF 附件（標準流程）
+- **格式 B**：郵件僅包含「下載帳單明細」連結，需填寫身分證字號、民國生日及驗證碼後下載 PDF（web-fetch 流程）
+
+兩種格式皆由同一 Gmail filter 匹配，系統會自動判斷並處理。
+
+1. 在 `config/banks.yaml` 確認 FUBON 區塊已啟用（`is_active: true`）
+2. 在 `.env` 新增 PDF 密碼：
+   ```bash
+   PDF_PASSWORD_FUBON=你的身分證字號
+   ```
+3. 在 `.env` 新增 web-fetch 憑證（格式 B 需要）：
+   ```bash
+   FUBON_NATIONAL_ID=你的身分證字號
+   FUBON_ROC_BIRTHDAY=0881010
+   ```
+   民國生日格式為 7 碼：民國年 3 碼 + 月 2 碼 + 日 2 碼（例如民國 68 年 10 月 26 日 = `0881010`）
+4. Gmail filter 會自動匹配寄件者 `rs@cf.taipeifubon.com.tw` 且主旨包含「台北富邦銀行」+「信用卡帳單」的郵件
+
+> **注意**：格式 B 的 CAPTCHA 驗證碼由 OCR 自動辨識（成功率約 90-95%）。若辨識失敗，系統會自動重試最多 3 次。需確保 Docker 環境中 tesseract 可用。
 
 ## 6. 啟動服務（Docker）
 

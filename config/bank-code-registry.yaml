@@ -22,8 +22,8 @@ banks:
   - bank_code: FUBON
     bank_name: 台北富邦
     fsc_code: "012"
-    supported: false
-    notes: 尚未提供正式 parser，適合先配置 Gmail filter
+    supported: true
+    notes: 支援 v1 parser，可自動解析表格式帳單
   - bank_code: MEGA
     bank_name: 兆豐銀行
     fsc_code: "017"
