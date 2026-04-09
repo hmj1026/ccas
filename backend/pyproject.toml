@@ -22,6 +22,8 @@ dependencies = [
     "apscheduler",
     "python-dotenv>=1.2.2",
     "pytesseract>=0.3.13",
+    "httpx",
+    "beautifulsoup4",
 ]
 
 [build-system]
@@ -70,7 +72,6 @@ pythonVersion = "3.12"
 [dependency-groups]
 dev = [
     "fpdf2>=2.8.7",
-    "httpx",
     "pymupdf>=1.27.2.2",
     "pyright",
     "pytest",

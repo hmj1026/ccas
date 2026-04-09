@@ -116,6 +116,21 @@ class Settings(BaseSettings):
         key = f"PDF_PASSWORD_{bank_code.upper()}"
         return self._env_map.get(key)
 
+    def get_bank_credential(self, bank_code: str, key: str) -> str | None:
+        """取得指定銀行的額外憑證。
+
+        從環境變數 ``{BANK_CODE}_{KEY}`` 讀取。
+
+        Args:
+            bank_code: 銀行代碼（不分大小寫）。
+            key: 憑證鍵名（不分大小寫）。
+
+        Returns:
+            憑證字串；若未設定則回傳 None。
+        """
+        env_key = f"{bank_code.upper()}_{key.upper()}"
+        return self._env_map.get(env_key)
+
     def get_frontend_origins(self) -> list[str]:
         """解析允許攜帶 cookie 的前端來源清單。"""
         return [
