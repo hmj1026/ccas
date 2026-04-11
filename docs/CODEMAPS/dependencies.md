@@ -17,7 +17,7 @@
 - **Captcha**: OCR 為主的 captcha 解算（`captcha.py`）
 
 ### Telegram Bot API
-- **Module**: `bot/` (10 files, 900 LOC)
+- **Module**: `bot/` (10 files, ~932 LOC)
 - **Auth**: Bot token
 - **Commands**: `/status`, `/upcoming`, `/summary`, `/category`, `/paid`
 - **Push**: New bill notifications, payment reminders
