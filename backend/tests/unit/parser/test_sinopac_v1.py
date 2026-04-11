@@ -16,13 +16,19 @@ from ccas.parser.base import ParseError
 from .conftest import (
     EXPECTED_SINOPAC_BILLING_MONTH,
     EXPECTED_SINOPAC_DUE_DATE,
+    EXPECTED_SINOPAC_REAL_BILLING_MONTH,
+    EXPECTED_SINOPAC_REAL_DUE_DATE,
+    EXPECTED_SINOPAC_REAL_TOTAL_AMOUNT,
     EXPECTED_SINOPAC_TOTAL_AMOUNT,
     SINOPAC_FIRST_PAGE_TEXT,
     SINOPAC_NON_SINOPAC_PAGE_TEXT,
+    SINOPAC_REAL_FIRST_PAGE_TEXT,
+    SINOPAC_REAL_TXN_PAGE_TEXT,
     SINOPAC_SUMMARY_MISSING_DUE_DATE_TEXT,
     SINOPAC_SUMMARY_MISSING_TOTAL_TEXT,
     SINOPAC_TABLE_HEADER_ROW,
     SINOPAC_TRANSACTION_ROWS,
+    SINOPAC_ZERO_BALANCE_FIRST_PAGE_TEXT,
     make_mock_page,
 )
 
@@ -225,3 +231,54 @@ class TestParse:
         assert result.total_amount == EXPECTED_SINOPAC_TOTAL_AMOUNT
         assert result.due_date == EXPECTED_SINOPAC_DUE_DATE
         assert len(result.transactions) == 3
+
+
+# -- Real-PDF format tests (no-colon due date, row-based total, MM/DD txns) --
+
+
+class TestRealPdfFormat:
+    """Tests exercising the actual SINOPAC PDF layout sampled from production."""
+
+    def test_extracts_summary_without_colon(self):
+        parser = _make_parser()
+        page = make_mock_page(SINOPAC_REAL_FIRST_PAGE_TEXT)
+
+        billing_month, total_amount, due_date = parser._extract_summary([page])
+
+        assert billing_month == EXPECTED_SINOPAC_REAL_BILLING_MONTH
+        assert total_amount == EXPECTED_SINOPAC_REAL_TOTAL_AMOUNT
+        assert due_date == EXPECTED_SINOPAC_REAL_DUE_DATE
+
+    def test_zero_balance_bill_raises_identifiable_parse_error(self):
+        parser = _make_parser()
+        page = make_mock_page(SINOPAC_ZERO_BALANCE_FIRST_PAGE_TEXT)
+
+        with pytest.raises(ParseError, match="zero-balance"):
+            parser._extract_summary([page])
+
+    def test_extracts_transactions_from_real_text_layout(self):
+        parser = _make_parser()
+        summary_page = make_mock_page(SINOPAC_REAL_FIRST_PAGE_TEXT)
+        txn_page = make_mock_page(SINOPAC_REAL_TXN_PAGE_TEXT)
+        pages = cast(
+            list[pdfplumber.page.Page],
+            [summary_page, txn_page],
+        )
+
+        txns = parser._extract_transactions(pages, 2026)
+
+        # Expect: negative refund + 3 consumption rows = 4 items
+        assert len(txns) == 4
+        # Refund row first in the sample text
+        refund = txns[0]
+        assert refund.amount == -7147
+        assert refund.trans_date == date(2026, 3, 5)
+
+        consumption_amounts = [t.amount for t in txns[1:]]
+        assert 500 in consumption_amounts
+        assert 975 in consumption_amounts
+        assert 1188 in consumption_amounts
+
+        txn_with_card = next(t for t in txns if t.amount == 500)
+        assert txn_with_card.card_last4 == "4300"
+        assert txn_with_card.merchant.startswith("悠遊卡")

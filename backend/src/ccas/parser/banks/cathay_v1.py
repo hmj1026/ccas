@@ -22,7 +22,12 @@ logger = logging.getLogger(__name__)
 
 # -- Identification patterns --
 
-_CATHAY_KEYWORDS = ("國泰世華", "信用卡")
+# 真實 PDF page 0 收件人姓名常被 CID 字型遮蔽，且部分年份的 PDF 文字中「國泰世華」
+# 被拆分成「國泰」「世華」兩段或完全消失。使用兩組鍵詞做後援：
+# - 主要（112+）：「國泰」+「信用卡」
+# - 備援（106 ancient）：「多利金」+「信用卡」（COSTCO 聯名卡回饋名稱，國泰世華獨有）
+_CATHAY_KEYWORDS_PRIMARY = ("國泰", "信用卡")
+_CATHAY_KEYWORDS_FALLBACK = ("多利金", "信用卡")
 
 # -- Summary extraction patterns --
 
@@ -41,7 +46,21 @@ _ROC_OFFSET = 1911
 _RE_ROC_DUE_DATE = re.compile(
     r"繳[費款]截止日[：:]\s*(\d{2,3})[/-](\d{1,2})[/-](\d{1,2})"
 )
+# 真實 PDF：`繳款截止日(遇假日順延) 108/06/01`（無冒號，括號後空白）
+_RE_ROC_DUE_DATE_PAREN = re.compile(
+    r"繳款截止日\s*\(遇假日順延\)\s*(\d{2,3})/(\d{1,2})/(\d{1,2})"
+)
+# 真實 PDF（112+）：`帳款將於 115/04/01 (遇假日順延)` 或 `帳款將於 108/6/1 自013-...`
+_RE_ROC_DUE_DATE_DEBIT = re.compile(r"帳款將於\s*(\d{2,3})/(\d{1,2})/(\d{1,2})")
 _RE_ROC_BILLING_MONTH = re.compile(r"(\d{2,3})\s*年\s*(\d{1,2})\s*月")
+# 真實 PDF：`以下為您108年5月份的信用卡電子帳單`
+_RE_ROC_BILLING_MONTH_REAL = re.compile(r"以下為您(\d{2,3})年(\d{1,2})月份")
+# 真實 PDF（115+）：`信用卡帳單 115年3月`
+_RE_ROC_BILLING_MONTH_HEADER = re.compile(r"信用卡帳單\s*(\d{2,3})年\s*(\d{1,2})月")
+# 真實 PDF（112+）grid 佈局：結帳日與繳款截止日並排 `112/03/15 112/04/01`
+_RE_ROC_CLOSING_DUE_PAIR = re.compile(
+    r"^(\d{2,3})/(\d{1,2})/\d{1,2}\s+(\d{2,3})/(\d{1,2})/\d{1,2}\s*$", re.MULTILINE
+)
 
 # -- Transaction patterns --
 
@@ -105,12 +124,16 @@ class CathayV1Parser(BankParser):
     version = "v1"
 
     def can_parse(self, pdf_path: Path) -> bool:
-        """Check if PDF is a Cathay United Bank credit card statement."""
+        """Check if PDF is a Cathay United Bank credit card statement.
+
+        掃描全部頁面文字，因真實 PDF page 0 的收件人姓名常被 CID 字型遮蔽，
+        導致「國泰世華」關鍵字僅出現在後續頁面。
+        """
         try:
             with pdfplumber.open(pdf_path) as pdf:
                 if not pdf.pages:
                     return False
-                text = pdf.pages[0].extract_text() or ""
+                text = "\n".join(page.extract_text() or "" for page in pdf.pages)
                 return self._identify(text)
         except Exception:
             logger.debug("無法開啟 PDF: %s", pdf_path, exc_info=True)
@@ -133,8 +156,10 @@ class CathayV1Parser(BankParser):
         )
 
     def _identify(self, text: str) -> bool:
-        """Check if first-page text contains Cathay United Bank statement markers."""
-        return all(kw in text for kw in _CATHAY_KEYWORDS)
+        """Check if text contains Cathay United Bank statement markers."""
+        return all(kw in text for kw in _CATHAY_KEYWORDS_PRIMARY) or all(
+            kw in text for kw in _CATHAY_KEYWORDS_FALLBACK
+        )
 
     def _extract_summary(
         self, pages: list[pdfplumber.page.Page]
@@ -166,7 +191,24 @@ class CathayV1Parser(BankParser):
         match = _RE_BILLING_MONTH.search(text)
         if match:
             return f"{match.group(1)}-{int(match.group(2)):02d}"
-        # Try ROC year
+        # 真實 PDF 錨點（精確度優先於泛用 ROC regex）
+        match = _RE_ROC_BILLING_MONTH_REAL.search(text)
+        if match is None:
+            match = _RE_ROC_BILLING_MONTH_HEADER.search(text)
+        if match:
+            roc_year = int(match.group(1))
+            month = int(match.group(2))
+            ad_year = roc_year + _ROC_OFFSET
+            return f"{ad_year}-{month:02d}"
+        # Grid 佈局：結帳日與繳款截止日並排，第一組即結帳日
+        pair_match = _RE_ROC_CLOSING_DUE_PAIR.search(text)
+        if pair_match:
+            roc_year = int(pair_match.group(1))
+            month = int(pair_match.group(2))
+            if roc_year < 200:
+                ad_year = roc_year + _ROC_OFFSET
+                return f"{ad_year}-{month:02d}"
+        # 最後 fallback 至泛用 ROC `YYY年MM月` 格式
         match = _RE_ROC_BILLING_MONTH.search(text)
         if match:
             roc_year = int(match.group(1))
@@ -181,9 +223,15 @@ class CathayV1Parser(BankParser):
         match = _RE_DUE_DATE.search(text)
         if match:
             return date(int(match.group(1)), int(match.group(2)), int(match.group(3)))
-        # Try ROC date
-        match = _RE_ROC_DUE_DATE.search(text)
-        if match:
+        # Try ROC date with labelled formats in priority order
+        for pattern in (
+            _RE_ROC_DUE_DATE,
+            _RE_ROC_DUE_DATE_PAREN,
+            _RE_ROC_DUE_DATE_DEBIT,
+        ):
+            match = pattern.search(text)
+            if match is None:
+                continue
             roc_year = int(match.group(1))
             if roc_year < 200:
                 return date(

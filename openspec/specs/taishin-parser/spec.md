@@ -39,6 +39,53 @@ TBD - created by archiving change add-taishin-bank-support. Update Purpose after
 - **WHEN** PDF 中找不到必要的摘要欄位（月份、金額或到期日）
 - **THEN** SHALL 拋出 `ParseError`，包含缺失欄位的說明
 
+### Requirement: TAISHIN 繳款截止日 SHALL 支援無冒號空白分隔
+
+`_RE_DUE_DATE` 與 `_RE_ROC_DUE_DATE` MUST 接受「繳款截止日」後面僅有空白而無冒號的格式。
+
+#### Scenario: 民國年日期無冒號
+- **GIVEN** 文字含 `繳款截止日 113/11/27`
+- **WHEN** 呼叫 `_extract_due_date`
+- **THEN** 回傳 `date(2024, 11, 27)`
+
+#### Scenario: 民國年日期有冒號
+- **GIVEN** 文字含 `繳款截止日：113/11/27`
+- **WHEN** 呼叫 `_extract_due_date`
+- **THEN** 回傳 `date(2024, 11, 27)`（向後相容）
+
+### Requirement: TAISHIN 應繳總額 SHALL 優先匹配本期累計應繳金額
+
+`_extract_total_amount` MUST 優先匹配 `本期累計應繳金額`，避免誤抓出現在上方的 `上期應繳總額`。
+
+#### Scenario: 文字同時含本期與上期總額
+- **GIVEN** 文字包含 `上期應繳總額 43,642` 與 `本期累計應繳金額 35,366`
+- **WHEN** 呼叫 `_extract_total_amount`
+- **THEN** 回傳 `35366`
+
+### Requirement: TAISHIN 交易解析 SHALL 支援 ROC 年文字格式
+
+`_extract_transactions` MUST 以行為單位解析真實 PDF 的 ROC 年交易格式，支援 FX 尾綴、國別碼、負數金額與卡號末四碼追蹤。
+
+#### Scenario: 一般 TW 交易含國別碼
+- **GIVEN** 文字含 `108/12/13 108/12/18 全國加油站文心站 TAICHU 800 TW`
+- **WHEN** 呼叫 `_extract_transactions`
+- **THEN** 產生一筆 `TransactionItem`，`amount=800`、`trans_date=date(2019,12,13)`、`posting_date=date(2019,12,18)`
+
+#### Scenario: 外幣交易含 FX 尾綴
+- **GIVEN** 文字含 `109/01/02 109/01/06 ProDirectSoccer newt newton 3,496 0103 GB GBP 87.78`
+- **WHEN** 呼叫 `_extract_transactions`
+- **THEN** 產生一筆 `TransactionItem`，`amount=3496`、`merchant` 含 `ProDirectSoccer`
+
+#### Scenario: 負數退款交易
+- **GIVEN** 文字含 `108/12/27 108/12/27 您的付款已收到，謝謝您！ -18,901`
+- **WHEN** 呼叫 `_extract_transactions`
+- **THEN** 產生一筆 `TransactionItem`，`amount=-18901`
+
+#### Scenario: 卡號末四碼跟隨 header 行
+- **GIVEN** 文字中出現 `(卡號末四碼:1234)` header，隨後出現交易行
+- **WHEN** 呼叫 `_extract_transactions`
+- **THEN** 後續交易的 `card_last4` SHALL 為 `"1234"`
+
 ### Requirement: parse 提取交易明細
 
 `TaishinV1Parser.parse()` SHALL 從台新帳單 PDF 提取所有消費交易明細。

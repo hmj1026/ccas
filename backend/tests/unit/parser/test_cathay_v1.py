@@ -16,12 +16,28 @@ from ccas.parser.base import ParseError
 from .conftest import (
     CATHAY_FIRST_PAGE_TEXT,
     CATHAY_NON_CATHAY_PAGE_TEXT,
+    CATHAY_REAL_ANCIENT_TEXT,
+    CATHAY_REAL_GRID_TEXT,
+    CATHAY_REAL_NEW_TEXT,
+    CATHAY_REAL_OLD_TEXT,
     CATHAY_SUMMARY_MISSING_DUE_DATE_TEXT,
     CATHAY_SUMMARY_MISSING_TOTAL_TEXT,
     CATHAY_TABLE_HEADER_ROW,
     CATHAY_TRANSACTION_ROWS,
     EXPECTED_CATHAY_BILLING_MONTH,
     EXPECTED_CATHAY_DUE_DATE,
+    EXPECTED_CATHAY_REAL_ANCIENT_DUE,
+    EXPECTED_CATHAY_REAL_ANCIENT_MONTH,
+    EXPECTED_CATHAY_REAL_ANCIENT_TOTAL,
+    EXPECTED_CATHAY_REAL_GRID_DUE,
+    EXPECTED_CATHAY_REAL_GRID_MONTH,
+    EXPECTED_CATHAY_REAL_GRID_TOTAL,
+    EXPECTED_CATHAY_REAL_NEW_DUE,
+    EXPECTED_CATHAY_REAL_NEW_MONTH,
+    EXPECTED_CATHAY_REAL_NEW_TOTAL,
+    EXPECTED_CATHAY_REAL_OLD_DUE,
+    EXPECTED_CATHAY_REAL_OLD_MONTH,
+    EXPECTED_CATHAY_REAL_OLD_TOTAL,
     EXPECTED_CATHAY_TOTAL_AMOUNT,
     make_mock_page,
 )
@@ -302,3 +318,67 @@ class TestParse:
         assert result.total_amount == EXPECTED_CATHAY_TOTAL_AMOUNT
         assert result.due_date == EXPECTED_CATHAY_DUE_DATE
         assert len(result.transactions) == 3
+
+
+# -- Real PDF format tests --
+
+
+class TestRealPdfFormat:
+    """真實國泰世華 PDF 文字佈局覆蓋（108、112 grid、115 header、106 ancient）。"""
+
+    def _mock_pages(self, text: str) -> list[pdfplumber.page.Page]:
+        return [cast(pdfplumber.page.Page, make_mock_page(text))]
+
+    def test_can_parse_scans_all_pages_for_keyword(self):
+        """page 0 被 CID 遮蔽，但 page 1 含關鍵字時 can_parse 回傳 True。"""
+        parser = _make_parser()
+        page0 = make_mock_page("VZ000013-TW-03/18 1/3\n王小明 先生\n")
+        page1 = make_mock_page("國泰世華\n信用卡\n")
+        with patch("pdfplumber.open") as mock_open:
+            mock_pdf = MagicMock()
+            mock_pdf.pages = [page0, page1]
+            mock_pdf.__enter__ = MagicMock(return_value=mock_pdf)
+            mock_pdf.__exit__ = MagicMock(return_value=False)
+            mock_open.return_value = mock_pdf
+            assert parser.can_parse("fake.pdf") is True  # type: ignore[arg-type]
+
+    def test_identify_fallback_keyword_duoli(self):
+        """Ancient PDF 無「國泰」字串但有「多利金」也應辨識為 CATHAY。"""
+        parser = _make_parser()
+        assert parser._identify("COSTCO多利金 0 28 0 0 28\n信用卡消費明細\n") is True
+
+    def test_extract_summary_old_format_108(self):
+        parser = _make_parser()
+        month, total, due = parser._extract_summary(
+            self._mock_pages(CATHAY_REAL_OLD_TEXT)
+        )
+        assert month == EXPECTED_CATHAY_REAL_OLD_MONTH
+        assert total == EXPECTED_CATHAY_REAL_OLD_TOTAL
+        assert due == EXPECTED_CATHAY_REAL_OLD_DUE
+
+    def test_extract_summary_grid_format_112(self):
+        parser = _make_parser()
+        month, total, due = parser._extract_summary(
+            self._mock_pages(CATHAY_REAL_GRID_TEXT)
+        )
+        assert month == EXPECTED_CATHAY_REAL_GRID_MONTH
+        assert total == EXPECTED_CATHAY_REAL_GRID_TOTAL
+        assert due == EXPECTED_CATHAY_REAL_GRID_DUE
+
+    def test_extract_summary_new_header_115(self):
+        parser = _make_parser()
+        month, total, due = parser._extract_summary(
+            self._mock_pages(CATHAY_REAL_NEW_TEXT)
+        )
+        assert month == EXPECTED_CATHAY_REAL_NEW_MONTH
+        assert total == EXPECTED_CATHAY_REAL_NEW_TOTAL
+        assert due == EXPECTED_CATHAY_REAL_NEW_DUE
+
+    def test_extract_summary_ancient_106(self):
+        parser = _make_parser()
+        month, total, due = parser._extract_summary(
+            self._mock_pages(CATHAY_REAL_ANCIENT_TEXT)
+        )
+        assert month == EXPECTED_CATHAY_REAL_ANCIENT_MONTH
+        assert total == EXPECTED_CATHAY_REAL_ANCIENT_TOTAL
+        assert due == EXPECTED_CATHAY_REAL_ANCIENT_DUE

@@ -42,9 +42,7 @@ class TestResolveBillPdfPath:
         pdf.write_bytes(b"%PDF-1.4 test")
 
         # Simulate a path stored when running locally under a different root
-        local_path = (
-            "/Users/paul/Project/ccas/backend/data/staging/CTBC/abc123_bill.pdf"
-        )
+        local_path = "/home/dev/ccas/backend/data/staging/CTBC/abc123_bill.pdf"
 
         result = _resolve_bill_pdf_path(local_path, str(docker_staging))
 
@@ -55,7 +53,7 @@ class TestResolveBillPdfPath:
         docker_staging = tmp_path / "data" / "staging"
         docker_staging.mkdir(parents=True)
 
-        local_path = "/Users/paul/Project/ccas/backend/data/staging/CTBC/missing.pdf"
+        local_path = "/home/dev/ccas/backend/data/staging/CTBC/missing.pdf"
 
         with pytest.raises(HTTPException) as exc_info:
             _resolve_bill_pdf_path(local_path, str(docker_staging))

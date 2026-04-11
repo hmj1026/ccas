@@ -22,17 +22,29 @@ logger = logging.getLogger(__name__)
 
 # -- Identification patterns --
 
-_ESUN_KEYWORDS = ("玉山銀行", "信用卡")
+# ESUN PDFs may not contain "玉山銀行" on page 0 — only in later pages.
+# The distinctive marker is "玉山" + "信用卡帳單" anywhere in the document.
+_ESUN_KEYWORDS = ("玉山", "信用卡帳單")
 
 # -- Summary extraction patterns --
 
 # 帳單月份：2026年03月 or 2026/03
 _RE_BILLING_MONTH = re.compile(r"(\d{4})\s*[年/]\s*(\d{1,2})\s*月?\s*(?:份|月)")
+# Real ESUN format: 這是您 115年02月 信用卡帳單 (ROC year)
+_RE_ESUN_REAL_BILLING = re.compile(
+    r"這是您\s*(\d{2,3})\s*年\s*(\d{1,2})\s*月\s*信用卡帳單"
+)
 # 繳費截止日：2026/04/15 or 繳款截止日：2026-04-15
 _RE_DUE_DATE = re.compile(r"繳[費款]截止日[：:]\s*(\d{4})[/-](\d{1,2})[/-](\d{1,2})")
-# 本期應繳總額：NT$ 12,345 or 應繳金額 12,345
+# Real ESUN format: "115/04/07 7.88%" (ROC year date followed by interest rate).
+# Use percent-rate as anchor to avoid matching unrelated dates.
+_RE_ESUN_REAL_DUE_DATE = re.compile(r"(\d{2,3})/(\d{1,2})/(\d{1,2})\s+\d+\.\d+\s*%")
+# Prefer "本期應繳總金額： TWD 26,920" on later pages (real format). The
+# first-pass regex is strict to avoid matching "本期最低應繳金額" header rows.
+_RE_TOTAL_AMOUNT_REAL = re.compile(r"本期應繳總金額[：:]?\s*(?:NT\$?|TWD)\s*([\d,]+)")
+# Fallback: legacy synthetic formats like "本期應繳總額：NT$ 12,345".
 _RE_TOTAL_AMOUNT = re.compile(
-    r"(?:本期)?應繳[總金][額額][：:]?\s*(?:NT\$?\s*)?([\d,]+)"
+    r"(?:本期)?應繳(?:總金額|總額|金額)[：:]?\s*(?:NT\$?|TWD)?\s*([\d,]+)"
 )
 
 # -- ROC date support --
@@ -47,6 +59,18 @@ _RE_ROC_BILLING_MONTH = re.compile(r"(\d{2,3})\s*年\s*(\d{1,2})\s*月")
 
 _TRANSACTION_HEADER_KEYWORDS = ("交易日", "金額")
 _RE_DATE_MMDD = re.compile(r"^(\d{2})/(\d{2})$")
+
+# Real ESUN format: MM/DD MM/DD MERCHANT TWD AMOUNT
+_RE_ESUN_TXN_LINE = re.compile(
+    r"^(\d{1,2}/\d{1,2})\s+(\d{1,2}/\d{1,2})\s+"
+    r"(.+?)\s+TWD\s+(-?[\d,]+)\s*$",
+    re.MULTILINE,
+)
+# Single-date refund/payment row (e.g. "03/09 感謝您辦理本行自動轉帳繳款！ TWD -10,615")
+_RE_ESUN_TXN_SINGLE_DATE = re.compile(
+    r"^(\d{1,2}/\d{1,2})\s+(.+?)\s+TWD\s+(-?[\d,]+)\s*$",
+    re.MULTILINE,
+)
 
 # Text line-based transactions:
 # YYYY/MM/DD  YYYY/MM/DD  MERCHANT  AMOUNT
@@ -101,13 +125,17 @@ class EsunV1Parser(BankParser):
     version = "v1"
 
     def can_parse(self, pdf_path: Path) -> bool:
-        """Check if PDF is an E.SUN credit card statement."""
+        """Check if PDF is an E.SUN credit card statement.
+
+        Scans all pages because some ESUN bills only mention "玉山銀行" on
+        later pages (e.g. in the account-debit footer on page 3).
+        """
         try:
             with pdfplumber.open(pdf_path) as pdf:
                 if not pdf.pages:
                     return False
-                text = pdf.pages[0].extract_text() or ""
-                return self._identify(text)
+                full_text = "\n".join(page.extract_text() or "" for page in pdf.pages)
+                return self._identify(full_text)
         except Exception:
             logger.debug("無法開啟 PDF: %s", pdf_path, exc_info=True)
             return False
@@ -142,6 +170,14 @@ class EsunV1Parser(BankParser):
         """
         full_text = "\n".join(page.extract_text() or "" for page in pages)
 
+        # Zero-balance historical bills have no due date or amount and are
+        # marked with "無需繳款". Skip as not-an-error.
+        if "無需繳款" in full_text:
+            raise ParseError(
+                "zero-balance historical bill",
+                reason="ESUN 無消費帳單無 due_date 與金額，略過",
+            )
+
         billing_month = self._extract_billing_month(full_text)
         if billing_month is None:
             raise ParseError("帳單摘要缺失", reason="找不到帳單月份")
@@ -158,6 +194,13 @@ class EsunV1Parser(BankParser):
 
     def _extract_billing_month(self, text: str) -> str | None:
         """Extract billing month from text."""
+        # Prefer real-format ROC year pattern anchored on "信用卡帳單".
+        match = _RE_ESUN_REAL_BILLING.search(text)
+        if match:
+            roc_year = int(match.group(1))
+            if roc_year < 200:
+                ad_year = roc_year + _ROC_OFFSET
+                return f"{ad_year}-{int(match.group(2)):02d}"
         match = _RE_BILLING_MONTH.search(text)
         if match:
             return f"{match.group(1)}-{int(match.group(2)):02d}"
@@ -183,10 +226,24 @@ class EsunV1Parser(BankParser):
                     int(match.group(2)),
                     int(match.group(3)),
                 )
+        # Real ESUN page-0 format: "115/04/07 7.88%" with no label; anchor on
+        # the percent-rate to avoid matching unrelated dates.
+        match = _RE_ESUN_REAL_DUE_DATE.search(text)
+        if match:
+            roc_year = int(match.group(1))
+            if roc_year < 200:
+                return date(
+                    roc_year + _ROC_OFFSET,
+                    int(match.group(2)),
+                    int(match.group(3)),
+                )
         return None
 
     def _extract_total_amount(self, text: str) -> int | None:
         """Extract total payable amount from text."""
+        match = _RE_TOTAL_AMOUNT_REAL.search(text)
+        if match:
+            return int(match.group(1).replace(",", ""))
         match = _RE_TOTAL_AMOUNT.search(text)
         if not match:
             return None
@@ -311,8 +368,33 @@ def _extract_transactions_text(
     pages: list[pdfplumber.page.Page],
     billing_year: int,
 ) -> list[TransactionItem]:
-    """Extract transactions from text lines."""
+    """Extract transactions from text lines.
+
+    Tries the real ESUN MM/DD + TWD format first, then falls back to the
+    older full-date patterns for synthetic/test fixtures.
+    """
     items: list[TransactionItem] = []
+    consumed_spans: list[tuple[int, int]] = []
+    for page in pages:
+        text = page.extract_text() or ""
+        page_spans: list[tuple[int, int]] = []
+        for match in _RE_ESUN_TXN_LINE.finditer(text):
+            item = _parse_esun_real_transaction(match, billing_year)
+            if item is not None:
+                items.append(item)
+                page_spans.append(match.span())
+        # Single-date rows (refunds, payments) — skip text already captured
+        # by the two-date pattern to avoid double-counting.
+        for match in _RE_ESUN_TXN_SINGLE_DATE.finditer(text):
+            if any(s <= match.start() < e for s, e in page_spans):
+                continue
+            item = _parse_esun_single_date_transaction(match, billing_year)
+            if item is not None:
+                items.append(item)
+        consumed_spans.extend(page_spans)
+    if items:
+        return items
+
     for page in pages:
         text = page.extract_text() or ""
         for match in _RE_TRANSACTION_LINE.finditer(text):
@@ -326,6 +408,73 @@ def _extract_transactions_text(
                 if item is not None:
                     items.append(item)
     return items
+
+
+def _parse_mmdd_loose(raw: str, year: int) -> date | None:
+    """Parse MM/DD or M/D into a date (tolerant of 1-digit components)."""
+    parts = raw.split("/")
+    if len(parts) != 2:
+        return None
+    try:
+        return date(year, int(parts[0]), int(parts[1]))
+    except ValueError:
+        return None
+
+
+def _parse_esun_real_transaction(
+    match: re.Match[str],
+    billing_year: int,
+) -> TransactionItem | None:
+    """Parse a real-ESUN MM/DD + TWD transaction line."""
+    try:
+        trans_date = _parse_mmdd_loose(match.group(1), billing_year)
+        posting_date = _parse_mmdd_loose(match.group(2), billing_year)
+        merchant = match.group(3).strip()
+        amount = int(match.group(4).replace(",", ""))
+
+        if trans_date is None:
+            return None
+
+        # Skip rows that are summary/subtotal lines rather than real txns.
+        if "本期" in merchant or "上期" in merchant or "合計" in merchant:
+            return None
+
+        return TransactionItem(
+            trans_date=trans_date,
+            merchant=merchant,
+            amount=amount,
+            posting_date=posting_date,
+        )
+    except (ValueError, IndexError):
+        logger.warning("跳過無法解析的 ESUN 交易行: %s", match.group(0))
+        return None
+
+
+def _parse_esun_single_date_transaction(
+    match: re.Match[str],
+    billing_year: int,
+) -> TransactionItem | None:
+    """Parse a single-date ESUN refund/payment line."""
+    try:
+        trans_date = _parse_mmdd_loose(match.group(1), billing_year)
+        merchant = match.group(2).strip()
+        amount = int(match.group(3).replace(",", ""))
+
+        if trans_date is None:
+            return None
+
+        # Skip summary rows: "上期應繳金額： TWD 10,615" etc.
+        if "應繳" in merchant or "合計" in merchant:
+            return None
+
+        return TransactionItem(
+            trans_date=trans_date,
+            merchant=merchant,
+            amount=amount,
+        )
+    except (ValueError, IndexError):
+        logger.warning("跳過無法解析的 ESUN 單日期交易行: %s", match.group(0))
+        return None
 
 
 def _parse_text_transaction(

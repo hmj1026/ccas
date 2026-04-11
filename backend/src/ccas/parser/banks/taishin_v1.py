@@ -28,18 +28,19 @@ _TAISHIN_KEYWORDS = ("台新銀行", "信用卡")
 
 # 帳單月份：2026年03月 or 帳單月份：2026/03
 _RE_BILLING_MONTH = re.compile(r"(\d{4})\s*[年/]\s*(\d{1,2})\s*月?\s*(?:份|月)")
-# 繳費截止日：2026/04/15 or 繳款截止日：2026-04-15
-_RE_DUE_DATE = re.compile(r"繳[費款]截止日[：:]\s*(\d{4})[/-](\d{1,2})[/-](\d{1,2})")
+# 繳費截止日：2026/04/15 or 繳款截止日 113/11/27 (label may be followed
+# by space instead of a colon in real TAISHIN PDFs)
+_RE_DUE_DATE = re.compile(r"繳[費款]截止日[：:]?\s*(\d{4})[/-](\d{1,2})[/-](\d{1,2})")
+# 本期累計應繳金額 35,366 (real PDF format, preferred over legacy 應繳總額)
+_RE_TOTAL_AMOUNT_REAL = re.compile(r"本期累計應繳金額[：:]?\s*(?:NT\$?\s*)?([\d,]+)")
 # 本期應繳總額：NT$ 12,345 or 本期應繳金額 12,345 or 應繳總額：12,345
-_RE_TOTAL_AMOUNT = re.compile(
-    r"(?:本期)?應繳[總金][額額][：:]?\s*(?:NT\$?\s*)?([\d,]+)"
-)
+_RE_TOTAL_AMOUNT = re.compile(r"本期應繳[總金][額額][：:]?\s*(?:NT\$?\s*)?([\d,]+)")
 
 # -- ROC date support --
 
 _ROC_OFFSET = 1911
 _RE_ROC_DUE_DATE = re.compile(
-    r"繳[費款]截止日[：:]\s*(\d{2,3})[/-](\d{1,2})[/-](\d{1,2})"
+    r"繳[費款]截止日[：:]?\s*(\d{2,3})[/-](\d{1,2})[/-](\d{1,2})"
 )
 _RE_ROC_BILLING_MONTH = re.compile(r"(\d{2,3})\s*年\s*(\d{1,2})\s*月")
 
@@ -67,6 +68,27 @@ _RE_TRANSACTION_LINE_SIMPLE = re.compile(
     r"([\d,]+)\s*$",  # amount
     re.MULTILINE,
 )
+
+# Real TAISHIN PDF line format (ROC year, two full dates, optional FX trailer):
+#   108/12/27 108/12/27 您的付款已收到，謝謝您！ -18,901
+#   107/11/16 108/12/19 ＰＣＨＯＭＥ１ 第 14/30 期 993 TW
+#   109/01/02 109/01/06 ProDirectSoccer newt newton 3,496 0103 GB GBP 87.78
+#   109/01/03 109/01/03 １０８年海外當地３％回饋金 -2
+_RE_TAISHIN_TXN_REAL = re.compile(
+    r"^(\d{2,3}/\d{1,2}/\d{1,2})\s+"  # trans_date (ROC/AD)
+    r"(\d{2,3}/\d{1,2}/\d{1,2})\s+"  # posting_date (ROC/AD)
+    r"(.+?)\s+"  # merchant (non-greedy)
+    r"(-?[\d,]+)"  # NT amount (may be negative)
+    # Optional FX trailer: " MMDD CC CUR amount.dec" (e.g. "0103 GB GBP 87.78")
+    r"(?:\s+\d{4}\s+[A-Z]{2,3}\s+[A-Z]{3}\s+[\d,]+\.[\d]+)?"
+    # Optional 2-3 letter country code (e.g. " TW", " IE")
+    r"(?:\s+[A-Z]{2,3})?"
+    r"\s*$",
+    re.MULTILINE,
+)
+
+# 卡號末四碼:1234 or 卡號末四碼：1234
+_RE_TAISHIN_CARD_LAST4 = re.compile(r"卡號末四碼[：:]\s*(\d{4})")
 
 
 def _parse_date(raw: str, billing_year: int) -> date | None:
@@ -194,7 +216,14 @@ class TaishinV1Parser(BankParser):
         return None
 
     def _extract_total_amount(self, text: str) -> int | None:
-        """Extract total payable amount from text."""
+        """Extract total payable amount from text.
+
+        Prefers the real-PDF marker ``本期累計應繳金額`` to avoid matching
+        ``上期應繳總額`` (previous balance) which sits on an earlier line.
+        """
+        match = _RE_TOTAL_AMOUNT_REAL.search(text)
+        if match:
+            return int(match.group(1).replace(",", ""))
         match = _RE_TOTAL_AMOUNT.search(text)
         if not match:
             return None
@@ -210,6 +239,10 @@ class TaishinV1Parser(BankParser):
         Tries table extraction first, then text line parsing.
         """
         items = _extract_transactions_table(pages, billing_year)
+        if items:
+            return tuple(items)
+
+        items = _extract_transactions_real(pages, billing_year)
         if items:
             return tuple(items)
 
@@ -311,6 +344,70 @@ def _parse_transaction_row(
     except (ValueError, IndexError):
         logger.warning("跳過無法解析的交易行: %s", row)
         return None
+
+
+# -- Real TAISHIN text extraction (ROC year, text-based layout) --
+
+
+def _extract_transactions_real(
+    pages: list[pdfplumber.page.Page],
+    billing_year: int,
+) -> list[TransactionItem]:
+    """Extract transactions from real TAISHIN PDF text format.
+
+    Processes each page line by line so we can track the currently-active
+    card (header line ``(卡號末四碼:1234)``) and attach it to following
+    transaction rows. Uses :data:`_RE_TAISHIN_TXN_REAL` which tolerates
+    FX trailers and country codes after the NT amount.
+    """
+    items: list[TransactionItem] = []
+    for page in pages:
+        text = page.extract_text() or ""
+        current_card: str | None = None
+        for raw_line in text.split("\n"):
+            line = raw_line.strip()
+            if not line:
+                continue
+
+            card_match = _RE_TAISHIN_CARD_LAST4.search(line)
+            if card_match:
+                current_card = card_match.group(1)
+                continue
+
+            match = _RE_TAISHIN_TXN_REAL.match(line)
+            if match is None:
+                continue
+
+            item = _parse_taishin_real_transaction(match, current_card)
+            if item is not None:
+                items.append(item)
+    return items
+
+
+def _parse_taishin_real_transaction(
+    match: re.Match[str],
+    card_last4: str | None,
+) -> TransactionItem | None:
+    """Build a TransactionItem from a real-format regex match."""
+    try:
+        trans_date = _parse_date(match.group(1), 0)
+        posting_date = _parse_date(match.group(2), 0)
+        merchant = match.group(3).strip()
+        amount = int(match.group(4).replace(",", ""))
+    except (ValueError, IndexError):
+        logger.warning("跳過無法解析的交易行: %s", match.group(0))
+        return None
+
+    if trans_date is None:
+        return None
+
+    return TransactionItem(
+        trans_date=trans_date,
+        merchant=merchant,
+        amount=amount,
+        posting_date=posting_date,
+        card_last4=card_last4,
+    )
 
 
 # -- Text line extraction helpers --

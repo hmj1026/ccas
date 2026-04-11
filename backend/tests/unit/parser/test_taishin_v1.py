@@ -16,9 +16,14 @@ from ccas.parser.base import ParseError
 from .conftest import (
     EXPECTED_TAISHIN_BILLING_MONTH,
     EXPECTED_TAISHIN_DUE_DATE,
+    EXPECTED_TAISHIN_REAL_BILLING_MONTH,
+    EXPECTED_TAISHIN_REAL_DUE_DATE,
+    EXPECTED_TAISHIN_REAL_TOTAL_AMOUNT,
     EXPECTED_TAISHIN_TOTAL_AMOUNT,
     TAISHIN_FIRST_PAGE_TEXT,
     TAISHIN_NON_TAISHIN_PAGE_TEXT,
+    TAISHIN_REAL_SUMMARY_TEXT,
+    TAISHIN_REAL_TRANSACTIONS_TEXT,
     TAISHIN_SUMMARY_MISSING_DUE_DATE_TEXT,
     TAISHIN_SUMMARY_MISSING_TOTAL_TEXT,
     TAISHIN_TABLE_HEADER_ROW,
@@ -225,3 +230,94 @@ class TestParse:
         assert result.total_amount == EXPECTED_TAISHIN_TOTAL_AMOUNT
         assert result.due_date == EXPECTED_TAISHIN_DUE_DATE
         assert len(result.transactions) == 3
+
+
+# -- Real-format PDF tests (ROC year, text-based layout) --
+
+
+class TestRealPdfFormat:
+    def test_extracts_due_date_with_space_separator(self):
+        parser = _make_parser()
+        text = "帳務資訊\n繳款截止日 113/11/27\n"
+        assert parser._extract_due_date(text) == date(2024, 11, 27)
+
+    def test_extracts_due_date_with_colon(self):
+        parser = _make_parser()
+        text = "繳款截止日：113/11/27\n"
+        assert parser._extract_due_date(text) == date(2024, 11, 27)
+
+    def test_extracts_real_summary(self):
+        parser = _make_parser()
+        page = make_mock_page(TAISHIN_REAL_SUMMARY_TEXT)
+
+        billing_month, total_amount, due_date = parser._extract_summary([page])
+
+        assert billing_month == EXPECTED_TAISHIN_REAL_BILLING_MONTH
+        assert total_amount == EXPECTED_TAISHIN_REAL_TOTAL_AMOUNT
+        assert due_date == EXPECTED_TAISHIN_REAL_DUE_DATE
+
+    def test_total_amount_prefers_cumulative_over_previous(self):
+        """Guard: must match 本期累計應繳金額, not 上期應繳總額."""
+        parser = _make_parser()
+        page = make_mock_page(TAISHIN_REAL_SUMMARY_TEXT)
+
+        _, total_amount, _ = parser._extract_summary([page])
+
+        # 上期應繳總額 is 43,642; 本期累計應繳金額 is 35,366
+        assert total_amount == 35366
+        assert total_amount != 43642
+
+    def test_extracts_roc_text_transactions(self):
+        parser = _make_parser()
+        page = make_mock_page(TAISHIN_REAL_TRANSACTIONS_TEXT)
+
+        txns = parser._extract_transactions(
+            cast(list[pdfplumber.page.Page], [page]),
+            2020,
+        )
+
+        # Expect: payment, instalment, gas, service fee, foreign, refund, apple
+        assert len(txns) >= 6
+        merchants = [t.merchant for t in txns]
+        amounts = [t.amount for t in txns]
+        # Payment line
+        assert any("付款已收到" in m for m in merchants)
+        assert -18901 in amounts
+        # Instalment with TW country code
+        assert any("ＰＣＨＯＭＥ" in m for m in merchants)
+        assert 993 in amounts
+        # Foreign transaction (FX trailing info should be stripped)
+        assert any("ProDirectSoccer" in m for m in merchants)
+        assert 3496 in amounts
+        # Refund
+        assert -2 in amounts
+
+    def test_roc_transaction_uses_trans_date_year(self):
+        parser = _make_parser()
+        page = make_mock_page("108/12/27 108/12/27 您的付款已收到，謝謝您！ -18,901\n")
+
+        txns = parser._extract_transactions(
+            cast(list[pdfplumber.page.Page], [page]),
+            2020,
+        )
+
+        assert len(txns) == 1
+        # ROC 108 + 1911 = 2019
+        assert txns[0].trans_date == date(2019, 12, 27)
+        assert txns[0].amount == -18901
+
+    def test_tracks_card_last4_from_header(self):
+        parser = _make_parser()
+        text = (
+            "ａＧｏＧｏ iCash 御璽卡 王小明 (卡號末四碼:1234)\n"
+            "108/12/13 108/12/18 全國加油站文心站 TAICHU 800 TW\n"
+        )
+        page = make_mock_page(text)
+
+        txns = parser._extract_transactions(
+            cast(list[pdfplumber.page.Page], [page]),
+            2020,
+        )
+
+        assert len(txns) == 1
+        assert txns[0].card_last4 == "1234"

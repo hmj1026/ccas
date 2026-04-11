@@ -28,12 +28,20 @@ _SINOPAC_KEYWORDS = ("永豐銀行", "信用卡")
 
 # 帳單月份：2026年03月 or 帳單月份：2026/03
 _RE_BILLING_MONTH = re.compile(r"(\d{4})\s*[年/]\s*(\d{1,2})\s*月?\s*(?:份|月)")
-# 繳費截止日：2026/04/15 or 繳款截止日：2026-04-15
-_RE_DUE_DATE = re.compile(r"繳[費款]截止日[：:]\s*(\d{4})[/-](\d{1,2})[/-](\d{1,2})")
+# 繳費截止日：2026/04/15 or 繳款截止日 2026-04-15 (colon optional — real
+# SINOPAC PDFs omit it, e.g. "您的繳款截止日2026/03/27").
+_RE_DUE_DATE = re.compile(r"繳[費款]截止日[：:]?\s*(\d{4})[/-](\d{1,2})[/-](\d{1,2})")
 # 本期應繳總額：NT$ 12,345 or 本期應繳金額 12,345 or 應繳總額：12,345
 _RE_TOTAL_AMOUNT = re.compile(
     r"(?:本期)?應繳[總金][額額][：:]?\s*(?:NT\$?\s*)?([\d,]+)"
 )
+# Real-PDF summary row: "臺幣 上期 已繳 新增 循環 違約 本期應繳 最低" — 7 numeric
+# columns following the 臺幣 literal, with the 6th being 本期應繳總金額 (index 5).
+_RE_SUMMARY_ROW = re.compile(
+    r"臺幣\s+([\d,]+)\s+([\d,]+)\s+([\d,]+)\s+([\d,]+)\s+([\d,]+)\s+([\d,]+)\s+([\d,]+)"
+)
+# Zero-balance historical bills carry this marker and have no due date / amount.
+_ZERO_BALANCE_MARKER = "無需繳款"
 
 # -- ROC date support --
 
@@ -45,9 +53,21 @@ _RE_ROC_BILLING_MONTH = re.compile(r"(\d{2,3})\s*年\s*(\d{1,2})\s*月")
 
 # -- Transaction patterns --
 
-# Table-based: headers contain 交易日 and 金額
-_TRANSACTION_HEADER_KEYWORDS = ("交易日", "金額")
+# Table-based: real SINOPAC table headers contain 入帳 and 臺幣金額 (the legacy
+# synthetic fixture used 交易日/金額, which we also keep for back-compat).
+_TRANSACTION_HEADER_KEYWORDS_LEGACY = ("交易日", "金額")
+_TRANSACTION_HEADER_KEYWORDS_REAL = ("入帳", "臺幣金額")
 _RE_DATE_MMDD = re.compile(r"^(\d{2})/(\d{2})$")
+
+# Real-PDF transaction line: MM/DD MM/DD [optional 4-digit card] merchant amount
+# e.g. "02/18 02/24 4300 悠遊卡自動加值─台北捷 500"
+#      "03/05 03/05 永豐自扣已入帳，謝謝！ -7,147"
+_RE_SINOPAC_REAL_TXN = re.compile(
+    r"^(\d{1,2}/\d{1,2})\s+(\d{1,2}/\d{1,2})\s+"
+    r"(?:(\d{4})\s+)?"  # optional card_last4
+    r"(.+?)\s+(-?[\d,]+)\s*$",
+    re.MULTILINE,
+)
 
 # Text line-based transactions:
 # YYYY/MM/DD  YYYY/MM/DD  MERCHANT  AMOUNT  (or similar)
@@ -142,9 +162,18 @@ class SinopacV1Parser(BankParser):
         """Extract billing_month, total_amount, due_date from page text.
 
         Raises:
-            ParseError: If any mandatory summary field is missing.
+            ParseError: If any mandatory summary field is missing, or with
+                reason ``"zero-balance historical bill"`` when the statement
+                is an old no-activity bill that intentionally omits due date
+                and amount.
         """
         full_text = "\n".join(page.extract_text() or "" for page in pages)
+
+        if _ZERO_BALANCE_MARKER in full_text:
+            raise ParseError(
+                "zero-balance historical bill",
+                reason="SINOPAC 無消費帳單無 due_date 與金額，略過",
+            )
 
         billing_month = self._extract_billing_month(full_text)
         if billing_month is None:
@@ -194,11 +223,21 @@ class SinopacV1Parser(BankParser):
         return None
 
     def _extract_total_amount(self, text: str) -> int | None:
-        """Extract total payable amount from text."""
-        match = _RE_TOTAL_AMOUNT.search(text)
-        if not match:
-            return None
-        return int(match.group(1).replace(",", ""))
+        """Extract total payable amount from text.
+
+        Real SINOPAC bills list amounts in a summary row beginning with
+        ``臺幣`` followed by seven numbers (上期/已繳/新增/循環/違約/本期應繳/最低);
+        the 6th (index 5) is 本期應繳總金額. Older synthetic fixtures use the
+        keyword style ``本期應繳總額：NT$ 12,345`` which we keep as fallback.
+        """
+        row_match = _RE_SUMMARY_ROW.search(text)
+        if row_match:
+            return int(row_match.group(6).replace(",", ""))
+
+        keyword_match = _RE_TOTAL_AMOUNT.search(text)
+        if keyword_match:
+            return int(keyword_match.group(1).replace(",", ""))
+        return None
 
     def _extract_transactions(
         self,
@@ -238,12 +277,18 @@ def _extract_transactions_table(
 
 
 def _is_transaction_table(table: list[list[str | None]]) -> bool:
-    """Return True if the table header contains transaction keywords."""
+    """Return True if the table header contains transaction keywords.
+
+    Accepts either the legacy synthetic header (``交易日 / 金額``) used by
+    historical unit fixtures, or the real-PDF header (``入帳 / 臺幣金額``).
+    """
     if not table:
         return False
     header = [str(cell or "") for cell in table[0]]
     header_text = " ".join(header)
-    return all(kw in header_text for kw in _TRANSACTION_HEADER_KEYWORDS)
+    if all(kw in header_text for kw in _TRANSACTION_HEADER_KEYWORDS_LEGACY):
+        return True
+    return all(kw in header_text for kw in _TRANSACTION_HEADER_KEYWORDS_REAL)
 
 
 def _parse_transaction_row(
@@ -320,11 +365,24 @@ def _extract_transactions_text(
     pages: list[pdfplumber.page.Page],
     billing_year: int,
 ) -> list[TransactionItem]:
-    """Extract transactions from text lines."""
+    """Extract transactions from text lines.
+
+    Tries the real-PDF MM/DD format first (covers all production SINOPAC
+    bills), then falls back to legacy YYYY/MM/DD patterns for back-compat
+    with older fixtures.
+    """
     items: list[TransactionItem] = []
     for page in pages:
         text = page.extract_text() or ""
-        # Try full format first (date date merchant amount)
+        for match in _RE_SINOPAC_REAL_TXN.finditer(text):
+            item = _parse_real_text_transaction(match, billing_year)
+            if item is not None:
+                items.append(item)
+
+        if items:
+            continue
+
+        # Try full format next (date date merchant amount)
         for match in _RE_TRANSACTION_LINE.finditer(text):
             item = _parse_text_transaction(match, billing_year)
             if item is not None:
@@ -337,6 +395,37 @@ def _extract_transactions_text(
                 if item is not None:
                     items.append(item)
     return items
+
+
+def _parse_real_text_transaction(
+    match: re.Match[str],
+    billing_year: int,
+) -> TransactionItem | None:
+    """Parse a real SINOPAC MM/DD formatted text transaction line."""
+    try:
+        trans_date = _parse_mmdd(match.group(1), billing_year)
+        posting_date = _parse_mmdd(match.group(2), billing_year)
+        card_last4 = match.group(3)
+        merchant = match.group(4).strip()
+        amount = int(match.group(5).replace(",", ""))
+
+        if trans_date is None:
+            return None
+
+        # Skip summary/totals rows like "您的正卡，本期應繳金額合計 12,579"
+        if "本期應繳金額合計" in merchant or "小計" in merchant:
+            return None
+
+        return TransactionItem(
+            trans_date=trans_date,
+            merchant=merchant,
+            amount=amount,
+            posting_date=posting_date,
+            card_last4=card_last4,
+        )
+    except (ValueError, IndexError):
+        logger.warning("跳過無法解析的交易行: %s", match.group(0))
+        return None
 
 
 def _parse_text_transaction(

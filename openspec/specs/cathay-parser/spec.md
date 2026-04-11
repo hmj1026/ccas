@@ -11,21 +11,58 @@ TBD - created by archiving change add-cathay-bank-support. Update Purpose after 
 - **WHEN** 檢查 `CathayV1Parser` 的屬性
 - **THEN** `bank_code` SHALL 為 `"CATHAY"`，`version` SHALL 為 `"v1"`
 
-### Requirement: can_parse 正確辨識國泰世華帳單 PDF
+### Requirement: can_parse 透過全部頁面辨識國泰世華帳單
 
-`CathayV1Parser.can_parse()` SHALL 透過 PDF 首頁文字特徵辨識國泰世華銀行信用卡帳單。
+`CathayV1Parser.can_parse()` SHALL 掃描 PDF 全部頁面文字辨識國泰世華信用卡帳單，不限於 page 0，以因應真實 PDF page 0 被 CID 字型遮蔽的情境。辨識 keyword 採兩組後援：主要為「國泰」+「信用卡」，備援為「多利金」+「信用卡」（COSTCO 聯名卡回饋，國泰世華獨有）。
 
-#### Scenario: 辨識國泰世華銀行帳單 PDF
-- **WHEN** 輸入 PDF 首頁包含「國泰世華」與「信用卡」關鍵字
-- **THEN** `can_parse()` SHALL 回傳 `True`
+#### Scenario: page 0 關鍵字遮蔽但後續頁面可辨識
+- **GIVEN** PDF page 0 的 `extract_text()` 不含「國泰」（因收件人姓名 CID 字型）
+- **AND** page 1 含「國泰」與「信用卡」
+- **WHEN** 呼叫 `can_parse`
+- **THEN** 回傳 `True`
 
-#### Scenario: 拒絕非國泰世華帳單 PDF
-- **WHEN** 輸入 PDF 首頁不包含國泰世華銀行特徵關鍵字
-- **THEN** `can_parse()` SHALL 回傳 `False`
+#### Scenario: Ancient PDF 僅含「多利金」備援關鍵字
+- **GIVEN** PDF 全部頁面皆不含「國泰」但含「多利金」與「信用卡」
+- **WHEN** 呼叫 `can_parse`
+- **THEN** 回傳 `True`
+
+#### Scenario: 全部頁面皆無關鍵字
+- **WHEN** 所有頁面文字皆不含兩組 keyword
+- **THEN** `can_parse` 回傳 `False`
 
 #### Scenario: 損壞 PDF 不導致例外
 - **WHEN** 輸入 PDF 無法開啟或讀取
-- **THEN** `can_parse()` SHALL 回傳 `False`，不拋出例外
+- **THEN** `can_parse` 回傳 `False`，不拋出例外
+
+### Requirement: CATHAY parser SHALL 解析多版帳單 summary 佈局
+
+`CathayV1Parser._extract_summary` MUST 支援跨版本 billing_month / due_date 錨點組合：`以下為您YYY年MM月份`、`信用卡帳單 YYY年MM月`、grid 結帳日並排、`繳款截止日(遇假日順延) ROC/MM/DD`、`帳款將於 ROC/MM/DD`。
+
+#### Scenario: 舊版「以下為您YYY年MM月份」月份錨點
+- **GIVEN** 文字含 `以下為您108年5月份的信用卡電子帳單`
+- **WHEN** 呼叫 `_extract_billing_month`
+- **THEN** 回傳 `"2019-05"`
+
+#### Scenario: 新版「信用卡帳單 YYY年MM月」月份錨點
+- **GIVEN** 文字含 `信用卡帳單 115年3月`
+- **WHEN** 呼叫 `_extract_billing_month`
+- **THEN** 回傳 `"2026-03"`
+
+#### Scenario: Grid 佈局從結帳日並排推導月份
+- **GIVEN** 文字含獨立行 `112/03/15 112/04/01`
+- **AND** 無「信用卡帳單」或「以下為您」錨點
+- **WHEN** 呼叫 `_extract_billing_month`
+- **THEN** 回傳 `"2023-03"`（第一組日期即結帳日）
+
+#### Scenario: 「繳款截止日(遇假日順延)」無冒號錨點
+- **GIVEN** 文字含 `繳款截止日(遇假日順延) 108/06/01`
+- **WHEN** 呼叫 `_extract_due_date`
+- **THEN** 回傳 `date(2019, 6, 1)`
+
+#### Scenario: 「帳款將於」扣款日錨點
+- **GIVEN** 文字含 `您的新臺幣帳款將於 115/04/01 (遇假日順延)`
+- **WHEN** 呼叫 `_extract_due_date`
+- **THEN** 回傳 `date(2026, 4, 1)`
 
 ### Requirement: parse 提取帳單摘要
 

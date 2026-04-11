@@ -18,9 +18,15 @@ from ccas.parser.base import ParseError
 from .conftest import (
     EXPECTED_UBOT_BILLING_MONTH,
     EXPECTED_UBOT_DUE_DATE,
+    EXPECTED_UBOT_REAL_BILLING_MONTH,
+    EXPECTED_UBOT_REAL_DUE_DATE,
+    EXPECTED_UBOT_REAL_TOTAL_AMOUNT,
     EXPECTED_UBOT_TOTAL_AMOUNT,
     UBOT_FIRST_PAGE_TEXT,
     UBOT_NON_UBOT_PAGE_TEXT,
+    UBOT_REAL_SUMMARY_TEXT,
+    UBOT_REAL_TRANSACTIONS_TEXT,
+    UBOT_REAL_ZERO_BALANCE_TEXT,
     UBOT_SUMMARY_MISSING_DUE_DATE_TEXT,
     UBOT_SUMMARY_MISSING_TOTAL_TEXT,
     UBOT_TABLE_HEADER_ROW,
@@ -376,3 +382,110 @@ class TestParse:
         assert result.total_amount == EXPECTED_UBOT_TOTAL_AMOUNT
         assert result.due_date == EXPECTED_UBOT_DUE_DATE
         assert len(result.transactions) == 3
+
+
+# -- Real-format PDF tests (unlabeled grid layout) --
+
+
+class TestRealPdfFormat:
+    def test_extracts_real_summary(self):
+        parser = _make_parser()
+        page = make_mock_page(UBOT_REAL_SUMMARY_TEXT)
+
+        billing_month, total_amount, due_date = parser._extract_summary([page])
+
+        assert billing_month == EXPECTED_UBOT_REAL_BILLING_MONTH
+        assert total_amount == EXPECTED_UBOT_REAL_TOTAL_AMOUNT
+        assert due_date == EXPECTED_UBOT_REAL_DUE_DATE
+
+    def test_zero_balance_raises_parse_error(self):
+        parser = _make_parser()
+        page = make_mock_page(UBOT_REAL_ZERO_BALANCE_TEXT)
+
+        with pytest.raises(ParseError, match="zero-balance"):
+            parser._extract_summary([page])
+
+    def test_extracts_real_local_transaction(self):
+        parser = _make_parser()
+        page = make_mock_page("12/30 12/26 某保險公司 ＸＸＸＸＸＸＸＸＸＸＸ TW 12,152\n")
+
+        txns = parser._extract_transactions(
+            cast(list[pdfplumber.page.Page], [page]),
+            2026,
+        )
+
+        assert len(txns) == 1
+        assert txns[0].amount == 12152
+        assert txns[0].trans_date == date(2026, 12, 30)
+
+    def test_extracts_real_foreign_transaction(self):
+        parser = _make_parser()
+        page = make_mock_page(
+            "01/07 12/31 PRIME MEMBERSHIP MEGURO-KU JP 01/02 JPY 600.00 120\n"
+        )
+
+        txns = parser._extract_transactions(
+            cast(list[pdfplumber.page.Page], [page]),
+            2026,
+        )
+
+        assert len(txns) == 1
+        assert txns[0].amount == 120
+
+    def test_extracts_mobile_payment_transaction(self):
+        parser = _make_parser()
+        page = make_mock_page(
+            "+ 02/23 02/17 台灣大創百貨（股）南港ＬａＬａｐｏｒｔ TW 98\n"
+        )
+
+        txns = parser._extract_transactions(
+            cast(list[pdfplumber.page.Page], [page]),
+            2026,
+        )
+
+        assert len(txns) == 1
+        assert txns[0].amount == 98
+
+    def test_extracts_negative_refund(self):
+        parser = _make_parser()
+        page = make_mock_page("12/31 12/26 專案：想分調整某保險公司 ＸＸＸＸ -12,152\n")
+
+        txns = parser._extract_transactions(
+            cast(list[pdfplumber.page.Page], [page]),
+            2026,
+        )
+
+        assert len(txns) == 1
+        assert txns[0].amount == -12152
+
+    def test_card_header_tracking(self):
+        parser = _make_parser()
+        page = make_mock_page(
+            "聯邦Ｍ悠遊鈦商卡 －正卡 8000\n"
+            "12/30 12/26 某保險公司 ＸＸＸＸＸＸＸＸＸＸＸ TW 12,152\n"
+        )
+
+        txns = parser._extract_transactions(
+            cast(list[pdfplumber.page.Page], [page]),
+            2026,
+        )
+
+        assert len(txns) == 1
+        assert txns[0].card_last4 == "8000"
+
+    def test_full_mixed_transactions(self):
+        parser = _make_parser()
+        page = make_mock_page(UBOT_REAL_TRANSACTIONS_TEXT)
+
+        txns = parser._extract_transactions(
+            cast(list[pdfplumber.page.Page], [page]),
+            2026,
+        )
+
+        # Expected: installment, local, refund, foreign, mobile payment
+        amounts = [t.amount for t in txns]
+        assert 2603 in amounts
+        assert 12152 in amounts
+        assert -12152 in amounts
+        assert 120 in amounts
+        assert 98 in amounts

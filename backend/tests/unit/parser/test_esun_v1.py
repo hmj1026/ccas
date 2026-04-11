@@ -16,12 +16,18 @@ from ccas.parser.base import ParseError
 from .conftest import (
     ESUN_FIRST_PAGE_TEXT,
     ESUN_NON_ESUN_PAGE_TEXT,
+    ESUN_REAL_PAGE0_TEXT,
+    ESUN_REAL_PAGE1_TEXT,
+    ESUN_REAL_PAGE2_TEXT,
     ESUN_SUMMARY_MISSING_DUE_DATE_TEXT,
     ESUN_SUMMARY_MISSING_TOTAL_TEXT,
     ESUN_TABLE_HEADER_ROW,
     ESUN_TRANSACTION_ROWS,
     EXPECTED_ESUN_BILLING_MONTH,
     EXPECTED_ESUN_DUE_DATE,
+    EXPECTED_ESUN_REAL_BILLING_MONTH,
+    EXPECTED_ESUN_REAL_DUE_DATE,
+    EXPECTED_ESUN_REAL_TOTAL_AMOUNT,
     EXPECTED_ESUN_TOTAL_AMOUNT,
     make_mock_page,
 )
@@ -309,3 +315,52 @@ class TestParse:
         assert result.total_amount == EXPECTED_ESUN_TOTAL_AMOUNT
         assert result.due_date == EXPECTED_ESUN_DUE_DATE
         assert len(result.transactions) == 3
+
+
+# -- Real PDF format tests (ROC year + TWD prefix + multi-page identify) --
+
+
+class TestRealPdfFormat:
+    def test_identify_spans_all_pages(self):
+        parser = _make_parser()
+        # page 0 lacks "玉山銀行"; only last page has it
+        combined = ESUN_REAL_PAGE0_TEXT + "\n" + ESUN_REAL_PAGE2_TEXT
+        assert parser._identify(combined) is True
+
+    def test_identify_rejects_without_keywords(self):
+        parser = _make_parser()
+        assert parser._identify("無關文字") is False
+
+    def test_extract_summary_roc_year_no_label(self):
+        parser = _make_parser()
+        page0 = make_mock_page(ESUN_REAL_PAGE0_TEXT)
+        page1 = make_mock_page(ESUN_REAL_PAGE1_TEXT)
+        page2 = make_mock_page(ESUN_REAL_PAGE2_TEXT)
+
+        billing_month, total_amount, due_date = parser._extract_summary(
+            cast(list[pdfplumber.page.Page], [page0, page1, page2])
+        )
+
+        assert billing_month == EXPECTED_ESUN_REAL_BILLING_MONTH
+        assert total_amount == EXPECTED_ESUN_REAL_TOTAL_AMOUNT
+        assert due_date == EXPECTED_ESUN_REAL_DUE_DATE
+
+    def test_extract_transactions_real_format(self):
+        parser = _make_parser()
+        page0 = make_mock_page(ESUN_REAL_PAGE0_TEXT)
+        page1 = make_mock_page(ESUN_REAL_PAGE1_TEXT)
+
+        txns = parser._extract_transactions(
+            cast(list[pdfplumber.page.Page], [page0, page1]),
+            2026,
+        )
+
+        # Expect: refund -10615 + 2 consumption rows = 3 items
+        assert len(txns) == 3
+        refund = next(t for t in txns if t.amount == -10615)
+        assert refund.trans_date == date(2026, 3, 9)
+
+        consumption_142 = next(t for t in txns if t.amount == 142)
+        assert consumption_142.trans_date == date(2026, 2, 12)
+        assert consumption_142.posting_date == date(2026, 2, 23)
+        assert "新光三越" in consumption_142.merchant

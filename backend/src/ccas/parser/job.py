@@ -181,6 +181,26 @@ async def _process_attachment(
 
     if not success:
         pdf_filename = attachment.original_filename or "unknown"
+
+        # Zero-balance historical bills (e.g. SINOPAC 2021 無消費帳單) raise a
+        # ParseError tagged with "zero-balance" — treat as skip, not failure,
+        # since there is no actionable amount / due_date to persist.
+        if "zero-balance" in (error_detail or ""):
+            summary.skipped_count += 1
+            logger.info(
+                "略過零額歷史帳單: bank_code=%s pdf=%s detail=%s",
+                bank_code,
+                pdf_filename,
+                error_detail,
+            )
+            await update_attachment_status(
+                session,
+                attachment,
+                status="parse_skipped",
+                error_reason=error_detail,
+            )
+            return
+
         error_msg = f"所有 parser 皆失敗 ({bank_code}/{pdf_filename}): {error_detail}"
         summary.failed_count += 1
         summary.errors.append(error_msg)
