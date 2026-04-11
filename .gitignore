@@ -24,7 +24,14 @@ logs/
 .env
 .env.local
 .env.*.local
+.env.bak*
 *.Zone.Identifier
+
+# Backup files (never commit backups — they may contain real PII/secrets)
+*.bak
+*.bak.*
+*.bak-*
+backend/data/*.bak*
 
 # Python
 __pycache__/
