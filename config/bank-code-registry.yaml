@@ -7,18 +7,18 @@ banks:
   - bank_code: CATHAY
     bank_name: 國泰世華
     fsc_code: "013"
-    supported: false
-    notes: 尚未提供正式 parser，適合先配置 Gmail filter
+    supported: true
+    notes: 支援 v1 parser，可自動解析表格式帳單
   - bank_code: ESUN
     bank_name: 玉山銀行
     fsc_code: "808"
-    supported: false
-    notes: 尚未提供正式 parser，適合先配置 Gmail filter
+    supported: true
+    notes: 支援 v1 parser，可自動解析表格式帳單
   - bank_code: TAISHIN
     bank_name: 台新銀行
     fsc_code: "812"
-    supported: false
-    notes: 尚未提供正式 parser，適合先配置 Gmail filter
+    supported: true
+    notes: 支援 v1 parser，可自動解析表格式帳單
   - bank_code: FUBON
     bank_name: 台北富邦
     fsc_code: "012"
@@ -42,8 +42,8 @@ banks:
   - bank_code: UBOT
     bank_name: 聯邦銀行
     fsc_code: "803"
-    supported: false
-    notes: 尚未提供正式 parser，適合先配置 Gmail filter
+    supported: true
+    notes: 支援 v1 parser，可自動解析表格式帳單
   - bank_code: HSBC
     bank_name: 匯豐銀行
     fsc_code: "081"

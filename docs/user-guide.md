@@ -106,6 +106,8 @@ cp config/banks.example.yaml config/banks.yaml
 
 編輯 `config/banks.yaml`，設定各銀行的 Gmail 篩選條件和 PDF 密碼。
 
+> **注意**：`config/banks.example.yaml` 目前僅附 **CTBC / SINOPAC / FUBON** 3 家預設 block；其餘 ESUN / UBOT / CATHAY / TAISHIN 需依下方範例自行新增（bank_code 限制於 `config/bank-code-registry.yaml` 定義清單內）。
+
 ### 目前支援的銀行
 
 | 銀行 | bank_code | Gmail filter 範例 | PDF 密碼環境變數 |
@@ -188,38 +190,38 @@ cp config/banks.example.yaml config/banks.yaml
 
 > **注意**：格式 B 的 CAPTCHA 驗證碼由 OCR 自動辨識（成功率約 90-95%）。若辨識失敗，系統會自動重試最多 3 次。需確保 Docker 環境中 tesseract 可用。
 
-## 6. 啟動服務（Docker）
-
-### 開發模式
+## 6. 啟動服務（Docker Compose）
 
 ```bash
-docker compose up
+docker compose up --build
 ```
 
-首次啟動會自動：
-- 驗證環境變數
-- 檢查 OCR（tesseract）可用性
-- 套用資料庫 migration
-- 啟動 backend（API）、frontend（Vite dev server）、Redis
+`docker-compose.yaml` 一次啟動下列服務（皆使用 `target: production` build stage）：
+
+| 服務 | 連接埠 | 說明 |
+|------|--------|------|
+| `backend` | `127.0.0.1:8000` | FastAPI + uvicorn |
+| `worker` | — | RQ worker（Redis job queue） |
+| `scheduler` | — | APScheduler 週期性任務 |
+| `bot` | — | Telegram Bot daemon |
+| `frontend` | `127.0.0.1:8080` | nginx 靜態站（已 build） |
+| `redis` | `127.0.0.1:6379` | job queue + 快取 |
+
+首次啟動 `backend` 時，`scripts/docker-entrypoint.sh` 會在容器內：
+- 驗證環境變數（`scripts/check-env.sh`）
+- 檢查 tesseract OCR 可用性
+- 套用 alembic migration（`alembic upgrade head`）
+- 啟動 uvicorn
 
 驗證服務正常：
 ```bash
-curl http://localhost:8000/health
-open http://localhost:5173
-```
-
-### Production 模式
-
-適用於部署到遠端伺服器（詳見 [部署指南](deployment-guide.md)）：
-
-```bash
-docker compose -f docker-compose.yaml up -d --build
-```
-
-Production 模式僅啟動 backend、scheduler、bot、redis（不含 frontend），透過 Telegram bot 存取資料：
-```bash
 curl http://localhost:8000/health   # backend health check
+open http://localhost:8080          # frontend 儀表板
 ```
+
+> **僅需要伺服器端（不含 frontend）？** 用 `docker compose up backend worker scheduler bot redis`。遠端部署的完整流程見 [部署指南](deployment-guide.md)。
+
+> **本地開發（熱更新）？** 若要使用 Vite dev server（port 5173）與 uvicorn reload，改用 `./scripts/start.sh`（不經 Docker），詳見 [開發者指南](developer-guide.md)。
 
 ## 7. 執行 Pipeline
 
@@ -259,14 +261,14 @@ Pipeline 階段順序：`ingest` → `decrypt` → `parse` → `classify` → `n
 
 ## 8. 查看報表
 
-1. 開啟瀏覽器 http://localhost:5173（僅開發模式可用）
+1. 開啟瀏覽器 http://localhost:8080
 2. 使用 `.env` 中的 `API_TOKEN` 登入
 3. 瀏覽各頁面：帳單列表、交易明細、分析圖表
 
 ## 9. 停止服務
 
 ```bash
-docker-compose down
+docker compose down
 ```
 
 ## 故障排除
@@ -274,12 +276,12 @@ docker-compose down
 ### 服務未啟動
 - 檢查 `.env` 是否齊全：`./scripts/check-env.sh`
 - 檢查 Docker 是否運行：`docker info`
-- 查看 logs：`docker-compose logs backend`
+- 查看 logs：`docker compose logs backend`
 
 ### Pipeline 執行失敗
 - 確認 Gmail 憑證有效：重新執行 OAuth 認證
 - 確認 PDF 密碼正確：檢查 `.env` 中的 `PDF_PASSWORD_<BANK_CODE>`
-- 查看詳細 log：`docker-compose logs backend | grep ERROR`
+- 查看詳細 log：`docker compose logs backend | grep ERROR`
 
 ### 前端無法載入資料
 - 確認 backend 正常：`curl http://localhost:8000/health`

@@ -15,14 +15,14 @@
 | bank_code | fsc_code | 銀行名稱 | Parser 現況 | 備註 |
 |---|---|---|---|---|
 | `CTBC` | `822` | 中國信託 | v1 已實作 | `parser/banks/ctbc_v1.py` |
-| `CATHAY` | `013` | 國泰世華 | 尚未提供正式 parser | 可先配置 Gmail filter 與本地流程 |
-| `ESUN` | `808` | 玉山銀行 | 尚未提供正式 parser | 可先配置 Gmail filter 與本地流程 |
-| `TAISHIN` | `812` | 台新銀行 | 尚未提供正式 parser | 可先配置 Gmail filter 與本地流程 |
-| `FUBON` | `012` | 台北富邦 | 尚未提供正式 parser | 可先配置 Gmail filter 與本地流程 |
+| `CATHAY` | `013` | 國泰世華 | v1 已實作 | `parser/banks/cathay_v1.py` |
+| `ESUN` | `808` | 玉山銀行 | v1 已實作 | `parser/banks/esun_v1.py` |
+| `TAISHIN` | `812` | 台新銀行 | v1 已實作 | `parser/banks/taishin_v1.py` |
+| `FUBON` | `012` | 台北富邦 | v1 已實作 | `parser/banks/fubon_v1.py`（支援 web-fetch 流程） |
 | `MEGA` | `017` | 兆豐銀行 | 尚未提供正式 parser | 可先配置 Gmail filter 與本地流程 |
 | `FIRST` | `007` | 第一銀行 | 尚未提供正式 parser | 可先配置 Gmail filter 與本地流程 |
-| `SINOPAC` | `807` | 永豐銀行 | 尚未提供正式 parser | 可先配置 Gmail filter 與本地流程 |
-| `UBOT` | `803` | 聯邦銀行 | 尚未提供正式 parser | 可先配置 Gmail filter 與本地流程 |
+| `SINOPAC` | `807` | 永豐銀行 | v1 已實作 | `parser/banks/sinopac_v1.py` |
+| `UBOT` | `803` | 聯邦銀行 | v1 已實作 | `parser/banks/ubot_v1.py` |
 | `HSBC` | `081` | 匯豐銀行 | 尚未提供正式 parser | 可先配置 Gmail filter 與本地流程 |
 | `SCB` | `052` | 渣打銀行 | 尚未提供正式 parser | 可先配置 Gmail filter 與本地流程 |
 | `LANDBANK` | `005` | 土地銀行 | 尚未提供正式 parser | 可先配置 Gmail filter 與本地流程 |

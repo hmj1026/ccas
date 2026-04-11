@@ -6,7 +6,7 @@
 
 - Docker Engine 24+ 和 Docker Compose v2（推薦）
 - Python 3.12+、[uv](https://docs.astral.sh/uv/)（本地開發用）
-- Node.js 18+ 和 pnpm（前端開發用）
+- Node.js 20+ 和 pnpm（前端開發用；React 19 / Vite 8 建議 Node 20 LTS 以上）
 - Git
 
 ## 1. 取得專案
@@ -185,7 +185,7 @@ backend/src/ccas/
   classifier/   # Keyword-based classification
   config.py     # Pydantic settings
   decryptor/    # PDF decryption
-  ingestor/     # Gmail attachment download
+  ingestor/     # Gmail attachment download（`fetcher/` 子模組提供 BaseFetcher 介面、富邦 web-fetch 流程與 captcha OCR）
   parser/       # PDF parsing (per-bank)
   pipeline/     # Orchestration + CLI
   scheduler/    # APScheduler jobs
@@ -255,6 +255,8 @@ uv run alembic revision --autogenerate -m "description"
 ## 10. Seed Data
 
 ```bash
+cd backend
+
 # 新增測試資料
 uv run python scripts/seed.py
 

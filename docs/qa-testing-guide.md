@@ -69,7 +69,7 @@ docker compose up --build
 | API 文件 (Swagger) | http://localhost:8000/docs | 互動式 API 測試 |
 | API 文件 (ReDoc) | http://localhost:8000/redoc | API 參考文件 |
 | Health Check | http://localhost:8000/health | 健康檢查 |
-| Frontend UI | http://localhost:5173 | Web 操作介面 |
+| Frontend UI | http://localhost:8080 | Web 操作介面（nginx production build） |
 
 ### 5. 寫入測試資料
 
@@ -276,5 +276,5 @@ docker compose logs redis
 docker exec -it ccas-backend-1 uv run alembic upgrade head
 
 # 再次 seed
-docker exec -it ccas-backend-1 uv run python scripts/seed.py --reset
+docker exec -it ccas-backend-1 uv run python /app/scripts/seed.py --reset
 ```
