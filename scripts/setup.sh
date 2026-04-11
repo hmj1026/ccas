@@ -8,7 +8,7 @@ ENV_FILE="$ROOT_DIR/.env"
 BANKS_FILE="$ROOT_DIR/config/banks.yaml"
 BANKS_EXAMPLE_FILE="$ROOT_DIR/config/banks.example.yaml"
 REGISTRY_FILE="$ROOT_DIR/config/bank-code-registry.yaml"
-UV_CACHE_DIR="${UV_CACHE_DIR:-/tmp/uv-cache}"
+UV_CACHE_DIR="${UV_CACHE_DIR:-${TMPDIR:-/tmp}/uv-cache}"
 
 step() {
   printf '\n==> %s\n' "$1"

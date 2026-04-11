@@ -8,7 +8,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BACKEND_DIR="$ROOT_DIR/backend"
 FRONTEND_DIR="$ROOT_DIR/frontend"
 ENV_FILE="$ROOT_DIR/.env"
-UV_CACHE_DIR="${UV_CACHE_DIR:-/tmp/uv-cache}"
+UV_CACHE_DIR="${UV_CACHE_DIR:-${TMPDIR:-/tmp}/uv-cache}"
 
 BACKEND_PID=""
 FRONTEND_PID=""
