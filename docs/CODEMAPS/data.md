@@ -1,4 +1,4 @@
-<!-- Generated: 2026-04-07 | Files scanned: 5 | Token estimate: ~600 -->
+<!-- Generated: 2026-04-11 | Files scanned: 5 | Token estimate: ~650 -->
 
 # Data
 
@@ -16,7 +16,7 @@ ORM: SQLAlchemy 2.0 (`Mapped[T]` style) in `backend/src/ccas/storage/models.py`
 | id | int PK | autoincrement |
 | bank_code | str | |
 | billing_month | str | |
-| total_amount | int | TWD cents |
+| total_amount | int | TWD（整數元） |
 | due_date | date | |
 | is_paid | bool | |
 | is_notified | bool | default False, set after Telegram notify |
@@ -32,7 +32,7 @@ ORM: SQLAlchemy 2.0 (`Mapped[T]` style) in `backend/src/ccas/storage/models.py`
 | trans_date | date | |
 | posting_date | date? | |
 | merchant | str | |
-| amount | int | TWD |
+| amount | int | TWD（整數元） |
 | currency | str | default "TWD" |
 | original_amount | int? | foreign currency |
 | card_last4 | str? | |
@@ -52,14 +52,16 @@ bank_code (str, UQ), bank_name, gmail_filter, pdf_password_rule?, active_parser_
 |--------|------|-------|
 | id | int PK | |
 | bank_code | str | |
+| source_type | str | `gmail` / `web`（新增） |
 | gmail_message_id | str | |
-| gmail_attachment_id | str | |
+| gmail_attachment_id | str | legacy, 舊資料保留 |
+| gmail_part_id | str? | 新 dedupe key（Gmail MIME part），舊列 NULL 時 fallback 檔名 |
 | message_date | datetime | |
 | original_filename | str | |
 | staged_path | str? | |
 | status | str | staged/decrypted/parsed/skipped/*_failed |
 | error_reason | str? | |
-| **UQ** | (gmail_message_id, gmail_attachment_id) | |
+| **UQ** | (gmail_message_id, gmail_part_id) | 舊 UQ `(message_id, attachment_id)` 已替換 |
 
 ### payment_reminders
 bill_id (FK), reminder_type, sent_at | **UQ** (bill_id, reminder_type)
@@ -79,3 +81,5 @@ Bill 1--* PaymentReminder
 | 08828cd4e8ca | Add staged_attachments |
 | c3a1f5e8d9b2 | Add payment_reminders |
 | ca5a1f05744d | Add bill.is_notified column |
+| 11ca9b74b00c | Add staged_attachment.source_type (`gmail` / `web`) |
+| 1334f4fe5f73 | Add staged_attachment.gmail_part_id + switch UQ to `(message_id, part_id)` |

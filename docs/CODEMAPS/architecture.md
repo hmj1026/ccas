@@ -1,4 +1,4 @@
-<!-- Generated: 2026-04-07 | Files scanned: 94 | Token estimate: ~600 -->
+<!-- Generated: 2026-04-11 | Files scanned: 78 | Token estimate: ~650 -->
 
 # Architecture
 
@@ -9,13 +9,17 @@ Credit card bill automation: ingest PDF statements from Gmail, decrypt, parse, c
 ## Data Flow
 
 ```
-Gmail ──> Ingestor ──> Decryptor ──> Parser ──> Classifier ──> Notifier
-           (PDF)       (pikepdf)    (pdfplumber)  (keyword)    (Telegram)
-             │                       + OCR          │
-             v                          │            v
-        StagedAttachment           Bill + Txn     category field
-           (status tracking)        (SQLite)       (updated)
+Gmail ──┐
+        ├─> Ingestor ──> Decryptor ──> Parser ──> Classifier ──> Notifier
+Web   ──┘   (+ fetcher/)  (pikepdf)   (pdfplumber) (keyword)    (Telegram)
+             │                        + OCR          │
+             v                           │           v
+        StagedAttachment            Bill + Txn     category field
+        (status + source_type)       (SQLite)
 ```
+
+`ingestor/fetcher/` 提供 Gmail 以外的來源（目前：FUBON 網銀 web-fetch + captcha）。
+`staged_attachments.source_type` 區分 `gmail` / `web`；dedupe 依 `(gmail_message_id, gmail_part_id)`。
 
 ## Entry Points
 
@@ -48,8 +52,8 @@ backend/src/ccas/
 ├── bot/          Telegram bot commands & notifications
 ├── classifier/   Transaction categorization
 ├── decryptor/    PDF password decryption
-├── ingestor/     Gmail PDF download & staging
-├── parser/       PDF extraction (bank-specific) + OCR fallback (pytesseract + tesseract)
+├── ingestor/     Gmail PDF download & staging; `fetcher/` web scrapers (FUBON + captcha)
+├── parser/       PDF extraction for 7 banks (CTBC/ESUN/Taishin/UBOT/Cathay/SinoPac/Fubon) + OCR fallback
 ├── pipeline/     5-stage orchestrator with stage range control (--from/--to)
 ├── scheduler/    APScheduler cron jobs
 ├── storage/      SQLAlchemy models, database, queries

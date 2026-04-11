@@ -1,4 +1,4 @@
-<!-- Generated: 2026-04-07 | Files scanned: 69 | Token estimate: ~900 -->
+<!-- Generated: 2026-04-11 | Files scanned: 78 | Token estimate: ~950 -->
 
 # Backend
 
@@ -53,9 +53,9 @@ Supports `--from`/`--to` stage range via `PipelineOptions`.
 
 | # | Stage | Module | Key File (LOC) |
 |---|-------|--------|-----------------|
-| 1 | Ingest | `ingestor/` | `job.py`, `gmail_client.py` |
+| 1 | Ingest | `ingestor/` | `job.py`, `gmail_client.py`, `fetcher/` (web scrapers) |
 | 2 | Decrypt | `decryptor/` | `job.py`, `decrypt.py` |
-| 3 | Parse | `parser/` | `job.py`, `banks/ctbc_v1.py`, `ocr.py` (fallback) |
+| 3 | Parse | `parser/` | `job.py`, `registry.py`, `banks/{ctbc,esun,taishin,ubot,cathay,sinopac,fubon}_v1.py`, `ocr.py` (fallback) |
 | 4 | Classify | `classifier/` | `job.py`, `engine.py` |
 | 5 | Notify | `bot/` | `notifications.py`, `job.py` (auto-query is_notified=False) |
 
@@ -76,15 +76,15 @@ Supports `--from`/`--to` stage range via `PipelineOptions`.
 
 | Module | Files | LOC | Purpose |
 |--------|-------|-----|---------|
-| api | 12 | 1163 | FastAPI routes, schemas, deps, security headers middleware |
-| parser | 9 | 1192 | PDF extraction, bank parsers, OCR fallback (pytesseract), non-transaction filtering |
-| bot | 10 | 900 | Telegram commands, notifications, auto-query pending bills (is_notified=False) |
-| ingestor | 6 | 736 | Gmail download, staging, retry |
+| api | 12 | 1310 | FastAPI routes, schemas, deps, security headers middleware |
+| parser | 15 | 4342 | 7 bank parsers (CTBC/ESUN/Taishin/UBOT/Cathay/SinoPac/Fubon), registry, result, OCR fallback |
+| ingestor | 13 | 1395 | Gmail download + staging + retry; `fetcher/` sub-module (web scrapers, captcha, FUBON bank) |
+| bot | 10 | 932 | Telegram commands, notifications, auto-query pending bills (is_notified=False) |
 | pipeline | 7 | 637 | Orchestrator, worker, CLI, options, stage range |
 | tools | 3 | 409 | Bank configs (YAML), Gmail auth |
 | classifier | 5 | 327 | Keyword engine, rules |
 | decryptor | 5 | 308 | PDF password resolution, decryption |
-| storage | 4 | 251 | ORM models, async DB session, queries |
-| scheduler | 4 | 237 | APScheduler, reminders |
+| storage | 4 | 256 | ORM models, async DB session, queries |
+| scheduler | 4 | 245 | APScheduler, reminders |
 | core | 4 | 330 | config, errors, log, __init__ |
-| **Total** | **69** | **~6490** | |
+| **Total** | **82** | **~10491** | |

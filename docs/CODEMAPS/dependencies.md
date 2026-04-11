@@ -1,4 +1,4 @@
-<!-- Generated: 2026-04-07 | Files scanned: 94 | Token estimate: ~550 -->
+<!-- Generated: 2026-04-11 | Files scanned: 82 | Token estimate: ~600 -->
 
 # Dependencies
 
@@ -9,6 +9,12 @@
 - **Auth**: OAuth2 (credentials.json + token.json)
 - **Usage**: Search emails by bank filter, download PDF attachments
 - **Library**: `google-api-python-client`
+
+### 銀行網銀 web-fetch
+- **Module**: `ingestor/fetcher/` — `base.py`, `captcha.py`, `registry.py`, `banks/fubon.py`
+- **Usage**: Gmail 未寄送對帳單的銀行，改由登入網銀下載 PDF
+- **Env**: `FUBON_NATIONAL_ID`, `FUBON_ROC_BIRTHDAY`（富邦）
+- **Captcha**: OCR 為主的 captcha 解算（`captcha.py`）
 
 ### Telegram Bot API
 - **Module**: `bot/` (10 files, 900 LOC)

@@ -1,31 +1,66 @@
-Codemap Update Report — 2026-04-07
-====================================
+Codemap Diff — 2026-04-11 (vs 2026-04-07 snapshot)
+========================================================
 
-Files Updated
--------------
-docs/CODEMAPS/architecture.md  — timestamp refresh (no structural changes)
-docs/CODEMAPS/backend.md        — timestamp + added Configuration (config.py Settings) section
-docs/CODEMAPS/frontend.md       — timestamp refresh (no structural changes)
-docs/CODEMAPS/data.md           — timestamp refresh (no structural changes)
-docs/CODEMAPS/dependencies.md   — timestamp + Docker services rework + dev-tools profile
+## Module LOC changes
 
-Changes Detected Since 2026-04-04/05
---------------------------------------
-+ New config fields: redis_url, scheduler_api_base_url, log_dir, log_file_max_bytes,
-  log_file_backup_count, log_file_prefix (added during Docker/logging work 2026-04-07)
-+ Docker backend service: /logs volume added
-+ Docker redis: maxmemory 256mb, allkeys-lru, appendonly yes
-+ Docker frontend: changed from Vite dev server (:5173) to nginx static (:8080)
-+ Docker dev-tools profile: sqlite-web (:8088), redis-commander (:8081)
+  ingestor       6 files /  736 LOC  →  13 files / 1395 LOC   (+7 files, +90%)
+  parser         9 files / 1192 LOC  →  15 files / 4342 LOC   (+6 files, +264%)
+  api           12 files / 1163 LOC  →  12 files / 1310 LOC   (+13%)
+  bot           10 files /  900 LOC  →  10 files /  932 LOC   (+4%)
+  scheduler      4 files /  237 LOC  →   4 files /  245 LOC   (+3%)
+  storage        4 files /  251 LOC  →   4 files /  256 LOC   (+2%)
+  classifier / decryptor / pipeline / tools — unchanged
 
-New Dependencies
-----------------
-None (all existing packages)
+  Total:        69 files / ~6490 LOC → 82 files / ~10491 LOC   (+13 files, +62%)
 
-Architecture Changes
---------------------
-None — same 5 pipeline stages, same 23 API endpoints, same 6 DB tables
+## New modules / features
 
-Staleness Warnings
-------------------
-None — all codemaps now dated 2026-04-07
+  + ingestor/fetcher/                      Web-based statement fetcher (non-Gmail sources)
+    ├── base.py                            BaseFetcher interface
+    ├── captcha.py                         OCR-based captcha solver
+    ├── registry.py                        Fetcher dispatch by bank_code
+    └── banks/fubon.py                     FUBON online-banking PDF fetcher
+
+  + parser/banks/ — expanded from 1 to 7 bank parsers:
+    ├── ctbc_v1.py       (existing)
+    ├── esun_v1.py       (new)
+    ├── taishin_v1.py    (new)
+    ├── ubot_v1.py       (new)
+    ├── cathay_v1.py     (new)
+    ├── sinopac_v1.py    (new)
+    └── fubon_v1.py      (new)
+
+  + parser/registry.py                     Bank-code → parser dispatch
+  + parser/result.py                       Parse-result value objects
+
+## New Alembic migrations
+
+  11ca9b74b00c   add_staged_attachment_source_type       (gmail / web)
+  1334f4fe5f73   add_staged_attachment_gmail_part_id     (new dedupe UQ)
+
+## Schema drift (staged_attachments)
+
+  + source_type: str           "gmail" | "web"
+  + gmail_part_id: str?        新 dedupe 欄位（Gmail MIME part）
+  ~ UQ: (gmail_message_id, gmail_attachment_id) → (gmail_message_id, gmail_part_id)
+
+## New environment variables (ref .env.example)
+
+  FUBON_NATIONAL_ID              FUBON web-fetch 登入（身分證）
+  FUBON_ROC_BIRTHDAY             FUBON web-fetch 登入（民國生日 7 碼）
+
+## Frontend
+
+  No changes detected (5 pages, 5 shared components, same stack).
+
+## Codemaps updated
+
+  docs/CODEMAPS/architecture.md    data-flow diagram + module map updated
+  docs/CODEMAPS/backend.md         module inventory LOC refresh + parser registry note
+  docs/CODEMAPS/data.md            staged_attachments + 2 new migrations
+  docs/CODEMAPS/dependencies.md    + web-fetch section (FUBON)
+  docs/CODEMAPS/frontend.md        timestamp only (no structural change)
+
+## Staleness warnings
+
+  None. All docs/CODEMAPS/*.md refreshed this run; no codemap >90 days stale.
