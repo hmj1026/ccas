@@ -59,7 +59,26 @@
       "Bash(bash -n scripts/pre-push.sh)",
       "Bash(bash -n scripts/setup-hooks.sh)",
       "Bash(bash -n scripts/setup.sh)",
-      "Bash(RUN_FRONTEND=0 ./scripts/pre-push.sh)"
+      "Bash(RUN_FRONTEND=0 ./scripts/pre-push.sh)",
+      "Bash(sqlite3:*)",
+      "Bash(sed:*)",
+      "Bash(python -c \"import sys,json; d=json.loads\\(sys.stdin.read\\(\\)\\); [print\\(s['stage'], s.get\\('counts'\\)\\) for s in d.get\\('stages',[]\\)]\")",
+      "Bash(curl -s http://127.0.0.1:8000/api/bills)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://127.0.0.1:8000/api/overview)",
+      "Bash(curl -s -H 'Authorization: Bearer 123456' 'http://127.0.0.1:8000/api/bills?page=1&page_size=500')",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(d.get\\('pagination'\\)\\)\")",
+      "Bash(curl -sv -H \"Authorization: Bearer 123456\" \"http://127.0.0.1:8000/api/bills?page=1&page_size=5\")",
+      "Bash(curl -s -H 'Authorization: Bearer 123456' 'http://127.0.0.1:8765/api/bills?page=1&page_size=1000')",
+      "Bash(curl -s -H 'Authorization: Bearer 123456' 'http://127.0.0.1:8765/api/bills?page=1&page_size=__TRACKED_VAR__')",
+      "Bash(python -c ':*)",
+      "Bash(kill 15433)",
+      "Bash(pip show:*)",
+      "Bash(rm -rf backend/data/staging)",
+      "Bash(rm -f backend/data/ccas.db backend/data/ccas.db-shm backend/data/ccas.db-wal backend/data/credentials.json backend/data/token.json)",
+      "Bash(mkdir -p backend/data/staging)",
+      "Bash(touch backend/data/staging/.gitkeep)",
+      "Bash(brew install:*)",
+      "Bash(gitleaks detect:*)"
     ]
   },
   "hooks": {

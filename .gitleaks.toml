@@ -1,0 +1,67 @@
+# CCAS gitleaks configuration
+#
+# Scans for leaked secrets and PII before commit/push.
+# Extends gitleaks' default rules (OAuth tokens, API keys, private keys, etc.)
+# with CCAS-specific patterns for Taiwanese PII and bank credentials.
+
+title = "CCAS gitleaks config"
+
+[extend]
+useDefault = true
+
+# ---------------------------------------------------------------------------
+# Custom rules — CCAS-specific leak patterns
+# ---------------------------------------------------------------------------
+
+[[rules]]
+id = "taiwan-national-id"
+description = "Taiwanese national ID (1 uppercase letter + 9 digits) near a key"
+regex = '''(?i)(national_id|nid|身分證|PDF_PASSWORD_[A-Z]+)\s*[:=]\s*["']?[A-Z]\d{9}'''
+tags = ["pii", "taiwan", "national-id"]
+
+[[rules]]
+id = "roc-birthday"
+description = "ROC 民國 birthday (7 digits) near a key"
+regex = '''(?i)(roc_birthday|民國生日)\s*[:=]\s*["']?\d{7}\b'''
+tags = ["pii", "taiwan", "birthday"]
+
+[[rules]]
+id = "telegram-bot-token"
+description = "Telegram bot token (digits:AAxxx…)"
+regex = '''\b\d{9,12}:AA[A-Za-z0-9_-]{32,}\b'''
+tags = ["secret", "telegram"]
+
+[[rules]]
+id = "telegram-chat-id-assignment"
+description = "Telegram chat_id literal assignment"
+regex = '''(?i)(TELEGRAM_CHAT_ID|telegram_chat_id)\s*[:=]\s*["']?-?\d{6,}'''
+tags = ["pii", "telegram"]
+
+# ---------------------------------------------------------------------------
+# Allowlist — dummy / placeholder values used in tests and examples
+# ---------------------------------------------------------------------------
+
+[allowlist]
+description = "CCAS placeholders and dummy test data"
+
+# Whitelisted dummy values (never treat as a real leak)
+regexTarget = "match"
+regexes = [
+    '''A123456789''',          # dummy national ID used in tests/docs
+    '''B987654321''',          # dummy national ID (test_log.py)
+    '''0881010''',             # dummy ROC birthday placeholder
+    '''card_last4["'= :]*1234''',  # dummy card last4
+    '''chat_id["'= :]*123456789''',  # dummy chat_id in test_log.py
+    '''sk_live_abc123''',      # documentation placeholder in skill examples
+    '''sk_test_[A-Za-z0-9]+''',  # Stripe-style test-key placeholders
+]
+
+# Files that are allowed to contain allowlisted placeholders
+paths = [
+    '''^\.env\.example$''',
+    '''^\.gitleaks\.toml$''',
+    '''^openspec/.*\.md$''',   # docs may reference dummy formats
+    '''^docs/.*\.md$''',
+    '''^backend/tests/.*\.py$''',
+    '''^backend/src/ccas/log\.py$''',  # contains regex patterns mentioning field names
+]

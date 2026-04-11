@@ -9,3 +9,10 @@ echo "pre-commit hook installed"
 
 ln -sf ../../scripts/pre-push.sh "$HOOKS_DIR/pre-push"
 echo "pre-push hook installed"
+
+if ! command -v gitleaks >/dev/null 2>&1; then
+    echo ""
+    echo "[WARN] gitleaks not found in PATH."
+    echo "       The pre-commit hook will SKIP secret scanning until installed."
+    echo "       Install with: brew install gitleaks"
+fi

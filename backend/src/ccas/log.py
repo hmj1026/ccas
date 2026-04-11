@@ -36,6 +36,29 @@ _REDACT_PATTERNS: list[re.Pattern[str]] = [
         r'|gmail_token_path)"?\s*[:=]\s*"?)[^\s,"]+',
         re.IGNORECASE,
     ),
+    # Taiwanese national ID (1 letter + 9 digits). Trailing \b prevents
+    # a longer digit suffix from leaking.
+    re.compile(
+        r'("?(?:national_id|nid)"?\s*[:=]\s*"?)[A-Z]\d{9}\b',
+        re.IGNORECASE,
+    ),
+    # ROC 民國生日 (7 digits YYYMMDD). Trailing \b avoids partial match
+    # on 8-digit Gregorian dates leaking a digit.
+    re.compile(
+        r'("?(?:roc_birthday|birthday)"?\s*[:=]\s*"?)\d{7}\b',
+        re.IGNORECASE,
+    ),
+    # Card last 4 digits. Trailing \b prevents partial leak when the
+    # value is longer than 4 digits.
+    re.compile(
+        r'("?(?:card_last4|卡號末四碼)"?\s*[:=]\s*"?)\d{4}\b',
+        re.IGNORECASE,
+    ),
+    # Telegram chat_id (6+ digits, optional leading - for group chats).
+    re.compile(
+        r'("?(?:chat_id|telegram_chat_id)"?\s*[:=]\s*"?)-?\d{6,}\b',
+        re.IGNORECASE,
+    ),
 ]
 
 _REDACT_REPLACEMENT = r"\g<1>[REDACTED]"

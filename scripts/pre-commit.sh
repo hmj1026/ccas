@@ -9,6 +9,27 @@ if [ -z "$STAGED_FILES" ]; then
     exit 0
 fi
 
+# ---------------------------------------------------------------------------
+# Secret scan (gitleaks) — runs first so a leak aborts the commit before
+# any other check. Uses `gitleaks protect --staged` so only the staged diff
+# is scanned (fast path). Config at .gitleaks.toml in repo root.
+# ---------------------------------------------------------------------------
+if command -v gitleaks >/dev/null 2>&1; then
+    echo "-> gitleaks (staged diff)"
+    if ! gitleaks protect --staged --redact \
+            --config "$REPO_ROOT/.gitleaks.toml" \
+            --source "$REPO_ROOT" --no-banner; then
+        echo "[ERROR] gitleaks found leaked secrets/PII in staged changes." >&2
+        echo "Review above findings. If any is a false positive, add it to" >&2
+        echo ".gitleaks.toml allowlist. Bypass only in emergencies via" >&2
+        echo "git commit --no-verify." >&2
+        exit 1
+    fi
+else
+    echo "[WARN] gitleaks not installed — skipping secret scan." >&2
+    echo "       Install: brew install gitleaks" >&2
+fi
+
 BACKEND_PY_FILES=()
 FRONTEND_TS_FILES=()
 

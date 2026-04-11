@@ -173,6 +173,51 @@ class TestRedactingFilter:
         record = self._make_record("anything")
         assert filt.filter(record) is True
 
+    def test_redacts_national_id(self, filt: RedactingFilter) -> None:
+        record = self._make_record('national_id="A123456789"')
+        filt.filter(record)
+        assert "[REDACTED]" in record.msg
+        assert "A123456789" not in record.msg
+
+    def test_redacts_nid_short_form(self, filt: RedactingFilter) -> None:
+        record = self._make_record("nid=B987654321")
+        filt.filter(record)
+        assert "[REDACTED]" in record.msg
+        assert "B987654321" not in record.msg
+
+    def test_redacts_roc_birthday(self, filt: RedactingFilter) -> None:
+        record = self._make_record("roc_birthday=0881010")
+        filt.filter(record)
+        assert "[REDACTED]" in record.msg
+        assert "0881010" not in record.msg
+
+    def test_redacts_card_last4(self, filt: RedactingFilter) -> None:
+        record = self._make_record('card_last4="1234"')
+        filt.filter(record)
+        assert "[REDACTED]" in record.msg
+        # Only the value after the key is redacted
+        assert 'card_last4="1234"' not in record.msg
+
+    def test_redacts_chat_id(self, filt: RedactingFilter) -> None:
+        record = self._make_record("chat_id=123456789")
+        filt.filter(record)
+        assert "[REDACTED]" in record.msg
+        assert "123456789" not in record.msg
+
+    def test_redacts_telegram_chat_id(self, filt: RedactingFilter) -> None:
+        record = self._make_record('telegram_chat_id: "-1001234567890"')
+        filt.filter(record)
+        assert "[REDACTED]" in record.msg
+        assert "1001234567890" not in record.msg
+
+    def test_pii_field_in_dict_args(self, filt: RedactingFilter) -> None:
+        record = self._make_record("%(key)s")
+        record.args = {"key": "national_id=A123456789"}
+        filt.filter(record)
+        assert isinstance(record.args, dict)
+        assert "[REDACTED]" in record.args["key"]
+        assert "A123456789" not in record.args["key"]
+
 
 class TestConfigureLogging:
     """configure_logging 整合測試。"""
