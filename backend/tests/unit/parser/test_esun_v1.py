@@ -363,4 +363,4 @@ class TestRealPdfFormat:
         consumption_142 = next(t for t in txns if t.amount == 142)
         assert consumption_142.trans_date == date(2026, 2, 12)
         assert consumption_142.posting_date == date(2026, 2, 23)
-        assert "新光三越" in consumption_142.merchant
+        assert "某百貨分店" in consumption_142.merchant

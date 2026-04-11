@@ -20,6 +20,18 @@ regex = '''(?i)(national_id|nid|身分證|PDF_PASSWORD_[A-Z]+)\s*[:=]\s*["']?[A-
 tags = ["pii", "taiwan", "national-id"]
 
 [[rules]]
+id = "masked-chinese-name-in-greeting"
+description = "Partially masked Chinese name in greeting context (e.g. 親愛的 X*X / 測試客戶 / 測試客戶)"
+regex = '''親愛的[\s　]*\p{Han}[＊Ｏ*]\p{Han}'''
+tags = ["pii", "taiwan", "name"]
+
+[[rules]]
+id = "partial-bank-account"
+description = "Partially masked Taiwanese bank account number (digits + asterisks/X + digits)"
+regex = '''\b\d{3,9}[-]?\d{0,6}(?:\*{2,}|[Xx]{2,})\d{2,}\b'''
+tags = ["pii", "taiwan", "bank-account"]
+
+[[rules]]
 id = "roc-birthday"
 description = "ROC 民國 birthday (7 digits) near a key"
 regex = '''(?i)(roc_birthday|民國生日)\s*[:=]\s*["']?\d{7}\b'''
@@ -54,14 +66,21 @@ regexes = [
     '''chat_id["'= :]*123456789''',  # dummy chat_id in test_log.py
     '''sk_live_abc123''',      # documentation placeholder in skill examples
     '''sk_test_[A-Za-z0-9]+''',  # Stripe-style test-key placeholders
+    '''000-?000000\*{4}00''',  # all-zero dummy bank account in parser fixtures
+    '''000000[Xx]{4}000''',    # all-zero dummy bank account in parser fixtures
+    '''0000-[Xx]{4}-[Xx]{4}-0000''',  # all-zero dummy card number in parser fixtures
 ]
 
 # Files that are allowed to contain allowlisted placeholders
+# NOTE: Previously `^backend/tests/.*\.py$` was blanket-allowed which hid real PII
+# in parser fixtures. Now narrowed to specific files that legitimately hold
+# dummy credentials (log redaction tests, config fixtures, etc.).
 paths = [
     '''^\.env\.example$''',
     '''^\.gitleaks\.toml$''',
     '''^openspec/.*\.md$''',   # docs may reference dummy formats
     '''^docs/.*\.md$''',
-    '''^backend/tests/.*\.py$''',
+    '''^backend/tests/unit/test_log\.py$''',   # tests redaction patterns
+    '''^backend/tests/unit/config/.*\.py$''',  # config fixtures with dummy env
     '''^backend/src/ccas/log\.py$''',  # contains regex patterns mentioning field names
 ]

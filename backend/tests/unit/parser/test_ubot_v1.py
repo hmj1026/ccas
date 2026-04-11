@@ -407,7 +407,9 @@ class TestRealPdfFormat:
 
     def test_extracts_real_local_transaction(self):
         parser = _make_parser()
-        page = make_mock_page("12/30 12/26 某保險公司 ＸＸＸＸＸＸＸＸＸＸＸ TW 12,152\n")
+        page = make_mock_page(
+            "12/30 12/26 某保險公司 ＸＸＸＸＸＸＸＸＸＸＸ TW 12,152\n"
+        )
 
         txns = parser._extract_transactions(
             cast(list[pdfplumber.page.Page], [page]),
