@@ -21,7 +21,7 @@ tags = ["pii", "taiwan", "national-id"]
 
 [[rules]]
 id = "masked-chinese-name-in-greeting"
-description = "Partially masked Chinese name in greeting context (e.g. 親愛的 X*X / 測試客戶 / 測試客戶)"
+description = "Partially masked Chinese name in greeting context (e.g. 親愛的 X*X pattern)"
 regex = '''親愛的[\s　]*\p{Han}[＊Ｏ*]\p{Han}'''
 tags = ["pii", "taiwan", "name"]
 
