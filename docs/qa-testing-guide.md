@@ -87,7 +87,7 @@ docker exec -it ccas-backend-1 uv run python /app/scripts/seed.py --reset
 
 ### 6. 開始測試
 
-- **Web UI**：瀏覽器開啟 http://localhost:5173，使用 `.env` 中的 `API_TOKEN` 登入
+- **Web UI**：瀏覽器開啟 http://localhost:8080，使用 `.env` 中的 `API_TOKEN` 登入
 - **Swagger**：瀏覽器開啟 http://localhost:8000/docs，點擊 Authorize 輸入 token
 
 ---

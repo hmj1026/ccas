@@ -66,7 +66,7 @@ test: add stage control unit tests
 ./scripts/dev-test.sh --cov --cov-report=term-missing  # 含 coverage
 ```
 
-Coverage 門檻：**80%**。低於門檻時 CI 會失敗。
+Coverage 門檻：CI／`pre-push` hook 強制 **70%**（見 `.github/workflows/ci.yaml` 與 `scripts/pre-push.sh`）；`backend/pyproject.toml` 的 `fail_under` 設為 **80%**，本地 `uv run pytest --cov` 直接呼叫時會套用較高門檻。目標仍是 80%。
 
 ### Lint & Type Check
 
@@ -95,7 +95,7 @@ uv run pyright           # type check
 在提交 PR 前確認：
 
 - [ ] 測試通過：`./scripts/dev-test.sh`
-- [ ] Coverage ≥ 80%：`./scripts/dev-test.sh --cov`
+- [ ] Coverage ≥ 70%（CI 門檻，目標 80%）：`./scripts/dev-test.sh --cov`
 - [ ] Lint 通過：`./scripts/dev-lint.sh`
 - [ ] 新功能有對應的 unit / integration tests
 - [ ] Commit messages 符合 Conventional Commits 格式
