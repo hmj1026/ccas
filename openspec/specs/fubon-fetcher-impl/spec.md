@@ -13,14 +13,18 @@ TBD - created by archiving change add-fubon-bank-support. Update Purpose after a
 
 ### Requirement: can_fetch 辨識富邦下載連結
 
-`FubonFetcher.can_fetch()` SHALL 從郵件 HTML body 中偵測「下載帳單明細」連結。
+`FubonFetcher.can_fetch()` SHALL 從郵件 HTML body 中偵測任何指向 FUBON 官方帳單下載網域（`_ALLOWED_DOMAINS`）的 `<a>` 錨點，以支援富邦帳單系統遷移為 SPA 後以圖片按鈕取代純文字連結的郵件格式。辨識邏輯不再依賴錨點內的文字內容。
 
-#### Scenario: 包含下載連結的郵件
-- **WHEN** HTML body 包含「下載帳單明細」相關連結（`<a>` 標籤或按鈕）
+#### Scenario: 錨點內為 img 按鈕（SPA 時代新格式）
+- **WHEN** HTML body 包含 `<a href="https://fbmbill.taipeifubon.com.tw/..."><img alt="下載本期帳單(PDF)" /></a>`
 - **THEN** `can_fetch()` SHALL 回傳 `True`
 
-#### Scenario: 不包含下載連結的郵件
-- **WHEN** HTML body 不包含富邦帳單下載相關連結
+#### Scenario: 錨點內為純文字（舊格式，保留相容）
+- **WHEN** HTML body 包含 `<a href="https://mybank.taipeifubon.com.tw/...">下載帳單明細</a>`
+- **THEN** `can_fetch()` SHALL 回傳 `True`
+
+#### Scenario: 錨點指向非 FUBON 官方網域
+- **WHEN** HTML body 包含的所有 `<a href="...">` 均指向 `_ALLOWED_DOMAINS` 以外的網域
 - **THEN** `can_fetch()` SHALL 回傳 `False`
 
 #### Scenario: 空或無效 HTML 不導致例外
@@ -29,47 +33,15 @@ TBD - created by archiving change add-fubon-bank-support. Update Purpose after a
 
 ### Requirement: fetch_pdf 完成完整下載流程
 
-`FubonFetcher.fetch_pdf()` SHALL 從郵件 HTML 提取 URL、與 web 表單互動、下載 PDF。
+`FubonFetcher.fetch_pdf()` SHALL 嘗試從郵件 HTML 下載 PDF 帳單。當目標下載系統（`fbmbill.taipeifubon.com.tw` 等）為 SPA + API + 可能 OTP 的架構、自動化流程尚未實作時，SHALL 拋出 `FetchError`，錯誤訊息 MUST 明確說明「FUBON 帳單系統已遷移為 SPA 流程，自動下載尚未實作」，以便 pipeline 將失敗記錄到 JSON summary 與 logs，讓使用者知曉並決定手動處理。
 
-#### Scenario: 成功下載 PDF
-- **WHEN** 提供有效的 HTML body 與正確憑證
-- **THEN** SHALL 完成以下步驟：
-  1. 從 HTML body 提取「下載帳單明細」URL
-  2. 以 HTTP client 訪問該 URL
-  3. 從頁面提取表單欄位與 CAPTCHA 圖片
-  4. OCR 辨識 CAPTCHA
-  5. 填入身分證字號（credentials["national_id"]）、民國生日（credentials["roc_birthday"]）、CAPTCHA 值
-  6. 提交表單
-  7. 回傳 PDF 檔案位元組
+#### Scenario: SPA 網域的下載請求拋出明確 FetchError
+- **WHEN** `fetch_pdf()` 被呼叫且 HTML 內含 `fbmbill.taipeifubon.com.tw` 下載連結
+- **THEN** SHALL 拋出 `FetchError`，`bank_code="FUBON"`，錯誤訊息包含「SPA」與「尚未實作」字樣
 
 #### Scenario: URL 提取失敗
-- **WHEN** HTML body 中找不到下載 URL
-- **THEN** SHALL 拋出 `FetchError`，包含 bank_code="FUBON" 與失敗描述
-
-#### Scenario: CAPTCHA OCR 失敗後重試
-- **WHEN** 表單提交因 CAPTCHA 錯誤被拒絕
-- **THEN** SHALL 自動重試（重新取得 CAPTCHA 圖片、OCR、提交），最多重試 3 次
-- **AND** 每次重試 SHALL 記錄 warning log
-
-#### Scenario: 所有重試耗盡
-- **WHEN** CAPTCHA 重試 3 次仍失敗
-- **THEN** SHALL 拋出 `FetchError`，包含 "CAPTCHA 辨識失敗" 描述
-
-### Requirement: CAPTCHA OCR 工具
-
-系統 SHALL 提供 `solve_captcha(image_bytes: bytes) -> str` 工具函式。
-
-#### Scenario: 辨識英數驗證碼圖片
-- **WHEN** 輸入簡單英數驗證碼圖片
-- **THEN** SHALL 使用 pytesseract（`--psm 7` 單行模式 + 英數字元白名單）回傳辨識文字
-
-#### Scenario: 辨識失敗回傳空字串
-- **WHEN** 輸入無法辨識的圖片
-- **THEN** SHALL 回傳空字串，不拋出例外
-
-#### Scenario: tesseract 不可用時 graceful 降級
-- **WHEN** 系統未安裝 tesseract
-- **THEN** SHALL 拋出 `FetchError`，說明 CAPTCHA OCR 需要 tesseract
+- **WHEN** HTML body 中找不到任何指向 `_ALLOWED_DOMAINS` 的連結
+- **THEN** SHALL 拋出 `FetchError`，包含 `bank_code="FUBON"` 與「找不到帳單下載連結」描述
 
 ### Requirement: FubonFetcher 自動註冊至 FetcherRegistry
 
@@ -78,4 +50,3 @@ TBD - created by archiving change add-fubon-bank-support. Update Purpose after a
 #### Scenario: import 後 registry 包含 FUBON fetcher
 - **WHEN** `ccas.ingestor.fetcher.banks.fubon` 模組被 import
 - **THEN** `fetcher_registry.get("FUBON")` SHALL 回傳 `FubonFetcher` 實例
-

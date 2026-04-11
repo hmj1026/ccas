@@ -1,30 +1,35 @@
 """台北富邦銀行 (FUBON) web-fetch 實作。
 
-FUBON 帳單郵件不含 PDF 附件，而是包含一個下載連結。
-使用者需填寫身分證字號、生日及 CAPTCHA 驗證碼後方可下載 PDF。
+現況（2026-04 實測）：
+    富邦帳單下載系統已遷移為 Vue SPA + axios API 架構，不再使用
+    server-rendered 表單 + CAPTCHA 圖片。本模組目前只實作「辨識含
+    FUBON 官方網域下載連結的郵件」以便 pipeline 正確路由，實際下載
+    流程（``fetch_pdf``）會直接拋出 ``FetchError`` 要求使用者手動
+    處理。完整 SPA API + OTP 流程需另開變更反向工程後實作。
+
+參考變更：``openspec/changes/archive/...-fix-fubon-fetcher-spa-migration``
 """
 
 from __future__ import annotations
 
 import logging
-import re
-from typing import Any
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urlparse
 
 from bs4 import BeautifulSoup
 
 from ccas.ingestor.fetcher.base import BankFetcher, FetchError
-from ccas.ingestor.fetcher.captcha import solve_captcha
 from ccas.ingestor.fetcher.registry import fetcher_registry
 
 logger = logging.getLogger(__name__)
 
-_MAX_CAPTCHA_RETRIES = 3
-_DOWNLOAD_LINK_TEXT = "下載帳單明細"
-
 # Strict HTTPS domain allowlist for FUBON-owned hosts.
 # All URLs extracted from email HTML are validated against this set
 # before any request is made, to prevent credential exfiltration.
+#
+# ``fbmbill.taipeifubon.com.tw`` is the SPA landing host used by the
+# current (post-migration) bill download service. Legacy hosts remain
+# in the set so historical emails referencing mybank/ecard/ebill still
+# route through ``can_fetch`` correctly.
 _ALLOWED_DOMAINS: frozenset[str] = frozenset(
     {
         "mybank.taipeifubon.com.tw",
@@ -32,6 +37,7 @@ _ALLOWED_DOMAINS: frozenset[str] = frozenset(
         "ebill.taipeifubon.com.tw",
         "www.taipeifubon.com.tw",
         "cf.taipeifubon.com.tw",
+        "fbmbill.taipeifubon.com.tw",
     }
 )
 
@@ -61,216 +67,88 @@ def _validate_url(url: str, *, context: str = "") -> None:
         )
 
 
-class _CaptchaFailedError(Exception):
-    """Internal signal for CAPTCHA retry logic."""
-
-
 class FubonFetcher(BankFetcher):
-    """台北富邦銀行 web-fetch：從郵件 HTML 中取得帳單下載連結，填表下載 PDF。"""
+    """台北富邦銀行 web-fetch。
+
+    目前行為（SPA 遷移後）：
+        * ``can_fetch`` 會辨識任何指向 FUBON 官方下載網域的 ``<a>`` 錨點
+        * ``fetch_pdf`` 會立即拋出 ``FetchError`` 說明 SPA 流程尚未實作
+    """
 
     @property
     def bank_code(self) -> str:
         return "FUBON"
 
     def can_fetch(self, html_body: str) -> bool:
-        """Check whether the email HTML contains a FUBON bill download link."""
-        if not html_body:
+        """Return True if the email HTML contains a link to a FUBON-owned host."""
+        if not html_body or not html_body.strip():
             return False
         try:
             soup = BeautifulSoup(html_body, "html.parser")
-            pattern = re.compile(_DOWNLOAD_LINK_TEXT)
-            link = soup.find("a", string=pattern)  # type: ignore[call-overload]
-            return link is not None
-        except Exception:
-            logger.debug("FUBON can_fetch HTML 解析失敗", exc_info=True)
+        except (AttributeError, TypeError):
+            logger.warning("FUBON can_fetch HTML 解析失敗", exc_info=True)
             return False
+        for link in soup.find_all("a", href=True):
+            href = str(link.get("href", ""))
+            try:
+                hostname = urlparse(href).hostname
+            except ValueError:
+                continue
+            if hostname in _ALLOWED_DOMAINS:
+                return True
+        return False
 
     def fetch_pdf(self, html_body: str, credentials: dict[str, str]) -> bytes:
-        """Download the PDF bill via FUBON's web form with CAPTCHA.
+        """Attempt to download a FUBON bill PDF.
+
+        The current (SPA-era) download system requires reverse-engineering
+        a Vue SPA + axios ``doLogin`` flow with possible OTP verification,
+        which is not yet implemented. This method validates credentials and
+        the download URL domain, then raises ``FetchError`` with an explicit
+        message so the pipeline JSON summary surfaces the unsupported state.
 
         Args:
-            html_body: Email HTML containing the download link.
-            credentials: Must include ``national_id`` and ``roc_birthday``.
-
-        Returns:
-            Downloaded PDF bytes.
+            html_body: Email HTML containing the bill download link.
+            credentials: Must include ``national_id`` and ``roc_birthday``
+                (validated for future use even though not sent).
 
         Raises:
-            FetchError: Missing credentials, CAPTCHA failure, or download error.
+            FetchError: Always raised — missing credentials, missing link,
+                or SPA flow not implemented.
         """
-        import httpx
-
-        url = self._extract_download_url(html_body)
         national_id = credentials.get("national_id", "")
         roc_birthday = credentials.get("roc_birthday", "")
-
         if not national_id or not roc_birthday:
             raise FetchError(self.bank_code, "缺少 national_id 或 roc_birthday 憑證")
 
-        with httpx.Client(follow_redirects=True, timeout=30.0) as client:
-            page_resp = client.get(url)
-            page_resp.raise_for_status()
-            _validate_url(str(page_resp.url), context="redirect target")
-
-            for attempt in range(1, _MAX_CAPTCHA_RETRIES + 1):
-                try:
-                    return self._attempt_download(
-                        client, page_resp, national_id, roc_birthday, attempt
-                    )
-                except _CaptchaFailedError:
-                    if attempt < _MAX_CAPTCHA_RETRIES:
-                        logger.warning(
-                            "CAPTCHA 辨識失敗 (嘗試 %d/%d)，重新取得",
-                            attempt,
-                            _MAX_CAPTCHA_RETRIES,
-                        )
-                        page_resp = client.get(url)
-                        page_resp.raise_for_status()
-                        _validate_url(str(page_resp.url), context="redirect target")
-                    else:
-                        raise FetchError(
-                            self.bank_code,
-                            f"CAPTCHA 辨識失敗，已重試 {_MAX_CAPTCHA_RETRIES} 次",
-                        )
-
-        # Should not reach here
-        raise FetchError(self.bank_code, "PDF 下載流程異常終止")  # pragma: no cover
+        url = self._extract_download_url(html_body)
+        logger.info(
+            "FUBON SPA download requested but not implemented",
+            extra={"url_host": urlparse(url).hostname},
+        )
+        raise FetchError(
+            self.bank_code,
+            "富邦帳單系統已遷移為 SPA + API 流程（含可能的 OTP 驗證），"
+            "自動下載尚未實作；請手動從網銀下載 PDF 後放入 staging 目錄。",
+        )
 
     def _extract_download_url(self, html_body: str) -> str:
-        """Extract the bill download URL from the email HTML."""
-        soup = BeautifulSoup(html_body, "html.parser")
-        pattern = re.compile(_DOWNLOAD_LINK_TEXT)
-        link = soup.find("a", string=pattern)  # type: ignore[call-overload]
-        if link is None or not link.get("href"):
-            raise FetchError(self.bank_code, "找不到帳單下載連結")
-        url = str(link["href"])
-        _validate_url(url, context="download URL")
-        return url
-
-    def _attempt_download(
-        self,
-        client: Any,
-        page_response: Any,
-        national_id: str,
-        roc_birthday: str,
-        attempt: int,
-    ) -> bytes:
-        """Attempt a single CAPTCHA-protected download cycle.
+        """Extract the first FUBON-owned bill download URL from email HTML.
 
         Raises:
-            _CaptchaFailedError: CAPTCHA verification failed (caller should retry).
-            FetchError: Non-retryable error.
+            FetchError: No FUBON-owned anchor was found in *html_body*.
         """
-        soup = BeautifulSoup(page_response.text, "html.parser")
-
-        captcha_img = soup.find(
-            "img",
-            {"id": re.compile(r"captcha", re.I)},  # type: ignore[dict-item]
-        )
-        if captcha_img is None:
-            captcha_img = soup.find(
-                "img",
-                {"alt": re.compile(r"驗證碼|captcha", re.I)},  # type: ignore[dict-item]
-            )
-
-        if captcha_img is None:
-            raise FetchError(self.bank_code, "找不到 CAPTCHA 圖片")
-
-        captcha_url = str(captcha_img.get("src", ""))
-        if not captcha_url.startswith("http"):
-            captcha_url = urljoin(str(page_response.url), captcha_url)
-        _validate_url(captcha_url, context="CAPTCHA image URL")
-
-        captcha_resp = client.get(captcha_url)
-        captcha_resp.raise_for_status()
-
-        captcha_text = solve_captcha(captcha_resp.content)
-        if not captcha_text:
-            raise _CaptchaFailedError
-
-        form = soup.find("form")
-        if form is None:
-            raise FetchError(self.bank_code, "找不到下載表單")
-
-        action_url = str(form.get("action", ""))
-        if not action_url.startswith("http"):
-            action_url = urljoin(str(page_response.url), action_url)
-        _validate_url(action_url, context="form action URL")
-
-        form_data = self._build_form_data(form, national_id, roc_birthday, captcha_text)
-
-        resp = client.post(action_url, data=form_data)
-        resp.raise_for_status()
-        _validate_url(str(resp.url), context="POST response URL")
-
-        content_type = resp.headers.get("content-type", "")
-        if "pdf" in content_type.lower() or resp.content[:4] == b"%PDF":
-            return resp.content
-
-        logger.warning(
-            "CAPTCHA 嘗試 %d：回應非 PDF (content-type: %s)",
-            attempt,
-            content_type,
-        )
-        raise _CaptchaFailedError
-
-    @staticmethod
-    def _build_form_data(
-        form: Any,
-        national_id: str,
-        roc_birthday: str,
-        captcha_text: str,
-    ) -> dict[str, str]:
-        """Build form submission data from HTML form fields.
-
-        Strategy: first match fields by common name patterns,
-        then fall back to positional assignment for unmatched text inputs.
-        """
-        data: dict[str, str] = {}
-
-        # Collect hidden fields
-        for hidden in form.find_all("input", {"type": "hidden"}):
-            name = hidden.get("name")
-            if name:
-                data[name] = hidden.get("value", "")
-
-        # Fill in known fields by common name patterns
-        for inp in form.find_all("input"):
-            name = inp.get("name", "")
-            if not name:
+        soup = BeautifulSoup(html_body, "html.parser")
+        for link in soup.find_all("a", href=True):
+            href = str(link.get("href", ""))
+            try:
+                hostname = urlparse(href).hostname
+            except ValueError:
                 continue
-            name_lower = name.lower()
-            if (
-                "id" in name_lower
-                and "national" in name_lower
-                or name_lower in ("idno", "id_no", "nationalid")
-            ):
-                data[name] = national_id
-            elif "birth" in name_lower or "birthday" in name_lower:
-                data[name] = roc_birthday
-            elif (
-                "captcha" in name_lower
-                or "verify" in name_lower
-                or "vcode" in name_lower
-            ):
-                data[name] = captcha_text
-
-        # Fallback: positional assignment for unmatched text inputs
-        text_inputs = [
-            inp
-            for inp in form.find_all("input")
-            if inp.get("type", "text") in ("text", "password", "")
-            and inp.get("name")
-            and inp.get("name") not in data
-        ]
-
-        values = [national_id, roc_birthday, captcha_text]
-        for inp, val in zip(text_inputs, values, strict=False):
-            name = inp.get("name")
-            if name and name not in data:
-                data[name] = val
-
-        return data
+            if hostname in _ALLOWED_DOMAINS:
+                _validate_url(href, context="download URL")
+                return href
+        raise FetchError(self.bank_code, "找不到帳單下載連結")
 
 
 # Module-level registration

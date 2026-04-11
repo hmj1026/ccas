@@ -32,7 +32,7 @@
 #### Scenario: 環境變數範例中包含 FUBON web-fetch 憑證
 - **WHEN** 使用者查看 `.env.example`
 - **THEN** SHALL 看到 `FUBON_NATIONAL_ID` 與 `FUBON_ROC_BIRTHDAY` 的註解說明
-- **AND** SHALL 說明民國生日格式為 7 碼（如 `0881010` 表示民國 68 年 10 月 26 日）
+- **AND** SHALL 說明民國生日格式為 7 碼（如 `0881010` 表示民國 88 年 10 月 10 日）
 
 #### Scenario: Settings 可正確取得 FUBON 憑證
 - **WHEN** 環境變數 `FUBON_NATIONAL_ID` 與 `FUBON_ROC_BIRTHDAY` 已設定

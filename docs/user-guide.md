@@ -183,7 +183,7 @@ cp config/banks.example.yaml config/banks.yaml
    FUBON_NATIONAL_ID=你的身分證字號
    FUBON_ROC_BIRTHDAY=0881010
    ```
-   民國生日格式為 7 碼：民國年 3 碼 + 月 2 碼 + 日 2 碼（例如民國 68 年 10 月 26 日 = `0881010`）
+   民國生日格式為 7 碼：民國年 3 碼 + 月 2 碼 + 日 2 碼（例如民國 88 年 10 月 10 日 = `0881010`）
 4. Gmail filter 會自動匹配寄件者 `rs@cf.taipeifubon.com.tw` 且主旨包含「台北富邦銀行」+「信用卡帳單」的郵件
 
 > **注意**：格式 B 的 CAPTCHA 驗證碼由 OCR 自動辨識（成功率約 90-95%）。若辨識失敗，系統會自動重試最多 3 次。需確保 Docker 環境中 tesseract 可用。
