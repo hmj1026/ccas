@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ccas.config import Settings, get_settings
 from ccas.ingestor.auth import load_credentials
+from ccas.ingestor.filters import should_skip_attachment
 from ccas.ingestor.gmail_client import (
     GmailAttachmentMeta,
     GmailMessage,
@@ -25,6 +26,7 @@ from ccas.ingestor.gmail_client import (
     search_messages,
 )
 from ccas.ingestor.staging import (
+    backfill_part_id,
     build_staged_path,
     create_staged_record,
     delete_staged_record,
@@ -110,12 +112,28 @@ async def _process_attachment(
     force: bool = False,
 ) -> None:
     """處理單個 PDF 附件：dedupe 檢查、下載、寫檔、建立記錄。"""
+    if should_skip_attachment(bank_code, attachment.filename):
+        summary.skipped_count += 1
+        logger.debug(
+            "附件檔名命中黑名單，跳過：%s/%s",
+            bank_code,
+            attachment.filename,
+        )
+        return
+
     existing = await find_existing_staged(
-        session, attachment.message_id, attachment.attachment_id
+        session,
+        attachment.message_id,
+        attachment.part_id,
+        attachment.filename,
     )
     if existing is not None:
         is_failed_retry = existing.status == "failed"
         if not force and not is_failed_retry:
+            # Opportunistic backfill: if the legacy row lacks gmail_part_id
+            # (pre-migration data matched via filename fallback), write it in
+            # now so future lookups use the primary key path.
+            await backfill_part_id(session, existing, attachment.part_id)
             summary.skipped_count += 1
             logger.debug(
                 "略過已存在的附件：%s/%s",
@@ -168,6 +186,7 @@ async def _process_attachment(
             original_filename=attachment.filename,
             staged_path=str(staged_path),
             status="staged",
+            part_id=attachment.part_id,
         )
         summary.staged_count += 1
         logger.info("已 staged 附件：%s -> %s", attachment.filename, staged_path)
@@ -190,6 +209,7 @@ async def _process_attachment(
                 staged_path=None,
                 status="failed",
                 error_reason=str(exc),
+                part_id=attachment.part_id,
             )
 
 
@@ -219,13 +239,19 @@ async def _process_web_fetch(
         return
 
     synthetic_attachment_id = f"web_fetch_{message.message_id}"
+    synthetic_part_id = f"web:{message.message_id}"
+    staged_filename = f"{bank_code}_{message.message_id}.pdf"
 
     existing = await find_existing_staged(
-        session, message.message_id, synthetic_attachment_id
+        session,
+        message.message_id,
+        synthetic_part_id,
+        staged_filename,
     )
     if existing is not None:
         is_failed_retry = existing.status == "failed"
         if not force and not is_failed_retry:
+            await backfill_part_id(session, existing, synthetic_part_id)
             summary.skipped_count += 1
             logger.debug("略過已存在的 web-fetch：%s", message.message_id)
             return
@@ -240,7 +266,6 @@ async def _process_web_fetch(
         "roc_birthday": settings.get_bank_credential(bank_code, "ROC_BIRTHDAY") or "",
     }
 
-    staged_filename = f"{bank_code}_{message.message_id}.pdf"
     staged_path = build_staged_path(
         staging_dir, bank_code, message.message_id, staged_filename
     )
@@ -268,6 +293,7 @@ async def _process_web_fetch(
             staged_path=str(staged_path),
             status="staged",
             source_type="web_fetch",
+            part_id=synthetic_part_id,
         )
         summary.staged_count += 1
         logger.info("已 web-fetch staged：%s -> %s", message.message_id, staged_path)
@@ -290,6 +316,7 @@ async def _process_web_fetch(
                 status="failed",
                 error_reason=str(exc),
                 source_type="web_fetch",
+                part_id=synthetic_part_id,
             )
 
 

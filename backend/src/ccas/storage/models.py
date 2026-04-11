@@ -122,16 +122,17 @@ class StagedAttachment(Base):
 
     每筆記錄追蹤一個從 Gmail 下載的 PDF 附件，
     包含其 Gmail 來源識別資訊、落地路徑與處理狀態。
-    以 (gmail_message_id, gmail_attachment_id) 為唯一識別，
-    防止同一附件重複 staging。
+    以 (gmail_message_id, gmail_part_id) 為穩定 dedupe 鍵，
+    防止同一附件重複 staging。`gmail_attachment_id` 每次 Gmail API 呼叫
+    都會重生，僅用於下載動作，不可作為 dedupe 鍵。
     """
 
     __tablename__ = "staged_attachments"
     __table_args__ = (
         UniqueConstraint(
             "gmail_message_id",
-            "gmail_attachment_id",
-            name="uq_staged_gmail_attachment",
+            "gmail_part_id",
+            name="uq_staged_gmail_message_part",
         ),
     )
 
@@ -139,6 +140,7 @@ class StagedAttachment(Base):
     bank_code: Mapped[str] = mapped_column(Text, nullable=False)
     gmail_message_id: Mapped[str] = mapped_column(Text, nullable=False)
     gmail_attachment_id: Mapped[str] = mapped_column(Text, nullable=False)
+    gmail_part_id: Mapped[str | None] = mapped_column(Text, nullable=True)
     message_date: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     original_filename: Mapped[str] = mapped_column(Text, nullable=False)
     staged_path: Mapped[str | None] = mapped_column(Text, nullable=True)

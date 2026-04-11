@@ -25,7 +25,9 @@ class GmailAttachmentMeta:
 
     Attributes:
         message_id: Gmail message ID。
-        attachment_id: Gmail attachment ID。
+        attachment_id: Gmail attachment ID（非穩定，每次 API 呼叫重生，僅用於下載）。
+        part_id: Gmail MIME payload 的 partId（例 "1"、"0.1"），
+            為結構性穩定識別碼，用於 staging dedupe 鍵。
         filename: 原始附件檔名。
         message_date: 郵件日期。
         size: 附件大小（bytes）。
@@ -36,6 +38,7 @@ class GmailAttachmentMeta:
     filename: str
     message_date: datetime
     size: int
+    part_id: str = ""
 
 
 @dataclass(frozen=True)
@@ -118,6 +121,7 @@ def _collect_pdf_parts(
                     filename=part["filename"],
                     message_date=message_date,
                     size=body.get("size", 0),
+                    part_id=str(part.get("partId", "")),
                 )
             )
         return

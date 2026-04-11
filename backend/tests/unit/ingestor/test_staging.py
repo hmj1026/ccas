@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from ccas.ingestor.staging import (
+    backfill_part_id,
     build_staged_path,
     create_staged_record,
     find_existing_staged,
@@ -75,19 +76,22 @@ class TestBuildStagedPath:
 
 
 class TestFindExistingStaged:
-    """find_existing_staged() 的測試案例。"""
+    """find_existing_staged() 的測試案例（使用 stable part_id dedupe 鍵）。"""
 
     async def test_returns_none_when_not_found(self, db_session):
         """DB 為空時回傳 None。"""
-        result = await find_existing_staged(db_session, "msg-999", "att-999")
+        result = await find_existing_staged(
+            db_session, "msg-999", part_id="1", original_filename="bill.pdf"
+        )
         assert result is None
 
-    async def test_returns_record_when_found(self, db_session):
-        """記錄存在時回傳正確的 StagedAttachment。"""
+    async def test_primary_query_matches_part_id(self, db_session):
+        """主查詢：以 (message_id, part_id) 命中既有記錄。"""
         record = StagedAttachment(
             bank_code="CTBC",
             gmail_message_id="msg-001",
-            gmail_attachment_id="att-001",
+            gmail_attachment_id="att-ROTATED-A",
+            gmail_part_id="1",
             message_date=datetime(2026, 3, 10),
             original_filename="bill.pdf",
             staged_path="/data/staging/CTBC/msg-001_bill.pdf",
@@ -96,34 +100,149 @@ class TestFindExistingStaged:
         db_session.add(record)
         await db_session.flush()
 
-        result = await find_existing_staged(db_session, "msg-001", "att-001")
+        # 即使 attachment_id 不同（模擬 Gmail API 重生 token），
+        # 只要 part_id 相同仍命中。
+        result = await find_existing_staged(
+            db_session, "msg-001", part_id="1", original_filename="bill.pdf"
+        )
         assert result is not None
-        assert result.bank_code == "CTBC"
-        assert result.status == "staged"
+        assert result.gmail_part_id == "1"
 
-    async def test_same_message_different_attachments(self, db_session):
-        """同 message_id 不同 attachment_id 各自獨立。"""
-        for att_id in ("att-001", "att-002"):
-            db_session.add(
-                StagedAttachment(
-                    bank_code="CTBC",
-                    gmail_message_id="msg-001",
-                    gmail_attachment_id=att_id,
-                    message_date=datetime(2026, 3, 10),
-                    original_filename=f"{att_id}.pdf",
-                    staged_path=f"/data/staging/CTBC/{att_id}.pdf",
-                    status="staged",
-                )
-            )
+    async def test_fallback_matches_by_filename_when_part_id_null(self, db_session):
+        """Fallback：part_id 為 NULL 的舊資料以 filename 比對命中。"""
+        legacy = StagedAttachment(
+            bank_code="CTBC",
+            gmail_message_id="msg-legacy",
+            gmail_attachment_id="att-LEGACY",
+            gmail_part_id=None,
+            message_date=datetime(2026, 3, 10),
+            original_filename="legacy.pdf",
+            staged_path="/data/staging/CTBC/msg-legacy_legacy.pdf",
+            status="staged",
+        )
+        db_session.add(legacy)
         await db_session.flush()
 
-        r1 = await find_existing_staged(db_session, "msg-001", "att-001")
-        r2 = await find_existing_staged(db_session, "msg-001", "att-002")
-        r3 = await find_existing_staged(db_session, "msg-001", "att-003")
+        result = await find_existing_staged(
+            db_session, "msg-legacy", part_id="1", original_filename="legacy.pdf"
+        )
+        assert result is not None
+        assert result.gmail_attachment_id == "att-LEGACY"
+        assert result.gmail_part_id is None  # 尚未 backfill
 
-        assert r1 is not None
-        assert r2 is not None
-        assert r3 is None
+    async def test_primary_takes_precedence_over_fallback(self, db_session):
+        """同 message_id 下若有 part_id 命中的列，絕不走 fallback。"""
+        db_session.add_all(
+            [
+                StagedAttachment(
+                    bank_code="CTBC",
+                    gmail_message_id="msg-mixed",
+                    gmail_attachment_id="att-LEGACY",
+                    gmail_part_id=None,
+                    message_date=datetime(2026, 3, 10),
+                    original_filename="bill.pdf",
+                    staged_path="/legacy/bill.pdf",
+                    status="staged",
+                ),
+                StagedAttachment(
+                    bank_code="CTBC",
+                    gmail_message_id="msg-mixed",
+                    gmail_attachment_id="att-NEW",
+                    gmail_part_id="1",
+                    message_date=datetime(2026, 3, 10),
+                    original_filename="bill.pdf",
+                    staged_path="/new/bill.pdf",
+                    status="staged",
+                ),
+            ]
+        )
+        await db_session.flush()
+
+        result = await find_existing_staged(
+            db_session, "msg-mixed", part_id="1", original_filename="bill.pdf"
+        )
+        assert result is not None
+        assert result.gmail_attachment_id == "att-NEW"
+        assert result.gmail_part_id == "1"
+
+    async def test_no_match_when_filename_differs_and_no_part_id(self, db_session):
+        """Fallback 僅在 filename 相符時命中，否則回傳 None。"""
+        db_session.add(
+            StagedAttachment(
+                bank_code="CTBC",
+                gmail_message_id="msg-other",
+                gmail_attachment_id="att-X",
+                gmail_part_id=None,
+                message_date=datetime(2026, 3, 10),
+                original_filename="other.pdf",
+                staged_path="/data/staging/CTBC/other.pdf",
+                status="staged",
+            )
+        )
+        await db_session.flush()
+
+        result = await find_existing_staged(
+            db_session, "msg-other", part_id="1", original_filename="bill.pdf"
+        )
+        assert result is None
+
+
+class TestBackfillPartId:
+    """backfill_part_id() 的測試案例。"""
+
+    async def test_backfills_null_part_id(self, db_session):
+        """對 gmail_part_id 為 NULL 的舊紀錄寫入 part_id。"""
+        record = StagedAttachment(
+            bank_code="CTBC",
+            gmail_message_id="msg-001",
+            gmail_attachment_id="att-001",
+            gmail_part_id=None,
+            message_date=datetime(2026, 3, 10),
+            original_filename="bill.pdf",
+            staged_path="/data/staging/CTBC/bill.pdf",
+            status="staged",
+        )
+        db_session.add(record)
+        await db_session.flush()
+
+        await backfill_part_id(db_session, record, part_id="1")
+        assert record.gmail_part_id == "1"
+
+    async def test_no_op_when_part_id_already_set(self, db_session):
+        """已存在 part_id 的紀錄不會被覆蓋。"""
+        record = StagedAttachment(
+            bank_code="CTBC",
+            gmail_message_id="msg-002",
+            gmail_attachment_id="att-002",
+            gmail_part_id="0.1",
+            message_date=datetime(2026, 3, 10),
+            original_filename="bill.pdf",
+            staged_path="/data/staging/CTBC/bill.pdf",
+            status="staged",
+        )
+        db_session.add(record)
+        await db_session.flush()
+
+        await backfill_part_id(db_session, record, part_id="different")
+        assert record.gmail_part_id == "0.1"
+
+    async def test_no_op_when_part_id_empty(self, db_session):
+        """空字串 part_id 不寫入。"""
+        record = StagedAttachment(
+            bank_code="CTBC",
+            gmail_message_id="msg-003",
+            gmail_attachment_id="att-003",
+            gmail_part_id=None,
+            message_date=datetime(2026, 3, 10),
+            original_filename="bill.pdf",
+            staged_path="/data/staging/CTBC/bill.pdf",
+            status="staged",
+        )
+        db_session.add(record)
+        await db_session.flush()
+
+        await backfill_part_id(db_session, record, part_id="")
+        assert record.gmail_part_id is None
 
 
 class TestCreateStagedRecord:

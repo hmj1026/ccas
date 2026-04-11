@@ -29,9 +29,10 @@ def _make_message_payload(
     }
 
 
-def _pdf_part(filename="bill.pdf", attachment_id="att-001", size=1024):
+def _pdf_part(filename="bill.pdf", attachment_id="att-001", size=1024, part_id="1"):
     """建立 PDF 附件 part。"""
     return {
+        "partId": part_id,
         "mimeType": "application/pdf",
         "filename": filename,
         "body": {"attachmentId": attachment_id, "size": size},
@@ -173,6 +174,62 @@ class TestExtractPdfAttachmentsRecursive:
         result = _extract_pdf_attachments("msg-flat", payload, datetime(2026, 3, 15))
         assert len(result) == 1
         assert result[0].filename == "flat-bill.pdf"
+
+    def test_captures_part_id_from_payload(self):
+        """PDF part 的 partId 應被擷取到 GmailAttachmentMeta.part_id。"""
+        from datetime import datetime
+
+        payload = {
+            "parts": [
+                _pdf_part("bill.pdf", "att-A", part_id="1"),
+            ],
+        }
+        result = _extract_pdf_attachments("msg-partid", payload, datetime(2026, 3, 15))
+        assert len(result) == 1
+        assert result[0].part_id == "1"
+
+    def test_captures_nested_part_id(self):
+        """巢狀 multipart 中的 PDF 應保留其原始 partId（例如 "0.1"）。"""
+        from datetime import datetime
+
+        payload = {
+            "parts": [
+                {
+                    "partId": "0",
+                    "mimeType": "multipart/related",
+                    "parts": [
+                        {
+                            "partId": "0.0",
+                            "mimeType": "text/html",
+                            "filename": "",
+                            "body": {"size": 100},
+                        },
+                        _pdf_part("nested.pdf", "att-B", part_id="0.1"),
+                    ],
+                },
+            ],
+        }
+        result = _extract_pdf_attachments(
+            "msg-nested-partid", payload, datetime(2026, 3, 15)
+        )
+        assert len(result) == 1
+        assert result[0].part_id == "0.1"
+
+    def test_missing_part_id_defaults_to_empty(self):
+        """缺少 partId 欄位時 part_id 應退回空字串（防禦性）。"""
+        from datetime import datetime
+
+        part = {
+            "mimeType": "application/pdf",
+            "filename": "no-partid.pdf",
+            "body": {"attachmentId": "att-C", "size": 512},
+        }
+        payload = {"parts": [part]}
+        result = _extract_pdf_attachments(
+            "msg-no-partid", payload, datetime(2026, 3, 15)
+        )
+        assert len(result) == 1
+        assert result[0].part_id == ""
 
     def test_depth_limit_stops_search(self):
         """超過遞迴深度限制時停止搜尋。"""
