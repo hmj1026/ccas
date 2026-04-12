@@ -17,6 +17,8 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+import shutil
+from pathlib import Path
 from urllib.parse import urlparse
 
 from bs4 import BeautifulSoup
@@ -28,6 +30,13 @@ from ccas.ingestor.fetcher.registry import fetcher_registry
 
 _ID_RE = re.compile(r"^[A-Z][12]\d{8}$")
 _BIRTHDAY_RE = re.compile(r"^\d{7}$")
+_BILLING_MONTH_RE = re.compile(r"(\d{4})\s*年\s*(\d{1,2})\s*月")
+# Credential error prefixes — FetchError messages starting with these
+# must NOT fall through to manual-staging (surface to operator instead).
+_CREDENTIAL_ERROR_PREFIXES = (
+    "credentials_missing:",
+    "credentials_wrong:",
+)
 
 logger = logging.getLogger(__name__)
 
@@ -48,13 +57,22 @@ _ALLOWED_DOMAINS: frozenset[str] = frozenset(
 )
 
 
+def _extract_billing_month(html_body: str) -> str | None:
+    """Try to extract ``YYYY-MM`` billing month from email HTML."""
+    match = _BILLING_MONTH_RE.search(html_body)
+    if match:
+        return f"{match.group(1)}-{int(match.group(2)):02d}"
+    return None
+
+
 class FubonFetcher(BankFetcher):
     """台北富邦銀行 web-fetch.
 
     ``can_fetch`` recognises any ``<a>`` anchor pointing at a FUBON-owned
     download host. ``fetch_pdf`` validates credentials and delegates to
     :func:`flow.download`, which runs the full SPA pipeline and returns
-    PDF bytes.
+    PDF bytes. When the SPA path fails, falls back to a manual-staging
+    directory where the user can place a pre-downloaded PDF.
     """
 
     @property
@@ -76,34 +94,91 @@ class FubonFetcher(BankFetcher):
                 parsed = urlparse(href)
             except ValueError:
                 continue
-            # Require HTTPS + allowlisted host. Non-HTTPS FUBON links are
-            # rejected so can_fetch cannot return True for an attacker-
-            # controlled http:// URL pointing at a look-alike serial-key.
             if parsed.scheme != "https":
                 continue
             if parsed.hostname in _ALLOWED_DOMAINS:
                 return True
         return False
 
+    def _try_manual_staging(self, billing_month: str | None) -> Path:
+        """Find a PDF in the manual-staging directory and move it to staging.
+
+        Args:
+            billing_month: ``YYYY-MM`` string or None.
+
+        Returns:
+            Destination path after move.
+
+        Raises:
+            FetchError: No suitable file found.
+        """
+        settings = get_settings()
+        manual_dir = Path(settings.fubon_manual_staging_dir)
+        staging_dest = Path(settings.staging_dir) / "FUBON"
+
+        if not manual_dir.exists():
+            raise FetchError(
+                self.bank_code,
+                "manual_staging_not_found: "
+                f"目錄 {manual_dir} 不存在。"
+                "請建立目錄或確認 FUBON_MANUAL_STAGING_DIR 設定。",
+            )
+
+        pdfs = sorted(manual_dir.glob("*.pdf"))
+        if not pdfs:
+            raise FetchError(
+                self.bank_code,
+                f"manual_staging_empty: manual-staging 目錄 {manual_dir} 無 PDF 檔案。"
+                "請從富邦網銀下載 PDF 並放入該目錄後重試。"
+                "Docker 環境下 host 路徑為 ./backend/data/manual-staging/FUBON/",
+            )
+
+        chosen: Path | None = None
+        if billing_month:
+            compact = billing_month.replace("-", "")
+            for pdf in pdfs:
+                if billing_month in pdf.name or compact in pdf.name:
+                    chosen = pdf
+                    break
+
+        if chosen is None:
+            if len(pdfs) == 1:
+                chosen = pdfs[0]
+            else:
+                raise FetchError(
+                    self.bank_code,
+                    f"manual_staging_ambiguous: manual-staging 目錄有 {len(pdfs)} 個"
+                    "無法對應的檔案。請保留單一 PDF 或以 fubon-YYYY-MM.pdf 命名。"
+                    f"目錄：{manual_dir}",
+                )
+
+        staging_dest.mkdir(parents=True, exist_ok=True)
+        dest = staging_dest / chosen.name
+        if dest.exists():
+            raise FetchError(
+                self.bank_code,
+                "manual_staging_conflict: "
+                f"{dest} 已存在。請移除後重試。",
+            )
+        shutil.move(chosen, dest)
+        logger.info(
+            "manual-staging fallback: %s → %s", chosen.name, dest,
+        )
+        return dest
+
     def fetch_pdf(self, html_body: str, credentials: dict[str, str]) -> bytes:
         """Download the current FUBON bill PDF via the SPA JSON API.
 
-        Delegates to :func:`flow.download` which runs the full async pipeline
-        in a fresh event loop (this method is invoked via
-        ``asyncio.to_thread`` from :mod:`ccas.ingestor.job`, so no outer loop
-        exists in this thread).
+        Falls back to manual-staging directory when the SPA path fails
+        (but not for credential errors).
 
         Args:
             html_body: Email HTML containing the bill download link.
-            credentials: Must include ``national_id`` (10-char ROC id,
-                ``^[A-Z][12]\\d{8}$``) and ``roc_birthday`` (7 digits).
-                Format is validated here so a clear ``credentials_wrong``
-                error surfaces early.
+            credentials: Must include ``national_id`` and ``roc_birthday``.
 
         Raises:
-            FetchError: credentials missing / malformed, download link not
-                found, or the underlying flow failed (captcha retries
-                exhausted, doLogin rejected, HTTP error).
+            FetchError: credentials missing / malformed, or both SPA and
+                manual-staging paths failed.
         """
         national_id = credentials.get("national_id", "").strip()
         roc_birthday = credentials.get("roc_birthday", "").strip()
@@ -125,16 +200,26 @@ class FubonFetcher(BankFetcher):
 
         settings = get_settings()
         api_key = settings.anthropic_api_key.get_secret_value()
-        return asyncio.run(
-            flow.download(
-                email_html=html_body,
-                id_number=national_id,
-                birthday=roc_birthday,
-                max_retries=settings.fubon_captcha_max_retries,
-                llm_fallback=settings.fubon_captcha_fallback_llm,
-                llm_api_key=api_key or None,
+
+        try:
+            return asyncio.run(
+                flow.download(
+                    email_html=html_body,
+                    id_number=national_id,
+                    birthday=roc_birthday,
+                    max_retries=settings.fubon_captcha_max_retries,
+                    llm_fallback=settings.fubon_captcha_fallback_llm,
+                    llm_api_key=api_key or None,
+                )
             )
-        )
+        except FetchError as exc:
+            msg = str(exc)
+            if any(p in msg for p in _CREDENTIAL_ERROR_PREFIXES):
+                raise
+            logger.info("SPA fetch 失敗，嘗試 manual-staging fallback: %s", exc)
+            billing_month = _extract_billing_month(html_body)
+            path = self._try_manual_staging(billing_month)
+            return path.read_bytes()
 
 
 fetcher_registry.register(FubonFetcher())

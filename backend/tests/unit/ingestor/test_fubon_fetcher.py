@@ -127,7 +127,8 @@ class TestFetchPdf:
         assert kwargs["email_html"] == _SPA_IMG_ANCHOR_HTML
         assert kwargs["max_retries"] >= 1
 
-    def test_fetch_pdf_wraps_flow_fetch_error(self):
+    def test_fetch_pdf_wraps_flow_error_with_fallback(self):
+        """SPA failure falls through to manual-staging."""
         from unittest.mock import AsyncMock, patch
 
         from ccas.ingestor.fetcher.banks.fubon import flow
@@ -138,7 +139,7 @@ class TestFetchPdf:
             "download",
             AsyncMock(side_effect=FetchError("FUBON", "captcha_retry_exhausted: 7")),
         ):
-            with pytest.raises(FetchError, match="captcha_retry_exhausted"):
+            with pytest.raises(FetchError, match="manual_staging_empty"):
                 fetcher.fetch_pdf(
                     _SPA_IMG_ANCHOR_HTML,
                     {"national_id": "A123456789", "roc_birthday": "0750101"},

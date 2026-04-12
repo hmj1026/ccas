@@ -1,6 +1,7 @@
 x-shared-env: &shared-env
   DATABASE_URL: "sqlite+aiosqlite:////data/ccas.db"
   STAGING_DIR: "/data/staging"
+  FUBON_MANUAL_STAGING_DIR: "/data/manual-staging/FUBON"
   GMAIL_CREDENTIALS_PATH: "/data/credentials.json"
   GMAIL_TOKEN_PATH: "/data/token.json"
   REDIS_URL: redis://redis:6379/0
