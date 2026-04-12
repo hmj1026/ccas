@@ -149,7 +149,10 @@
       "Bash(python -m ruff check src/ccas/ingestor/fetcher/banks/fubon/captcha.py tests/unit/ingestor/fetcher/banks/fubon/test_captcha_gate.py)",
       "Bash(python:*)",
       "Bash(BANK_CONFIG_DIR=/tmp/ccas-test uv run python -m ccas.tools.categories --help)",
-      "Bash(BANK_CONFIG_DIR=/tmp/ccas-test uv run:*)"
+      "Bash(BANK_CONFIG_DIR=/tmp/ccas-test uv run:*)",
+      "Bash(gh --version)",
+      "Bash(brew --version)",
+      "Bash(gh auth:*)"
     ]
   },
   "hooks": {
