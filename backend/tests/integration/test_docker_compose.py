@@ -6,12 +6,15 @@
 
 from pathlib import Path
 
+import pytest
 import yaml
 
 
 def _load_compose() -> dict:
     """讀取並解析 docker-compose.yaml。"""
     compose_path = Path(__file__).resolve().parents[3] / "docker-compose.yaml"
+    if not compose_path.exists():
+        pytest.skip(f"docker-compose.yaml not found at {compose_path}")
     return yaml.safe_load(compose_path.read_text())
 
 

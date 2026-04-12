@@ -13,7 +13,6 @@ from fpdf import FPDF
 
 from ccas.parser.registry import registry
 
-_CJK_FONT_PATH = "/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc"
 _COL_WIDTHS = [25, 25, 25, 60, 30]
 _TABLE_HEADERS = ["交易日", "入帳日", "卡號末四碼", "交易說明", "金額"]
 
@@ -25,10 +24,10 @@ def _reset_registry():
     registry.clear()
 
 
-def _new_pdf() -> FPDF:
+def _new_pdf(font_path: Path) -> FPDF:
     """Create a new FPDF instance with Chinese font configured."""
     pdf = FPDF()
-    pdf.add_font("WenQuanYi", "", _CJK_FONT_PATH)
+    pdf.add_font("WenQuanYi", "", str(font_path))
     pdf.set_font("WenQuanYi", size=10)
     return pdf
 
@@ -40,9 +39,11 @@ def _write_table_row(pdf: FPDF, cells: Sequence[str]) -> None:
     pdf.ln()
 
 
-def _create_taishin_pdf(path: Path, *, include_transactions: bool = True) -> Path:
+def _create_taishin_pdf(
+    path: Path, font_path: Path, *, include_transactions: bool = True
+) -> Path:
     """Generate a synthetic Taishin statement PDF."""
-    pdf = _new_pdf()
+    pdf = _new_pdf(font_path)
     pdf.add_page()
 
     pdf.cell(0, 10, "台新銀行 信用卡帳單", new_x="LMARGIN", new_y="NEXT")
@@ -66,18 +67,18 @@ def _create_taishin_pdf(path: Path, *, include_transactions: bool = True) -> Pat
     return path
 
 
-def _create_non_taishin_pdf(path: Path) -> Path:
+def _create_non_taishin_pdf(path: Path, font_path: Path) -> Path:
     """Generate a non-Taishin statement PDF."""
-    pdf = _new_pdf()
+    pdf = _new_pdf(font_path)
     pdf.add_page()
     pdf.cell(0, 10, "國泰世華商業銀行 信用卡帳單", new_x="LMARGIN", new_y="NEXT")
     pdf.output(str(path))
     return path
 
 
-def _create_multi_page_taishin_pdf(path: Path) -> Path:
+def _create_multi_page_taishin_pdf(path: Path, font_path: Path) -> Path:
     """Generate a multi-page Taishin statement PDF."""
-    pdf = _new_pdf()
+    pdf = _new_pdf(font_path)
 
     # Page 1: summary + one transaction
     pdf.add_page()
@@ -106,21 +107,21 @@ class TestTaishinV1PdfIntegration:
 
         return TaishinV1Parser()
 
-    def test_can_parse_synthetic_taishin_pdf(self, tmp_path):
+    def test_can_parse_synthetic_taishin_pdf(self, tmp_path, cjk_font_path):
         parser = self._get_parser()
-        pdf_path = _create_taishin_pdf(tmp_path / "taishin.pdf")
+        pdf_path = _create_taishin_pdf(tmp_path / "taishin.pdf", cjk_font_path)
 
         assert parser.can_parse(pdf_path) is True
 
-    def test_cannot_parse_non_taishin_pdf(self, tmp_path):
+    def test_cannot_parse_non_taishin_pdf(self, tmp_path, cjk_font_path):
         parser = self._get_parser()
-        pdf_path = _create_non_taishin_pdf(tmp_path / "cathay.pdf")
+        pdf_path = _create_non_taishin_pdf(tmp_path / "cathay.pdf", cjk_font_path)
 
         assert parser.can_parse(pdf_path) is False
 
-    def test_parse_returns_valid_result(self, tmp_path):
+    def test_parse_returns_valid_result(self, tmp_path, cjk_font_path):
         parser = self._get_parser()
-        pdf_path = _create_taishin_pdf(tmp_path / "taishin.pdf")
+        pdf_path = _create_taishin_pdf(tmp_path / "taishin.pdf", cjk_font_path)
 
         result = parser.parse(pdf_path)
 
@@ -132,18 +133,20 @@ class TestTaishinV1PdfIntegration:
         assert result.transactions[0].merchant == "全聯福利中心"
         assert result.transactions[0].amount == 520
 
-    def test_parse_multi_page_pdf(self, tmp_path):
+    def test_parse_multi_page_pdf(self, tmp_path, cjk_font_path):
         parser = self._get_parser()
-        pdf_path = _create_multi_page_taishin_pdf(tmp_path / "taishin_multi.pdf")
+        pdf_path = _create_multi_page_taishin_pdf(
+            tmp_path / "taishin_multi.pdf", cjk_font_path
+        )
 
         result = parser.parse(pdf_path)
 
         assert result.total_amount == 1800
         assert len(result.transactions) == 2
 
-    def test_parse_result_is_frozen(self, tmp_path):
+    def test_parse_result_is_frozen(self, tmp_path, cjk_font_path):
         parser = self._get_parser()
-        pdf_path = _create_taishin_pdf(tmp_path / "taishin.pdf")
+        pdf_path = _create_taishin_pdf(tmp_path / "taishin.pdf", cjk_font_path)
 
         result = parser.parse(pdf_path)
 

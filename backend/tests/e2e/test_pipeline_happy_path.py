@@ -83,12 +83,12 @@ class TestDecryptStage:
 
         with (
             patch(
-                "ccas.decryptor.job.decrypt_pdf",
+                "ccas.decryptor.job.decrypt_pdf_multi",
                 return_value=DecryptResult(needed_decryption=True),
             ),
             patch(
-                "ccas.decryptor.job.resolve_password",
-                return_value="test-password",
+                "ccas.decryptor.job.resolve_passwords",
+                return_value=("test-password",),
             ),
         ):
             from ccas.decryptor.job import run_decryption_job

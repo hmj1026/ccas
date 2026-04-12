@@ -51,14 +51,14 @@ class TestDecryptFailureIsolation:
 
         from ccas.decryptor.decrypt import DecryptResult
 
-        def mock_decrypt(pdf_path, password):
+        def mock_decrypt(pdf_path, passwords):
             if "bad.pdf" in str(pdf_path):
                 raise DecryptionError("Invalid password")
             return DecryptResult(needed_decryption=True)
 
         with (
-            patch("ccas.decryptor.job.decrypt_pdf", side_effect=mock_decrypt),
-            patch("ccas.decryptor.job.resolve_password", return_value="pw"),
+            patch("ccas.decryptor.job.decrypt_pdf_multi", side_effect=mock_decrypt),
+            patch("ccas.decryptor.job.resolve_passwords", return_value=("pw",)),
         ):
             from ccas.decryptor.job import run_decryption_job
 

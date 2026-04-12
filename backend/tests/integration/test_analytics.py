@@ -77,6 +77,18 @@ async def test_trend(client: AsyncClient, db_session: AsyncSession):
     assert "2026-03" in months
 
 
+async def test_trend_default_months_is_six(
+    client: AsyncClient, db_session: AsyncSession
+):
+    """省略 months 參數預設回傳 6 個月（user-guide §8）。"""
+    await _seed_analytics_data(db_session)
+
+    response = await client.get("/api/analytics/trend", headers=auth_headers())
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert len(data) == 6
+
+
 async def test_categories(client: AsyncClient, db_session: AsyncSession):
     """回傳指定月份的類別分布。"""
     await _seed_analytics_data(db_session)

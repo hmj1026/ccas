@@ -220,6 +220,54 @@ async def test_export_csv_no_month_uses_all_filename(
     assert "ccas-transactions-all.csv" in response.headers["content-disposition"]
 
 
+async def test_list_transactions_filter_by_bank_code(
+    client: AsyncClient, db_session: AsyncSession
+):
+    """bank_code 篩選只回傳該銀行交易（user-guide §7 API）。"""
+    bill_ctbc = Bill(
+        bank_code="CTBC",
+        billing_month="2026-03",
+        total_amount=200,
+        due_date=date(2026, 4, 15),
+    )
+    bill_esun = Bill(
+        bank_code="ESUN",
+        billing_month="2026-03",
+        total_amount=300,
+        due_date=date(2026, 4, 20),
+    )
+    db_session.add_all([bill_ctbc, bill_esun])
+    await db_session.flush()
+
+    db_session.add_all(
+        [
+            Transaction(
+                bill_id=bill_ctbc.id,
+                trans_date=date(2026, 3, 1),
+                merchant="星巴克",
+                amount=200,
+                currency="TWD",
+            ),
+            Transaction(
+                bill_id=bill_esun.id,
+                trans_date=date(2026, 3, 2),
+                merchant="麥當勞",
+                amount=300,
+                currency="TWD",
+            ),
+        ]
+    )
+    await db_session.commit()
+
+    response = await client.get(
+        "/api/transactions?bank_code=CTBC", headers=auth_headers()
+    )
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert len(data) == 1
+    assert data[0]["merchant"] == "星巴克"
+
+
 async def test_invalid_month_format(client: AsyncClient, db_session: AsyncSession):
     """無效月份格式回傳 422。"""
     response = await client.get(

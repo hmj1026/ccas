@@ -48,3 +48,41 @@ class TestParseArgs:
     def test_invalid_year_too_large_exits(self):
         with pytest.raises((SystemExit, ValueError)):
             _parse_args(["--year", "2100"])
+
+    # --from / --to flags (user-guide §7)
+
+    def test_from_flag(self):
+        opts = _parse_args(["--from", "decrypt"])
+        assert opts.from_stage == "decrypt"
+
+    def test_to_flag(self):
+        opts = _parse_args(["--to", "parse"])
+        assert opts.to_stage == "parse"
+
+    def test_from_and_to_combination(self):
+        opts = _parse_args(["--from", "decrypt", "--to", "classify"])
+        assert opts.from_stage == "decrypt"
+        assert opts.to_stage == "classify"
+
+    def test_full_combination_with_stages(self):
+        args = [
+            "--force",
+            "--bank",
+            "CTBC",
+            "--from",
+            "parse",
+            "--to",
+            "classify",
+        ]
+        opts = _parse_args(args)
+        expected = PipelineOptions(
+            force=True,
+            bank_code="CTBC",
+            from_stage="parse",
+            to_stage="classify",
+        )
+        assert opts == expected
+
+    def test_invalid_stage_passed_through(self):
+        opts = _parse_args(["--from", "nonexistent"])
+        assert opts.from_stage == "nonexistent"
