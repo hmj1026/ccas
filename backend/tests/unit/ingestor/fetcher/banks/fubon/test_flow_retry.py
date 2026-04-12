@@ -73,7 +73,7 @@ async def test_download_raises_retry_exhausted() -> None:
 
 
 @pytest.mark.asyncio
-async def test_download_retries_on_doLogin_captcha_wrong() -> None:
+async def test_download_retries_on_do_login_captcha_wrong() -> None:
     c = _fake_client()
     c.do_login = AsyncMock(
         side_effect=[

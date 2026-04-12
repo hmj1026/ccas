@@ -95,7 +95,8 @@ def load_category_specs(path: str | Path) -> list[CategorySpec]:
         keywords = row.get("keywords")
         if not isinstance(keywords, list) or not keywords:
             raise CategoryValidationError(
-                f"categories.yaml 第 {index} 筆 ({category}) 的 keywords 必須是非空清單。"
+                f"categories.yaml 第 {index} 筆 ({category})"
+                " 的 keywords 必須是非空清單。"
             )
         for keyword in keywords:
             text = str(keyword).strip()
