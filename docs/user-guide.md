@@ -164,7 +164,12 @@ cp config/banks.example.yaml config/banks.yaml
    PDF_PASSWORD_TAISHIN=你的密碼
    ```
    密碼規則：身分證字號後 2 碼 + 生日月日 4 碼（共 6 碼）
-3. Gmail filter 會自動匹配寄件者 `webmaster@bhurecv.taishinbank.com.tw` 且主旨格式為「台新信用卡電子帳單 YYYY年M月」的郵件
+3. （選用）若有舊期帳單使用不同密碼格式，可設定 legacy 密碼：
+   ```bash
+   PDF_PASSWORD_TAISHIN_LEGACY_1=舊密碼
+   ```
+   系統會依序嘗試主密碼 → legacy_1 → legacy_2 ...（最多 5 組），任一成功即完成解密。此機制適用於所有銀行，只需設定對應的 `PDF_PASSWORD_<BANK_CODE>_LEGACY_N` 環境變數。
+4. Gmail filter 會自動匹配寄件者 `webmaster@bhurecv.taishinbank.com.tw` 且主旨格式為「台新信用卡電子帳單 YYYY年M月」的郵件
 
 ### 新增台北富邦銀行設定
 
@@ -298,6 +303,12 @@ docker compose down
 - 確認 Gmail 憑證有效：重新執行 OAuth 認證
 - 確認 PDF 密碼正確：檢查 `.env` 中的 `PDF_PASSWORD_<BANK_CODE>`
 - 查看詳細 log：`docker compose logs backend | grep ERROR`
+
+### 舊期帳單解密失敗
+- 若錯誤訊息顯示 `Invalid password (tried N candidates)`，表示所有候選密碼均無法解密
+- 部分銀行（如 TAISHIN）過去可能變更過密碼規則，舊帳單需要舊密碼
+- 在 `.env` 新增 `PDF_PASSWORD_<BANK_CODE>_LEGACY_1=舊密碼`，然後重跑 pipeline
+- 最多可設定 5 組 legacy 密碼（`_LEGACY_1` 到 `_LEGACY_5`）
 
 ### 前端無法載入資料
 - 確認 backend 正常：`curl http://localhost:8000/health`

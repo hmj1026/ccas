@@ -5,7 +5,7 @@ TBD - created by archiving change local-ops-overhaul. Update Purpose after archi
 ## Requirements
 ### Requirement: 使用者操作手冊涵蓋完整使用流程
 
-系統 SHALL 提供 `docs/user-guide.md`，面向非開發者使用者，涵蓋從環境設定到日常操作的完整流程，每個步驟附完整可執行指令。依文件操作的使用者 MUST NOT 被要求手動 seed 資料庫內容——首次 `docker compose up` 必須讓 pipeline 立即可跑且分類規則就緒。
+系統 SHALL 提供 `docs/user-guide.md`，面向非開發者使用者，涵蓋從環境設定到日常操作的完整流程，每個步驟附完整可執行指令。依文件操作的使用者 MUST NOT 被要求手動 seed 資料庫內容——首次 `docker compose up` 必須讓 pipeline 立即可跑且分類規則就緒。PDF 密碼設定章節 MUST 說明當舊期帳單解密失敗時，可透過 `PDF_PASSWORD_<BANK>_LEGACY_N` 設定額外的 legacy 密碼。
 
 #### Scenario: 使用者依文件完成首次設定
 
@@ -26,6 +26,11 @@ TBD - created by archiving change local-ops-overhaul. Update Purpose after archi
 
 - **WHEN** 使用者需要重新載入 `categories.yaml` 變更或發現分類全部為「未分類」
 - **THEN** 故障排除章節 SHALL 指引使用者執行 `docker compose restart backend` 或手動 `docker exec ccas-backend-1 uv run python -m ccas.tools.categories --apply`，並說明 YAML 為 SSOT 的覆寫行為
+
+#### Scenario: PDF 密碼章節涵蓋 legacy 密碼
+
+- **WHEN** 使用者設定 `PDF_PASSWORD_<BANK>` 後仍有舊期帳單解密失敗
+- **THEN** 文件 SHALL 指引使用者新增 `PDF_PASSWORD_<BANK>_LEGACY_1` 至 `_LEGACY_5` 來提供歷史密碼，並說明解密會按 primary → legacy_1 → ... 順序嘗試
 
 ### Requirement: 刪除 beginner-setup-guide.md
 
