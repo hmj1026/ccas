@@ -86,7 +86,14 @@
       "Bash(unset BANK_CONFIG_DIR)",
       "mcp__claude_ai_Gmail__gmail_search_messages",
       "mcp__claude_ai_Gmail__gmail_read_message",
-      "mcp__plugin_everything-claude-code_playwright__browser_navigate"
+      "mcp__plugin_everything-claude-code_playwright__browser_navigate",
+      "Bash(fc-list :lang=zh)",
+      "Bash(curl -s http://localhost:8000/health)",
+      "Bash(curl -s http://localhost:5173/)",
+      "Bash(open /tmp/captcha_review.html)",
+      "Bash(stat /Users/paul/Project/ccas/docs/*.md)",
+      "Bash(cat)",
+      "Read(//tmp/**)"
     ]
   },
   "hooks": {

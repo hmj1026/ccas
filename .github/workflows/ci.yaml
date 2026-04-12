@@ -73,6 +73,9 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Install CJK fonts
+        run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends fonts-wqy-zenhei
+
       - name: Install dependencies
         run: uv sync --frozen --all-extras
 

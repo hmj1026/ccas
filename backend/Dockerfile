@@ -20,7 +20,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # Stage: dev — hot reload, source bind-mounted at runtime
 FROM python:3.12-slim AS dev
 RUN apt-get update -qq \
-    && apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-chi-tra \
+    && apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-chi-tra fonts-wqy-zenhei \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=uv /uv /usr/local/bin/uv
 WORKDIR /app
@@ -39,7 +39,7 @@ FROM python:3.12-slim AS production
 LABEL org.opencontainers.image.title="ccas-backend" \
       org.opencontainers.image.description="CCAS Backend API, worker, scheduler, and bot"
 RUN apt-get update -qq \
-    && apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-chi-tra \
+    && apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-chi-tra fonts-wqy-zenhei \
     && rm -rf /var/lib/apt/lists/*
 RUN groupadd -g 1001 appgroup && useradd -u 1001 -g appgroup -s /bin/sh -m appuser
 COPY --from=uv /uv /usr/local/bin/uv

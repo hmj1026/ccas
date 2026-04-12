@@ -74,6 +74,7 @@ class Settings(BaseSettings):
     # are read via ``get_bank_credential("FUBON", ...)`` like other banks.
     fubon_captcha_max_retries: int = Field(default=7, ge=1, le=20)
     fubon_captcha_fallback_llm: bool = False
+    fubon_captcha_archive_dir: str = ""
     fubon_manual_staging_dir: str = "./data/manual-staging/FUBON"
     anthropic_api_key: SecretStr = SecretStr("")
 
