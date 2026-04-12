@@ -36,7 +36,4 @@ def test_whitelist_runs_before_hyphen_normalization() -> None:
 
 def test_mixed_case_ascii_dash_and_brand_fix() -> None:
     # Input simulates `ICP-CS 統一時代百鋼` rendered with both corruption types.
-    assert (
-        normalize_ocr_merchant("ICP一CS 統一時代百鋼")
-        == "ICP-CS 統一時代百貨"
-    )
+    assert normalize_ocr_merchant("ICP一CS 統一時代百鋼") == "ICP-CS 統一時代百貨"

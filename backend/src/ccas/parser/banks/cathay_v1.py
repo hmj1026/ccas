@@ -90,6 +90,7 @@ def _crop_transaction_section(text: str) -> str:
             earliest = idx
     return text[:earliest]
 
+
 # Text line-based transactions:
 # YYYY/MM/DD  YYYY/MM/DD  MERCHANT  AMOUNT  (or similar)
 # Also handle MM/DD format in some layouts

@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from ccas.parser.banks.cathay_v1 import (
+    _NON_TRANSACTION_SECTION_ANCHORS,
     _crop_transaction_section,
     _is_transaction_table,
-    _NON_TRANSACTION_SECTION_ANCHORS,
 )
 
 
