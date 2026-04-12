@@ -88,6 +88,26 @@ _RE_TRANSACTION_LINE_SIMPLE = re.compile(
     re.MULTILINE,
 )
 
+_REFUND_KEYWORDS = ("退款", "退費", "退貨", "沖銷", "取消授權", "永豐自扣")
+_REFUND_LINE_PREFIXES = ("(-)", "－", "(−)")
+
+
+def _is_refund_row(raw_line: str, merchant: str, amount: int) -> bool:
+    """Return True if the row represents a refund / credit / auto-debit.
+
+    Uses ``startswith`` on the merchant (not substring) so legitimate
+    merchants that happen to contain a keyword mid-word — e.g. 「退休俱樂部」
+    — are not filtered.
+    """
+    stripped = merchant.lstrip()
+    if stripped.startswith(_REFUND_KEYWORDS):
+        return True
+    if amount < 0:
+        return True
+    if raw_line.lstrip().startswith(_REFUND_LINE_PREFIXES):
+        return True
+    return False
+
 
 def _parse_date(raw: str, billing_year: int) -> date | None:
     """Parse a date string in various formats (YYYY/MM/DD, MM/DD, ROC YYY/MM/DD)."""
@@ -414,6 +434,9 @@ def _parse_real_text_transaction(
 
         # Skip summary/totals rows like "您的正卡，本期應繳金額合計 12,579"
         if "本期應繳金額合計" in merchant or "小計" in merchant:
+            return None
+
+        if _is_refund_row(match.group(0), merchant, amount):
             return None
 
         return TransactionItem(

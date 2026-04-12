@@ -32,6 +32,22 @@ fi
 printf '==> 套用資料庫 migration\n'
 uv run alembic upgrade head
 
+printf '==> Seed bank_configs from %s\n' "${BANK_CONFIG_DIR:-/config}"
+if ! uv run python -m ccas.tools.bank_configs --apply; then
+  printf '[ERROR] bank_configs seed failed (see stderr above)。\n' >&2
+  printf '[ERROR] 請檢查 %s/banks.yaml 與 %s/bank-code-registry.yaml 是否存在且格式正確。\n' \
+    "${BANK_CONFIG_DIR:-/config}" "${BANK_CONFIG_DIR:-/config}" >&2
+  exit 1
+fi
+
+printf '==> Seed categories from %s\n' "${BANK_CONFIG_DIR:-/config}"
+if ! uv run python -m ccas.tools.categories --apply; then
+  printf '[ERROR] categories seed failed (see stderr above)。\n' >&2
+  printf '[ERROR] 請檢查 %s/categories.yaml 是否存在且格式正確。\n' \
+    "${BANK_CONFIG_DIR:-/config}" >&2
+  exit 1
+fi
+
 printf '==> 啟動後端 API\n'
 exec uv run uvicorn ccas.api.app:create_app \
   --host 0.0.0.0 \

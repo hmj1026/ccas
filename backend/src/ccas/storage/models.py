@@ -9,6 +9,7 @@
 """
 
 from datetime import UTC, date, datetime
+from typing import Literal
 
 from sqlalchemy import (
     Boolean,
@@ -90,6 +91,11 @@ class Category(Base):
     """消費分類關鍵字對照。
 
     以 keyword（唯一）比對交易商家名稱，自動歸類消費類別。
+
+    ``source`` 標記 row 來源：``"seed"`` 表示由 ``ccas.tools.categories``
+    從 YAML 寫入；``"user"`` 表示使用者在後台手動新增或修改。reseed 時
+    只會 DELETE / UPDATE ``source == "seed"`` 的 row，避免覆寫使用者
+    資料，同時又能把 YAML 已移除的 seed 規則真正刪掉。
     """
 
     __tablename__ = "categories"
@@ -97,6 +103,9 @@ class Category(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     keyword: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
     category: Mapped[str] = mapped_column(Text, nullable=False)
+    source: Mapped[Literal["seed", "user"]] = mapped_column(
+        Text, nullable=False, server_default="user", default="user"
+    )
 
 
 class BankConfig(Base):

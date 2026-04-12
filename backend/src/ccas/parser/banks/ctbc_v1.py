@@ -16,6 +16,7 @@ from pathlib import Path
 import pdfplumber
 import pdfplumber.page
 
+from ccas.parser.banks.ctbc.ocr_postprocess import normalize_ocr_merchant
 from ccas.parser.base import BankParser, ParseError
 from ccas.parser.ocr import extract_text_from_image, is_ocr_available
 from ccas.parser.registry import registry
@@ -383,7 +384,7 @@ def _parse_transaction_row(
 
         return TransactionItem(
             trans_date=trans_date,
-            merchant=merchant,
+            merchant=normalize_ocr_merchant(merchant),
             amount=amount,
             posting_date=posting_date,
             card_last4=card_last4,
@@ -647,7 +648,7 @@ def _parse_roc_transaction(
 
         return TransactionItem(
             trans_date=trans_date,
-            merchant=merchant,
+            merchant=normalize_ocr_merchant(merchant),
             amount=amount,
             posting_date=posting_date,
             card_last4=card_last4,

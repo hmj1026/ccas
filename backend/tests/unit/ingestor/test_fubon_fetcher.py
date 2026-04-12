@@ -9,11 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from ccas.ingestor.fetcher.banks.fubon import (
-    _ALLOWED_DOMAINS,
-    FubonFetcher,
-    _validate_url,
-)
+from ccas.ingestor.fetcher.banks.fubon import FubonFetcher
 from ccas.ingestor.fetcher.base import BankFetcher, FetchError
 
 # -- Test HTML fixtures --
@@ -82,64 +78,73 @@ class TestCanFetch:
         assert fetcher.can_fetch("   ") is False
 
 
-class TestExtractDownloadUrl:
-    """FubonFetcher._extract_download_url() tests."""
-
-    def test_extracts_legacy_anchor_href(self):
-        fetcher = FubonFetcher()
-        url = fetcher._extract_download_url(_LEGACY_TEXT_ANCHOR_HTML)
-        assert url == "https://mybank.taipeifubon.com.tw/download?token=abc123"
-
-    def test_extracts_spa_anchor_href(self):
-        """SPA 時代錨點：優先回傳 fbmbill 網域連結。"""
-        fetcher = FubonFetcher()
-        url = fetcher._extract_download_url(_SPA_IMG_ANCHOR_HTML)
-        assert url.startswith("https://fbmbill.taipeifubon.com.tw/")
-
-    def test_missing_link_raises_fetch_error(self):
-        fetcher = FubonFetcher()
-        with pytest.raises(FetchError, match="找不到帳單下載連結"):
-            fetcher._extract_download_url(_NO_LINK_HTML)
-
-    def test_non_fubon_domain_raises(self):
-        fetcher = FubonFetcher()
-        with pytest.raises(FetchError, match="找不到帳單下載連結"):
-            fetcher._extract_download_url(_NON_FUBON_DOMAIN_HTML)
-
-
 class TestFetchPdf:
-    """FubonFetcher.fetch_pdf() tests (SPA edition)."""
+    """FubonFetcher.fetch_pdf() delegates to flow.download()."""
 
     def test_missing_credentials_raises(self):
         fetcher = FubonFetcher()
-        with pytest.raises(FetchError, match="缺少"):
+        with pytest.raises(FetchError, match="credentials_missing"):
             fetcher.fetch_pdf(
                 _SPA_IMG_ANCHOR_HTML,
                 {"national_id": "", "roc_birthday": ""},
             )
 
-    def test_fetch_pdf_raises_spa_not_implemented(self):
-        """SPA 網域下載請求應立即拋出明確錯誤，而非嘗試舊 CAPTCHA 流程。"""
+    def test_invalid_id_format_raises_credentials_wrong(self):
         fetcher = FubonFetcher()
-        with pytest.raises(FetchError) as exc_info:
+        with pytest.raises(FetchError, match="credentials_wrong"):
             fetcher.fetch_pdf(
+                _SPA_IMG_ANCHOR_HTML,
+                {"national_id": "abc12345", "roc_birthday": "0750101"},
+            )
+
+    def test_invalid_birthday_format_raises_credentials_wrong(self):
+        fetcher = FubonFetcher()
+        with pytest.raises(FetchError, match="credentials_wrong"):
+            fetcher.fetch_pdf(
+                _SPA_IMG_ANCHOR_HTML,
+                {"national_id": "A123456789", "roc_birthday": "1985-01-01"},
+            )
+
+    def test_fetch_pdf_delegates_to_flow_and_returns_pdf(self):
+        from unittest.mock import AsyncMock, patch
+
+        from ccas.ingestor.fetcher.banks.fubon import flow
+
+        fetcher = FubonFetcher()
+        with patch.object(
+            flow, "download", AsyncMock(return_value=b"%PDF-1.4\nfake")
+        ) as mock_flow:
+            result = fetcher.fetch_pdf(
                 _SPA_IMG_ANCHOR_HTML,
                 {"national_id": "A123456789", "roc_birthday": "0750101"},
             )
-        assert exc_info.value.bank_code == "FUBON"
-        assert "SPA" in str(exc_info.value)
-        assert "尚未實作" in str(exc_info.value)
+        assert result == b"%PDF-1.4\nfake"
+        mock_flow.assert_awaited_once()
+        assert mock_flow.await_args is not None
+        kwargs = mock_flow.await_args.kwargs
+        assert kwargs["id_number"] == "A123456789"
+        assert kwargs["birthday"] == "0750101"
+        assert kwargs["email_html"] == _SPA_IMG_ANCHOR_HTML
+        assert kwargs["max_retries"] >= 1
 
-    def test_fetch_pdf_legacy_url_also_not_implemented(self):
-        """即使是舊格式 URL（mybank 網域），fetch 流程現階段全面未實作。"""
+    def test_fetch_pdf_wraps_flow_fetch_error(self):
+        from unittest.mock import AsyncMock, patch
+
+        from ccas.ingestor.fetcher.banks.fubon import flow
+
         fetcher = FubonFetcher()
-        with pytest.raises(FetchError) as exc_info:
-            fetcher.fetch_pdf(
-                _LEGACY_TEXT_ANCHOR_HTML,
-                {"national_id": "A123456789", "roc_birthday": "0750101"},
-            )
-        assert exc_info.value.bank_code == "FUBON"
-        assert "尚未實作" in str(exc_info.value)
+        with patch.object(
+            flow,
+            "download",
+            AsyncMock(
+                side_effect=FetchError("FUBON", "captcha_retry_exhausted: 7")
+            ),
+        ):
+            with pytest.raises(FetchError, match="captcha_retry_exhausted"):
+                fetcher.fetch_pdf(
+                    _SPA_IMG_ANCHOR_HTML,
+                    {"national_id": "A123456789", "roc_birthday": "0750101"},
+                )
 
 
 class TestRegistryRegistration:
@@ -152,56 +157,3 @@ class TestRegistryRegistration:
         assert fetcher is not None
         assert isinstance(fetcher, BankFetcher)
         assert fetcher.bank_code == "FUBON"
-
-
-class TestUrlValidation:
-    """_validate_url() domain allowlist tests."""
-
-    def test_valid_https_legacy_domain_passes(self):
-        _validate_url(
-            "https://mybank.taipeifubon.com.tw/bill/download",
-            context="test",
-        )
-
-    def test_fbmbill_domain_passes(self):
-        """SPA 時代新網域必須在白名單內。"""
-        _validate_url(
-            "https://fbmbill.taipeifubon.com.tw/client/pdf/abc123",
-            context="test",
-        )
-
-    def test_http_scheme_rejected(self):
-        with pytest.raises(FetchError, match="HTTPS"):
-            _validate_url(
-                "http://mybank.taipeifubon.com.tw/bill",
-                context="test",
-            )
-
-    def test_disallowed_domain_rejected(self):
-        with pytest.raises(FetchError, match="允許清單"):
-            _validate_url(
-                "https://evil.example.com/phish",
-                context="test",
-            )
-
-    def test_all_allowed_domains_pass(self):
-        for domain in _ALLOWED_DOMAINS:
-            _validate_url(f"https://{domain}/path", context="test")
-
-    def test_userinfo_bypass_rejected(self):
-        with pytest.raises(FetchError, match="userinfo"):
-            _validate_url(
-                "https://evil.com@mybank.taipeifubon.com.tw/path",
-                context="test",
-            )
-
-    def test_subdomain_suffix_confusion_rejected(self):
-        with pytest.raises(FetchError, match="允許清單"):
-            _validate_url(
-                "https://mybank.taipeifubon.com.tw.evil.com/path",
-                context="test",
-            )
-
-    def test_protocol_relative_url_rejected(self):
-        with pytest.raises(FetchError, match="HTTPS"):
-            _validate_url("//mybank.taipeifubon.com.tw/path", context="test")

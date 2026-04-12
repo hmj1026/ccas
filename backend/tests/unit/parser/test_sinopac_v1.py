@@ -267,14 +267,14 @@ class TestRealPdfFormat:
 
         txns = parser._extract_transactions(pages, 2026)
 
-        # Expect: negative refund + 3 consumption rows = 4 items
-        assert len(txns) == 4
-        # Refund row first in the sample text
-        refund = txns[0]
-        assert refund.amount == -7147
-        assert refund.trans_date == date(2026, 3, 5)
+        # Refund rows (negative amount / 永豐自扣 prefix) are filtered out to
+        # keep analytics on actual consumption.
+        assert len(txns) == 3
+        for txn in txns:
+            assert txn.amount > 0
+            assert not txn.merchant.startswith("永豐自扣")
 
-        consumption_amounts = [t.amount for t in txns[1:]]
+        consumption_amounts = [t.amount for t in txns]
         assert 500 in consumption_amounts
         assert 975 in consumption_amounts
         assert 1188 in consumption_amounts

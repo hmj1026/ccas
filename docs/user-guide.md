@@ -182,13 +182,28 @@ cp config/banks.example.yaml config/banks.yaml
    ```
 3. 在 `.env` 新增 web-fetch 憑證（格式 B 需要）：
    ```bash
-   FUBON_NATIONAL_ID=你的身分證字號
-   FUBON_ROC_BIRTHDAY=0881010
+   FUBON_NATIONAL_ID=你的身分證字號        # 格式 ^[A-Z][12]\d{8}$
+   FUBON_ROC_BIRTHDAY=0881010              # 民國年月日 7 碼
+   # 以下為選填 tuning knobs
+   FUBON_CAPTCHA_MAX_RETRIES=7             # 預設 7；CAPTCHA + doLogin 迴圈最大重試次數
+   FUBON_CAPTCHA_FALLBACK_LLM=false        # 預設 false；OCR 失敗後是否 fallback 至 Claude Vision
+   ANTHROPIC_API_KEY=sk-ant-...            # 僅在 FUBON_CAPTCHA_FALLBACK_LLM=true 時需要
    ```
    民國生日格式為 7 碼：民國年 3 碼 + 月 2 碼 + 日 2 碼（例如民國 88 年 10 月 10 日 = `0881010`）
 4. Gmail filter 會自動匹配寄件者 `rs@cf.taipeifubon.com.tw` 且主旨包含「台北富邦銀行」+「信用卡帳單」的郵件
 
-> **注意**：格式 B 的 CAPTCHA 驗證碼由 OCR 自動辨識（成功率約 90-95%）。若辨識失敗，系統會自動重試最多 3 次。需確保 Docker 環境中 tesseract 可用。
+> **免責聲明**：FUBON web-fetch 流程會代表「使用者本人」登入富邦信用卡帳單系統，系統僅讀取「使用者本人郵件」中的下載連結、使用「使用者本人身分證號」與生日登入，並下載本期帳單 PDF。此為「使用者授權代理」行為，請勿將他人憑證填入 `.env`。
+>
+> **CAPTCHA 處理**：驗證碼由 ddddocr 在容器內本地辨識；rejected 樣本觸發重試，`FUBON_CAPTCHA_MAX_RETRIES` 預設 7 次。若在 `FUBON_CAPTCHA_FALLBACK_LLM=true` 下，rejected 樣本會轉送 Claude Vision 作為 fallback（需 `ANTHROPIC_API_KEY`）。production image 已預裝 `fubon-llm` extra（`anthropic` SDK），無須額外 rebuild 即可啟用 fallback。
+
+**Troubleshooting — fetch 錯誤對應表**
+
+| FetchError 訊息 | 意義 | 建議處理 |
+| --- | --- | --- |
+| `captcha_retry_exhausted: N attempts failed` | OCR 在 N 次重試後仍無法通過 `doLogin` | (a) 設 `FUBON_CAPTCHA_FALLBACK_LLM=true` + `ANTHROPIC_API_KEY` 啟用 Claude Vision fallback；(b) 暫時切換 manual staging，將 PDF 放到 `STAGING_DIR/FUBON/` 繞過 web-fetch |
+| `record_not_found: doLogin msg='登入失敗, 查無資料'` | serial_key 已過期、或該期帳單已被抓取過 | 非憑證錯誤。正常情況下直接跳過即可；若剛送出新帳單信仍持續出現，確認 Gmail filter 是否抓到最新一封 |
+| `credentials_wrong: doLogin ...` | 身分證 / 生日與富邦登錄不符 | 校對 `FUBON_NATIONAL_ID`、`FUBON_ROC_BIRTHDAY`（民國 7 碼） |
+| `llm_fallback_unavailable: ...` | 已開啟 LLM fallback 但 SDK / API key 不可用 | 檢查 `ANTHROPIC_API_KEY` 是否有效；若為自建 image 且移除了 `fubon-llm` extra，需 rebuild backend image |
 
 ## 6. 啟動服務（Docker Compose）
 
@@ -211,6 +226,7 @@ docker compose up --build
 - 驗證環境變數（`scripts/check-env.sh`）
 - 檢查 tesseract OCR 可用性
 - 套用 alembic migration（`alembic upgrade head`）
+- **自動 seed `bank_configs`**（讀取容器內唯讀 mount 的 `/config/banks.yaml` 與 `/config/bank-code-registry.yaml`）— 無需手動執行 `scripts/setup.sh`，重啟 container 會自動保持 idempotent。
 - 啟動 uvicorn
 
 驗證服務正常：
@@ -291,3 +307,40 @@ docker compose down
 - 確認 bot token 正確
 - 確認 chat ID 正確：執行 `./scripts/get-telegram-chat-id.sh` 驗證
 - 測試 bot 連線：`curl https://api.telegram.org/bot<TOKEN>/getMe`
+
+### bank_configs 需要重新 seed
+
+`config/banks.yaml` 或 `config/bank-code-registry.yaml` 變更後，讓 container 重跑 entrypoint 的 seed 步驟即可生效：
+
+```bash
+docker compose restart backend
+```
+
+若不想重啟整個 service，可在 container 內手動執行（等價於 entrypoint 內的呼叫）：
+
+```bash
+docker exec -it ccas-backend-1 uv run python -m ccas.tools.bank_configs --apply
+```
+
+seed 為 idempotent 設計：重跑不會破壞既有資料，輸出會顯示 `created=0 updated=N unchanged=M`。
+Host 直接執行 `scripts/setup.sh` 的流程也使用同一條命令，靠環境變數 `BANK_CONFIG_DIR` 切換路徑；未設定時退回 `../config/...` 相對路徑。
+
+### 交易分類全部為「未分類」
+
+如果 `/transactions` 頁面或 `/api/transactions` 回應中 `category` 全為 `未分類`，最常見的原因是 `categories` 資料表為空或缺少對應 keyword。`config/categories.yaml` 是分類關鍵字的 **SSOT（Single Source of Truth）**，修改後請擇一方式重跑 seed：
+
+```bash
+# 方案一：重啟 backend，entrypoint 會自動重跑 seed
+docker compose restart backend
+
+# 方案二：在 container 內手動執行
+docker exec -it ccas-backend-1 uv run python -m ccas.tools.categories --apply
+```
+
+seed 策略：YAML 中存在的 keyword 會 UPSERT；使用者透過 API 額外新增的 keyword（不在 YAML 中）**不會**被 seed 流程刪除。若要調整分類，請以改 YAML 為優先。
+
+seed 完成後需重跑 classify 階段讓歷史交易套用新規則：
+
+```bash
+docker exec -it ccas-backend-1 uv run python -m ccas.pipeline --from classify --to classify
+```

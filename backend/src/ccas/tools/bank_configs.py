@@ -1,9 +1,20 @@
-"""從本地 YAML 同步銀行設定到資料庫。"""
+"""從本地 YAML 同步銀行設定到資料庫。
+
+預設 YAML 路徑的三層優先序（對應 change `fix-docker-bank-configs-seed`）：
+
+1. CLI explicit flag：`--config` / `--registry` 明示傳入的路徑最優先。
+2. 環境變數 `BANK_CONFIG_DIR`：若設定則 default 指向 `{BANK_CONFIG_DIR}/banks.yaml`
+   與 `{BANK_CONFIG_DIR}/bank-code-registry.yaml`，讓 container 端 (`/config`)
+   與 host 端共用同一條命令 `uv run python -m ccas.tools.bank_configs --apply`。
+3. Hard-coded fallback：`../config/banks.yaml` 與 `../config/bank-code-registry.yaml`，
+   對應 host 直接從 `backend/` 工作目錄執行的 `scripts/setup.sh` 流程。
+"""
 
 from __future__ import annotations
 
 import argparse
 import asyncio
+import os
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -264,19 +275,44 @@ async def _run_cli(args: argparse.Namespace) -> int:
     return 0
 
 
+_FALLBACK_CONFIG_PATH = "../config/banks.yaml"
+_FALLBACK_REGISTRY_PATH = "../config/bank-code-registry.yaml"
+
+
+def _default_config_path() -> str:
+    """Resolve banks.yaml default: `BANK_CONFIG_DIR` env > hard-coded fallback."""
+    env_dir = os.environ.get("BANK_CONFIG_DIR")
+    if env_dir:
+        return f"{env_dir.rstrip('/')}/banks.yaml"
+    return _FALLBACK_CONFIG_PATH
+
+
+def _default_registry_path() -> str:
+    """Resolve registry.yaml default: `BANK_CONFIG_DIR` env > hard-coded fallback."""
+    env_dir = os.environ.get("BANK_CONFIG_DIR")
+    if env_dir:
+        return f"{env_dir.rstrip('/')}/bank-code-registry.yaml"
+    return _FALLBACK_REGISTRY_PATH
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="將本地 banks.yaml 同步到 bank_configs 資料表。"
     )
     parser.add_argument(
         "--config",
-        default="../config/banks.yaml",
-        help="banks.yaml 路徑",
+        default=_default_config_path(),
+        help=(
+            "banks.yaml 路徑。優先序：此 flag > `BANK_CONFIG_DIR` 環境變數 > "
+            "`../config/banks.yaml` 預設值。"
+        ),
     )
     parser.add_argument(
         "--registry",
-        default="../config/bank-code-registry.yaml",
-        help="bank_code registry 路徑",
+        default=_default_registry_path(),
+        help=(
+            "bank_code registry 路徑。優先序同 `--config`。"
+        ),
     )
     parser.add_argument(
         "--database-url",

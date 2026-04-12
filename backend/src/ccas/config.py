@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from dotenv import dotenv_values
-from pydantic import Field, PrivateAttr, field_validator
+from pydantic import Field, PrivateAttr, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic_settings.sources.types import ENV_FILE_SENTINEL, DotenvType
 
@@ -67,6 +67,13 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379/0"
     scheduler_api_base_url: str = ""
     telegram_allowed_chat_ids: str = ""
+
+    # FUBON web-fetch pipeline tuning knobs. Credentials themselves
+    # (FUBON_NATIONAL_ID, FUBON_ROC_BIRTHDAY) live outside Settings and
+    # are read via ``get_bank_credential("FUBON", ...)`` like other banks.
+    fubon_captcha_max_retries: int = Field(default=7, ge=1, le=20)
+    fubon_captcha_fallback_llm: bool = False
+    anthropic_api_key: SecretStr = SecretStr("")
 
     _env_map: dict[str, str] = PrivateAttr(default_factory=dict)
 

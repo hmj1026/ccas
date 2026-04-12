@@ -24,7 +24,17 @@ dependencies = [
     "pytesseract>=0.3.13",
     "httpx",
     "beautifulsoup4",
+    # Captcha-specialized OCR: CNN + ONNX runtime (~76 MB wheel bundles
+    # common.onnx / common_det.onnx). Replaces EasyOCR+torch for the FUBON
+    # captcha solver — see openspec archive/fix-fubon-captcha-solver-accuracy.
+    # Exact pin: single-maintainer package (sml2h3), no org backing — avoid
+    # silent upgrade to a compromised future release. uv.lock captures the
+    # wheel hash for reproducibility.
+    "ddddocr==1.6.1",
 ]
+
+[project.optional-dependencies]
+fubon-llm = ["anthropic>=0.40.0"]
 
 [build-system]
 requires = ["hatchling"]
@@ -39,6 +49,14 @@ packages = ["src/ccas"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+# live_fubon: hits real Taipei Fubon SPA API + real Gmail; requires
+# FUBON_NATIONAL_ID / FUBON_ROC_BIRTHDAY / credentials.json / token.json.
+# Excluded from default runs because it is slow, non-deterministic
+# (captcha OCR), and rate-limited by the upstream bank.
+markers = [
+    "live_fubon: live FUBON web-fetch integration test (opt-in)",
+]
+addopts = "-m 'not live_fubon'"
 
 [tool.coverage.run]
 source = ["ccas"]
@@ -77,5 +95,6 @@ dev = [
     "pytest",
     "pytest-asyncio",
     "pytest-cov",
+    "respx",
     "ruff",
 ]

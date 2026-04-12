@@ -59,6 +59,20 @@ _REDACT_PATTERNS: list[re.Pattern[str]] = [
         r'("?(?:chat_id|telegram_chat_id)"?\s*[:=]\s*"?)-?\d{6,}\b',
         re.IGNORECASE,
     ),
+    # Bare Anthropic API key prefix. Catches ``sk-ant-api03-...`` tokens
+    # that appear in SDK exception messages or log lines even when the
+    # usual ``api_key=`` keyword is absent. Defence-in-depth in addition
+    # to ``Settings.anthropic_api_key`` being a ``SecretStr``.
+    re.compile(r"(sk-ant-api\d{2}-)[A-Za-z0-9_-]+"),
+    # Raw JWT values keyed by ``jwt`` / ``authorization``. Covers
+    # FUBON's raw ``Authorization`` header (no Bearer prefix) and
+    # ``"jwt": "..."`` fields in logged JSON bodies. The 4-char segment
+    # minimum avoids matching short version strings like "1.2.3".
+    re.compile(
+        r'("?(?:jwt|authorization)"?\s*[:=]\s*"?)'
+        r"[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]{4,}",
+        re.IGNORECASE,
+    ),
 ]
 
 _REDACT_REPLACEMENT = r"\g<1>[REDACTED]"

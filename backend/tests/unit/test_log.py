@@ -122,6 +122,19 @@ class TestRedactingFilter:
             exc_info=None,
         )
 
+    def test_redacts_anthropic_key_in_bare_message(
+        self, filt: RedactingFilter
+    ) -> None:
+        """Anthropic SDK exceptions can echo keys without an ``api_key=``
+        prefix; the bare-prefix pattern must catch these defensively."""
+        record = self._make_record(
+            "anthropic API error: invalid key sk-ant-api03-abc_DEF-123xyz"
+        )
+        filt.filter(record)
+        assert "[REDACTED]" in record.msg
+        assert "abc_DEF-123xyz" not in record.msg
+        assert "sk-ant-api03-" in record.msg  # prefix kept, suffix redacted
+
     def test_redacts_bearer_token(self, filt: RedactingFilter) -> None:
         record = self._make_record("Authorization: Bearer ya29.abc123xyz")
         filt.filter(record)
@@ -209,6 +222,23 @@ class TestRedactingFilter:
         filt.filter(record)
         assert "[REDACTED]" in record.msg
         assert "1001234567890" not in record.msg
+
+    def test_redacts_jwt_field(self, filt: RedactingFilter) -> None:
+        record = self._make_record(
+            'jwt="eyJhbGciOi.eyJzdWIiOi.SflKxwRJSM"'
+        )
+        filt.filter(record)
+        assert "[REDACTED]" in record.msg
+        assert "SflKxwRJSM" not in record.msg
+
+    def test_redacts_authorization_raw_jwt(self, filt: RedactingFilter) -> None:
+        """FUBON uses a raw JWT in Authorization (no Bearer prefix)."""
+        record = self._make_record(
+            "Authorization=eyJhbGciOi.eyJzdWIiOi.SflKxwRJSM"
+        )
+        filt.filter(record)
+        assert "[REDACTED]" in record.msg
+        assert "SflKxwRJSM" not in record.msg
 
     def test_pii_field_in_dict_args(self, filt: RedactingFilter) -> None:
         record = self._make_record("%(key)s")

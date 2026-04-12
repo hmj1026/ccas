@@ -6,8 +6,16 @@ FROM python:3.12-slim AS builder
 COPY --from=uv /uv /usr/local/bin/uv
 WORKDIR /app
 COPY pyproject.toml uv.lock ./
+# ``fubon-llm`` extra installs the ``anthropic`` SDK so the documented
+# ``FUBON_CAPTCHA_FALLBACK_LLM=true`` recovery path is actually functional
+# in the stock production image. Without it, enabling the flag would
+# surface ``llm_fallback_unavailable`` at runtime (fail-loud) instead of
+# silently degrading to OCR-only.
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --no-dev --no-editable
+    uv sync --no-dev --no-editable --extra fubon-llm
+# ddddocr ships its ONNX models inside the wheel (~76 MB), so no remote
+# preload is required at build time — the prior EasyOCR preload step was
+# removed via fix-fubon-captcha-solver-accuracy.
 
 # Stage: dev — hot reload, source bind-mounted at runtime
 FROM python:3.12-slim AS dev

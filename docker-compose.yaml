@@ -5,6 +5,7 @@ x-shared-env: &shared-env
   GMAIL_TOKEN_PATH: "/data/token.json"
   REDIS_URL: redis://redis:6379/0
   LOG_DIR: "/logs"
+  BANK_CONFIG_DIR: "/config"
 
 services:
   backend:
@@ -15,6 +16,7 @@ services:
       - "127.0.0.1:8000:8000"
     volumes:
       - ./backend/data:/data
+      - ./config:/config:ro
       - ./scripts:/scripts:ro
       - ./backend/scripts:/app/scripts:ro
       - ./.env.example:/app/.env.example:ro
@@ -43,6 +45,7 @@ services:
       target: production
     volumes:
       - ./backend/data:/data
+      - ./config:/config:ro
       - ./logs:/logs
     env_file:
       - ./.env
@@ -66,6 +69,7 @@ services:
       target: production
     volumes:
       - ./backend/data:/data
+      - ./config:/config:ro
       - ./logs:/logs
     env_file:
       - ./.env
@@ -88,6 +92,7 @@ services:
       target: production
     volumes:
       - ./backend/data:/data
+      - ./config:/config:ro
       - ./logs:/logs
     env_file:
       - ./.env

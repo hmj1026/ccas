@@ -91,6 +91,32 @@ _RE_TRANSACTION_LINE_SIMPLE = re.compile(
     re.MULTILINE,
 )
 
+# Kept per-bank (not shared with SINOPAC) because the failure modes differ:
+# UBOT uses "現金回饋", "紅利折抵", "專案：想分調整..." which SINOPAC never emits.
+_CASHBACK_KEYWORDS = (
+    "現金回饋",
+    "回饋入帳",
+    "紅利折抵",
+    "抵扣",
+    "退款",
+    "退貨",
+    "退費",
+    "沖銷",
+)
+_CASHBACK_LINE_PREFIXES = ("(-)", "－", "(−)")
+
+
+def _is_cashback_row(raw_line: str, merchant: str, amount: int) -> bool:
+    """Return True if the row represents a cashback / refund / adjustment."""
+    stripped = merchant.lstrip()
+    if stripped.startswith(_CASHBACK_KEYWORDS):
+        return True
+    if amount < 0:
+        return True
+    if raw_line.lstrip().startswith(_CASHBACK_LINE_PREFIXES):
+        return True
+    return False
+
 
 def _parse_date(raw: str, billing_year: int) -> date | None:
     """Parse a date string in various formats (YYYY/MM/DD, MM/DD, ROC YYY/MM/DD)."""
@@ -451,6 +477,9 @@ def _parse_ubot_real_transaction(
         return None
 
     if trans_date is None:
+        return None
+
+    if _is_cashback_row(match.group(0), merchant, amount):
         return None
 
     return TransactionItem(

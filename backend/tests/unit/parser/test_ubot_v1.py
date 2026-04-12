@@ -448,7 +448,7 @@ class TestRealPdfFormat:
         assert len(txns) == 1
         assert txns[0].amount == 98
 
-    def test_extracts_negative_refund(self):
+    def test_filters_out_negative_refund(self):
         parser = _make_parser()
         page = make_mock_page("12/31 12/26 專案：想分調整某保險公司 ＸＸＸＸ -12,152\n")
 
@@ -457,8 +457,7 @@ class TestRealPdfFormat:
             2026,
         )
 
-        assert len(txns) == 1
-        assert txns[0].amount == -12152
+        assert len(txns) == 0
 
     def test_card_header_tracking(self):
         parser = _make_parser()
@@ -484,10 +483,11 @@ class TestRealPdfFormat:
             2026,
         )
 
-        # Expected: installment, local, refund, foreign, mobile payment
+        # Refund row (-12152) is filtered out; expect installment, local,
+        # foreign, and mobile payment rows only.
         amounts = [t.amount for t in txns]
         assert 2603 in amounts
         assert 12152 in amounts
-        assert -12152 in amounts
+        assert -12152 not in amounts
         assert 120 in amounts
         assert 98 in amounts

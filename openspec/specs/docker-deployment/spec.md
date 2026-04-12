@@ -99,7 +99,7 @@ The system SHALL provide a `docs/deployment-guide.md` covering prerequisites, cr
 
 ### Requirement: Logs bind mount for persistence
 
-Docker Compose 使用 bind mount 將專案根目錄 `./logs/` 掛載至容器內 `/logs`，搭配 `logs/.gitkeep` 確保目錄存在於 git。
+Docker Compose SHALL 使用 bind mount 將專案根目錄 `./logs/` 掛載至容器內 `/logs`，搭配 `logs/.gitkeep` 確保目錄存在於 git。
 
 #### Scenario: container restart preserves logs
 - **WHEN** 任一服務容器重啟
@@ -115,9 +115,113 @@ Docker Compose 使用 bind mount 將專案根目錄 `./logs/` 掛載至容器內
 
 ### Requirement: LOG_DIR in shared environment
 
-`x-shared-env` anchor 中加入 `LOG_DIR` 設定。
+系統 SHALL 在 `x-shared-env` anchor 中加入 `LOG_DIR` 設定。
 
 #### Scenario: shared-env includes LOG_DIR
 - **WHEN** 服務使用 `<<: *shared-env`
 - **THEN** `LOG_DIR` 被設定為 `/logs`
+
+### Requirement: Bank config volume mount
+
+The system SHALL mount the host `./config/` directory into backend, worker, scheduler, and bot containers as read-only at `/config`, so that `banks.yaml` and `bank-code-registry.yaml` are available inside the container without rebuilding the image.
+
+#### Scenario: Backend container can read bank config
+
+- **WHEN** `docker compose up -d backend` completes
+- **THEN** `docker exec ccas-backend-1 ls /config/banks.yaml /config/bank-code-registry.yaml` SHALL return both files with exit code 0
+
+#### Scenario: Config mount is read-only
+
+- **WHEN** the backend container attempts to write to `/config/banks.yaml`
+- **THEN** the write SHALL fail with a read-only filesystem error
+
+#### Scenario: All pipeline-relevant services receive the mount
+
+- **WHEN** `docker compose config` is rendered
+- **THEN** the `backend`, `worker`, `scheduler`, and `bot` services SHALL each include `./config:/config:ro` in their `volumes`; the `frontend` and `redis` services SHALL NOT include it
+
+### Requirement: Automatic bank_configs seeding on backend startup
+
+The system SHALL seed the `bank_configs` table from `/config/banks.yaml` and `/config/bank-code-registry.yaml` during backend container startup, after database migrations have been applied and before uvicorn starts serving requests. The seed step MUST be idempotent — unchanged rows SHALL NOT be rewritten on subsequent restarts.
+
+#### Scenario: Fresh container seeds from empty table
+
+- **WHEN** a clean `docker compose up -d backend` runs against an empty database
+- **THEN** the entrypoint SHALL execute `uv run python -m ccas.tools.bank_configs --apply`, the tool SHALL report `created=N` where N matches the number of enabled banks in `banks.yaml`, and uvicorn SHALL start successfully afterwards
+
+#### Scenario: Restart after seed is idempotent
+
+- **WHEN** a backend container that has already seeded `bank_configs` is restarted without changing `banks.yaml`
+- **THEN** the entrypoint seed step SHALL report `created=0 updated=0 unchanged=N` and SHALL NOT raise
+
+#### Scenario: Seed failure aborts startup
+
+- **WHEN** the bank_configs seed step exits with a non-zero status (e.g. malformed YAML, DB unreachable)
+- **THEN** `docker-entrypoint.sh` SHALL exit non-zero without `exec`-ing uvicorn, and the container SHALL be marked unhealthy by Compose
+
+#### Scenario: Pipeline ingest succeeds immediately after first startup
+
+- **WHEN** an operator runs `docker compose up -d` on a fresh clone followed by `docker exec ccas-backend-1 uv run python -m ccas.pipeline --bank CTBC --to ingest`
+- **THEN** the pipeline SHALL NOT raise `未找到任何啟用的銀行設定` and the ingest stage SHALL proceed past bank-config validation
+
+### Requirement: BANK_CONFIG_DIR environment variable overrides CLI defaults
+
+The `ccas.tools.bank_configs` CLI SHALL honor the `BANK_CONFIG_DIR` environment variable as the source of default paths for `--config` and `--registry`. Explicit `--config` / `--registry` flags MUST still take precedence over the environment variable, and the environment variable MUST take precedence over the hard-coded `../config/...` defaults.
+
+#### Scenario: Env var sets defaults inside container
+
+- **WHEN** `BANK_CONFIG_DIR=/config` is set and `uv run python -m ccas.tools.bank_configs --apply` is invoked with no path flags
+- **THEN** the tool SHALL read `/config/banks.yaml` and `/config/bank-code-registry.yaml`
+
+#### Scenario: Explicit flag overrides env var
+
+- **WHEN** `BANK_CONFIG_DIR=/config` is set and the tool is invoked as `--config /tmp/custom-banks.yaml --registry /tmp/custom-registry.yaml --apply`
+- **THEN** the tool SHALL read from the `/tmp/custom-*` paths and ignore `BANK_CONFIG_DIR`
+
+#### Scenario: Host fallback when env var unset
+
+- **WHEN** `BANK_CONFIG_DIR` is unset (as in `scripts/setup.sh` host flow)
+- **THEN** the tool SHALL fall back to the hard-coded `../config/banks.yaml` and `../config/bank-code-registry.yaml` defaults relative to the backend working directory
+
+### Requirement: Automatic categories seeding on backend startup
+
+The system SHALL seed the `categories` table from `/config/categories.yaml` during backend container startup, immediately after the `bank_configs` seed step and before uvicorn starts serving requests. The seed step MUST be idempotent and MUST fast-fail with non-zero exit on failure.
+
+#### Scenario: Fresh container seeds categories
+
+- **WHEN** a clean `docker compose up -d backend` runs against an empty database
+- **THEN** the entrypoint SHALL execute `uv run python -m ccas.tools.categories --apply` after `bank_configs --apply`, the tool SHALL report `created=N` matching the YAML row count, and uvicorn SHALL start successfully afterwards
+
+#### Scenario: Restart is idempotent
+
+- **WHEN** a backend container that has already seeded categories is restarted without changing `categories.yaml`
+- **THEN** the entrypoint categories step SHALL report `created=0 updated=0 unchanged=N` and SHALL NOT raise
+
+#### Scenario: Seed failure aborts startup
+
+- **WHEN** the categories seed step exits with non-zero status
+- **THEN** `docker-entrypoint.sh` SHALL exit non-zero without `exec`-ing uvicorn
+
+### Requirement: Docker image SHALL 預載 EasyOCR 模型權重
+
+Backend Docker image build 階段 SHALL 預下載 EasyOCR 英文模型權重（`craft_mlt_25k.pth` + `english_g2.pth`），避免容器 runtime 首次呼叫 FUBON fetcher 時才觸發下載（會拖長啟動時間且依賴 runtime 對外網路）。
+
+#### Scenario: image 內包含 EasyOCR 權重檔
+
+- **WHEN** backend image build 完成後檢查 `/root/.EasyOCR/model/` 或對應使用者家目錄
+- **THEN** 目錄 SHALL 存在 `craft_mlt_25k.pth` 與 `english_g2.pth` 兩個檔案
+
+#### Scenario: 容器啟動後第一次呼叫不觸發下載
+
+- **WHEN** 容器 fresh 啟動後首次執行 FUBON fetcher，且 runtime 無對外網路存取
+- **THEN** EasyOCR `Reader(['en'])` SHALL 成功初始化，不拋出下載相關錯誤
+
+### Requirement: Docker Compose SHALL 將 FUBON 專屬 env 視為可選
+
+`docker-compose.yml` 與 `x-shared-env` anchor SHALL 將 `FUBON_ID_NUMBER`、`FUBON_BIRTHDAY`、`FUBON_CAPTCHA_MAX_RETRIES`、`FUBON_CAPTCHA_FALLBACK_LLM` 列入 env 傳遞清單但不 hardcode 值；未設定時容器 SHALL 正常啟動，FUBON fetcher 會在執行時回 `credentials_missing` 的明確錯誤。
+
+#### Scenario: 未設 FUBON env 的 compose up
+
+- **WHEN** 使用者 `.env` 完全沒有 `FUBON_*` 變數，執行 `docker compose up -d`
+- **THEN** 所有 7 個 services SHALL 正常 healthy，backend SHALL 正常提供其他銀行的 pipeline
 

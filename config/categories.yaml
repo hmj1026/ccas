@@ -1,0 +1,160 @@
+# 消費分類關鍵字對照（SSOT）
+#
+# 用法：`ccas.tools.categories --apply` 會把這份清單同步到 `categories` 資料表。
+# 比對策略：交易商家名稱 `LIKE '%keyword%'` 即視為命中該分類。
+# 管理原則：
+#   - 新增／調整分類 → 改這個檔案然後重跑 `--apply`
+#   - 使用者在 API 直接新增的自訂 row（不在本 YAML 中）不會被 seed 流程刪除
+#   - keyword 應避免泛詞（「食」「店」等），盡量以品牌／商家全名為主
+#
+# Schema：
+#   categories:
+#     - category: <類別名稱>
+#       keywords:
+#         - <關鍵字>
+
+categories:
+  - category: 餐飲
+    keywords:
+      - 麥當勞
+      - 肯德基
+      - 摩斯漢堡
+      - SUBWAY
+      - 必勝客
+      - 達美樂
+      - 鼎泰豐
+      - 王品
+      - 瓦城
+      - 三商巧福
+      - 爭鮮
+      - くら寿司
+      - 藏壽司
+      - 壽司郎
+      - 八方雲集
+      - 美而美
+      - 胖老爹
+      - 路易莎
+      - CAMA
+      - 拿坡里
+
+  - category: 咖啡飲料
+    keywords:
+      - 星巴克
+      - STARBUCKS
+      - LOUISA
+      - 85度C
+      - 85度c
+      - 路易莎咖啡
+      - CAMA CAFE
+      - 可不可
+      - 清心福全
+      - 五十嵐
+      - 50嵐
+      - 大苑子
+      - 迷客夏
+      - 麻古茶坊
+      - 春水堂
+
+  - category: 超商
+    keywords:
+      - 7-ELEVEN
+      - 統一超商
+      - 全家便利
+      - 全家FAMILY
+      - FAMILYMART
+      - 萊爾富
+      - OK超商
+      - OKMART
+
+  - category: 交通
+    keywords:
+      - 台灣高鐵
+      - 台鐵
+      - 高鐵
+      - 悠遊卡
+      - 一卡通
+      - iPASS
+      - UBER
+      - Uber
+      - LINE TAXI
+      - 台灣大車隊
+      - 55688
+      - 中油
+      - 台塑
+      - 台塑石油
+      - FULLON
+      - 停車場
+      - 嘟嘟房
+
+  - category: 購物
+    keywords:
+      - 全聯
+      - 家樂福
+      - 大潤發
+      - COSTCO
+      - 好市多
+      - 新光三越
+      - 遠東百貨
+      - 微風
+      - SOGO
+      - 統一時代
+      - 誠品
+      - MITSUI OUTLET
+      - LaLaport
+      - 蝦皮
+      - PChome
+      - MOMO
+      - momo購物
+      - 露天拍賣
+      - 博客來
+
+  - category: 娛樂
+    keywords:
+      - 威秀影城
+      - 威秀
+      - 秀泰影城
+      - 國賓影城
+      - 新光影城
+      - KKBOX
+      - Spotify
+      - SPOTIFY
+      - 劍湖山
+      - 六福村
+      - 麗寶
+
+  - category: 訂閱服務
+    keywords:
+      - Netflix
+      - NETFLIX
+      - Disney Plus
+      - DISNEY+
+      - YouTube Premium
+      - Google One
+      - GOOGLE
+      - Apple.com
+      - APPLE COM BILL
+      - iCloud
+      - ICLOUD
+      - OpenAI
+      - ChatGPT
+      - Anthropic
+      - Claude
+      - Adobe
+      - ADOBE
+      - Microsoft
+      - GitHub
+      - AWS
+
+  - category: 帳單水電
+    keywords:
+      - 中華電信
+      - 遠傳
+      - 台灣大哥大
+      - 亞太電信
+      - 台灣之星
+      - 台灣電力
+      - 台電
+      - 自來水
+      - 台水
+      - 大台北瓦斯
+      - 欣欣瓦斯

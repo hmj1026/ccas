@@ -64,9 +64,31 @@ _RE_ROC_CLOSING_DUE_PAIR = re.compile(
 
 # -- Transaction patterns --
 
-# Table-based: headers contain 交易日 and 金額
-_TRANSACTION_HEADER_KEYWORDS = ("交易日", "金額")
+_TRANSACTION_HEADER_DATE_KEYWORDS = ("交易日", "消費日", "日期")
+_TRANSACTION_HEADER_AMOUNT_KEYWORDS = ("金額", "新臺幣金額", "款項")
+
+# Sections that follow the consumption table and share its date+amount shape,
+# so text-line regex would otherwise mis-capture their summary rows.
+_NON_TRANSACTION_SECTION_ANCHORS = (
+    "帳單分期",
+    "紅利點數",
+    "優惠回饋",
+    "本期回饋",
+    "累積紅利",
+    "循環信用",
+)
+
 _RE_DATE_MMDD = re.compile(r"^(\d{2})/(\d{2})$")
+
+
+def _crop_transaction_section(text: str) -> str:
+    """Truncate ``text`` at the first non-transaction section anchor."""
+    earliest = len(text)
+    for anchor in _NON_TRANSACTION_SECTION_ANCHORS:
+        idx = text.find(anchor)
+        if idx != -1 and idx < earliest:
+            earliest = idx
+    return text[:earliest]
 
 # Text line-based transactions:
 # YYYY/MM/DD  YYYY/MM/DD  MERCHANT  AMOUNT  (or similar)
@@ -286,12 +308,20 @@ def _extract_transactions_table(
 
 
 def _is_transaction_table(table: list[list[str | None]]) -> bool:
-    """Return True if the table header contains transaction keywords."""
+    """Return True if header has both a date-like and an amount-like keyword."""
     if not table:
         return False
     header = [str(cell or "") for cell in table[0]]
     header_text = " ".join(header)
-    return all(kw in header_text for kw in _TRANSACTION_HEADER_KEYWORDS)
+    has_date = any(kw in header_text for kw in _TRANSACTION_HEADER_DATE_KEYWORDS)
+    has_amount = any(kw in header_text for kw in _TRANSACTION_HEADER_AMOUNT_KEYWORDS)
+    if not (has_date and has_amount):
+        return False
+    # Installment detail tables also match date+amount; the "分期" token
+    # disambiguates them from regular consumption tables.
+    if "分期" in header_text:
+        return False
+    return True
 
 
 def _parse_transaction_row(
@@ -371,7 +401,8 @@ def _extract_transactions_text(
     """Extract transactions from text lines."""
     items: list[TransactionItem] = []
     for page in pages:
-        text = page.extract_text() or ""
+        raw_text = page.extract_text() or ""
+        text = _crop_transaction_section(raw_text)
         # Try full format first (date date merchant amount)
         for match in _RE_TRANSACTION_LINE.finditer(text):
             item = _parse_text_transaction(match, billing_year)
