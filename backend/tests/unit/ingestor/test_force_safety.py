@@ -117,7 +117,9 @@ class TestForceModeSafety:
         )
 
         # Old record should be cleaned up after download success
-        mock_cleanup.assert_called_once_with(existing_record.staged_path)
+        mock_cleanup.assert_called_once_with(
+            "/data/staged", existing_record.staged_path
+        )
         mock_delete.assert_called_once_with(session, existing_record)
 
         # New record should be created
