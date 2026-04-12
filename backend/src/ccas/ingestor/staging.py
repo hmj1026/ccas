@@ -90,7 +90,9 @@ def resolve_staged_path(staging_dir: str, stored_path: str) -> Path:
             seg_dir = parts[-2] if len(parts) >= 2 else None
             seg_file = p.name
             if seg_file in {"", ".", ".."} or (seg_dir and seg_dir in {"", ".", ".."}):
-                raise ValueError(f"Legacy path contains traversal components: {stored_path}")
+                raise ValueError(
+                    f"Legacy path contains traversal components: {stored_path}"
+                )
             if seg_dir and not _BANK_CODE_RE.fullmatch(seg_dir):
                 raise ValueError(f"Legacy path has invalid bank segment: {stored_path}")
             relative = Path(seg_dir) / seg_file if seg_dir else Path(seg_file)
