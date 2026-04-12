@@ -8,7 +8,6 @@
 import asyncio
 import logging
 from dataclasses import dataclass, field
-from pathlib import Path
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -16,6 +15,7 @@ from ccas.config import get_settings
 from ccas.decryptor.decrypt import DecryptionError, decrypt_pdf_multi
 from ccas.decryptor.password import resolve_passwords
 from ccas.decryptor.staging import fetch_pending_attachments, update_attachment_status
+from ccas.ingestor.staging import resolve_staged_path
 from ccas.pipeline.options import PipelineOptions
 from ccas.storage.models import StagedAttachment
 
@@ -49,9 +49,9 @@ async def _process_attachment(
     """處理單一附件的解密。"""
     settings = get_settings()
     passwords = resolve_passwords(settings, attachment.bank_code)
-    staged_path = attachment.staged_path
+    raw_path = attachment.staged_path
 
-    if staged_path is None:
+    if raw_path is None:
         error_msg = (
             f"缺少 staged_path，無法解密 ({attachment.bank_code}/"
             f"{attachment.original_filename})"
@@ -68,9 +68,27 @@ async def _process_attachment(
         return
 
     try:
+        staged_path = resolve_staged_path(settings.staging_dir, raw_path)
+    except ValueError:
+        error_msg = (
+            f"staged_path 逃逸 staging 根目錄 ({attachment.bank_code}/"
+            f"{attachment.original_filename}): {raw_path}"
+        )
+        summary.failed_count += 1
+        summary.errors.append(error_msg)
+        logger.error(error_msg)
+        await update_attachment_status(
+            session,
+            attachment,
+            status="decrypt_failed",
+            error_reason=error_msg,
+        )
+        return
+
+    try:
         result = await asyncio.to_thread(
             decrypt_pdf_multi,
-            Path(staged_path),
+            staged_path,
             passwords,
         )
     except DecryptionError as exc:
