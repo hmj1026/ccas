@@ -32,9 +32,7 @@ _VALID_CREDS = {
     "roc_birthday": "0750101",
 }
 
-_PATCH_SETTINGS = (
-    "ccas.ingestor.fetcher.banks.fubon.get_settings"
-)
+_PATCH_SETTINGS = "ccas.ingestor.fetcher.banks.fubon.get_settings"
 
 
 def _make_settings(tmp_path: Path) -> Settings:
@@ -51,7 +49,8 @@ def _make_settings(tmp_path: Path) -> Settings:
 
 
 def _write_pdf(
-    path: Path, content: bytes = b"%PDF-1.4\nfake",
+    path: Path,
+    content: bytes = b"%PDF-1.4\nfake",
 ) -> None:
     path.write_bytes(content)
 
@@ -64,20 +63,23 @@ class TestManualStagingEmpty:
     """Scenario 1: empty dir → FetchError with guidance."""
 
     def test_empty_dir_raises_with_guidance(
-        self, tmp_path: Path,
+        self,
+        tmp_path: Path,
     ) -> None:
         settings = _make_settings(tmp_path)
         fetcher = FubonFetcher()
 
         with (
             patch.object(
-                flow, "download",
+                flow,
+                "download",
                 AsyncMock(side_effect=_spa_error()),
             ),
             patch(_PATCH_SETTINGS, return_value=settings),
         ):
             with pytest.raises(
-                FetchError, match="manual-staging",
+                FetchError,
+                match="manual-staging",
             ):
                 fetcher.fetch_pdf(_SPA_HTML, _VALID_CREDS)
 
@@ -86,7 +88,8 @@ class TestManualStagingMonthMatch:
     """Scenario 2: filename contains billing month."""
 
     def test_exact_month_match_and_move(
-        self, tmp_path: Path,
+        self,
+        tmp_path: Path,
     ) -> None:
         settings = _make_settings(tmp_path)
         manual_dir = Path(settings.fubon_manual_staging_dir)
@@ -100,14 +103,15 @@ class TestManualStagingMonthMatch:
         fetcher = FubonFetcher()
         html = (
             "<html><body>"
-            "<p>2026\u5E7403\u6708\u4FE1\u7528\u5361\u5E33\u55AE</p>"
+            "<p>2026\u5e7403\u6708\u4fe1\u7528\u5361\u5e33\u55ae</p>"
             '<a href="https://fbmbill.taipeifubon.com.tw/abc">'
             "link</a></body></html>"
         )
 
         with (
             patch.object(
-                flow, "download",
+                flow,
+                "download",
                 AsyncMock(side_effect=_spa_error()),
             ),
             patch(_PATCH_SETTINGS, return_value=settings),
@@ -125,7 +129,8 @@ class TestManualStagingSingleNoMonth:
     """Scenario 3: single file without month → pick it."""
 
     def test_single_file_picked(
-        self, tmp_path: Path,
+        self,
+        tmp_path: Path,
     ) -> None:
         settings = _make_settings(tmp_path)
         manual_dir = Path(settings.fubon_manual_staging_dir)
@@ -136,13 +141,15 @@ class TestManualStagingSingleNoMonth:
         fetcher = FubonFetcher()
         with (
             patch.object(
-                flow, "download",
+                flow,
+                "download",
                 AsyncMock(side_effect=_spa_error()),
             ),
             patch(_PATCH_SETTINGS, return_value=settings),
         ):
             result = fetcher.fetch_pdf(
-                _SPA_HTML, _VALID_CREDS,
+                _SPA_HTML,
+                _VALID_CREDS,
             )
 
         assert result == b"%PDF-1.4\nsingle"
@@ -153,7 +160,8 @@ class TestManualStagingMultipleAmbiguous:
     """Scenario 4: multiple files without month → error."""
 
     def test_multiple_ambiguous_raises(
-        self, tmp_path: Path,
+        self,
+        tmp_path: Path,
     ) -> None:
         settings = _make_settings(tmp_path)
         manual_dir = Path(settings.fubon_manual_staging_dir)
@@ -164,14 +172,16 @@ class TestManualStagingMultipleAmbiguous:
         fetcher = FubonFetcher()
         with (
             patch.object(
-                flow, "download",
+                flow,
+                "download",
                 AsyncMock(side_effect=_spa_error()),
             ),
             patch(_PATCH_SETTINGS, return_value=settings),
         ):
             with pytest.raises(FetchError, match="無法對應"):
                 fetcher.fetch_pdf(
-                    _SPA_HTML, _VALID_CREDS,
+                    _SPA_HTML,
+                    _VALID_CREDS,
                 )
 
 
@@ -179,7 +189,8 @@ class TestManualStagingSpaFallback:
     """Scenario 5: SPA failure → fallback succeeds."""
 
     def test_spa_failure_falls_back(
-        self, tmp_path: Path,
+        self,
+        tmp_path: Path,
     ) -> None:
         settings = _make_settings(tmp_path)
         manual_dir = Path(settings.fubon_manual_staging_dir)
@@ -191,7 +202,7 @@ class TestManualStagingSpaFallback:
 
         fetcher = FubonFetcher()
         html = (
-            "<html><body><p>2026\u5E7403\u6708</p>"
+            "<html><body><p>2026\u5e7403\u6708</p>"
             '<a href="https://fbmbill.taipeifubon.com.tw/x">'
             "link</a></body></html>"
         )
@@ -201,7 +212,8 @@ class TestManualStagingSpaFallback:
         )
         with (
             patch.object(
-                flow, "download",
+                flow,
+                "download",
                 AsyncMock(side_effect=err),
             ),
             patch(_PATCH_SETTINGS, return_value=settings),

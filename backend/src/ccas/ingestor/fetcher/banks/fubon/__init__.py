@@ -157,12 +157,13 @@ class FubonFetcher(BankFetcher):
         if dest.exists():
             raise FetchError(
                 self.bank_code,
-                "manual_staging_conflict: "
-                f"{dest} 已存在。請移除後重試。",
+                f"manual_staging_conflict: {dest} 已存在。請移除後重試。",
             )
         shutil.move(chosen, dest)
         logger.info(
-            "manual-staging fallback: %s → %s", chosen.name, dest,
+            "manual-staging fallback: %s → %s",
+            chosen.name,
+            dest,
         )
         return dest
 
