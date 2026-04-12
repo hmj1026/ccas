@@ -190,6 +190,7 @@ class TestFetchPdf:
                 _SPA_IMG_ANCHOR_HTML,
                 {"national_id": " A123456789 ", "roc_birthday": " 0750101 "},
             )
+        assert mock_flow.await_args is not None
         kwargs = mock_flow.await_args.kwargs
         assert kwargs["id_number"] == "A123456789"
         assert kwargs["birthday"] == "0750101"

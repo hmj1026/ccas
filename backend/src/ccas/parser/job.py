@@ -261,7 +261,9 @@ async def _process_attachment(
         )
 
     # 建立 Bill 與 Transaction 記錄
-    await create_bill_and_transactions(session, parse_result, file_path=staged_path)
+    await create_bill_and_transactions(
+        session, parse_result, file_path=str(staged_path)
+    )
     await update_attachment_status(session, attachment, status="parsed")
 
     summary.parsed_count += 1
