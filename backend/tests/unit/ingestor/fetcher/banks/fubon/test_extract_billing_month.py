@@ -6,7 +6,6 @@ from ccas.ingestor.fetcher.banks.fubon import _extract_billing_month
 
 
 class TestExtractBillingMonth:
-
     def test_standard_format(self):
         assert _extract_billing_month("2026年03月信用卡帳單") == "2026-03"
 

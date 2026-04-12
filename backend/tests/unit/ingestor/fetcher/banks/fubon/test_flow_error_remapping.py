@@ -62,9 +62,7 @@ async def test_redirect_error_remapped_to_fetch_error() -> None:
 @pytest.mark.asyncio
 async def test_session_error_remapped_to_fetch_error() -> None:
     c = _fake_client()
-    c.get_bill_pdf = AsyncMock(
-        side_effect=FubonSessionError("PDFReportProc http 401")
-    )
+    c.get_bill_pdf = AsyncMock(side_effect=FubonSessionError("PDFReportProc http 401"))
     good = captcha.CaptchaResult(text="4707", confidence=0.98)
     with (
         patch.object(flow, "FubonClient", return_value=c),

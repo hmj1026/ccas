@@ -80,9 +80,7 @@ async def test_get_bill_pdf_non_200_raises_session_error() -> None:
         mock.get("https://fbmbill.taipeifubon.com.tw/PDFReportProc").mock(
             return_value=httpx.Response(401, text="unauthorized")
         )
-        with pytest.raises(
-            errors.FubonSessionError, match="PDFReportProc http 401"
-        ):
+        with pytest.raises(errors.FubonSessionError, match="PDFReportProc http 401"):
             await client.get_bill_pdf(
                 bill_period="11504",
                 batch_period="20260410",

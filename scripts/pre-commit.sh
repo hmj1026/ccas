@@ -64,8 +64,8 @@ if [ ${#BACKEND_PY_FILES[@]} -gt 0 ]; then
             EXIT_CODE=1
         fi
 
-        echo "-> ruff format (staged files)"
-        if ! uv run ruff format --check "${REL_PY_FILES[@]}"; then
+        echo "-> ruff format (all backend files)"
+        if ! uv run ruff format --check .; then
             EXIT_CODE=1
         fi
 

@@ -9,9 +9,10 @@ from ccas.ingestor.fetcher.base import FetchError
 
 
 class TestExtractSerialKey:
-
     def test_direct_link(self):
-        html = '<html><a href="https://fbmbill.taipeifubon.com.tw/abcdef123">x</a></html>'
+        html = (
+            '<html><a href="https://fbmbill.taipeifubon.com.tw/abcdef123">x</a></html>'
+        )
         assert _extract_serial_key(html) == "abcdef123"
 
     def test_client_pdf_prefix_stripped(self):

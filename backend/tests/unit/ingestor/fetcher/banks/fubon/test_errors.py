@@ -11,7 +11,6 @@ from ccas.ingestor.fetcher.banks.fubon.errors import (
 
 
 class TestErrorHierarchy:
-
     def test_redirect_error_is_flow_error(self):
         assert issubclass(FubonRedirectError, FubonFlowError)
 
@@ -26,7 +25,6 @@ class TestErrorHierarchy:
 
 
 class TestFubonLoginError:
-
     def test_attributes(self):
         err = FubonLoginError("id_wrong", raw_code=1001, message="身分證字號不正確")
         assert err.code == "id_wrong"

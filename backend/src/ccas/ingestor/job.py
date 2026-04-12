@@ -92,9 +92,7 @@ def _build_gmail_query(
     return f"{base_filter} {date_clause}"
 
 
-async def _cleanup_old_staged_file(
-    staging_dir: str, staged_path: str | None
-) -> None:
+async def _cleanup_old_staged_file(staging_dir: str, staged_path: str | None) -> None:
     """刪除舊的 staging 檔案（若存在）。"""
     if not staged_path:
         return

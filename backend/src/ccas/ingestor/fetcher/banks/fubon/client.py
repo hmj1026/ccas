@@ -67,6 +67,7 @@ def _make_ssl_context() -> ssl.SSLContext:
     ctx.verify_flags &= ~ssl.VERIFY_X509_STRICT
     return ctx
 
+
 _MAIN_INFO_FIELDS: tuple[str, ...] = (
     "billPeriod",
     "twYearMonth",

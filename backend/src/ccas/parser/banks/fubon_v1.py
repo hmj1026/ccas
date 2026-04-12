@@ -399,7 +399,9 @@ def _extract_transactions_text(
             txn_match = _RE_FUBON_TRANSACTION_LINE.match(line.strip())
             if txn_match:
                 item = _parse_fubon_text_transaction(
-                    txn_match, billing_year, card_last4=current_card,
+                    txn_match,
+                    billing_year,
+                    card_last4=current_card,
                 )
                 if item is not None:
                     items.append(item)

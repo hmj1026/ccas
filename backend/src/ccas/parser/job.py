@@ -163,8 +163,7 @@ async def _process_attachment(
         staged_path = resolve_staged_path(settings.staging_dir, raw_path)
     except ValueError:
         error_msg = (
-            f"staged_path 逃逸 staging 根目錄：bank_code={bank_code}, "
-            f"path={raw_path}"
+            f"staged_path 逃逸 staging 根目錄：bank_code={bank_code}, path={raw_path}"
         )
         summary.failed_count += 1
         summary.errors.append(error_msg)

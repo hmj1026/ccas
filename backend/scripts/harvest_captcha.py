@@ -67,13 +67,19 @@ async def harvest(serial_key: str, count: int, output_dir: Path) -> None:
             saved += 1
             logger.info(
                 "[%d/%d] Saved %s (conf=%.3f)",
-                i, count, dest.name, result.confidence,
+                i,
+                count,
+                dest.name,
+                result.confidence,
             )
 
     existing = len(list(output_dir.glob("*.jpg")))
     logger.info(
         "\nDone: fetched=%d saved=%d rejected=%d skipped=%d",
-        fetched, saved, rejected, skipped,
+        fetched,
+        saved,
+        rejected,
+        skipped,
     )
     logger.info("Total fixtures in %s: %d", output_dir, existing)
 
@@ -87,11 +93,15 @@ def main() -> None:
         help="Valid serial key from a FUBON bill email",
     )
     parser.add_argument(
-        "--count", type=int, default=40,
+        "--count",
+        type=int,
+        default=40,
         help="Number of captchas to fetch (default: 40)",
     )
     parser.add_argument(
-        "--output-dir", type=Path, default=DEFAULT_OUTPUT,
+        "--output-dir",
+        type=Path,
+        default=DEFAULT_OUTPUT,
         help="Output directory for JPEG files",
     )
     args = parser.parse_args()
