@@ -1,66 +1,56 @@
-Codemap Diff — 2026-04-11 (vs 2026-04-07 snapshot)
+Codemap Diff — 2026-04-12 (vs 2026-04-11 snapshot)
 ========================================================
 
-## Module LOC changes
+## Changes since last scan
 
-  ingestor       6 files /  736 LOC  →  13 files / 1395 LOC   (+7 files, +90%)
-  parser         9 files / 1192 LOC  →  15 files / 4342 LOC   (+6 files, +264%)
-  api           12 files / 1163 LOC  →  12 files / 1310 LOC   (+13%)
-  bot           10 files /  900 LOC  →  10 files /  932 LOC   (+4%)
-  scheduler      4 files /  237 LOC  →   4 files /  245 LOC   (+3%)
-  storage        4 files /  251 LOC  →   4 files /  256 LOC   (+2%)
-  classifier / decryptor / pipeline / tools — unchanged
+  backend/src/ccas/ingestor/fetcher/banks/fubon/  (refactored from fubon.py → directory)
+    + captcha_llm.py    Claude Vision captcha fallback (new file)
+    ~ captcha.py        Modified
+    ~ client.py         Modified
+    ~ flow.py           Modified
+  backend/src/ccas/ingestor/job.py                Modified
+  backend/src/ccas/ingestor/staging.py            Modified
+  backend/src/ccas/parser/banks/fubon_v1.py       Modified
+  backend/src/ccas/parser/job.py                  Modified
+  backend/src/ccas/decryptor/job.py               Modified
+  backend/src/ccas/config.py                      Modified (+2 new FUBON fields)
+  .env.example                                    Modified (+FUBON_CAPTCHA_ARCHIVE_DIR)
 
-  Total:        69 files / ~6490 LOC → 82 files / ~10491 LOC   (+13 files, +62%)
+  Total: ~90 Python files (+8 since last scan of 82)
 
-## New modules / features
+## New dependencies detected
 
-  + ingestor/fetcher/                      Web-based statement fetcher (non-Gmail sources)
-    ├── base.py                            BaseFetcher interface
-    ├── captcha.py                         OCR-based captcha solver
-    ├── registry.py                        Fetcher dispatch by bank_code
-    └── banks/fubon.py                     FUBON online-banking PDF fetcher
+  anthropic >= 0.40.0 (optional extra "fubon-llm")
+    Purpose: Claude Vision captcha fallback for FUBON web-fetch
+    Module:  ingestor/fetcher/banks/fubon/captcha_llm.py
+    Model:   claude-sonnet-4-6
+    Trigger: FUBON_CAPTCHA_FALLBACK_LLM=true
 
-  + parser/banks/ — expanded from 1 to 7 bank parsers:
-    ├── ctbc_v1.py       (existing)
-    ├── esun_v1.py       (new)
-    ├── taishin_v1.py    (new)
-    ├── ubot_v1.py       (new)
-    ├── cathay_v1.py     (new)
-    ├── sinopac_v1.py    (new)
-    └── fubon_v1.py      (new)
+## New config fields (config.py / .env.example)
 
-  + parser/registry.py                     Bank-code → parser dispatch
-  + parser/result.py                       Parse-result value objects
+  FUBON_CAPTCHA_ARCHIVE_DIR   成功驗證的 captcha JPEG 存檔目錄（eval 資料集擴充用）
+  FUBON_MANUAL_STAGING_DIR    手動下載 PDF 放置目錄（SPA 自動化完成前的 fallback）
+  ANTHROPIC_API_KEY           Anthropic API key（SecretStr，僅 fallback_llm=true 時需要）
 
-## New Alembic migrations
+## Schema changes
 
-  11ca9b74b00c   add_staged_attachment_source_type       (gmail / web)
-  1334f4fe5f73   add_staged_attachment_gmail_part_id     (new dedupe UQ)
+  categories.source  新欄位（"seed" / "user"）—— 分類來源區分
+  + Migration: 066eb5d1c70c   add-category-source
 
-## Schema drift (staged_attachments)
+## Architecture changes
 
-  + source_type: str           "gmail" | "web"
-  + gmail_part_id: str?        新 dedupe 欄位（Gmail MIME part）
-  ~ UQ: (gmail_message_id, gmail_attachment_id) → (gmail_message_id, gmail_part_id)
-
-## New environment variables (ref .env.example)
-
-  FUBON_NATIONAL_ID              FUBON web-fetch 登入（身分證）
-  FUBON_ROC_BIRTHDAY             FUBON web-fetch 登入（民國生日 7 碼）
-
-## Frontend
-
-  No changes detected (5 pages, 5 shared components, same stack).
+  FUBON captcha resolution: ddddocr OCR → Claude Vision fallback (2-layer)
+  banks/fubon.py refactored → banks/fubon/ directory
+    (client.py, flow.py, captcha.py, captcha_llm.py, errors.py)
 
 ## Codemaps updated
 
-  docs/CODEMAPS/architecture.md    data-flow diagram + module map updated
-  docs/CODEMAPS/backend.md         module inventory LOC refresh + parser registry note
-  docs/CODEMAPS/data.md            staged_attachments + 2 new migrations
-  docs/CODEMAPS/dependencies.md    + web-fetch section (FUBON)
-  docs/CODEMAPS/frontend.md        timestamp only (no structural change)
+  docs/CODEMAPS/architecture.md    metadata: file count 78 → ~90
+  docs/CODEMAPS/backend.md         added FUBON + Anthropic config groups; updated file counts
+  docs/CODEMAPS/data.md            categories.source column; migration 066eb5d1c70c
+  docs/CODEMAPS/dependencies.md    fixed fubon path; added Anthropic API section
+  docs/CODEMAPS/frontend.md        no changes (skipped)
 
 ## Staleness warnings
 
-  None. All docs/CODEMAPS/*.md refreshed this run; no codemap >90 days stale.
+  None. All docs/CODEMAPS/*.md refreshed; no codemap >90 days stale.

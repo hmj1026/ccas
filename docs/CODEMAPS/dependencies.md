@@ -1,4 +1,4 @@
-<!-- Generated: 2026-04-11 | Files scanned: 82 | Token estimate: ~600 -->
+<!-- Generated: 2026-04-12 | Files scanned: ~90 | Token estimate: ~650 -->
 
 # Dependencies
 
@@ -11,10 +11,16 @@
 - **Library**: `google-api-python-client`
 
 ### 銀行網銀 web-fetch
-- **Module**: `ingestor/fetcher/` — `base.py`, `captcha.py`, `registry.py`, `banks/fubon.py`
+- **Module**: `ingestor/fetcher/` — `base.py`, `captcha.py`, `registry.py`, `banks/fubon/` (directory)
 - **Usage**: Gmail 未寄送對帳單的銀行，改由登入網銀下載 PDF
-- **Env**: `FUBON_NATIONAL_ID`, `FUBON_ROC_BIRTHDAY`（富邦）
-- **Captcha**: OCR 為主的 captcha 解算（`captcha.py`）
+- **Env**: `FUBON_NATIONAL_ID`, `FUBON_ROC_BIRTHDAY`, `FUBON_CAPTCHA_MAX_RETRIES`, `FUBON_CAPTCHA_FALLBACK_LLM`, `FUBON_CAPTCHA_ARCHIVE_DIR`, `FUBON_MANUAL_STAGING_DIR`
+- **Captcha**: ddddocr OCR 為主；失敗後可 fallback 至 Claude Vision（需 `ANTHROPIC_API_KEY`）
+
+### Anthropic API (Claude Vision)
+- **Module**: `ingestor/fetcher/banks/fubon/captcha_llm.py`
+- **Usage**: FUBON 驗證碼辨識 LLM fallback（`FUBON_CAPTCHA_FALLBACK_LLM=true` 時啟用）
+- **Model**: `claude-sonnet-4-6`
+- **Library**: `anthropic` (optional extra `fubon-llm`)
 
 ### Telegram Bot API
 - **Module**: `bot/` (10 files, ~932 LOC)

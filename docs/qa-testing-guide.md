@@ -218,7 +218,7 @@ Pipeline 階段順序：`ingest` -> `decrypt` -> `parse` -> `classify` -> `notif
 | Pipeline (ingest) | 不可 | 需真實 Gmail 憑證 |
 | Pipeline (parse/classify) | 部分 | 自動化測試已覆蓋 |
 | Telegram 通知 | 不可 | 需真實 Bot token |
-| 自動化測試 (495 tests) | 可以 | 全部使用 mock，無外部依賴 |
+| 自動化測試 (1000+ tests) | 可以 | 全部使用 mock，無外部依賴 |
 
 **結論**：無真實憑證的環境可測試約 **80%** 的功能，涵蓋所有 UI、API、CRUD 操作。Pipeline 的 ingest/notify 階段需依賴真實憑證。
 
@@ -226,11 +226,10 @@ Pipeline 階段順序：`ingest` -> `decrypt` -> `parse` -> `classify` -> `notif
 
 ## 已知限制
 
-1. **僅支援 CTBC（中國信託）**：目前僅實作 CTBC 帳單 parser，其他銀行的 parser 尚未開發
+1. **支援 7 家銀行**：CTBC（中國信託）、SINOPAC（永豐）、ESUN（玉山）、UBOT（聯邦）、CATHAY（國泰）、TAISHIN（台新）、FUBON（台北富邦）皆已實作完整 parser
 2. **OCR 需 Docker**：tesseract OCR 僅在 Docker production image 中安裝，本機直接執行需手動安裝
 3. **Frontend 無覆蓋率工具**：前端測試存在但尚未安裝 `@vitest/coverage-v8`
-4. **Bot handlers 無自動化測試**：Telegram bot 的 5 個指令（/status, /upcoming, /summary, /category, /paid）需手動測試
-5. **SQLite 單一連線**：不支援多使用者並行寫入，適合單人測試
+4. **SQLite 單一連線**：不支援多使用者並行寫入，適合單人測試
 
 ---
 

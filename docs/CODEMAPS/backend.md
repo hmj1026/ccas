@@ -1,4 +1,4 @@
-<!-- Generated: 2026-04-11 | Files scanned: 78 | Token estimate: ~950 -->
+<!-- Generated: 2026-04-12 | Files scanned: ~90 | Token estimate: ~980 -->
 
 # Backend
 
@@ -69,6 +69,8 @@ Supports `--from`/`--to` stage range via `PipelineOptions`.
 | API | `api_token`, `api_host`, `api_port`, `api_session_cookie_name`, `api_session_max_age`, `api_cookie_secure`, `frontend_origins` |
 | Redis | `redis_url` (default: `redis://localhost:6379/0`) |
 | Scheduler | `scheduler_api_base_url` |
+| FUBON Fetcher | `fubon_national_id`, `fubon_roc_birthday`, `fubon_captcha_max_retries` (1-20, default 7), `fubon_captcha_fallback_llm` (bool), `fubon_captcha_archive_dir`, `fubon_manual_staging_dir` |
+| Anthropic | `anthropic_api_key` (SecretStr, only needed when `fubon_captcha_fallback_llm=true`) |
 | Logging | `log_level`, `log_format`, `log_dir`, `log_file_max_bytes`, `log_file_backup_count`, `log_file_prefix` |
 | PDF Passwords | `get_pdf_password(bank_code)` → reads `PDF_PASSWORD_{BANK_CODE}` env var |
 
@@ -78,7 +80,7 @@ Supports `--from`/`--to` stage range via `PipelineOptions`.
 |--------|-------|-----|---------|
 | api | 12 | 1310 | FastAPI routes, schemas, deps, security headers middleware |
 | parser | 15 | 4342 | 7 bank parsers (CTBC/ESUN/Taishin/UBOT/Cathay/SinoPac/Fubon), registry, result, OCR fallback |
-| ingestor | 13 | 1395 | Gmail download + staging + retry; `fetcher/` sub-module (web scrapers, captcha, FUBON bank) |
+| ingestor | ~18 | ~1600 | Gmail download + staging + retry; `fetcher/` sub-module (web scrapers, captcha, FUBON bank with captcha LLM fallback) |
 | bot | 10 | 932 | Telegram commands, notifications, auto-query pending bills (is_notified=False) |
 | pipeline | 7 | 637 | Orchestrator, worker, CLI, options, stage range |
 | tools | 3 | 409 | Bank configs (YAML), Gmail auth |
@@ -87,4 +89,4 @@ Supports `--from`/`--to` stage range via `PipelineOptions`.
 | storage | 4 | 256 | ORM models, async DB session, queries |
 | scheduler | 4 | 245 | APScheduler, reminders |
 | core | 4 | 330 | config, errors, log, __init__ |
-| **Total** | **82** | **~10491** | |
+| **Total** | **~90** | **~10800** | |

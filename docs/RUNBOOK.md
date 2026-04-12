@@ -60,11 +60,11 @@ docker compose -f docker-compose.yaml logs backend --since=1h
 若設定了 `LOG_DIR`，日誌同步寫入檔案：
 
 ```bash
-# 檔案日誌位置（容器內）
-docker compose exec backend ls /data/logs/
+# 檔案日誌位置（容器內，對應 host 的 ./logs/）
+docker compose exec backend ls /logs/
 
 # 讀取最新日誌
-docker compose exec backend tail -f /data/logs/ccas.log
+docker compose exec backend tail -f /logs/ccas.log
 ```
 
 ## 常見問題速查
@@ -145,6 +145,33 @@ docker compose exec backend python -c \
   "from ccas.parser.ocr import is_ocr_available; print('OCR:', is_ocr_available())"
 ```
 
+### FUBON Web-Fetch 失敗 / Captcha LLM Fallback 問題
+
+**症狀：** ingest 階段 FUBON 失敗，logs 顯示 `CaptchaError`、`LoginError` 或 `anthropic` 相關錯誤
+
+```bash
+# 確認 FUBON 相關設定
+grep FUBON .env
+grep ANTHROPIC_API_KEY .env
+
+# 查看 FUBON 詳細 logs
+docker compose logs backend 2>&1 | grep -i fubon
+
+# 若 FUBON_CAPTCHA_FALLBACK_LLM=true，確認 Anthropic API key 已設定
+docker compose exec backend python -c \
+  "from ccas.config import get_settings; s=get_settings(); print('anthropic key set:', bool(s.anthropic_api_key))"
+
+# 停用 LLM fallback，回到純 OCR 模式（排查用）
+# 編輯 .env: FUBON_CAPTCHA_FALLBACK_LLM=false
+docker compose -f docker-compose.yaml restart backend
+```
+
+**常見原因：**
+- `FUBON_NATIONAL_ID` / `FUBON_ROC_BIRTHDAY` 未填或格式錯誤（ROC 生日需 7 碼，例 `0881010`）
+- `FUBON_CAPTCHA_FALLBACK_LLM=true` 但 `ANTHROPIC_API_KEY` 未設定 → LLM fallback 無法啟動
+- 驗證碼重試超過 `FUBON_CAPTCHA_MAX_RETRIES`（預設 7）→ pipeline 放棄，需 manual staging
+- SPA 自動化失敗時，可將 PDF 手動放入 `FUBON_MANUAL_STAGING_DIR`，下次 ingest 自動拾取
+
 ## 日誌分析
 
 ### JSON Log 格式
@@ -212,11 +239,9 @@ docker compose exec backend uv run alembic downgrade <revision-id>
 ### 緊急備份
 
 ```bash
-# 備份資料庫（從 volume）
-docker run --rm \
-  -v ccas_ccas-data:/data \
-  -v $(pwd)/backups:/backups \
-  alpine cp /data/ccas.db /backups/ccas-$(date +%Y%m%d-%H%M%S).db
+# 備份資料庫（從 bind mount ./backend/data/）
+mkdir -p backups
+cp backend/data/ccas.db backups/ccas-$(date +%Y%m%d-%H%M%S).db
 
 echo "Backup saved to backups/"
 ```

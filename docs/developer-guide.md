@@ -6,7 +6,7 @@
 
 - Docker Engine 24+ 和 Docker Compose v2（推薦）
 - Python 3.12+、[uv](https://docs.astral.sh/uv/)（本地開發用）
-- Node.js 20+ 和 pnpm（前端開發用；React 19 / Vite 8 建議 Node 20 LTS 以上）
+- Node.js 22+ 和 pnpm（前端開發用；CI 與 Dockerfile 使用 Node 22）
 - Git
 
 ## 1. 取得專案
@@ -167,7 +167,7 @@ cd frontend && pnpm dev
 ```
 Gmail Inbox
     |
-[INGEST]   -> StagedAttachment (從 Gmail 下載 PDF)
+[INGEST]   -> StagedAttachment (從 Gmail 下載 PDF；FUBON 另含 web-fetch + captcha 解析)
     |
 [DECRYPT]  -> 解密 PDF (pikepdf + bank-specific password)
     |
@@ -187,7 +187,7 @@ backend/src/ccas/
   classifier/   # Keyword-based classification
   config.py     # Pydantic settings
   decryptor/    # PDF decryption
-  ingestor/     # Gmail attachment download（`fetcher/` 子模組提供 BaseFetcher 介面、富邦 web-fetch 流程與 captcha OCR）
+  ingestor/     # Gmail 附件下載 + staging；`fetcher/` 子模組含 BaseFetcher 介面、FUBON web-fetch 流程、captcha OCR（ddddocr）與 Claude Vision LLM fallback
   parser/       # PDF parsing (per-bank)
   pipeline/     # Orchestration + CLI
   scheduler/    # APScheduler jobs

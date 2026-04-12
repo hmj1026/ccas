@@ -1,4 +1,4 @@
-<!-- Generated: 2026-04-11 | Files scanned: 5 | Token estimate: ~650 -->
+<!-- Generated: 2026-04-12 | Files scanned: 5 | Token estimate: ~680 -->
 
 # Data
 
@@ -42,7 +42,7 @@ ORM: SQLAlchemy 2.0 (`Mapped[T]` style) in `backend/src/ccas/storage/models.py`
 | created_at | datetime | |
 
 ### categories
-keyword (str, UQ) -> category (str)
+keyword (str, UQ) -> category (str), source (str, `"seed"` / `"user"`)
 
 ### bank_configs
 bank_code (str, UQ), bank_name, gmail_filter, pdf_password_rule?, active_parser_version, is_active
@@ -83,3 +83,4 @@ Bill 1--* PaymentReminder
 | ca5a1f05744d | Add bill.is_notified column |
 | 11ca9b74b00c | Add staged_attachment.source_type (`gmail` / `web`) |
 | 1334f4fe5f73 | Add staged_attachment.gmail_part_id + switch UQ to `(message_id, part_id)` |
+| 066eb5d1c70c | Add categories.source (`"seed"` / `"user"`) |

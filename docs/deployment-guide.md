@@ -27,20 +27,17 @@ cp config/banks.example.yaml config/banks.yaml
 
 ## 3. Gmail 憑證
 
-Production 模式使用 Docker named volume `ccas-data` 儲存資料。需將 Google OAuth 憑證複製到 volume 內的 `/data/` 目錄。
+Production 模式使用 bind mount `./backend/data:/data` 儲存資料（見 `docker-compose.yaml`）。需將 Google OAuth 憑證放入 host 端的 `./backend/data/` 目錄。
 
-**首次設定**：先在本機完成 OAuth 認證流程（`./scripts/setup.sh`）取得 `token.json`，再將憑證複製到伺服器。
+**首次設定**：先在本機完成 OAuth 認證流程（`./scripts/setup.sh`）取得 `token.json`，再將憑證複製到伺服器：
 
 ```bash
-# 先啟動服務讓 volume 建立
-docker compose -f docker-compose.yaml up -d redis
+# 確保目錄存在
+mkdir -p backend/data
 
-# 複製憑證到 volume
-docker run --rm \
-  -v ccas_ccas-data:/data \
-  -v /path/to/credentials.json:/src/credentials.json:ro \
-  -v /path/to/token.json:/src/token.json:ro \
-  alpine sh -c "cp /src/credentials.json /data/ && cp /src/token.json /data/"
+# 將憑證複製到 backend/data/
+cp /path/to/credentials.json backend/data/credentials.json
+cp /path/to/token.json backend/data/token.json
 ```
 
 注意：憑證必須是**檔案**（非目錄）。`token.json` 會由 Gmail API 自動更新。
@@ -106,13 +103,9 @@ docker compose -f docker-compose.yaml logs -f scheduler
 SQLite 資料庫儲存在 Docker named volume `ccas-data` 中。
 
 ```bash
-# 備份資料庫
-docker exec ccas-backend-1 sqlite3 /data/ccas.db ".backup '/data/ccas-backup.db'"
-docker cp ccas-backend-1:/data/ccas-backup.db ./backups/
-
-# 或直接從 volume 複製
-docker run --rm -v ccas-data:/data -v $(pwd)/backups:/backups \
-  alpine cp /data/ccas.db /backups/ccas-$(date +%Y%m%d).db
+# 備份資料庫（直接從 bind mount 目錄複製）
+mkdir -p backups
+cp backend/data/ccas.db backups/ccas-$(date +%Y%m%d).db
 ```
 
 建議設定 cron job 定期備份。

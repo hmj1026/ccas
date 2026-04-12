@@ -109,6 +109,12 @@ cp .env.example .env
 | **富邦 web-fetch** | | | |
 | `FUBON_NATIONAL_ID` | 是* | 身分證字號（富邦網銀登入用）| — |
 | `FUBON_ROC_BIRTHDAY` | 是* | 民國年月日 7 碼（例：`0881010`）| — |
+| `FUBON_CAPTCHA_MAX_RETRIES` | 否 | OCR + doLogin 迴圈最大重試次數（1-20）| `7` |
+| `FUBON_CAPTCHA_FALLBACK_LLM` | 否 | OCR 失敗後是否 fallback 至 Claude Vision | `false` |
+| `FUBON_CAPTCHA_ARCHIVE_DIR` | 否 | 成功驗證的 captcha JPEG 存檔目錄（eval 資料集擴充用）| — |
+| `FUBON_MANUAL_STAGING_DIR` | 否 | 手動下載 PDF 放置目錄（SPA 自動化失敗時的 fallback）| — |
+| **Anthropic（FUBON LLM captcha fallback）** | | | |
+| `ANTHROPIC_API_KEY` | 是* | Anthropic API key（僅 `FUBON_CAPTCHA_FALLBACK_LLM=true` 時需要）| — |
 | **前端（Vite）** | | | |
 | `VITE_API_BASE` | 否 | 後端 API base URL；dev 留空走 Vite proxy，production 或自架後端時才填 | — |
 | `VITE_API_PROXY_TARGET` | 否 | Vite dev server 的 `/api` proxy 目標（僅 dev 生效）| `http://127.0.0.1:8000` |

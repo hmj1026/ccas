@@ -1,4 +1,4 @@
-<!-- Generated: 2026-04-11 | Files scanned: 78 | Token estimate: ~650 -->
+<!-- Generated: 2026-04-12 | Files scanned: ~90 | Token estimate: ~650 -->
 
 # Architecture
 
