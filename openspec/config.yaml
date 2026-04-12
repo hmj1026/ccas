@@ -1,11 +1,12 @@
 schema: spec-driven
 
 context: |
-  Tech stack: Python 3.12, FastAPI, SQLAlchemy, Alembic, SQLite (WAL mode)
-  Frontend: React (planned)
+  Tech stack: Python 3.12, FastAPI, SQLAlchemy 2.0 (async), Alembic, SQLite (WAL mode)
+  Frontend: React 19, Vite 8, TypeScript 5.9, Tailwind CSS 4.2, shadcn/ui, TanStack React Query 5
   Integrations: Gmail API (PDF attachment download), Telegram Bot (notifications/queries)
-  Package manager: uv
-  Testing: pytest, pytest-cov, httpx (ASGI test client)
+  Infrastructure: Docker Compose (backend, worker, scheduler, bot, frontend, redis), Redis (RQ job queue), APScheduler
+  Package manager: uv (backend), pnpm (frontend)
+  Testing: pytest, pytest-asyncio, pytest-cov, httpx (ASGI test client), Vitest (frontend)
   Domain: Credit card bill automation - download bank statement PDFs from email,
     parse transactions, classify spending, generate reports, push summaries via Telegram
-  Conventions: Conventional commits, TDD workflow, 80% test coverage minimum
+  Conventions: Conventional commits, TDD workflow, CI gate 70% / target 80% test coverage
