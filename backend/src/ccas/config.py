@@ -16,6 +16,7 @@ from pydantic_settings.sources.types import ENV_FILE_SENTINEL, DotenvType
 _APP_ROOT = Path(__file__).resolve().parents[2]
 _DEFAULT_ENV_FILES = (_APP_ROOT / ".env", _APP_ROOT.parent / ".env")
 _SQLITE_ASYNC_PREFIX = "sqlite+aiosqlite:///"
+_MAX_LEGACY_PDF_PASSWORDS = 5
 
 
 class Settings(BaseSettings):
@@ -122,6 +123,30 @@ class Settings(BaseSettings):
         """
         key = f"PDF_PASSWORD_{bank_code.upper()}"
         return self._env_map.get(key)
+
+    def get_pdf_passwords(self, bank_code: str) -> tuple[str, ...]:
+        """取得指定銀行的所有候選 PDF 解密密碼。
+
+        依序回傳主密碼 ``PDF_PASSWORD_{BANK_CODE}`` 與
+        legacy 密碼 ``PDF_PASSWORD_{BANK_CODE}_LEGACY_1`` .. ``_LEGACY_5``。
+        跳過未設定或空值的項目。
+
+        Args:
+            bank_code: 銀行代碼（不分大小寫）。
+
+        Returns:
+            候選密碼 tuple（主密碼優先）；若無任何密碼則為空 tuple。
+        """
+        code = bank_code.upper()
+        candidates: list[str] = []
+        primary = self._env_map.get(f"PDF_PASSWORD_{code}")
+        if primary:
+            candidates.append(primary)
+        for i in range(1, _MAX_LEGACY_PDF_PASSWORDS + 1):
+            legacy = self._env_map.get(f"PDF_PASSWORD_{code}_LEGACY_{i}")
+            if legacy:
+                candidates.append(legacy)
+        return tuple(candidates)
 
     def get_bank_credential(self, bank_code: str, key: str) -> str | None:
         """取得指定銀行的額外憑證。

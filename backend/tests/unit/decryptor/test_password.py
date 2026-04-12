@@ -3,7 +3,7 @@
 import os
 from unittest.mock import MagicMock
 
-from ccas.decryptor.password import resolve_password
+from ccas.decryptor.password import resolve_password, resolve_passwords
 
 
 class TestResolvePassword:
@@ -46,3 +46,26 @@ class TestResolvePassword:
 
         resolve_password(settings, "CTBC")
         settings.get_pdf_password.assert_called_once_with("CTBC")
+
+
+class TestResolvePasswords:
+    """resolve_passwords() multi-password delegation tests."""
+
+    def test_delegates_to_settings(self):
+        """確認透過 settings.get_pdf_passwords() 查詢。"""
+        settings = MagicMock()
+        settings.get_pdf_passwords.return_value = ("pw1", "pw2")
+
+        result = resolve_passwords(settings, "TAISHIN")
+
+        settings.get_pdf_passwords.assert_called_once_with("TAISHIN")
+        assert result == ("pw1", "pw2")
+
+    def test_returns_empty_tuple_when_no_passwords(self):
+        """無密碼時回傳空 tuple。"""
+        settings = MagicMock()
+        settings.get_pdf_passwords.return_value = ()
+
+        result = resolve_passwords(settings, "UNKNOWN")
+
+        assert result == ()

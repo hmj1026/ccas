@@ -31,6 +31,49 @@ class DecryptResult:
     needed_decryption: bool
 
 
+def decrypt_pdf_multi(pdf_path: Path, passwords: tuple[str, ...]) -> DecryptResult:
+    """嘗試以多組候選密碼解密 PDF 檔案。
+
+    流程：
+    1. 嘗試無密碼開啟 -- 成功表示未加密，直接透通
+    2. 依序嘗試 passwords tuple 中每個密碼
+    3. 任一成功即覆寫原始檔案並回傳
+    4. 全失敗或無候選密碼則拋出 DecryptionError
+
+    Args:
+        pdf_path: PDF 檔案路徑。
+        passwords: 候選密碼 tuple（主密碼優先）。
+
+    Returns:
+        DecryptResult 描述解密結果。
+
+    Raises:
+        DecryptionError: 密碼缺漏或全部錯誤導致無法解密。
+        FileNotFoundError: PDF 檔案不存在。
+    """
+    try:
+        with pikepdf.open(pdf_path, allow_overwriting_input=True) as pdf:
+            pdf.save(pdf_path)
+            return DecryptResult(needed_decryption=False)
+    except pikepdf.PasswordError:
+        pass
+
+    if not passwords:
+        raise DecryptionError("Password not found in settings")
+
+    for pw in passwords:
+        try:
+            with pikepdf.open(
+                pdf_path, password=pw, allow_overwriting_input=True
+            ) as pdf:
+                pdf.save(pdf_path)
+                return DecryptResult(needed_decryption=True)
+        except pikepdf.PasswordError:
+            continue
+
+    raise DecryptionError(f"Invalid password (tried {len(passwords)} candidates)")
+
+
 def decrypt_pdf(pdf_path: Path, password: str | None) -> DecryptResult:
     """嘗試解密 PDF 檔案並覆寫原始路徑。
 

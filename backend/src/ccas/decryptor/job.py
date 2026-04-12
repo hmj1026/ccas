@@ -13,8 +13,8 @@ from pathlib import Path
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ccas.config import get_settings
-from ccas.decryptor.decrypt import DecryptionError, decrypt_pdf
-from ccas.decryptor.password import resolve_password
+from ccas.decryptor.decrypt import DecryptionError, decrypt_pdf_multi
+from ccas.decryptor.password import resolve_passwords
 from ccas.decryptor.staging import fetch_pending_attachments, update_attachment_status
 from ccas.pipeline.options import PipelineOptions
 from ccas.storage.models import StagedAttachment
@@ -48,7 +48,7 @@ async def _process_attachment(
 ) -> None:
     """處理單一附件的解密。"""
     settings = get_settings()
-    password = resolve_password(settings, attachment.bank_code)
+    passwords = resolve_passwords(settings, attachment.bank_code)
     staged_path = attachment.staged_path
 
     if staged_path is None:
@@ -69,9 +69,9 @@ async def _process_attachment(
 
     try:
         result = await asyncio.to_thread(
-            decrypt_pdf,
+            decrypt_pdf_multi,
             Path(staged_path),
-            password,
+            passwords,
         )
     except DecryptionError as exc:
         error_msg = (
