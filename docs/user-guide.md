@@ -197,6 +197,26 @@ cp config/banks.example.yaml config/banks.yaml
    民國生日格式為 7 碼：民國年 3 碼 + 月 2 碼 + 日 2 碼（例如民國 88 年 10 月 10 日 = `0881010`）
 4. Gmail filter 會自動匹配寄件者 `rs@cf.taipeifubon.com.tw` 且主旨包含「台北富邦銀行」+「信用卡帳單」的郵件
 
+### FUBON 手動下載步驟（SPA 自動化完成前的 fallback）
+
+富邦網銀帳單系統已遷移為 SPA 架構，自動下載可能因驗證碼或 OTP 失敗。此時可改用手動下載：
+
+1. 登入 [富邦網銀](https://www.taipeifubon.com.tw/) 或 [信用卡帳單服務](https://fbmbill.taipeifubon.com.tw/)
+2. 下載當月 PDF 帳單
+3. 將檔案命名為 `fubon-YYYY-MM.pdf`（例如 `fubon-2026-03.pdf`），月份格式有助自動配對
+4. 放到手動下載目錄：
+   - **本機開發**：`backend/data/manual-staging/FUBON/`
+   - **Docker 環境**：host 的 `./backend/data/manual-staging/FUBON/` 對應容器內 `/data/manual-staging/FUBON/`
+5. 執行 pipeline：
+   ```bash
+   docker exec -it ccas-backend-1 uv run python -m ccas.pipeline --bank FUBON
+   ```
+6. Pipeline 會自動從手動目錄取得 PDF，處理完成後檔案會移至 `staging/FUBON/`
+
+> **命名提示**：若目錄內只有一個 PDF，系統會直接取用，不要求特定檔名。若有多個 PDF 且無法依檔名判斷月份，pipeline 會報錯。
+
+> **自訂目錄**：手動下載目錄可透過環境變數 `FUBON_MANUAL_STAGING_DIR` 覆蓋，預設為 `./data/manual-staging/FUBON`。
+
 > **免責聲明**：FUBON web-fetch 流程會代表「使用者本人」登入富邦信用卡帳單系統，系統僅讀取「使用者本人郵件」中的下載連結、使用「使用者本人身分證號」與生日登入，並下載本期帳單 PDF。此為「使用者授權代理」行為，請勿將他人憑證填入 `.env`。
 >
 > **CAPTCHA 處理**：驗證碼由 ddddocr 在容器內本地辨識；rejected 樣本觸發重試，`FUBON_CAPTCHA_MAX_RETRIES` 預設 7 次。若在 `FUBON_CAPTCHA_FALLBACK_LLM=true` 下，rejected 樣本會轉送 Claude Vision 作為 fallback（需 `ANTHROPIC_API_KEY`）。production image 已預裝 `fubon-llm` extra（`anthropic` SDK），無須額外 rebuild 即可啟用 fallback。
@@ -310,7 +330,13 @@ docker compose down
 - 在 `.env` 新增 `PDF_PASSWORD_<BANK_CODE>_LEGACY_1=舊密碼`，然後重跑 pipeline
 - 最多可設定 5 組 legacy 密碼（`_LEGACY_1` 到 `_LEGACY_5`）
 
-### 前端無法載入資料
+### FUBON fetch 失敗
+
+- 若錯誤訊息包含 `manual_staging_empty`：表示 SPA 自動下載失敗且手動目錄無檔案。請依照「FUBON 手動下載步驟」放入 PDF 後重試
+- 若錯誤訊息包含 `manual_staging_ambiguous`：手動目錄有多個 PDF 無法判斷月份。請保留單一檔案或以 `fubon-YYYY-MM.pdf` 命名
+- 手動目錄位置：`backend/data/manual-staging/FUBON/`（Docker 環境下 host 路徑）
+
+### ���端無法載入資料
 - 確認 backend 正常：`curl http://localhost:8000/health`
 - 確認 API token 正確：登入時使用 `.env` 中的 `API_TOKEN`
 
