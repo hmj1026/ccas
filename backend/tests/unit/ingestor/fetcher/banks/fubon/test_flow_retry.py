@@ -146,3 +146,50 @@ async def test_download_no_retry_on_id_wrong() -> None:
     assert "credentials_wrong" in str(exc_info.value)
     assert c.get_captcha.await_count == 1
     assert c.do_login.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_download_max_retries_one_single_attempt() -> None:
+    """max_retries=1 with OCR rejection → exactly 1 captcha fetch, then exhausted."""
+    c = _fake_client()
+    with (
+        patch.object(flow, "FubonClient", return_value=c),
+        patch.object(captcha, "solve", return_value=None),
+    ):
+        with pytest.raises(FetchError, match="captcha_retry_exhausted"):
+            await flow.download(
+                email_html=_email(),
+                id_number="A123456789",
+                birthday="0850101",
+                max_retries=1,
+            )
+    assert c.get_captcha.await_count == 1
+    c.do_login.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_mixed_ocr_reject_and_server_captcha_wrong() -> None:
+    """Attempt 1: OCR passes → server captcha_wrong.
+    Attempt 2: OCR rejects → burn slot.
+    Attempt 3: OCR passes → login succeeds."""
+    c = _fake_client()
+    good = captcha.CaptchaResult(text="4707", confidence=0.98)
+    c.do_login = AsyncMock(
+        side_effect=[
+            FubonLoginError("captcha_wrong", raw_code=9999),
+            None,
+        ]
+    )
+    with (
+        patch.object(flow, "FubonClient", return_value=c),
+        patch.object(captcha, "solve", side_effect=[good, None, good]),
+    ):
+        result = await flow.download(
+            email_html=_email(),
+            id_number="A123456789",
+            birthday="0850101",
+            max_retries=5,
+        )
+    assert result.startswith(b"%PDF")
+    assert c.get_captcha.await_count == 3
+    assert c.do_login.await_count == 2

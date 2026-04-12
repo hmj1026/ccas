@@ -77,6 +77,13 @@ class TestCanFetch:
         fetcher = FubonFetcher()
         assert fetcher.can_fetch("   ") is False
 
+    def test_can_fetch_rejects_http_scheme(self):
+        html = '<html><a href="http://fbmbill.taipeifubon.com.tw/serial">x</a></html>'
+        assert FubonFetcher().can_fetch(html) is False
+
+    def test_can_fetch_bank_code_returns_fubon(self):
+        assert FubonFetcher().bank_code == "FUBON"
+
 
 class TestFetchPdf:
     """FubonFetcher.fetch_pdf() delegates to flow.download()."""
@@ -127,8 +134,8 @@ class TestFetchPdf:
         assert kwargs["email_html"] == _SPA_IMG_ANCHOR_HTML
         assert kwargs["max_retries"] >= 1
 
-    def test_fetch_pdf_wraps_flow_error_with_fallback(self):
-        """SPA failure falls through to manual-staging."""
+    def test_credential_error_does_not_fallback_to_manual_staging(self):
+        """FetchError with credentials_wrong prefix must re-raise directly."""
         from unittest.mock import AsyncMock, patch
 
         from ccas.ingestor.fetcher.banks.fubon import flow
@@ -137,7 +144,92 @@ class TestFetchPdf:
         with patch.object(
             flow,
             "download",
-            AsyncMock(side_effect=FetchError("FUBON", "captcha_retry_exhausted: 7")),
+            AsyncMock(
+                side_effect=FetchError(
+                    "FUBON", "credentials_wrong: FUBON_NATIONAL_ID invalid"
+                )
+            ),
+        ):
+            with pytest.raises(FetchError, match="credentials_wrong"):
+                fetcher.fetch_pdf(
+                    _SPA_IMG_ANCHOR_HTML,
+                    {"national_id": "A123456789", "roc_birthday": "0750101"},
+                )
+
+    def test_credentials_missing_does_not_fallback_to_manual_staging(self):
+        from unittest.mock import AsyncMock, patch
+
+        from ccas.ingestor.fetcher.banks.fubon import flow
+
+        fetcher = FubonFetcher()
+        with patch.object(
+            flow,
+            "download",
+            AsyncMock(
+                side_effect=FetchError(
+                    "FUBON", "credentials_missing: FUBON_NATIONAL_ID not set"
+                )
+            ),
+        ):
+            with pytest.raises(FetchError, match="credentials_missing"):
+                fetcher.fetch_pdf(
+                    _SPA_IMG_ANCHOR_HTML,
+                    {"national_id": "A123456789", "roc_birthday": "0750101"},
+                )
+
+    def test_fetch_pdf_strips_whitespace_from_credentials(self):
+        from unittest.mock import AsyncMock, patch
+
+        from ccas.ingestor.fetcher.banks.fubon import flow
+
+        fetcher = FubonFetcher()
+        with patch.object(
+            flow, "download", AsyncMock(return_value=b"%PDF-1.4\nfake")
+        ) as mock_flow:
+            fetcher.fetch_pdf(
+                _SPA_IMG_ANCHOR_HTML,
+                {"national_id": " A123456789 ", "roc_birthday": " 0750101 "},
+            )
+        kwargs = mock_flow.await_args.kwargs
+        assert kwargs["id_number"] == "A123456789"
+        assert kwargs["birthday"] == "0750101"
+
+    def test_fetch_pdf_wraps_flow_error_with_fallback(self, tmp_path):
+        """SPA failure falls through to manual-staging."""
+        from unittest.mock import AsyncMock, patch
+
+        from ccas.ingestor.fetcher.banks.fubon import flow
+
+        manual_dir = tmp_path / "manual-staging" / "FUBON"
+        manual_dir.mkdir(parents=True)
+
+        fake_settings = type(
+            "S",
+            (),
+            {
+                "fubon_manual_staging_dir": str(manual_dir),
+                "staging_dir": str(tmp_path / "staging"),
+                "anthropic_api_key": type(
+                    "Sec", (), {"get_secret_value": lambda self: ""}
+                )(),
+                "fubon_captcha_max_retries": 3,
+                "fubon_captcha_fallback_llm": False,
+            },
+        )()
+
+        fetcher = FubonFetcher()
+        with (
+            patch.object(
+                flow,
+                "download",
+                AsyncMock(
+                    side_effect=FetchError("FUBON", "captcha_retry_exhausted: 7")
+                ),
+            ),
+            patch(
+                "ccas.ingestor.fetcher.banks.fubon.get_settings",
+                return_value=fake_settings,
+            ),
         ):
             with pytest.raises(FetchError, match="manual_staging_empty"):
                 fetcher.fetch_pdf(

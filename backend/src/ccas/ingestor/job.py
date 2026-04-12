@@ -10,7 +10,6 @@ from __future__ import annotations
 import asyncio
 import logging
 from dataclasses import dataclass, field
-from pathlib import Path
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -31,6 +30,8 @@ from ccas.ingestor.staging import (
     create_staged_record,
     delete_staged_record,
     find_existing_staged,
+    resolve_staged_path,
+    staged_path_for_storage,
 )
 from ccas.pipeline.options import PipelineOptions
 from ccas.storage.models import BankConfig
@@ -91,11 +92,17 @@ def _build_gmail_query(
     return f"{base_filter} {date_clause}"
 
 
-async def _cleanup_old_staged_file(staged_path: str | None) -> None:
+async def _cleanup_old_staged_file(
+    staging_dir: str, staged_path: str | None
+) -> None:
     """刪除舊的 staging 檔案（若存在）。"""
     if not staged_path:
         return
-    path = Path(staged_path)
+    try:
+        path = resolve_staged_path(staging_dir, staged_path)
+    except ValueError:
+        logger.warning("staged_path 逃逸 staging 根目錄，跳過刪除：%s", staged_path)
+        return
     if path.exists():
         await asyncio.to_thread(path.unlink)
         logger.debug("已刪除舊 staging 檔案：%s", staged_path)
@@ -174,7 +181,7 @@ async def _process_attachment(
 
         # Cleanup old record only after new download succeeds
         if existing is not None:
-            await _cleanup_old_staged_file(existing.staged_path)
+            await _cleanup_old_staged_file(staging_dir, existing.staged_path)
             await delete_staged_record(session, existing)
 
         await create_staged_record(
@@ -184,7 +191,7 @@ async def _process_attachment(
             attachment_id=attachment.attachment_id,
             message_date=attachment.message_date,
             original_filename=attachment.filename,
-            staged_path=str(staged_path),
+            staged_path=staged_path_for_storage(staging_dir, staged_path),
             status="staged",
             part_id=attachment.part_id,
         )
@@ -280,7 +287,7 @@ async def _process_web_fetch(
         await asyncio.to_thread(staged_path.write_bytes, pdf_bytes)
 
         if existing is not None:
-            await _cleanup_old_staged_file(existing.staged_path)
+            await _cleanup_old_staged_file(staging_dir, existing.staged_path)
             await delete_staged_record(session, existing)
 
         await create_staged_record(
@@ -290,7 +297,7 @@ async def _process_web_fetch(
             attachment_id=synthetic_attachment_id,
             message_date=message.message_date,
             original_filename=staged_filename,
-            staged_path=str(staged_path),
+            staged_path=staged_path_for_storage(staging_dir, staged_path),
             status="staged",
             source_type="web_fetch",
             part_id=synthetic_part_id,

@@ -133,3 +133,77 @@ def test_solve_rejects_oversized_blob() -> None:
     with patch.object(captcha, "_get_ocr", return_value=mock_ocr):
         assert captcha.solve(oversized) is None
     mock_ocr.classification.assert_not_called()
+
+
+def test_solve_confidence_exactly_080_accepted() -> None:
+    mock_ocr = MagicMock()
+    mock_ocr.classification.return_value = _fake_ddddocr_return("1234", 0.80)
+    with patch.object(captcha, "_get_ocr", return_value=mock_ocr):
+        result = captcha.solve(b"\xff\xd8\xffanything")
+        assert result is not None
+        assert result.text == "1234"
+        assert result.confidence == pytest.approx(0.80)
+
+
+def test_solve_confidence_just_below_080_rejected() -> None:
+    mock_ocr = MagicMock()
+    mock_ocr.classification.return_value = _fake_ddddocr_return("1234", 0.7999)
+    with patch.object(captcha, "_get_ocr", return_value=mock_ocr):
+        assert captcha.solve(b"\xff\xd8\xffanything") is None
+
+
+def test_solve_text_key_missing() -> None:
+    mock_ocr = MagicMock()
+    mock_ocr.classification.return_value = {"confidence": 0.9}
+    with patch.object(captcha, "_get_ocr", return_value=mock_ocr):
+        assert captcha.solve(b"\xff\xd8\xffanything") is None
+
+
+def test_solve_confidence_key_missing() -> None:
+    mock_ocr = MagicMock()
+    mock_ocr.classification.return_value = {"text": "1234"}
+    with patch.object(captcha, "_get_ocr", return_value=mock_ocr):
+        assert captcha.solve(b"\xff\xd8\xffanything") is None
+
+
+def test_solve_confidence_not_numeric() -> None:
+    mock_ocr = MagicMock()
+    mock_ocr.classification.return_value = {"text": "1234", "confidence": "high"}
+    with patch.object(captcha, "_get_ocr", return_value=mock_ocr):
+        assert captcha.solve(b"\xff\xd8\xffanything") is None
+
+
+def test_solve_empty_string_text() -> None:
+    mock_ocr = MagicMock()
+    mock_ocr.classification.return_value = _fake_ddddocr_return("", 0.99)
+    with patch.object(captcha, "_get_ocr", return_value=mock_ocr):
+        assert captcha.solve(b"\xff\xd8\xffanything") is None
+
+
+def test_solve_exactly_max_bytes_accepted() -> None:
+    """Input at exactly 512 KB must pass size guard."""
+    blob = b"\xff\xd8\xff" + b"\x00" * (512 * 1024 - 3)
+    assert len(blob) == 512 * 1024
+    mock_ocr = MagicMock()
+    mock_ocr.classification.return_value = _fake_ddddocr_return("1234", 0.95)
+    with patch.object(captcha, "_get_ocr", return_value=mock_ocr):
+        result = captcha.solve(blob)
+        assert result is not None
+    mock_ocr.classification.assert_called_once()
+
+
+def test_solve_one_byte_over_max_rejected() -> None:
+    blob = b"\xff\xd8\xff" + b"\x00" * (512 * 1024 - 2)
+    assert len(blob) == 512 * 1024 + 1
+    mock_ocr = MagicMock()
+    with patch.object(captcha, "_get_ocr", return_value=mock_ocr):
+        assert captcha.solve(blob) is None
+    mock_ocr.classification.assert_not_called()
+
+
+def test_solve_non_dict_result() -> None:
+    """ddddocr returning a non-dict type must not crash."""
+    mock_ocr = MagicMock()
+    mock_ocr.classification.return_value = "raw string result"
+    with patch.object(captcha, "_get_ocr", return_value=mock_ocr):
+        assert captcha.solve(b"\xff\xd8\xffanything") is None

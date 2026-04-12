@@ -34,7 +34,10 @@ def _sanitize_filename(filename: str) -> str:
 
 def _ensure_within_root(path: Path, root: Path) -> Path:
     resolved = path.resolve()
-    resolved.relative_to(root.resolve())
+    try:
+        resolved.relative_to(root.resolve())
+    except ValueError:
+        raise ValueError(f"Path {resolved!r} escapes staging root {root!r}")
     return resolved
 
 
@@ -64,6 +67,38 @@ def build_staged_path(
     bank_root = staging_root / safe_bank_code
     candidate = bank_root / f"{safe_prefix}_{safe_filename}"
     return _ensure_within_root(candidate, bank_root)
+
+
+def staged_path_for_storage(staging_dir: str, absolute_path: Path) -> str:
+    """Convert absolute staging path to relative for DB storage."""
+    staging_root = Path(staging_dir).resolve()
+    return str(absolute_path.resolve().relative_to(staging_root))
+
+
+def resolve_staged_path(staging_dir: str, stored_path: str) -> Path:
+    """Resolve a stored staged_path (relative or legacy absolute) to absolute.
+
+    Raises ValueError if the resolved path escapes the staging root.
+    """
+    staging_root = Path(staging_dir).resolve()
+    p = Path(stored_path)
+    if p.is_absolute():
+        try:
+            relative = p.relative_to(staging_root)
+        except ValueError:
+            parts = p.parts
+            seg_dir = parts[-2] if len(parts) >= 2 else None
+            seg_file = p.name
+            if seg_file in {"", ".", ".."} or (seg_dir and seg_dir in {"", ".", ".."}):
+                raise ValueError(f"Legacy path contains traversal components: {stored_path}")
+            if seg_dir and not _BANK_CODE_RE.fullmatch(seg_dir):
+                raise ValueError(f"Legacy path has invalid bank segment: {stored_path}")
+            relative = Path(seg_dir) / seg_file if seg_dir else Path(seg_file)
+    else:
+        relative = p
+    resolved = (staging_root / relative).resolve()
+    resolved.relative_to(staging_root)  # raises ValueError on escape
+    return resolved
 
 
 async def find_existing_staged(

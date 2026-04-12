@@ -17,12 +17,14 @@ success rate. Empirical baseline on the shipped fixture set is ~90%.
 
 from __future__ import annotations
 
+import io
 import logging
 import threading
 from dataclasses import dataclass
 from typing import Any
 
 import ddddocr  # type: ignore[import-untyped]
+from PIL import Image, ImageEnhance, ImageFilter
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +54,53 @@ def _get_ocr() -> ddddocr.DdddOcr:
     return _OCR
 
 
+def _preprocess(jpeg_bytes: bytes) -> bytes:
+    """Enhance captcha image for better OCR accuracy.
+
+    Pipeline: grayscale → contrast boost → Otsu-style binarization → median denoise.
+    Returns processed JPEG bytes; falls back to original on any error.
+    """
+    try:
+        img = Image.open(io.BytesIO(jpeg_bytes)).convert("L")
+        img = ImageEnhance.Contrast(img).enhance(2.0)
+        thresh = _otsu_threshold(img)
+        lut = [255 if i > thresh else 0 for i in range(256)]
+        img = img.point(lut, mode="1")
+        img = img.convert("L").filter(ImageFilter.MedianFilter(size=3))
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG")
+        return buf.getvalue()
+    except Exception:  # noqa: BLE001
+        logger.debug("captcha_preprocess_fallback", exc_info=True)
+        return jpeg_bytes
+
+
+def _otsu_threshold(img: Image.Image) -> int:
+    """Compute Otsu's optimal binarization threshold for a grayscale image."""
+    histogram = img.histogram()
+    total = sum(histogram)
+    sum_all = sum(i * h for i, h in enumerate(histogram))
+    sum_bg = 0.0
+    weight_bg = 0
+    best_thresh = 0
+    best_variance = 0.0
+    for t in range(256):
+        weight_bg += histogram[t]
+        if weight_bg == 0:
+            continue
+        weight_fg = total - weight_bg
+        if weight_fg == 0:
+            break
+        sum_bg += t * histogram[t]
+        mean_bg = sum_bg / weight_bg
+        mean_fg = (sum_all - sum_bg) / weight_fg
+        variance = weight_bg * weight_fg * (mean_bg - mean_fg) ** 2
+        if variance > best_variance:
+            best_variance = variance
+            best_thresh = t
+    return best_thresh
+
+
 def solve(jpeg_bytes: bytes) -> CaptchaResult | None:
     """Run OCR on a FUBON captcha JPEG and apply the conf+length+digit gate.
 
@@ -62,8 +111,9 @@ def solve(jpeg_bytes: bytes) -> CaptchaResult | None:
     if len(jpeg_bytes) > _MAX_CAPTCHA_BYTES:
         logger.warning("fubon_captcha_oversized", extra={"size": len(jpeg_bytes)})
         return None
+    processed = _preprocess(jpeg_bytes)
     try:
-        result: Any = _get_ocr().classification(jpeg_bytes, probability=True)
+        result: Any = _get_ocr().classification(processed, probability=True)
     except Exception:  # noqa: BLE001 -- ddddocr raises broad types on bad input
         logger.warning("fubon_captcha_ocr_error", exc_info=True)
         return None

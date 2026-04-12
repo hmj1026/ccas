@@ -6,6 +6,7 @@ import httpx
 import pytest
 import respx
 
+from ccas.ingestor.fetcher.banks.fubon import errors
 from ccas.ingestor.fetcher.banks.fubon.client import FubonClient
 
 
@@ -70,3 +71,52 @@ async def test_get_bill_pdf_requires_jwt() -> None:
                 uid="uid123",
                 tw_year_month="11504",
             )
+
+
+@pytest.mark.asyncio
+async def test_get_bill_pdf_non_200_raises_session_error() -> None:
+    async with FubonClient() as client, respx.mock() as mock:
+        client._jwt = "jwt-abc"
+        mock.get("https://fbmbill.taipeifubon.com.tw/PDFReportProc").mock(
+            return_value=httpx.Response(401, text="unauthorized")
+        )
+        with pytest.raises(
+            errors.FubonSessionError, match="PDFReportProc http 401"
+        ):
+            await client.get_bill_pdf(
+                bill_period="11504",
+                batch_period="20260410",
+                uid="uid123",
+                tw_year_month="11504",
+            )
+
+
+@pytest.mark.asyncio
+async def test_get_bill_pdf_non_pdf_content_raises_session_error() -> None:
+    async with FubonClient() as client, respx.mock() as mock:
+        client._jwt = "jwt-abc"
+        mock.get("https://fbmbill.taipeifubon.com.tw/PDFReportProc").mock(
+            return_value=httpx.Response(200, content=b"<html>error</html>")
+        )
+        with pytest.raises(errors.FubonSessionError, match="not a PDF"):
+            await client.get_bill_pdf(
+                bill_period="11504",
+                batch_period="20260410",
+                uid="uid123",
+                tw_year_month="11504",
+            )
+
+
+@pytest.mark.asyncio
+async def test_get_main_info_returns_defensive_copy() -> None:
+    """Mutating the returned dict must not affect the cached original."""
+    async with FubonClient() as client:
+        client._main_info = {
+            "billPeriod": "11504",
+            "batchPeriod": "20260410",
+            "uniqueIdentifier": "uid",
+            "twYearMonth": "11504",
+        }
+        result = await client.get_main_info()
+        result["billPeriod"] = "MUTATED"
+        assert client._main_info["billPeriod"] == "11504"

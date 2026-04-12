@@ -59,3 +59,13 @@ async def test_get_captcha_bad_base64_raises() -> None:
         )
         with pytest.raises(errors.FubonSessionError):
             await client.get_captcha()
+
+
+@pytest.mark.asyncio
+async def test_get_captcha_non_200_raises_session_error() -> None:
+    async with FubonClient() as client, respx.mock() as mock:
+        mock.get("https://fbmbill.taipeifubon.com.tw/checkImgs/captcha.jpg").mock(
+            return_value=httpx.Response(403, text="forbidden")
+        )
+        with pytest.raises(errors.FubonSessionError, match="captcha http 403"):
+            await client.get_captcha()

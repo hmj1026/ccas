@@ -256,3 +256,44 @@ async def test_do_login_null_jwt_and_null_error_msg_maps_to_unknown() -> None:
                 server_token="tok",
             )
         assert exc_info.value.code == "unknown"
+
+
+@pytest.mark.asyncio
+async def test_do_login_non_200_http_raises_login_error_unknown() -> None:
+    """Non-200 HTTP status → FubonLoginError with code='unknown'."""
+    async with FubonClient() as client, respx.mock() as mock:
+        mock.post(LOGIN_URL).mock(
+            return_value=httpx.Response(500, text="Internal Server Error")
+        )
+        with pytest.raises(errors.FubonLoginError) as exc_info:
+            await client.do_login(
+                id_number="A123456789",
+                birthday="0850101",
+                serial_key="1e79",
+                captcha_answer="1234",
+                server_token="tok",
+            )
+        assert exc_info.value.code == "unknown"
+        assert exc_info.value.raw_code == 500
+        assert client._jwt is None
+
+
+@pytest.mark.asyncio
+async def test_do_login_empty_string_jwt_treated_as_failure() -> None:
+    """JWT as empty string is falsy → must be treated as login failure."""
+    async with FubonClient() as client, respx.mock() as mock:
+        mock.post(LOGIN_URL).mock(
+            return_value=httpx.Response(
+                200,
+                json={"errorMsg": "some error", "jwt": ""},
+            )
+        )
+        with pytest.raises(errors.FubonLoginError):
+            await client.do_login(
+                id_number="A123456789",
+                birthday="0850101",
+                serial_key="1e79",
+                captcha_answer="1234",
+                server_token="tok",
+            )
+        assert client._jwt is None

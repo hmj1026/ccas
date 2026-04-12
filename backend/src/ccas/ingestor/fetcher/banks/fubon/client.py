@@ -42,6 +42,7 @@ from __future__ import annotations
 import base64
 import binascii
 import logging
+import ssl
 from types import TracebackType
 from typing import Any
 
@@ -58,6 +59,13 @@ logger = logging.getLogger(__name__)
 ALLOWED_SPA_HOST = "fbmbill.taipeifubon.com.tw"
 _BASE_URL = f"https://{ALLOWED_SPA_HOST}"
 _DEFAULT_TIMEOUT = 15.0
+
+
+def _make_ssl_context() -> ssl.SSLContext:
+    """Build an SSL context that tolerates FUBON's missing Subject Key Identifier."""
+    ctx = ssl.create_default_context()
+    ctx.verify_flags &= ~ssl.VERIFY_X509_STRICT
+    return ctx
 
 _MAIN_INFO_FIELDS: tuple[str, ...] = (
     "billPeriod",
@@ -102,6 +110,7 @@ class FubonClient:
             base_url=_BASE_URL,
             follow_redirects=False,
             timeout=timeout,
+            verify=_make_ssl_context(),
             headers={
                 "User-Agent": (
                     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "

@@ -15,6 +15,7 @@ tests and pipeline summary logs can match on them.
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from urllib.parse import urlparse
 
 from bs4 import BeautifulSoup
@@ -174,9 +175,25 @@ async def _login_with_captcha_retry(
                 f"credentials_wrong: doLogin code={exc.code} "
                 f"raw={exc.raw_code} msg={exc.raw_message!r}",
             ) from exc
+        _archive_captcha(jpeg, answer)
         return
 
     raise FetchError(
         _BANK,
         f"captcha_retry_exhausted: {max_retries} attempts failed",
     )
+
+
+def _archive_captcha(jpeg: bytes, answer: str) -> None:
+    """Save captcha JPEG to archive dir if FUBON_CAPTCHA_ARCHIVE_DIR is set."""
+    from ccas.config import get_settings
+
+    archive_dir = get_settings().fubon_captcha_archive_dir
+    if not archive_dir:
+        return
+    try:
+        dest = Path(archive_dir)
+        dest.mkdir(parents=True, exist_ok=True)
+        (dest / f"{answer}.jpg").write_bytes(jpeg)
+    except Exception:  # noqa: BLE001
+        logger.debug("captcha_archive_failed", exc_info=True)
