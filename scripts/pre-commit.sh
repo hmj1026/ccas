@@ -59,13 +59,22 @@ if [ ${#BACKEND_PY_FILES[@]} -gt 0 ]; then
 
         cd "$REPO_ROOT/backend"
 
-        echo "-> ruff check (staged files)"
+        echo "-> ruff check --fix + format (auto-fix staged files)"
+        uv run ruff check --fix "${REL_PY_FILES[@]}" || true
+        uv run ruff format .
+
+        # Re-stage any files modified by auto-fix
+        cd "$REPO_ROOT"
+        git add "${BACKEND_PY_FILES[@]}"
+        cd "$REPO_ROOT/backend"
+
+        echo "-> ruff check (verify no remaining errors)"
         if ! uv run ruff check "${REL_PY_FILES[@]}"; then
             EXIT_CODE=1
         fi
 
-        echo "-> ruff format (all backend files)"
-        if ! uv run ruff format --check .; then
+        echo "-> pyright"
+        if ! uv run pyright; then
             EXIT_CODE=1
         fi
 
