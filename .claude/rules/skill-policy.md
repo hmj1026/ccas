@@ -14,5 +14,6 @@
 - **小型變更直接實作**：不套完整流程型 skill（避免過度儀式化）
 - **execution-policy 優先**：透過任務分類路由後，以 execution-policy 的 agent 流程為準，不再重複觸發本優先順序
 - **同名 skill 以專案內版本為準**：若本地 `.claude/skills/` 有同名版本，優先於全域 ECC skill
+- **software-architecture 為通用指引**：該 ECC skill 含 JS/npm 相關建議（arrow functions、Redux 等），與 CCAS Python 後端無關；遇到衝突時以專案 rules（`python.md`、`python-api.md`）為準
 
 > 強制後置步驟規則與 ECC Agent Roster 詳見 `execution-policy.md`。
