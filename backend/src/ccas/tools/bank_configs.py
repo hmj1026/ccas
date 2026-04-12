@@ -279,20 +279,28 @@ _FALLBACK_CONFIG_PATH = "../config/banks.yaml"
 _FALLBACK_REGISTRY_PATH = "../config/bank-code-registry.yaml"
 
 
-def _default_config_path() -> str:
-    """Resolve banks.yaml default: `BANK_CONFIG_DIR` env > hard-coded fallback."""
+def resolve_default_config_path(filename: str, fallback_rel: str) -> str:
+    """Resolve a seed-tool YAML default path.
+
+    Priority: `BANK_CONFIG_DIR` env var (joined with ``filename``) >
+    hard-coded relative ``fallback_rel``. Shared by bank_configs and
+    categories seed tools so they behave identically under Docker
+    (`BANK_CONFIG_DIR=/config`) and host (`scripts/setup.sh`) flows.
+    """
     env_dir = os.environ.get("BANK_CONFIG_DIR")
     if env_dir:
-        return f"{env_dir.rstrip('/')}/banks.yaml"
-    return _FALLBACK_CONFIG_PATH
+        return f"{env_dir.rstrip('/')}/{filename}"
+    return fallback_rel
+
+
+def _default_config_path() -> str:
+    return resolve_default_config_path("banks.yaml", _FALLBACK_CONFIG_PATH)
 
 
 def _default_registry_path() -> str:
-    """Resolve registry.yaml default: `BANK_CONFIG_DIR` env > hard-coded fallback."""
-    env_dir = os.environ.get("BANK_CONFIG_DIR")
-    if env_dir:
-        return f"{env_dir.rstrip('/')}/bank-code-registry.yaml"
-    return _FALLBACK_REGISTRY_PATH
+    return resolve_default_config_path(
+        "bank-code-registry.yaml", _FALLBACK_REGISTRY_PATH
+    )
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -310,9 +318,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--registry",
         default=_default_registry_path(),
-        help=(
-            "bank_code registry 路徑。優先序同 `--config`。"
-        ),
+        help=("bank_code registry 路徑。優先序同 `--config`。"),
     )
     parser.add_argument(
         "--database-url",

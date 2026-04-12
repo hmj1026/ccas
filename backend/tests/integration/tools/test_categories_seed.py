@@ -69,9 +69,7 @@ async def test_reapply_is_idempotent(db_session, write_yaml) -> None:
 
 async def test_changed_category_triggers_update(db_session, write_yaml) -> None:
     path = write_yaml(BASE_YAML)
-    await apply_categories(
-        db_session, load_category_specs(path), apply_changes=True
-    )
+    await apply_categories(db_session, load_category_specs(path), apply_changes=True)
 
     modified = """\
 categories:
@@ -126,9 +124,7 @@ async def test_reseed_deletes_yaml_removed_seed_rows(db_session, write_yaml) -> 
     on reseed. Without provenance tracking this rollback was impossible and
     stale rules stayed in the DB forever."""
     path = write_yaml(BASE_YAML)
-    await apply_categories(
-        db_session, load_category_specs(path), apply_changes=True
-    )
+    await apply_categories(db_session, load_category_specs(path), apply_changes=True)
 
     shrunk = """\
 categories:
@@ -157,12 +153,8 @@ async def test_reseed_preserves_user_added_rows(db_session, write_yaml) -> None:
     """User-created rows (source='user') must survive reseed even when their
     keyword does not appear in YAML — the delete pass only targets seed rows."""
     path = write_yaml(BASE_YAML)
-    await apply_categories(
-        db_session, load_category_specs(path), apply_changes=True
-    )
-    db_session.add(
-        Category(keyword="自家手搖店", category="飲料", source="user")
-    )
+    await apply_categories(db_session, load_category_specs(path), apply_changes=True)
+    db_session.add(Category(keyword="自家手搖店", category="飲料", source="user"))
     await db_session.commit()
 
     shrunk = """\
@@ -190,9 +182,7 @@ async def test_reseed_skips_user_overrides(db_session, write_yaml) -> None:
     YAML change must not silently overwrite their choice — record as
     skipped_user instead."""
     path = write_yaml(BASE_YAML)
-    db_session.add(
-        Category(keyword="麥當勞", category="自訂分類", source="user")
-    )
+    db_session.add(Category(keyword="麥當勞", category="自訂分類", source="user"))
     await db_session.commit()
 
     summary = await apply_categories(
@@ -210,9 +200,7 @@ async def test_reseed_skips_user_overrides(db_session, write_yaml) -> None:
 
 async def test_new_seed_inserts_carry_source_seed(db_session, write_yaml) -> None:
     path = write_yaml(BASE_YAML)
-    await apply_categories(
-        db_session, load_category_specs(path), apply_changes=True
-    )
+    await apply_categories(db_session, load_category_specs(path), apply_changes=True)
     result = await db_session.execute(select(Category))
     for row in result.scalars().all():
         assert row.source == "seed"

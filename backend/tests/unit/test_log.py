@@ -122,9 +122,7 @@ class TestRedactingFilter:
             exc_info=None,
         )
 
-    def test_redacts_anthropic_key_in_bare_message(
-        self, filt: RedactingFilter
-    ) -> None:
+    def test_redacts_anthropic_key_in_bare_message(self, filt: RedactingFilter) -> None:
         """Anthropic SDK exceptions can echo keys without an ``api_key=``
         prefix; the bare-prefix pattern must catch these defensively."""
         record = self._make_record(
@@ -224,18 +222,14 @@ class TestRedactingFilter:
         assert "1001234567890" not in record.msg
 
     def test_redacts_jwt_field(self, filt: RedactingFilter) -> None:
-        record = self._make_record(
-            'jwt="eyJhbGciOi.eyJzdWIiOi.SflKxwRJSM"'
-        )
+        record = self._make_record('jwt="eyJhbGciOi.eyJzdWIiOi.SflKxwRJSM"')
         filt.filter(record)
         assert "[REDACTED]" in record.msg
         assert "SflKxwRJSM" not in record.msg
 
     def test_redacts_authorization_raw_jwt(self, filt: RedactingFilter) -> None:
         """FUBON uses a raw JWT in Authorization (no Bearer prefix)."""
-        record = self._make_record(
-            "Authorization=eyJhbGciOi.eyJzdWIiOi.SflKxwRJSM"
-        )
+        record = self._make_record("Authorization=eyJhbGciOi.eyJzdWIiOi.SflKxwRJSM")
         filt.filter(record)
         assert "[REDACTED]" in record.msg
         assert "SflKxwRJSM" not in record.msg
