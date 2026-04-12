@@ -71,9 +71,7 @@ def test_solve_returns_none_on_bad_image() -> None:
     assert captcha.solve(b"not a jpeg") is None
 
 
-def _fake_ddddocr_return(
-    text: str, confidence: float
-) -> dict[str, object]:
+def _fake_ddddocr_return(text: str, confidence: float) -> dict[str, object]:
     """Mirror the keys that ``captcha.solve()`` actually reads from ddddocr."""
     return {"text": text, "confidence": confidence}
 
@@ -119,9 +117,7 @@ def test_solve_returns_none_on_ocr_exception() -> None:
 def test_ocr_is_singleton(monkeypatch: pytest.MonkeyPatch) -> None:
     """_get_ocr must only instantiate DdddOcr once across calls."""
     monkeypatch.setattr(captcha, "_OCR", None)
-    with patch(
-        "ccas.ingestor.fetcher.banks.fubon.captcha.ddddocr.DdddOcr"
-    ) as mock_cls:
+    with patch("ccas.ingestor.fetcher.banks.fubon.captcha.ddddocr.DdddOcr") as mock_cls:
         mock_cls.return_value.classification.return_value = _fake_ddddocr_return(
             "0000", 0.1
         )

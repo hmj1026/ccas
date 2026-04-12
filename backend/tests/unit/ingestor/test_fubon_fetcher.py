@@ -136,9 +136,7 @@ class TestFetchPdf:
         with patch.object(
             flow,
             "download",
-            AsyncMock(
-                side_effect=FetchError("FUBON", "captcha_retry_exhausted: 7")
-            ),
+            AsyncMock(side_effect=FetchError("FUBON", "captcha_retry_exhausted: 7")),
         ):
             with pytest.raises(FetchError, match="captcha_retry_exhausted"):
                 fetcher.fetch_pdf(

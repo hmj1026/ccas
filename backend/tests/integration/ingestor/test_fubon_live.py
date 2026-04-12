@@ -76,9 +76,7 @@ async def test_live_end_to_end() -> None:
         settings.gmail_token_path,
     )
     service = build_gmail_service(creds)
-    messages = await asyncio.to_thread(
-        search_messages, service, _FUBON_GMAIL_FILTER
-    )
+    messages = await asyncio.to_thread(search_messages, service, _FUBON_GMAIL_FILTER)
     html_messages = [m for m in messages if m.html_body]
     if not html_messages:
         pytest.skip(

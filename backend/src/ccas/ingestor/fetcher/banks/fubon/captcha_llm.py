@@ -98,9 +98,7 @@ async def solve_with_llm(jpeg_bytes: bytes, *, api_key: str) -> str:
         # tear down the async task tree cleanly.
         raise
     except Exception as exc:  # noqa: BLE001 -- SDK raises domain-specific types
-        raise CaptchaLlmUnavailableError(
-            f"anthropic API error: {exc}"
-        ) from exc
+        raise CaptchaLlmUnavailableError(f"anthropic API error: {exc}") from exc
 
     text = ""
     for block in response.content:

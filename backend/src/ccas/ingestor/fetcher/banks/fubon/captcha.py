@@ -60,9 +60,7 @@ def solve(jpeg_bytes: bytes) -> CaptchaResult | None:
         should be rejected and the caller should refetch + retry.
     """
     if len(jpeg_bytes) > _MAX_CAPTCHA_BYTES:
-        logger.warning(
-            "fubon_captcha_oversized", extra={"size": len(jpeg_bytes)}
-        )
+        logger.warning("fubon_captcha_oversized", extra={"size": len(jpeg_bytes)})
         return None
     try:
         result: Any = _get_ocr().classification(jpeg_bytes, probability=True)

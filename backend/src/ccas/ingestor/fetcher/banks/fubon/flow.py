@@ -127,9 +127,7 @@ async def _login_with_captcha_retry(
         elif llm_enabled:
             assert llm_api_key is not None  # guarded by llm_enabled
             try:
-                answer = await captcha_llm.solve_with_llm(
-                    jpeg, api_key=llm_api_key
-                )
+                answer = await captcha_llm.solve_with_llm(jpeg, api_key=llm_api_key)
             except captcha_llm.CaptchaLlmUnavailableError as exc:
                 # Infrastructure / config problem that will not be fixed by
                 # retrying — fail loud so operators see the real cause

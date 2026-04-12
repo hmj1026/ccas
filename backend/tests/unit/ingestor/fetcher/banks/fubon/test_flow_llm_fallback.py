@@ -110,9 +110,7 @@ async def test_llm_fallback_sdk_missing_fails_loud() -> None:
     from ccas.ingestor.fetcher.base import FetchError
 
     c = _fake_client()
-    unavailable = captcha_llm.CaptchaLlmUnavailableError(
-        "anthropic SDK not installed"
-    )
+    unavailable = captcha_llm.CaptchaLlmUnavailableError("anthropic SDK not installed")
     with (
         patch.object(flow, "FubonClient", return_value=c),
         patch.object(captcha, "solve", return_value=None),
@@ -143,9 +141,7 @@ async def test_llm_fallback_rejected_response_still_retries() -> None:
     case — distinct from ``CaptchaLlmUnavailable``, the flow must ``continue``
     and keep trying rather than fail-loud."""
     c = _fake_client()
-    rejected = captcha_llm.CaptchaLlmRejectedError(
-        "LLM response not 4 digits: 'x'"
-    )
+    rejected = captcha_llm.CaptchaLlmRejectedError("LLM response not 4 digits: 'x'")
     with (
         patch.object(flow, "FubonClient", return_value=c),
         patch.object(captcha, "solve", return_value=None),

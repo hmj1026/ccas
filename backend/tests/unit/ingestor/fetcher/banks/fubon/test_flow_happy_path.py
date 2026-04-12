@@ -8,7 +8,6 @@ import pytest
 
 from ccas.ingestor.fetcher.banks.fubon import captcha, flow
 
-
 MAIN_INFO = {
     "billPeriod": "11504",
     "batchPeriod": "20260410",
@@ -18,7 +17,9 @@ MAIN_INFO = {
 
 
 def _email_html(serial: str = "1e79254d8b8c42f1a5c15aa54a0c6616") -> str:
-    return f'<html><a href="https://fbmbill.taipeifubon.com.tw/{serial}">帳單</a></html>'
+    return (
+        f'<html><a href="https://fbmbill.taipeifubon.com.tw/{serial}">帳單</a></html>'
+    )
 
 
 @pytest.mark.asyncio

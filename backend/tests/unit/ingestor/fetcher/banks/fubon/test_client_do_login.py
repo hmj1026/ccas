@@ -69,9 +69,7 @@ async def test_do_login_posts_correct_payload_and_stores_jwt() -> None:
 async def test_do_login_caches_main_info_on_success() -> None:
     """doLogin now returns bill main-info alongside JWT; must be cached."""
     async with FubonClient() as client, respx.mock() as mock:
-        mock.post(LOGIN_URL).mock(
-            return_value=httpx.Response(200, json=_SUCCESS_BODY)
-        )
+        mock.post(LOGIN_URL).mock(return_value=httpx.Response(200, json=_SUCCESS_BODY))
         await client.do_login(
             id_number="A123456789",
             birthday="0850101",

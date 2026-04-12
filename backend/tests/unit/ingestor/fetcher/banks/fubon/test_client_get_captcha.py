@@ -11,12 +11,7 @@ import respx
 from ccas.ingestor.fetcher.banks.fubon import errors
 from ccas.ingestor.fetcher.banks.fubon.client import FubonClient
 
-FIXTURE = (
-    Path(__file__).parents[5]
-    / "fixtures"
-    / "fubon"
-    / "captcha_response.txt"
-)
+FIXTURE = Path(__file__).parents[5] / "fixtures" / "fubon" / "captcha_response.txt"
 
 
 @pytest.mark.asyncio
