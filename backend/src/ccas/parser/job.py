@@ -15,6 +15,8 @@ from pathlib import Path
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ccas.config import get_settings
+from ccas.ingestor.staging import resolve_staged_path
 from ccas.parser.base import BankParser, ParseError
 from ccas.parser.registry import ParserNotFoundError, registry
 from ccas.parser.result import ParseResult
@@ -144,10 +146,26 @@ async def _process_attachment(
 ) -> None:
     """處理單一附件的解析。"""
     bank_code = attachment.bank_code
-    staged_path = attachment.staged_path
+    raw_path = attachment.staged_path
 
-    if staged_path is None:
+    if raw_path is None:
         error_msg = f"缺少 staged_path，無法解析：bank_code={bank_code}"
+        summary.failed_count += 1
+        summary.errors.append(error_msg)
+        logger.error(error_msg)
+        await update_attachment_status(
+            session, attachment, status="parse_failed", error_reason=error_msg
+        )
+        return
+
+    settings = get_settings()
+    try:
+        staged_path = resolve_staged_path(settings.staging_dir, raw_path)
+    except ValueError:
+        error_msg = (
+            f"staged_path 逃逸 staging 根目錄：bank_code={bank_code}, "
+            f"path={raw_path}"
+        )
         summary.failed_count += 1
         summary.errors.append(error_msg)
         logger.error(error_msg)
@@ -174,9 +192,8 @@ async def _process_attachment(
         return
 
     # 在 thread 中執行同步 parse 邏輯
-    pdf_path = Path(staged_path)
     success, parse_result, error_detail = await asyncio.to_thread(
-        _try_parse, candidates, pdf_path
+        _try_parse, candidates, staged_path
     )
 
     if not success:

@@ -28,8 +28,10 @@ _FUBON_KEYWORDS = ("台北富邦", "信用卡")
 
 # 帳單月份：2026年03月 or 帳單月份：2026/03
 _RE_BILLING_MONTH = re.compile(r"(\d{4})\s*[年/]\s*(\d{1,2})\s*月?\s*(?:份|月)")
-# 繳費截止日：2026/04/15 or 繳款截止日：2026-04-15
-_RE_DUE_DATE = re.compile(r"繳[費款]截止日[：:]\s*(\d{4})[/-](\d{1,2})[/-](\d{1,2})")
+# 繳費截止日：2026/04/15 or 繳款截止日：2026-04-15 or 繳款期限 2026/04/15
+_RE_DUE_DATE = re.compile(
+    r"(?:繳[費款]截止日|繳款期限)[：:]?\s*(\d{4})[/-](\d{1,2})[/-](\d{1,2})"
+)
 # 本期應繳總額：NT$ 12,345 or 應繳金額 12,345
 _RE_TOTAL_AMOUNT = re.compile(
     r"(?:本期)?應繳[總金][額額][：:]?\s*(?:NT\$?\s*)?([\d,]+)"
@@ -39,11 +41,27 @@ _RE_TOTAL_AMOUNT = re.compile(
 
 _ROC_OFFSET = 1911
 _RE_ROC_DUE_DATE = re.compile(
-    r"繳[費款]截止日[：:]\s*(\d{2,3})[/-](\d{1,2})[/-](\d{1,2})"
+    r"(?:繳[費款]截止日|繳款期限)[：:]?\s*(\d{2,3})[/-](\d{1,2})[/-](\d{1,2})"
 )
 _RE_ROC_BILLING_MONTH = re.compile(r"(\d{2,3})\s*年\s*(\d{1,2})\s*月")
 
+# Tabular header format (real FUBON PDFs):
+# 帳單年月 ... 繳款截止日 ...
+# 115/04   ... 115/04/24  ...
+_RE_FUBON_BILLING_MONTH = re.compile(r"帳單年月.*\n\s*(\d{2,3})/(\d{1,2})")
+_RE_FUBON_DUE_DATE = re.compile(
+    r"繳款截止日.*\n"
+    r".*?(\d{2,3})/(\d{1,2})/(\d{1,2})\s+"
+    r"(\d{2,3})/(\d{1,2})/(\d{1,2})"
+)
+
 # -- Transaction patterns --
+
+# Card header: "MASTER鈦金正卡末４碼5273" or "VISA白金卡末4碼1234"
+_RE_CARD_HEADER = re.compile(r"末[４4]碼(\d{4})")
+
+# Installment suffix in merchant: "(01/06期)" or "(1/6期)"
+_RE_INSTALLMENT = re.compile(r"\s*\((\d{1,2})/(\d{1,2})期\)\s*$")
 
 # Table-based: headers contain 交易日 and 金額
 _TRANSACTION_HEADER_KEYWORDS = ("交易日", "金額")
@@ -63,6 +81,16 @@ _RE_TRANSACTION_LINE = re.compile(
 _RE_TRANSACTION_LINE_SIMPLE = re.compile(
     r"(\d{2,4}/\d{1,2}/\d{1,2})\s+"  # trans_date
     r"(.+?)\s+"  # merchant
+    r"([\d,]+)\s*$",  # amount
+    re.MULTILINE,
+)
+
+# Real FUBON format: ROC_DATE MERCHANT ROC_DATE [TWD] AMOUNT
+_RE_FUBON_TRANSACTION_LINE = re.compile(
+    r"(\d{2,3}/\d{1,2}/\d{1,2})\s+"  # trans_date (ROC)
+    r"(.+?)\s+"  # merchant
+    r"(\d{2,3}/\d{1,2}/\d{1,2})\s+"  # posting_date (ROC)
+    r"(?:TWD\s+)?"  # optional currency
     r"([\d,]+)\s*$",  # amount
     re.MULTILINE,
 )
@@ -97,6 +125,17 @@ def _parse_mmdd(raw: str, year: int) -> date | None:
     return date(year, int(match.group(1)), int(match.group(2)))
 
 
+def _extract_installment(
+    merchant: str,
+) -> tuple[str, int | None, int | None]:
+    """Extract installment info from merchant and return cleaned merchant."""
+    match = _RE_INSTALLMENT.search(merchant)
+    if not match:
+        return merchant, None, None
+    cleaned = merchant[: match.start()].strip()
+    return cleaned, int(match.group(1)), int(match.group(2))
+
+
 class FubonV1Parser(BankParser):
     """台北富邦銀行信用卡帳單 v1 parser。"""
 
@@ -104,12 +143,17 @@ class FubonV1Parser(BankParser):
     version = "v1"
 
     def can_parse(self, pdf_path: Path) -> bool:
-        """Check if PDF is a Taipei Fubon Bank credit card statement."""
+        """Check if PDF is a Taipei Fubon Bank credit card statement.
+
+        Scans the first 2 pages because some FUBON statements omit
+        '信用卡' from page 1 (only showing it in the transaction detail
+        section on page 2+).
+        """
         try:
             with pdfplumber.open(pdf_path) as pdf:
                 if not pdf.pages:
                     return False
-                text = pdf.pages[0].extract_text() or ""
+                text = "\n".join(p.extract_text() or "" for p in pdf.pages[:2])
                 return self._identify(text)
         except Exception:
             logger.debug("無法開啟 PDF: %s", pdf_path, exc_info=True)
@@ -165,7 +209,13 @@ class FubonV1Parser(BankParser):
         match = _RE_BILLING_MONTH.search(text)
         if match:
             return f"{match.group(1)}-{int(match.group(2)):02d}"
-        # Try ROC year
+        # Try FUBON tabular header (most specific, avoids disclaimer false positives)
+        match = _RE_FUBON_BILLING_MONTH.search(text)
+        if match:
+            roc_year = int(match.group(1))
+            month = int(match.group(2))
+            return f"{roc_year + _ROC_OFFSET}-{month:02d}"
+        # Try generic ROC year
         match = _RE_ROC_BILLING_MONTH.search(text)
         if match:
             roc_year = int(match.group(1))
@@ -180,7 +230,7 @@ class FubonV1Parser(BankParser):
         match = _RE_DUE_DATE.search(text)
         if match:
             return date(int(match.group(1)), int(match.group(2)), int(match.group(3)))
-        # Try ROC date
+        # Try ROC date with label
         match = _RE_ROC_DUE_DATE.search(text)
         if match:
             roc_year = int(match.group(1))
@@ -189,6 +239,16 @@ class FubonV1Parser(BankParser):
                     roc_year + _ROC_OFFSET,
                     int(match.group(2)),
                     int(match.group(3)),
+                )
+        # Try FUBON tabular: 帳單結帳日 + 繳款截止日 on header, dates on data row
+        match = _RE_FUBON_DUE_DATE.search(text)
+        if match:
+            roc_year = int(match.group(4))
+            if roc_year < 200:
+                return date(
+                    roc_year + _ROC_OFFSET,
+                    int(match.group(5)),
+                    int(match.group(6)),
                 )
         return None
 
@@ -321,16 +381,36 @@ def _extract_transactions_text(
 ) -> list[TransactionItem]:
     """Extract transactions from text lines.
 
-    Tries full format (date date merchant amount) across all pages first,
-    then falls back to simple format (date merchant amount) if none found.
+    Tries FUBON format (date merchant date [TWD] amount) first,
+    then full format (date date merchant amount),
+    then simple format (date merchant amount).
+
+    Tracks card_last4 from card header lines (e.g. "末４碼5273").
     """
     items: list[TransactionItem] = []
+    current_card: str | None = None
     for page in pages:
         text = page.extract_text() or ""
-        for match in _RE_TRANSACTION_LINE.finditer(text):
-            item = _parse_text_transaction(match, billing_year)
-            if item is not None:
-                items.append(item)
+        for line in text.split("\n"):
+            card_match = _RE_CARD_HEADER.search(line)
+            if card_match:
+                current_card = card_match.group(1)
+                continue
+            txn_match = _RE_FUBON_TRANSACTION_LINE.match(line.strip())
+            if txn_match:
+                item = _parse_fubon_text_transaction(
+                    txn_match, billing_year, card_last4=current_card,
+                )
+                if item is not None:
+                    items.append(item)
+
+    if not items:
+        for page in pages:
+            text = page.extract_text() or ""
+            for match in _RE_TRANSACTION_LINE.finditer(text):
+                item = _parse_text_transaction(match, billing_year)
+                if item is not None:
+                    items.append(item)
 
     if not items:
         for page in pages:
@@ -340,6 +420,38 @@ def _extract_transactions_text(
                 if item is not None:
                     items.append(item)
     return items
+
+
+def _parse_fubon_text_transaction(
+    match: re.Match[str],
+    billing_year: int,
+    *,
+    card_last4: str | None = None,
+) -> TransactionItem | None:
+    """Parse a FUBON-format text transaction: DATE MERCHANT DATE [TWD] AMOUNT."""
+    try:
+        trans_date = _parse_date(match.group(1), billing_year)
+        raw_merchant = match.group(2).strip()
+        posting_date = _parse_date(match.group(3), billing_year)
+        amount = int(match.group(4).replace(",", ""))
+
+        if trans_date is None:
+            return None
+
+        merchant, inst_cur, inst_tot = _extract_installment(raw_merchant)
+
+        return TransactionItem(
+            trans_date=trans_date,
+            merchant=merchant,
+            amount=amount,
+            posting_date=posting_date,
+            card_last4=card_last4,
+            installment_current=inst_cur,
+            installment_total=inst_tot,
+        )
+    except (ValueError, IndexError):
+        logger.warning("跳過無法解析的交易行: %s", match.group(0))
+        return None
 
 
 def _parse_text_transaction(

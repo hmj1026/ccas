@@ -354,6 +354,38 @@ FUBON_EXPECTED_BILLING_MONTH = "2026-03"
 FUBON_EXPECTED_TOTAL_AMOUNT = 15800
 FUBON_EXPECTED_DUE_DATE = date(2026, 4, 15)
 
+# -- FUBON real PDF fixtures (ROC year, 繳款期限, 元 suffix) --
+
+FUBON_REAL_PAGE1_TEXT = (
+    "第1/3頁\n"
+    "本期應繳總額 11,274元\n"
+    "帳單年月 信用額度 國內預借現金額度 帳單結帳日 繳款截止日 循環信用利率\n"
+    "115/04 200,000 20,000 115/04/08 115/04/24 3.80%\n"
+    "台北富邦商業銀行信用卡帳單\n"
+    "消費日期 消費說明 入帳日期 外幣折算日/幣別 外幣金額/消費地 台幣金額\n"
+    "前期應繳總額 3,793\n"
+    "115/03/25 自動扣繳 115/03/26 -3,793\n"
+    "MASTER鈦金正卡末４碼5273\n"
+    "115/03/08 好市多台中店 115/03/09 TWD 3,098\n"
+    "115/03/08 好市多台中店 115/03/09 TWD 339\n"
+    "115/03/14 好市多台中店 115/03/16 TWD 100\n"
+    "115/03/14 好市多台中店 115/03/16 TWD 2,475\n"
+    "115/03/16 好市多台中店 115/03/17 TWD 1,929\n"
+    "115/03/31 富邦產物保險股份有限公司 (01/06期) 115/04/02 TWD 2,362\n"
+    "115/04/03 好市多台中店 115/04/07 TWD 971\n"
+    "本期應繳金額 11,274\n"
+)
+
+FUBON_REAL_PAGE2_TEXT = (
+    "第2/3頁\n"
+    "您本期循環信用年利率為專案利率 3.80％，"
+    "適用於115年02月份至115年04月份帳單。\n"
+)
+
+EXPECTED_FUBON_REAL_BILLING_MONTH = "2026-04"
+EXPECTED_FUBON_REAL_TOTAL_AMOUNT = 11274
+EXPECTED_FUBON_REAL_DUE_DATE = date(2026, 4, 24)
+
 # -- ESUN page text fixtures --
 
 ESUN_FIRST_PAGE_TEXT = (
