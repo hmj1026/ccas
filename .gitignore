@@ -72,8 +72,10 @@ build/
 # Local config (use banks.example.yaml as template)
 config/banks.yaml
 
-# Docker Compose local overrides
-docker-compose.override.yml
+# Docker Compose：docker-compose.override.yml 為專案 dev 預設，已納入版控。
+# 個人化客製請用 docker-compose.local.yml（本 gitignore）：
+#   docker compose -f docker-compose.yaml -f docker-compose.override.yml -f docker-compose.local.yml up
+docker-compose.local.yml
 
 # Claude Code plan files
 .claude/plans/
