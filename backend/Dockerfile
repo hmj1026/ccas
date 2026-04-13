@@ -32,7 +32,10 @@ COPY alembic.ini ./
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --group dev
 EXPOSE 8000
-CMD ["uv", "run", "uvicorn", "ccas.api.app:create_app", "--host", "0.0.0.0", "--port", "8000", "--factory", "--reload"]
+# CMD 與 production 對齊：reload 由 docker-compose.override.yml 注入 UVICORN_RELOAD=1
+# 後，於 /scripts/docker-entrypoint.sh 內附加 --reload。dev 模式下 compose 以 entrypoint
+# 接管啟動流程，以下 CMD 通常不會直接執行。
+CMD ["uv", "run", "uvicorn", "ccas.api.app:create_app", "--host", "0.0.0.0", "--port", "8000", "--factory"]
 
 # Stage: production — non-root user, health check
 FROM python:3.12-slim AS production

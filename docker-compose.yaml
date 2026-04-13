@@ -130,8 +130,8 @@ services:
       - ccas-redis:/data
     command: >
       redis-server
-        --maxmemory 256mb
-        --maxmemory-policy allkeys-lru
+        --maxmemory ${REDIS_MAXMEMORY:-256mb}
+        --maxmemory-policy ${REDIS_MAXMEMORY_POLICY:-allkeys-lru}
         --appendonly yes
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]

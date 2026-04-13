@@ -49,7 +49,12 @@ if ! uv run python -m ccas.tools.categories --apply; then
 fi
 
 printf '==> 啟動後端 API\n'
+# UVICORN_RELOAD=1 由 docker-compose.override.yml 注入，啟用 hot reload；
+# 生產環境未設定此變數，reload_flag 保持空陣列。
+reload_flag=()
+[[ -n "${UVICORN_RELOAD:-}" ]] && reload_flag=(--reload)
 exec uv run uvicorn ccas.api.app:create_app \
   --host 0.0.0.0 \
   --port 8000 \
-  --factory
+  --factory \
+  "${reload_flag[@]}"
