@@ -4,7 +4,13 @@
 # Runs: ruff check, pyright, print detection, format check, security scan, secret scan
 set -o pipefail
 
-FILE="$1"
+# PostToolUse hook input: Claude Code delivers tool context as JSON on stdin;
+# argv is empty. Resolve file_path from stdin, keep argv as manual-invocation fallback.
+FILE="${1:-}"
+if [ -z "$FILE" ] && [ ! -t 0 ] && command -v jq >/dev/null 2>&1; then
+    FILE=$(jq -r '.tool_input.file_path // empty' 2>/dev/null || true)
+fi
+[ -n "$FILE" ] || exit 0
 
 # Only process Python files
 [[ "$FILE" == *.py ]] || exit 0

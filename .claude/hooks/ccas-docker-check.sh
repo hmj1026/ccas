@@ -4,7 +4,12 @@
 
 set -euo pipefail
 
-FILE="$1"
+FILE="${1:-}"
+if [ -z "$FILE" ] && [ ! -t 0 ] && command -v jq >/dev/null 2>&1; then
+    FILE=$(jq -r '.tool_input.file_path // empty' 2>/dev/null || true)
+fi
+[ -n "$FILE" ] || exit 0
+
 BASENAME="$(basename "$FILE")"
 
 # Only process Docker-related files

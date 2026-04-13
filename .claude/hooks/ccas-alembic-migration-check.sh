@@ -4,7 +4,11 @@
 # Checks for: empty downgrade, destructive operations, backward compatibility
 set -o pipefail
 
-FILE="$1"
+FILE="${1:-}"
+if [ -z "$FILE" ] && [ ! -t 0 ] && command -v jq >/dev/null 2>&1; then
+    FILE=$(jq -r '.tool_input.file_path // empty' 2>/dev/null || true)
+fi
+[ -n "$FILE" ] || exit 0
 
 # Only process Alembic migration files
 [[ "$FILE" == *alembic/versions/*.py ]] || exit 0

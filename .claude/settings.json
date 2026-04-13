@@ -86,42 +86,42 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash .claude/hooks/ccas-python-lint.sh \"$filePath\"",
+            "command": "bash .claude/hooks/ccas-python-lint.sh",
             "timeout": 30,
             "statusMessage": "Running Python lint & security checks...",
             "async": true
           },
           {
             "type": "command",
-            "command": "bash .claude/hooks/ccas-sqlalchemy-model-check.sh \"$filePath\"",
+            "command": "bash .claude/hooks/ccas-sqlalchemy-model-check.sh",
             "timeout": 5,
             "statusMessage": "Validating SQLAlchemy model...",
             "async": true
           },
           {
             "type": "command",
-            "command": "bash .claude/hooks/ccas-tdd-red-check.sh \"$filePath\"",
+            "command": "bash .claude/hooks/ccas-tdd-red-check.sh",
             "timeout": 30,
             "statusMessage": "Running test to confirm RED state...",
             "async": true
           },
           {
             "type": "command",
-            "command": "bash .claude/hooks/ccas-frontend-lint.sh \"$filePath\"",
+            "command": "bash .claude/hooks/ccas-frontend-lint.sh",
             "timeout": 15,
             "statusMessage": "Running frontend lint...",
             "async": true
           },
           {
             "type": "command",
-            "command": "bash .claude/hooks/ccas-alembic-migration-check.sh \"$filePath\"",
+            "command": "bash .claude/hooks/ccas-alembic-migration-check.sh",
             "timeout": 5,
             "statusMessage": "Checking Alembic migration safety...",
             "async": true
           },
           {
             "type": "command",
-            "command": "bash .claude/hooks/ccas-docker-check.sh \"$filePath\"",
+            "command": "bash .claude/hooks/ccas-docker-check.sh",
             "timeout": 5,
             "statusMessage": "Checking Docker conventions...",
             "async": true

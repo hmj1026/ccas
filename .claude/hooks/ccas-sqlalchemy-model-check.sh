@@ -3,7 +3,11 @@
 # Triggered by PostToolUse (Edit + Write) on models.py files
 # Checks for required SQLAlchemy model structure and reminds about migrations
 
-FILE="$1"
+FILE="${1:-}"
+if [ -z "$FILE" ] && [ ! -t 0 ] && command -v jq >/dev/null 2>&1; then
+    FILE=$(jq -r '.tool_input.file_path // empty' 2>/dev/null || true)
+fi
+[ -n "$FILE" ] || exit 0
 
 # Only process model files
 [[ "$FILE" == *models*.py ]] || exit 0
