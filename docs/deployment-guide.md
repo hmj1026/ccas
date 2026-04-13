@@ -4,10 +4,16 @@
 
 ## 前置需求
 
-- Docker Engine 24+ 和 Docker Compose v2
+- Docker Engine 24+ 和 **Docker Compose v2.24+**（`docker-compose.override.yml` 使用 `!override` YAML tag，舊版會 parse 失敗）
 - 至少 2GB RAM（tesseract OCR 需要記憶體）
 - Google Cloud 專案（啟用 Gmail API，OAuth 憑證）
 - Telegram Bot token 和 Chat ID
+
+驗證版本：
+
+```bash
+docker compose version  # 須顯示 v2.24 以上
+```
 
 ## 1. 取得專案
 
@@ -63,6 +69,17 @@ docker compose -f docker-compose.yaml up -d --build
 - **redis**: 非同步工作佇列
 
 注意：Production 模式不包含 frontend。前端僅供開發階段驗證資料使用，正式環境透過 Telegram bot 存取資料。
+
+### 強烈建議：設定 `COMPOSE_FILE` 鎖定 base compose
+
+為避免維運人員在 production host 不小心執行裸 `docker compose up`（會自動載入 `docker-compose.override.yml` 進入 dev 模式，啟用 bind mount 與 DEBUG log），**請在 production host 的 shell profile 或 `.env` 加上**：
+
+```bash
+# /etc/profile.d/ccas.sh 或 ~/.bashrc
+export COMPOSE_FILE=docker-compose.yaml
+```
+
+設定後 Compose 會忽略 override 自動發現，無論是否帶 `-f` 都以 base compose 為準。這是一行零成本的 defence-in-depth 防線。
 
 ## 6. 驗證服務
 
