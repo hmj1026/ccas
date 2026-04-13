@@ -78,4 +78,8 @@ docker-compose.override.yml
 # Claude Code plan files
 .claude/plans/
 
+# Claude Code personal overrides (Gmail MCP, macOS shortcuts, etc.)
+# settings.json is team-shared; settings.local.json is per-developer.
+.claude/settings.local.json
+
 compact-notes/
