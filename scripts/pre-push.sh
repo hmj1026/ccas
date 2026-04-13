@@ -4,6 +4,12 @@ set -euo pipefail
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 RUN_BACKEND="${RUN_BACKEND:-1}"
 RUN_FRONTEND="${RUN_FRONTEND:-1}"
+VERIFY_CLAUDE_PLUGINS="${VERIFY_CLAUDE_PLUGINS:-1}"
+
+if [ "$VERIFY_CLAUDE_PLUGINS" = "1" ]; then
+    echo "=== Claude Plugin Pin Check ==="
+    "$REPO_ROOT/scripts/verify-claude-plugins.sh"
+fi
 
 if [ "$RUN_BACKEND" = "1" ]; then
     echo "=== Backend Checks ==="
