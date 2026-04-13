@@ -2,6 +2,7 @@
 paths:
   - "**/Dockerfile"
   - "**/docker-compose*.yaml"
+  - "**/docker-compose*.yml"
   - "scripts/**"
 ---
 # CCAS Docker & Deployment Conventions
@@ -26,8 +27,11 @@ paths:
 - **Volumes**: Named volumes for persistent data (`ccas-redis`)
 - **Health checks**: Required for backend and redis; other services depend on healthy state
 - **stop_grace_period**: worker 30s, backend 15s, scheduler/bot 10s
-- **Redis**: `--maxmemory 256mb --maxmemory-policy allkeys-lru --appendonly yes`
-- **Base compose = production**: `target: production` for all services; override switches to `dev`
+- **Redis**: `--maxmemory ${REDIS_MAXMEMORY:-256mb} --maxmemory-policy ${REDIS_MAXMEMORY_POLICY:-allkeys-lru} --appendonly yes`（可透過 `.env` 覆寫）
+- **Base compose = production**：`target: production`；開發模式由 `docker-compose.override.yml` 自動載入切換至 `dev`（bind mount 原始碼、`UVICORN_RELOAD=1`、frontend 改走 Vite dev server 5173）
+- **生產部署**：務必以 `docker compose -f docker-compose.yaml up -d` 明確指定 base compose，略過 override
+- **Compose 版本需求**：≥ v2.24（override.yml 使用 `!override` YAML tag 取代 ports 清單，舊版會 parse 失敗）
+- **個人化客製**：團隊共用 dev 設定請改 `docker-compose.override.yml`；只屬於你個人的調整放 `docker-compose.local.yml`（已 gitignore，可參考 `docker-compose.local.yml.example`）
 
 ## Environment Variables
 
@@ -45,10 +49,11 @@ paths:
 
 ## Entrypoint Pattern
 
-- `scripts/docker-entrypoint.sh`: Validates env → runs migrations → starts server
+- `scripts/docker-entrypoint.sh`: Validates env → runs migrations → seeds configs → starts uvicorn
 - Always check required env vars before proceeding
 - Run `alembic upgrade head` before starting the application
 - Use `exec` for the final command to properly handle signals
+- **Hot reload**：`UVICORN_RELOAD=1` 由 `docker-compose.override.yml` 注入，讓 entrypoint 附加 `--reload`；生產環境不設定此變數
 
 ## Volume Mounts
 
