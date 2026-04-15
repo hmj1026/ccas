@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
+from ccas.ingestor.staging import resolve_staged_path
 from ccas.parser.base import BankParser, ParseError
 from ccas.parser.job import run_parse_job
 from ccas.parser.registry import _ParserRegistry
@@ -27,6 +28,8 @@ from ccas.storage.models import (
 os.environ.setdefault("TELEGRAM_BOT_TOKEN", "test")
 os.environ.setdefault("TELEGRAM_CHAT_ID", "test")
 os.environ.setdefault("API_TOKEN", "test")
+
+TEST_STAGING_DIR = "/tmp/test-staging"
 
 
 class FakeSuccessParser(BankParser):
@@ -98,6 +101,10 @@ async def _create_test_session():
     return engine, session_factory
 
 
+def _resolved_test_path(raw_path: str, staging_dir: str = TEST_STAGING_DIR) -> str:
+    return str(resolve_staged_path(staging_dir, raw_path))
+
+
 def _make_attachment(
     bank_code: str,
     message_id: str,
@@ -144,7 +151,11 @@ class TestSuccessfulParse:
             )
             await session.commit()
 
-            with patch("ccas.parser.job.registry", test_registry):
+            with (
+                patch("ccas.parser.job.registry", test_registry),
+                patch("ccas.parser.job.get_settings") as mock_get_settings,
+            ):
+                mock_get_settings.return_value.staging_dir = TEST_STAGING_DIR
                 summary = await run_parse_job(session)
 
             assert summary.parsed_count == 1
@@ -158,7 +169,7 @@ class TestSuccessfulParse:
             assert bills[0].billing_month == "2026-03"
             assert bills[0].total_amount == 5000
             assert bills[0].due_date == date(2026, 4, 15)
-            assert bills[0].file_path == "/tmp/ctbc.pdf"
+            assert bills[0].file_path == _resolved_test_path("/tmp/ctbc.pdf")
 
             # 驗證 Transaction 已建立
             txns = (await session.execute(select(Transaction))).scalars().all()

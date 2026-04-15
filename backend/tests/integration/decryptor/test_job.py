@@ -13,11 +13,14 @@ from sqlalchemy.ext.asyncio import (
 
 from ccas.decryptor.decrypt import DecryptionError, DecryptResult
 from ccas.decryptor.job import run_decryption_job
+from ccas.ingestor.staging import resolve_staged_path
 from ccas.storage.models import Base, StagedAttachment
 
 os.environ.setdefault("TELEGRAM_BOT_TOKEN", "test")
 os.environ.setdefault("TELEGRAM_CHAT_ID", "test")
 os.environ.setdefault("API_TOKEN", "test")
+
+TEST_STAGING_DIR = "/tmp/test-staging"
 
 
 async def _create_test_session():
@@ -30,6 +33,10 @@ async def _create_test_session():
         engine, class_=AsyncSession, expire_on_commit=False
     )
     return engine, session_factory
+
+
+def _resolved_test_path(raw_path: str, staging_dir: str = TEST_STAGING_DIR) -> str:
+    return str(resolve_staged_path(staging_dir, raw_path))
 
 
 def _make_attachment(
@@ -89,15 +96,16 @@ class TestMixedBatchScenario:
                 "CATHAY": None,
                 "ESUN": "wrong_pw",
             }.get(code.upper())
+            mock_settings.staging_dir = TEST_STAGING_DIR
             mock_get_settings.return_value = mock_settings
 
             async def fake_to_thread(fn, *args):
                 pdf_path = args[0]
-                if str(pdf_path) == "/tmp/1.pdf":
+                if str(pdf_path) == _resolved_test_path("/tmp/1.pdf"):
                     return DecryptResult(needed_decryption=True)
-                if str(pdf_path) == "/tmp/2.pdf":
+                if str(pdf_path) == _resolved_test_path("/tmp/2.pdf"):
                     return DecryptResult(needed_decryption=False)
-                if str(pdf_path) == "/tmp/3.pdf":
+                if str(pdf_path) == _resolved_test_path("/tmp/3.pdf"):
                     raise DecryptionError("Invalid password")
                 raise AssertionError(f"Unexpected call: {pdf_path}")
 
@@ -134,6 +142,7 @@ class TestMixedBatchScenario:
 
             mock_settings = MagicMock()
             mock_settings.get_pdf_password.return_value = "bad_pw"
+            mock_settings.staging_dir = TEST_STAGING_DIR
             mock_get_settings.return_value = mock_settings
 
             async def fake_to_thread(fn, *args):
@@ -172,6 +181,7 @@ class TestMixedBatchScenario:
 
             mock_settings = MagicMock()
             mock_settings.get_pdf_password.return_value = None
+            mock_settings.staging_dir = TEST_STAGING_DIR
             mock_get_settings.return_value = mock_settings
 
             call_paths = []
@@ -179,7 +189,7 @@ class TestMixedBatchScenario:
             async def fake_to_thread(fn, *args):
                 pdf_path = args[0]
                 call_paths.append(str(pdf_path))
-                if str(pdf_path) == "/tmp/a.pdf":
+                if str(pdf_path) == _resolved_test_path("/tmp/a.pdf"):
                     raise DecryptionError("Password not found in settings")
                 return DecryptResult(needed_decryption=False)
 
@@ -187,7 +197,10 @@ class TestMixedBatchScenario:
 
             summary = await run_decryption_job(session)
 
-            assert len(call_paths) == 2
+            assert call_paths == [
+                _resolved_test_path("/tmp/a.pdf"),
+                _resolved_test_path("/tmp/b.pdf"),
+            ]
             assert summary.failed_count == 1
             assert summary.passthrough_count == 1
 
