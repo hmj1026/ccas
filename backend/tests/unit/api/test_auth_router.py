@@ -41,12 +41,16 @@ class TestAuthRouter:
         set_cookie = response.headers["set-cookie"]
         assert "ccas_session=test-token" in set_cookie
         assert "HttpOnly" in set_cookie
-        assert "SameSite=strict" in set_cookie
+        assert "SameSite=lax" in set_cookie
 
-    async def test_delete_session_clears_cookie(self):
+    async def test_delete_session_clears_cookie(self, monkeypatch):
+        monkeypatch.setenv("API_TOKEN", "test-token")
+        get_settings.cache_clear()
+
         response = Response()
         await delete_session(response)
 
         set_cookie = response.headers["set-cookie"]
         assert "ccas_session=" in set_cookie
         assert "Max-Age=0" in set_cookie
+        assert "SameSite=lax" in set_cookie
