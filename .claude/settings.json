@@ -76,7 +76,10 @@
       "Bash(fc-list :lang=zh)",
       "Bash(BANK_CONFIG_DIR=*)",
       "Bash(unset BANK_CONFIG_DIR)",
-      "Read(//tmp/**)"
+      "Read(//tmp/**)",
+      "Bash(sqlite3 *)",
+      "Bash(uv run coverage *)",
+      "Bash(uv run mypy *)"
     ]
   },
   "hooks": {
