@@ -11,6 +11,7 @@ import { formatAmount } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { LoadingState, ErrorState, EmptyState } from '@/components/shared/states'
 import { FilterBar, type FilterBarParams, type FilterKey } from '@/components/shared/filter-bar'
+import { StagedAttachmentsWarning } from '@/components/staged-attachments-warning'
 
 function BillsPage() {
   const queryClient = useQueryClient()
@@ -87,6 +88,8 @@ function BillsPage() {
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-bold">帳單管理</h1>
+
+      <StagedAttachmentsWarning />
 
       <FilterBar
         show={['year', 'month', 'bank', 'status']}

@@ -5,8 +5,19 @@
 """
 
 from datetime import date, datetime
+from typing import Literal
 
 from pydantic import BaseModel, Field
+
+StagedAttachmentStatusLiteral = Literal[
+    "staged",
+    "decrypted",
+    "parsed",
+    "parse_skipped",
+    "parse_failed",
+    "failed",
+    "fetch_expired",
+]
 
 # -- 共用信封 --
 
@@ -148,6 +159,28 @@ class BillUpdateRequest(BaseModel):
     """帳單更新請求。"""
 
     is_paid: bool
+
+
+# -- Staged Attachments --
+
+
+class StagedAttachmentItem(BaseModel):
+    """Gmail staging 附件處理狀態。
+
+    暴露給前端的欄位刻意排除 ``staged_path`` 與 ``gmail_attachment_id``／
+    ``gmail_part_id`` 等內部識別/檔案系統資訊，只保留足以在 UI 呈現
+    附件狀態與原因所需的欄位。
+    """
+
+    id: int
+    bank_code: str
+    bank_name: str | None = None
+    status: StagedAttachmentStatusLiteral
+    original_filename: str
+    message_date: datetime
+    error_reason: str | None
+    source_type: str
+    created_at: datetime
 
 
 # -- Settings: Banks --

@@ -16,9 +16,28 @@ from ccas.api.routers import (
     overview,
     pipeline,
     settings,
+    staged_attachments,
     transactions,
 )
 from ccas.config import get_settings
+
+# Same CSP policy as nginx.conf（defense in depth；修改時請同步兩處）。
+_CONTENT_SECURITY_POLICY = (
+    "default-src 'self'; "
+    "script-src 'self'; "
+    "style-src 'self' 'unsafe-inline'; "
+    "img-src 'self' data:; "
+    "font-src 'self' data:; "
+    "connect-src 'self'; "
+    "frame-ancestors 'none'; "
+    "base-uri 'self'; "
+    "form-action 'self'"
+)
+
+# Swagger UI / ReDoc / OpenAPI schema 這些路徑使用外部 CDN JS + inline
+# script，套 CSP 會整個壞掉；直接跳過。正式流量走 nginx 不會打到這些端點，
+# 只在開發或內部除錯時使用。
+_CSP_EXEMPT_PATHS = frozenset({"/docs", "/redoc", "/openapi.json"})
 
 
 class _SecurityHeadersMiddleware(BaseHTTPMiddleware):
@@ -27,6 +46,8 @@ class _SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        if request.url.path not in _CSP_EXEMPT_PATHS:
+            response.headers["Content-Security-Policy"] = _CONTENT_SECURITY_POLICY
         return response
 
 
@@ -61,5 +82,6 @@ def create_app() -> FastAPI:
     app.include_router(bills.router, dependencies=api_dependencies)
     app.include_router(settings.router, dependencies=api_dependencies)
     app.include_router(pipeline.router, dependencies=api_dependencies)
+    app.include_router(staged_attachments.router, dependencies=api_dependencies)
 
     return app

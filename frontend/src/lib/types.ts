@@ -113,6 +113,38 @@ export interface BillUpdateRequest {
   readonly is_paid: boolean
 }
 
+// -- Staged Attachments --
+
+/**
+ * Staged 附件狀態值。
+ * - staged / decrypted / parsed：pipeline 進行中或已完成
+ * - parse_skipped：零結帳單，預期不解析
+ * - parse_failed：解析失敗（需人工介入）
+ * - failed：下載 / ingest 失敗（可重試）
+ * - fetch_expired：下載連結已一次性使用過期（不可自動重試）
+ */
+export type StagedAttachmentStatus =
+  | 'staged'
+  | 'decrypted'
+  | 'parsed'
+  | 'parse_skipped'
+  | 'parse_failed'
+  | 'failed'
+  | 'fetch_expired'
+
+/** Gmail staging 附件狀態，用於呈現異常 / 過期下載。 */
+export interface StagedAttachmentItem {
+  readonly id: number
+  readonly bank_code: string
+  readonly bank_name: string | null
+  readonly status: StagedAttachmentStatus
+  readonly original_filename: string
+  readonly message_date: string
+  readonly error_reason: string | null
+  readonly source_type: string
+  readonly created_at: string
+}
+
 // -- Settings: Banks --
 
 /** 銀行設定，包含 Gmail 篩選條件與 parser 版本。 */

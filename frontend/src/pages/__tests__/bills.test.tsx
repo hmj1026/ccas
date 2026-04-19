@@ -46,12 +46,19 @@ const MOCK_BANKS = {
   data: [{ id: 1, bank_code: 'CTBC', bank_name: '中國信託', gmail_filter: '', active_parser_version: 'v1', is_active: true }],
   message: '',
 }
+const MOCK_STAGED_EMPTY = {
+  success: true,
+  data: [],
+  message: '',
+  pagination: { page: 1, page_size: 100, total: 0, total_pages: 0 },
+}
 
 beforeEach(() => {
   vi.clearAllMocks()
   mockApiGet.mockImplementation((path: string) => {
     if (path === '/api/analytics/years') return Promise.resolve(MOCK_YEARS)
     if (path === '/api/settings/banks') return Promise.resolve(MOCK_BANKS)
+    if (path === '/api/staged-attachments') return Promise.resolve(MOCK_STAGED_EMPTY)
     return Promise.resolve(MOCK_BILLS_RESPONSE)
   })
 })
@@ -84,6 +91,7 @@ describe('BillsPage', () => {
     mockApiGet.mockImplementation((path: string) => {
       if (path === '/api/analytics/years') return Promise.resolve(MOCK_YEARS)
       if (path === '/api/settings/banks') return Promise.resolve(MOCK_BANKS)
+      if (path === '/api/staged-attachments') return Promise.resolve(MOCK_STAGED_EMPTY)
       return Promise.resolve({ ...MOCK_BILLS_RESPONSE, data: [], pagination: { ...MOCK_BILLS_RESPONSE.pagination, total: 0 } })
     })
 
@@ -124,6 +132,7 @@ describe('BillsPage', () => {
     mockApiGet.mockImplementation((path: string) => {
       if (path === '/api/analytics/years') return Promise.resolve(MOCK_YEARS)
       if (path === '/api/settings/banks') return Promise.resolve(MOCK_BANKS)
+      if (path === '/api/staged-attachments') return Promise.resolve(MOCK_STAGED_EMPTY)
       return Promise.resolve({ ...MOCK_BILLS_RESPONSE, pagination: { page: 1, page_size: 20, total: 50, total_pages: 3 } })
     })
 
