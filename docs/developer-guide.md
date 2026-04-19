@@ -42,6 +42,13 @@ Docker Compose 啟動時會再覆寫成容器內的 `/data/` 掛載點。
 
 此腳本會：驗證環境變數 -> 安裝依賴 -> Gmail OAuth 認證 -> 資料庫 migration -> 同步銀行設定。
 
+安裝 Git hooks（pre-commit / pre-push）：
+```bash
+./scripts/setup-hooks.sh
+```
+
+Pre-commit hook 針對 staged 檔案執行 gitleaks secret scan、ruff auto-fix、pyright、frontend ESLint。Pre-push hook 模擬完整 CI（lint + unit test ≥ 70% + frontend build & test）。需要 gitleaks：`brew install gitleaks`。
+
 ## 4. 啟動開發伺服器（Docker，推薦）
 
 ```bash
@@ -257,6 +264,17 @@ uv run ruff check .
 uv run ruff format .
 uv run pyright
 ```
+
+### CI 檢查項目
+
+GitHub Actions（`.github/workflows/ci.yaml`）分四個 job：
+
+| Job | 內容 |
+|-----|------|
+| backend-lint | ruff check + format + pyright |
+| backend-test | unit tests，`--cov-fail-under=70` |
+| backend-integration-test | integration tests，`--timeout=120` |
+| frontend-lint-test | eslint + tsc build + vitest |
 
 ## 9. 資料庫 Migration
 

@@ -56,6 +56,37 @@ test: add stage control unit tests
 4. 推送並在 GitHub 建立 PR，目標 branch：`develop`
 5. PR 說明填寫變更摘要與測試計畫
 
+## Git Hooks 設定
+
+安裝 pre-commit 與 pre-push hooks（建議在 clone 後立即執行）：
+
+```bash
+./scripts/setup-hooks.sh
+```
+
+### Pre-commit hook（`scripts/pre-commit.sh`）
+
+只針對 **staged 檔案**執行，速度快：
+
+| 步驟 | 說明 |
+|------|------|
+| gitleaks secret scan | 掃描 staged diff 是否含金鑰/PII（需安裝 `brew install gitleaks`；未安裝時警告不中止）|
+| ruff check --fix | 自動修正 lint 問題後重新 stage |
+| ruff format | 格式化 Python 檔案 |
+| pyright | 型別檢查（針對整個 backend）|
+| eslint | 針對 staged `.ts`/`.tsx` 檔案 |
+
+### Pre-push hook（`scripts/pre-push.sh`）
+
+模擬完整 CI，push 前完整驗證：
+
+| 步驟 | 說明 |
+|------|------|
+| verify-claude-plugins | 驗證 Claude plugin pin |
+| ruff check + format + pyright | 完整 backend 靜態分析 |
+| pytest (unit, --cov ≥ 70%) | Unit test coverage 門檻 |
+| pnpm lint + build + test | 前端完整驗證（TypeScript 編譯含其中）|
+
 ## 程式碼品質要求
 
 ### 執行測試
