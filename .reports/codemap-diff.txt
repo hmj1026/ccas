@@ -1,56 +1,44 @@
-Codemap Diff — 2026-04-12 (vs 2026-04-11 snapshot)
-========================================================
+Codemap Diff Report — 2026-04-19
+Previous scan: 2026-04-12
+========================================
 
-## Changes since last scan
+## Files Modified (backend/src)
+- parser/banks/fubon_v1.py  (+370 lines): 分期資訊提取、卡號分組標頭繼承
+- parser/job.py             (+25 lines):  路徑相對化對齊
+- ingestor/fetcher/banks/fubon/captcha.py (+52 lines): 預處理 + 置信度門檻
+- ingestor/fetcher/banks/fubon/client.py  (+9 lines):  錯誤分類強化
+- ingestor/fetcher/banks/fubon/flow.py    (+17 lines): captcha archive 機制
+- ingestor/job.py           (+21 lines):  ingest 穩定性
+- ingestor/staging.py       (+37 lines):  staged_path 相對路徑
+- decryptor/job.py          (+22 lines):  STAGING_DIR + 相對路徑組合
 
-  backend/src/ccas/ingestor/fetcher/banks/fubon/  (refactored from fubon.py → directory)
-    + captcha_llm.py    Claude Vision captcha fallback (new file)
-    ~ captcha.py        Modified
-    ~ client.py         Modified
-    ~ flow.py           Modified
-  backend/src/ccas/ingestor/job.py                Modified
-  backend/src/ccas/ingestor/staging.py            Modified
-  backend/src/ccas/parser/banks/fubon_v1.py       Modified
-  backend/src/ccas/parser/job.py                  Modified
-  backend/src/ccas/decryptor/job.py               Modified
-  backend/src/ccas/config.py                      Modified (+2 new FUBON fields)
-  .env.example                                    Modified (+FUBON_CAPTCHA_ARCHIVE_DIR)
+## Backend Scripts Added
+- backend/scripts/eval_captcha.py          (90 LOC)
+- backend/scripts/harvest_captcha.py       (102 LOC)
+- backend/scripts/migrate_staging_paths.py (61 LOC)
 
-  Total: ~90 Python files (+8 since last scan of 82)
+## Module LOC Changes
+- parser:    4342 → 4604  (+6%)
+- ingestor:  1600 → 2268  (+42%)  ← significant
+- decryptor:  308 →  386  (+25%)
+- tools:      409 →  736  (+80%)  ← categories.py added
+- Total:    10800 → 12185 (+13%)
 
-## New dependencies detected
+## New Dependencies
+- pytest-timeout (dev): integration test timeout guard
 
-  anthropic >= 0.40.0 (optional extra "fubon-llm")
-    Purpose: Claude Vision captcha fallback for FUBON web-fetch
-    Module:  ingestor/fetcher/banks/fubon/captcha_llm.py
-    Model:   claude-sonnet-4-6
-    Trigger: FUBON_CAPTCHA_FALLBACK_LLM=true
+## Architecture Changes
+- staged_path 改為相對路徑，decryptor job 於執行時組合絕對路徑
+- fubon_v1 parser 新增：分期欄位、卡號分組標頭屬性繼承
 
-## New config fields (config.py / .env.example)
+## Schema Changes
+- None (migrations unchanged since 2026-04-12)
 
-  FUBON_CAPTCHA_ARCHIVE_DIR   成功驗證的 captcha JPEG 存檔目錄（eval 資料集擴充用）
-  FUBON_MANUAL_STAGING_DIR    手動下載 PDF 放置目錄（SPA 自動化完成前的 fallback）
-  ANTHROPIC_API_KEY           Anthropic API key（SecretStr，僅 fallback_llm=true 時需要）
+## Staleness Warnings
+- None: all docs/CODEMAPS updated today
 
-## Schema changes
-
-  categories.source  新欄位（"seed" / "user"）—— 分類來源區分
-  + Migration: 066eb5d1c70c   add-category-source
-
-## Architecture changes
-
-  FUBON captcha resolution: ddddocr OCR → Claude Vision fallback (2-layer)
-  banks/fubon.py refactored → banks/fubon/ directory
-    (client.py, flow.py, captcha.py, captcha_llm.py, errors.py)
-
-## Codemaps updated
-
-  docs/CODEMAPS/architecture.md    metadata: file count 78 → ~90
-  docs/CODEMAPS/backend.md         added FUBON + Anthropic config groups; updated file counts
-  docs/CODEMAPS/data.md            categories.source column; migration 066eb5d1c70c
-  docs/CODEMAPS/dependencies.md    fixed fubon path; added Anthropic API section
-  docs/CODEMAPS/frontend.md        no changes (skipped)
-
-## Staleness warnings
-
-  None. All docs/CODEMAPS/*.md refreshed; no codemap >90 days stale.
+## Codemaps Updated
+- docs/CODEMAPS/backend.md       (Module inventory LOC + file counts + stage notes)
+- docs/CODEMAPS/dependencies.md  (pytest-timeout; Backend utility scripts table)
+- docs/CODEMAPS/architecture.md  (testing line; date)
+- docs/CODEMAPS/data.md          (header date only; no schema changes)

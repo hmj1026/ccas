@@ -1,4 +1,4 @@
-<!-- Generated: 2026-04-12 | Files scanned: ~90 | Token estimate: ~980 -->
+<!-- Generated: 2026-04-19 | Files scanned: ~90 | Token estimate: ~980 -->
 
 # Backend
 
@@ -54,8 +54,8 @@ Supports `--from`/`--to` stage range via `PipelineOptions`.
 | # | Stage | Module | Key File (LOC) |
 |---|-------|--------|-----------------|
 | 1 | Ingest | `ingestor/` | `job.py`, `gmail_client.py`, `fetcher/` (web scrapers) |
-| 2 | Decrypt | `decryptor/` | `job.py`, `decrypt.py` |
-| 3 | Parse | `parser/` | `job.py`, `registry.py`, `banks/{ctbc,esun,taishin,ubot,cathay,sinopac,fubon}_v1.py`, `ocr.py` (fallback) |
+| 2 | Decrypt | `decryptor/` | `job.py`, `decrypt.py`; staged_path 以 STAGING_DIR 相對路徑儲存，job 組合絕對路徑 |
+| 3 | Parse | `parser/` | `job.py`, `registry.py`, `banks/{ctbc,esun,taishin,ubot,cathay,sinopac,fubon}_v1.py`, `ocr.py` (fallback); fubon_v1 支援分期資訊 + 卡號分組標頭繼承 |
 | 4 | Classify | `classifier/` | `job.py`, `engine.py` |
 | 5 | Notify | `bot/` | `notifications.py`, `job.py` (auto-query is_notified=False) |
 
@@ -79,14 +79,14 @@ Supports `--from`/`--to` stage range via `PipelineOptions`.
 | Module | Files | LOC | Purpose |
 |--------|-------|-----|---------|
 | api | 12 | 1310 | FastAPI routes, schemas, deps, security headers middleware |
-| parser | 15 | 4342 | 7 bank parsers (CTBC/ESUN/Taishin/UBOT/Cathay/SinoPac/Fubon), registry, result, OCR fallback |
-| ingestor | ~18 | ~1600 | Gmail download + staging + retry; `fetcher/` sub-module (web scrapers, captcha, FUBON bank with captcha LLM fallback) |
+| parser | 17 | 4604 | 7 bank parsers (CTBC/ESUN/Taishin/UBOT/Cathay/SinoPac/Fubon), registry, result, OCR fallback; fubon_v1 支援分期 + 卡號群組繼承 |
+| ingestor | 18 | 2268 | Gmail download + staging + retry; `fetcher/` sub-module (FUBON web-fetch + captcha preprocess + confidence gate + archive) |
 | bot | 10 | 932 | Telegram commands, notifications, auto-query pending bills (is_notified=False) |
 | pipeline | 7 | 637 | Orchestrator, worker, CLI, options, stage range |
-| tools | 3 | 409 | Bank configs (YAML), Gmail auth |
+| tools | 4 | 736 | Bank configs (YAML), Gmail auth, categories seed |
 | classifier | 5 | 327 | Keyword engine, rules |
-| decryptor | 5 | 308 | PDF password resolution, decryption |
-| storage | 4 | 256 | ORM models, async DB session, queries |
+| decryptor | 5 | 386 | PDF password resolution + legacy fallback; staged_path 以相對路徑儲存 |
+| storage | 4 | 265 | ORM models, async DB session, queries |
 | scheduler | 4 | 245 | APScheduler, reminders |
-| core | 4 | 330 | config, errors, log, __init__ |
-| **Total** | **~90** | **~10800** | |
+| core | 4 | 475 | config, errors, log, __init__ |
+| **Total** | **~90** | **~12185** | |

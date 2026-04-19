@@ -1,4 +1,4 @@
-<!-- Generated: 2026-04-12 | Files scanned: ~90 | Token estimate: ~650 -->
+<!-- Generated: 2026-04-19 | Files scanned: ~90 | Token estimate: ~650 -->
 
 # Architecture
 
@@ -40,7 +40,7 @@ Web   ──┘   (+ fetcher/)  (pikepdf)   (pdfplumber) (keyword)    (Telegram)
 | Frontend | React 19, Vite 8, TypeScript, Tailwind, shadcn |
 | Package Mgmt | uv (backend), pnpm (frontend) |
 | Linting | ruff (lint+format), pyright (types) |
-| Testing | pytest + pytest-cov (80% min), Vitest |
+| Testing | pytest + pytest-cov + pytest-timeout (80% min), Vitest |
 | External | Gmail API, Telegram Bot API, Redis (job queue) |
 | Infra | Docker Compose |
 

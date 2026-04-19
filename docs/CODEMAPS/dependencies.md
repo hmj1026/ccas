@@ -1,4 +1,4 @@
-<!-- Generated: 2026-04-12 | Files scanned: ~90 | Token estimate: ~650 -->
+<!-- Generated: 2026-04-19 | Files scanned: ~90 | Token estimate: ~680 -->
 
 # Dependencies
 
@@ -88,10 +88,24 @@ apt-get install tesseract-ocr tesseract-ocr-chi-tra
 | Package | Purpose |
 |---------|---------|
 | pytest + pytest-cov | Testing (80% coverage min) |
+| pytest-timeout | Integration test timeout guard (e.g., `--timeout=120`) |
 | fpdf2 | Test PDF generation |
 | pymupdf | PDF rendering for tests |
 | ruff | Linting + formatting |
 | pyright | Type checking |
+
+## Backend Utility Scripts
+
+`backend/scripts/` — 非 production，手動執行的維運/開發工具：
+
+| Script | Purpose |
+|--------|---------|
+| `seed.py` | 匯入測試資料 |
+| `migrate_staging_paths.py` | 將 staged_path 由絕對路徑遷移至相對路徑 |
+| `eval_captcha.py` | FUBON 驗證碼 OCR 正確率評估 |
+| `harvest_captcha.py` | 收集真實驗證碼樣本供 eval 資料集 |
+| `dedupe_staged_attachments.py` | 清理重複 staged_attachments |
+| `reimport.py` | 強制重新匯入特定帳單 |
 
 ## Frontend Dependencies
 
