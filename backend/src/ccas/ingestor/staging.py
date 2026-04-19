@@ -216,6 +216,31 @@ async def create_staged_record(
     return record
 
 
+async def update_staged_record_failure(
+    session: AsyncSession,
+    record: StagedAttachment,
+    *,
+    status: str,
+    error_reason: str,
+) -> None:
+    """更新既有 StagedAttachment 的狀態與錯誤原因（失敗路徑使用）。
+
+    當自動重試（is_failed_retry）再次失敗時，既有紀錄應被更新為最新的
+    狀態/錯誤，而不是保留上一次的陳舊值。亦用於把 ``failed`` 轉為
+    ``fetch_expired`` 這類語意升級。
+
+    Args:
+        session: 非同步 DB Session。
+        record: 目標 StagedAttachment。
+        status: 新狀態（例：``failed``、``fetch_expired``）。
+        error_reason: 新錯誤描述。
+    """
+    record.status = status
+    record.error_reason = error_reason
+    session.add(record)
+    await session.flush()
+
+
 async def delete_staged_record(
     session: AsyncSession,
     record: StagedAttachment,

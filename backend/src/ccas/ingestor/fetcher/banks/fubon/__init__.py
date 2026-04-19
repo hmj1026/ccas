@@ -37,6 +37,12 @@ _CREDENTIAL_ERROR_PREFIXES = (
     "credentials_missing:",
     "credentials_wrong:",
 )
+# Expired / stale download-link error prefixes — FetchError messages
+# carrying these are permanent soft-skips (one-time serial_key consumed
+# or link aged out). They must also bypass manual-staging fallback so
+# the ingest job can mark staged_attachments.status='fetch_expired'
+# instead of masking as 'manual_staging_empty'.
+_EXPIRED_LINK_ERROR_PREFIXES = ("record_not_found:",)
 
 logger = logging.getLogger(__name__)
 
@@ -216,6 +222,10 @@ class FubonFetcher(BankFetcher):
         except FetchError as exc:
             msg = str(exc)
             if any(p in msg for p in _CREDENTIAL_ERROR_PREFIXES):
+                raise
+            if any(p in msg for p in _EXPIRED_LINK_ERROR_PREFIXES):
+                # One-time serial_key expired or already consumed.
+                # Surface as-is so ingest job can set fetch_expired.
                 raise
             logger.info("SPA fetch 失敗，嘗試 manual-staging fallback: %s", exc)
             billing_month = _extract_billing_month(html_body)

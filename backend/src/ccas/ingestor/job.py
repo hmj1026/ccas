@@ -32,11 +32,20 @@ from ccas.ingestor.staging import (
     find_existing_staged,
     resolve_staged_path,
     staged_path_for_storage,
+    update_staged_record_failure,
 )
 from ccas.pipeline.options import PipelineOptions
 from ccas.storage.models import BankConfig
 
 logger = logging.getLogger(__name__)
+
+# Error message fragments that map to status=fetch_expired instead of
+# status=failed. `record_not_found` is raised by FUBON fetcher when the
+# email's one-time serial_key has been consumed or aged out.
+_EXPIRED_FETCH_MARKERS: tuple[str, ...] = ("record_not_found:",)
+_EXPIRED_FETCH_REASON = (
+    "fetch_expired: 下載連結已失效（serial_key 已被使用或超過有效期）"
+)
 
 
 @dataclass
@@ -309,6 +318,14 @@ async def _process_web_fetch(
         summary.errors.append(error_msg)
         logger.error(error_msg, exc_info=True)
 
+        exc_str = str(exc)
+        if any(marker in exc_str for marker in _EXPIRED_FETCH_MARKERS):
+            new_status = "fetch_expired"
+            new_reason = _EXPIRED_FETCH_REASON
+        else:
+            new_status = "failed"
+            new_reason = exc_str
+
         if existing is None:
             await create_staged_record(
                 session,
@@ -318,10 +335,17 @@ async def _process_web_fetch(
                 message_date=message.message_date,
                 original_filename=staged_filename,
                 staged_path=None,
-                status="failed",
-                error_reason=str(exc),
+                status=new_status,
+                error_reason=new_reason,
                 source_type="web_fetch",
                 part_id=synthetic_part_id,
+            )
+        else:
+            await update_staged_record_failure(
+                session,
+                existing,
+                status=new_status,
+                error_reason=new_reason,
             )
 
 

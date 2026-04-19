@@ -247,3 +247,198 @@ class TestProcessWebFetch:
             assert pdf_files[0].read_bytes() == _FAKE_PDF
 
         await engine.dispose()
+
+
+class _RecordNotFoundFetcher(BankFetcher):
+    """Mock fetcher that simulates FUBON record_not_found (expired link)."""
+
+    @property
+    def bank_code(self) -> str:
+        return "MOCKBANK"
+
+    def can_fetch(self, html_body: str) -> bool:
+        return bool(html_body)
+
+    def fetch_pdf(self, html_body: str, credentials: dict[str, str]) -> bytes:
+        from ccas.ingestor.fetcher.base import FetchError
+
+        raise FetchError(
+            "MOCKBANK",
+            "record_not_found: doLogin msg='查無資料'",
+        )
+
+
+class _GenericFailureFetcher(BankFetcher):
+    """Mock fetcher that fails with a non-expired error."""
+
+    @property
+    def bank_code(self) -> str:
+        return "MOCKBANK"
+
+    def can_fetch(self, html_body: str) -> bool:
+        return bool(html_body)
+
+    def fetch_pdf(self, html_body: str, credentials: dict[str, str]) -> bytes:
+        from ccas.ingestor.fetcher.base import FetchError
+
+        raise FetchError("MOCKBANK", "captcha_retry_exhausted: 7 attempts failed")
+
+
+class TestFetchExpiredStatus:
+    """Web-fetch failure path: record_not_found → status=fetch_expired."""
+
+    async def test_record_not_found_creates_fetch_expired_record(self, tmp_path: Path):
+        engine, session_factory = await _create_test_session()
+        mock_registry = _FetcherRegistry()
+        mock_registry.register(_RecordNotFoundFetcher())
+
+        settings = _mock_settings()
+        settings.staging_dir = str(tmp_path)
+
+        async with session_factory() as session:
+            summary = IngestionSummary()
+            message = _web_fetch_message("msg-expired-001")
+
+            with patch("ccas.ingestor.fetcher.fetcher_registry", mock_registry):
+                await _process_web_fetch(
+                    session,
+                    "MOCKBANK",
+                    message,
+                    str(tmp_path),
+                    settings,
+                    summary,
+                )
+            await session.commit()
+
+            stmt = select(StagedAttachment).where(
+                StagedAttachment.gmail_message_id == "msg-expired-001"
+            )
+            record = (await session.execute(stmt)).scalar_one()
+            assert record.status == "fetch_expired"
+            assert record.error_reason is not None
+            assert "fetch_expired" in record.error_reason
+            assert summary.failed_count == 1
+
+        await engine.dispose()
+
+    async def test_other_failure_still_creates_failed_record(self, tmp_path: Path):
+        engine, session_factory = await _create_test_session()
+        mock_registry = _FetcherRegistry()
+        mock_registry.register(_GenericFailureFetcher())
+
+        settings = _mock_settings()
+        settings.staging_dir = str(tmp_path)
+
+        async with session_factory() as session:
+            summary = IngestionSummary()
+            message = _web_fetch_message("msg-generic-fail")
+
+            with patch("ccas.ingestor.fetcher.fetcher_registry", mock_registry):
+                await _process_web_fetch(
+                    session,
+                    "MOCKBANK",
+                    message,
+                    str(tmp_path),
+                    settings,
+                    summary,
+                )
+            await session.commit()
+
+            stmt = select(StagedAttachment).where(
+                StagedAttachment.gmail_message_id == "msg-generic-fail"
+            )
+            record = (await session.execute(stmt)).scalar_one()
+            assert record.status == "failed"
+            assert "captcha_retry_exhausted" in (record.error_reason or "")
+
+        await engine.dispose()
+
+    async def test_retry_upgrades_failed_to_fetch_expired(self, tmp_path: Path):
+        """既有 failed 記錄若重試再遇 record_not_found，應升級為 fetch_expired。"""
+        engine, session_factory = await _create_test_session()
+        settings = _mock_settings()
+        settings.staging_dir = str(tmp_path)
+
+        async with session_factory() as session:
+            # 先用 generic failure 建立 failed 記錄
+            reg1 = _FetcherRegistry()
+            reg1.register(_GenericFailureFetcher())
+            with patch("ccas.ingestor.fetcher.fetcher_registry", reg1):
+                await _process_web_fetch(
+                    session,
+                    "MOCKBANK",
+                    _web_fetch_message("msg-retry"),
+                    str(tmp_path),
+                    settings,
+                    IngestionSummary(),
+                )
+            await session.commit()
+
+            # 再用 record_not_found 重試（is_failed_retry path）
+            reg2 = _FetcherRegistry()
+            reg2.register(_RecordNotFoundFetcher())
+            with patch("ccas.ingestor.fetcher.fetcher_registry", reg2):
+                await _process_web_fetch(
+                    session,
+                    "MOCKBANK",
+                    _web_fetch_message("msg-retry"),
+                    str(tmp_path),
+                    settings,
+                    IngestionSummary(),
+                )
+            await session.commit()
+
+            stmt = select(StagedAttachment).where(
+                StagedAttachment.gmail_message_id == "msg-retry"
+            )
+            record = (await session.execute(stmt)).scalar_one()
+            assert record.status == "fetch_expired"
+            assert "fetch_expired" in (record.error_reason or "")
+
+        await engine.dispose()
+
+    async def test_fetch_expired_not_auto_retried(self, tmp_path: Path):
+        """status='fetch_expired' 的紀錄下次 ingest 應跳過（不走 is_failed_retry）。"""
+        engine, session_factory = await _create_test_session()
+        settings = _mock_settings()
+        settings.staging_dir = str(tmp_path)
+
+        async with session_factory() as session:
+            reg_expire = _FetcherRegistry()
+            reg_expire.register(_RecordNotFoundFetcher())
+            with patch("ccas.ingestor.fetcher.fetcher_registry", reg_expire):
+                await _process_web_fetch(
+                    session,
+                    "MOCKBANK",
+                    _web_fetch_message("msg-no-retry"),
+                    str(tmp_path),
+                    settings,
+                    IngestionSummary(),
+                )
+            await session.commit()
+
+            # 第二次使用 success fetcher，若不當重試會變 staged
+            reg_ok = _FetcherRegistry()
+            reg_ok.register(_MockFetcher())
+            second_summary = IngestionSummary()
+            with patch("ccas.ingestor.fetcher.fetcher_registry", reg_ok):
+                await _process_web_fetch(
+                    session,
+                    "MOCKBANK",
+                    _web_fetch_message("msg-no-retry"),
+                    str(tmp_path),
+                    settings,
+                    second_summary,
+                )
+            await session.commit()
+
+            stmt = select(StagedAttachment).where(
+                StagedAttachment.gmail_message_id == "msg-no-retry"
+            )
+            record = (await session.execute(stmt)).scalar_one()
+            # 應保留 fetch_expired，不被重新下載覆蓋
+            assert record.status == "fetch_expired"
+            assert second_summary.skipped_count == 1
+            assert second_summary.staged_count == 0
+
+        await engine.dispose()
