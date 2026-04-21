@@ -248,6 +248,52 @@ class TestProcessWebFetch:
 
         await engine.dispose()
 
+    async def test_retry_does_not_delete_newly_written_file(self, tmp_path: Path):
+        """Force retry to the same path must not delete the newly written PDF."""
+        engine, session_factory = await _create_test_session()
+        mock_registry = _FetcherRegistry()
+        mock_registry.register(_MockFetcher())
+
+        settings = _mock_settings()
+        settings.staging_dir = str(tmp_path)
+
+        async with session_factory() as session:
+            message = _web_fetch_message("msg-retry-nodelete")
+
+            # First call: stage the file
+            with patch("ccas.ingestor.fetcher.fetcher_registry", mock_registry):
+                await _process_web_fetch(
+                    session,
+                    "MOCKBANK",
+                    message,
+                    str(tmp_path),
+                    settings,
+                    IngestionSummary(),
+                )
+            await session.commit()
+
+            # Second call with force=True: retry to the exact same path
+            second_summary = IngestionSummary()
+            with patch("ccas.ingestor.fetcher.fetcher_registry", mock_registry):
+                await _process_web_fetch(
+                    session,
+                    "MOCKBANK",
+                    message,
+                    str(tmp_path),
+                    settings,
+                    second_summary,
+                    force=True,
+                )
+            await session.commit()
+
+            # File must still exist on disk after retry
+            pdf_files = list(tmp_path.rglob("*.pdf"))
+            assert len(pdf_files) == 1
+            assert pdf_files[0].read_bytes() == _FAKE_PDF
+            assert second_summary.staged_count == 1
+
+        await engine.dispose()
+
 
 class _RecordNotFoundFetcher(BankFetcher):
     """Mock fetcher that simulates FUBON record_not_found (expired link)."""
@@ -317,7 +363,9 @@ class TestFetchExpiredStatus:
             assert record.status == "fetch_expired"
             assert record.error_reason is not None
             assert "fetch_expired" in record.error_reason
-            assert summary.failed_count == 1
+            assert summary.failed_count == 0
+            assert summary.skipped_count == 1
+            assert len(summary.errors) == 0
 
         await engine.dispose()
 

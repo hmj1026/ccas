@@ -187,8 +187,10 @@ async def _process_attachment(
         await asyncio.to_thread(staged_path.write_bytes, pdf_bytes)
 
         # Cleanup old record only after new download succeeds
+        new_stored = staged_path_for_storage(staging_dir, staged_path)
         if existing is not None:
-            await _cleanup_old_staged_file(staging_dir, existing.staged_path)
+            if existing.staged_path is not None and existing.staged_path != new_stored:
+                await _cleanup_old_staged_file(staging_dir, existing.staged_path)
             await delete_staged_record(session, existing)
 
         await create_staged_record(
@@ -198,7 +200,7 @@ async def _process_attachment(
             attachment_id=attachment.attachment_id,
             message_date=attachment.message_date,
             original_filename=attachment.filename,
-            staged_path=staged_path_for_storage(staging_dir, staged_path),
+            staged_path=new_stored,
             status="staged",
             part_id=attachment.part_id,
         )
@@ -293,8 +295,10 @@ async def _process_web_fetch(
         await asyncio.to_thread(lambda: target_dir.mkdir(parents=True, exist_ok=True))
         await asyncio.to_thread(staged_path.write_bytes, pdf_bytes)
 
+        new_stored = staged_path_for_storage(staging_dir, staged_path)
         if existing is not None:
-            await _cleanup_old_staged_file(staging_dir, existing.staged_path)
+            if existing.staged_path is not None and existing.staged_path != new_stored:
+                await _cleanup_old_staged_file(staging_dir, existing.staged_path)
             await delete_staged_record(session, existing)
 
         await create_staged_record(
@@ -304,7 +308,7 @@ async def _process_web_fetch(
             attachment_id=synthetic_attachment_id,
             message_date=message.message_date,
             original_filename=staged_filename,
-            staged_path=staged_path_for_storage(staging_dir, staged_path),
+            staged_path=new_stored,
             status="staged",
             source_type="web_fetch",
             part_id=synthetic_part_id,
@@ -313,16 +317,20 @@ async def _process_web_fetch(
         logger.info("已 web-fetch staged：%s -> %s", message.message_id, staged_path)
 
     except Exception as exc:
-        error_msg = f"Web-fetch 失敗 ({bank_code}/{message.message_id}): {exc}"
-        summary.failed_count += 1
-        summary.errors.append(error_msg)
-        logger.error(error_msg, exc_info=True)
-
         exc_str = str(exc)
-        if any(marker in exc_str for marker in _EXPIRED_FETCH_MARKERS):
+        is_expired = any(marker in exc_str for marker in _EXPIRED_FETCH_MARKERS)
+
+        if is_expired:
+            error_msg = f"Web-fetch 略過（連結已失效）({bank_code}/{message.message_id}): {exc}"
+            summary.skipped_count += 1
+            logger.warning(error_msg)
             new_status = "fetch_expired"
             new_reason = _EXPIRED_FETCH_REASON
         else:
+            error_msg = f"Web-fetch 失敗 ({bank_code}/{message.message_id}): {exc}"
+            summary.failed_count += 1
+            summary.errors.append(error_msg)
+            logger.error(error_msg, exc_info=True)
             new_status = "failed"
             new_reason = exc_str
 
