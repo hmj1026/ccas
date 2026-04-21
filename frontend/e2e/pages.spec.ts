@@ -13,7 +13,7 @@ test.describe('Authenticated pages', () => {
   test('overview page shows summary cards', async ({ page }) => {
     await expect(page.getByText('總消費')).toBeVisible()
     await expect(page.getByText('已繳')).toBeVisible()
-    await expect(page.getByText('未繳')).toBeVisible()
+    await expect(page.getByText('未繳').first()).toBeVisible()
   })
 
   test('bills page loads', async ({ page }) => {

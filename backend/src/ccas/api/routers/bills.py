@@ -14,10 +14,11 @@ from ccas.api.schemas import (
     BillUpdateRequest,
     PaginatedResponse,
     PaginationMeta,
+    TransactionItem,
 )
 from ccas.config import get_settings
 from ccas.storage.database import get_db_session
-from ccas.storage.models import Bill
+from ccas.storage.models import Bill, Transaction
 from ccas.storage.queries import fetch_bank_names
 
 router = APIRouter(prefix="/api/bills", tags=["bills"])
@@ -119,6 +120,46 @@ async def update_bill(
     await session.refresh(bill)
 
     return ApiResponse(data=_to_bill_item(bill, bank_names))
+
+
+@router.get(
+    "/{bill_id}/transactions",
+    response_model=ApiResponse[list[TransactionItem]],
+)
+async def list_bill_transactions(
+    bill_id: int,
+    session: AsyncSession = Depends(get_db_session),
+) -> ApiResponse[list[TransactionItem]]:
+    """取得指定帳單的所有交易明細，依交易日期升序排列。"""
+    await _get_bill_or_404(session, bill_id)
+
+    stmt = (
+        select(Transaction, Bill.bank_code, Bill.billing_month)
+        .join(Bill, Transaction.bill_id == Bill.id)
+        .where(Transaction.bill_id == bill_id)
+        .order_by(Transaction.trans_date)
+    )
+    rows = (await session.execute(stmt)).all()
+
+    return ApiResponse(
+        data=[
+            TransactionItem(
+                id=txn.id,
+                bill_id=txn.bill_id,
+                trans_date=txn.trans_date,
+                posting_date=txn.posting_date,
+                merchant=txn.merchant,
+                amount=txn.amount,
+                currency=txn.currency,
+                original_amount=txn.original_amount,
+                card_last4=txn.card_last4,
+                category=txn.category,
+                bank_code=bank_code,
+                billing_month=billing_month,
+            )
+            for txn, bank_code, billing_month in rows
+        ]
+    )
 
 
 @router.get("/{bill_id}/pdf")

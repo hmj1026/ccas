@@ -1,5 +1,5 @@
 /**
- * Bills 頁面測試 -- 載入、篩選、分頁與付款狀態切換。
+ * Bills 頁面測試 -- 載入、篩選、分頁、付款狀態切換與手風琴展開明細。
  */
 import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -40,6 +40,27 @@ const MOCK_BILLS_RESPONSE = {
   },
 }
 
+const MOCK_TRANSACTIONS_RESPONSE = {
+  success: true,
+  data: [
+    {
+      id: 101,
+      bill_id: 1,
+      trans_date: '2026-03-15',
+      posting_date: null,
+      merchant: 'Starbucks',
+      amount: 150,
+      currency: 'TWD',
+      original_amount: null,
+      card_last4: '1234',
+      category: '餐飲',
+      bank_code: 'CTBC',
+      billing_month: '2026-03',
+    },
+  ],
+  message: '',
+}
+
 const MOCK_YEARS = { success: true, data: [2026, 2025], message: '' }
 const MOCK_BANKS = {
   success: true,
@@ -59,6 +80,7 @@ beforeEach(() => {
     if (path === '/api/analytics/years') return Promise.resolve(MOCK_YEARS)
     if (path === '/api/settings/banks') return Promise.resolve(MOCK_BANKS)
     if (path === '/api/staged-attachments') return Promise.resolve(MOCK_STAGED_EMPTY)
+    if (path === '/api/bills/1/transactions') return Promise.resolve(MOCK_TRANSACTIONS_RESPONSE)
     return Promise.resolve(MOCK_BILLS_RESPONSE)
   })
 })
@@ -163,5 +185,66 @@ describe('BillsPage', () => {
     await user.click(toggleButton)
 
     expect(mockApiPatch).toHaveBeenCalledWith('/api/bills/1', { is_paid: true })
+  })
+
+  it('does not fetch transactions until expanded', async () => {
+    renderWithProviders(<BillsPage />)
+
+    await waitFor(() => expect(screen.getByText('中國信託')).toBeInTheDocument())
+
+    expect(mockApiGet).not.toHaveBeenCalledWith('/api/bills/1/transactions')
+  })
+
+  it('expands bill row and shows transactions on chevron click', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<BillsPage />)
+
+    await waitFor(() => expect(screen.getByText('中國信託')).toBeInTheDocument())
+
+    const expandButton = screen.getByLabelText('展開 中國信託 帳單明細')
+    await user.click(expandButton)
+
+    await waitFor(() => {
+      expect(screen.getByText('Starbucks')).toBeInTheDocument()
+    })
+    expect(screen.getByText('餐飲')).toBeInTheDocument()
+    expect(mockApiGet).toHaveBeenCalledWith('/api/bills/1/transactions')
+  })
+
+  it('collapses bill row on second chevron click', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<BillsPage />)
+
+    await waitFor(() => expect(screen.getByText('中國信託')).toBeInTheDocument())
+
+    await user.click(screen.getByLabelText('展開 中國信託 帳單明細'))
+    await waitFor(() => expect(screen.getByText('Starbucks')).toBeInTheDocument())
+
+    await user.click(screen.getByLabelText('收起 中國信託 帳單明細'))
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('展開 中國信託 帳單明細')).toBeInTheDocument()
+    })
+  })
+
+  it('shows empty state when bill has no transactions', async () => {
+    const user = userEvent.setup()
+    mockApiGet.mockImplementation((path: string) => {
+      if (path === '/api/analytics/years') return Promise.resolve(MOCK_YEARS)
+      if (path === '/api/settings/banks') return Promise.resolve(MOCK_BANKS)
+      if (path === '/api/staged-attachments') return Promise.resolve(MOCK_STAGED_EMPTY)
+      if (path === '/api/bills/1/transactions')
+        return Promise.resolve({ success: true, data: [], message: '' })
+      return Promise.resolve(MOCK_BILLS_RESPONSE)
+    })
+
+    renderWithProviders(<BillsPage />)
+    await waitFor(() => expect(screen.getByText('中國信託')).toBeInTheDocument())
+
+    await user.click(screen.getByLabelText('展開 中國信託 帳單明細'))
+
+    await waitFor(() => {
+      expect(screen.getByText('此帳單無交易明細')).toBeInTheDocument()
+    })
   })
 })

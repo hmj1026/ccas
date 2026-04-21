@@ -1,14 +1,16 @@
 /**
- * Bills 頁面 -- 帳單列表、付款狀態切換與 PDF 連結。
+ * Bills 頁面 -- 帳單列表、付款狀態切換、PDF 連結與手風琴展開明細。
  * 預設：全部帳單，依 billing_month 降序。
  */
+import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { ExternalLink, Check, Clock, ChevronLeft, ChevronRight } from 'lucide-react'
+import { ExternalLink, Check, Clock, ChevronLeft, ChevronRight, ChevronDown, ChevronUp } from 'lucide-react'
 import { useSearchParams } from 'react-router'
 import { apiGet, apiPatch } from '@/lib/api-client'
-import type { ApiResponse, BillItem, PaginatedResponse } from '@/lib/types'
-import { formatAmount } from '@/lib/utils'
+import type { ApiResponse, BillItem, PaginatedResponse, TransactionItem } from '@/lib/types'
+import { cn, formatAmount } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
+import { Collapsible, CollapsibleTrigger, CollapsiblePanel } from '@/components/ui/collapsible'
 import { LoadingState, ErrorState, EmptyState } from '@/components/shared/states'
 import { FilterBar, type FilterBarParams, type FilterKey } from '@/components/shared/filter-bar'
 import { StagedAttachmentsWarning } from '@/components/staged-attachments-warning'
@@ -27,12 +29,6 @@ function BillsPage() {
     year, month, bank: bankCode, status, category: '', q: '',
   }
 
-  /**
-   * 篩選列變更 callback；將指定維度寫入 URL search params 並重置分頁至第 1 頁。
-   *
-   * @param key - 變更的篩選維度
-   * @param value - 新的篩選值，空字串時刪除該參數
-   */
   function handleFilterChange(key: FilterKey, value: string) {
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev)
@@ -69,11 +65,6 @@ function BillsPage() {
     },
   })
 
-  /**
-   * 更新 URL 中的分頁參數；第 1 頁時刪除 `page` 參數保持 URL 乾淨。
-   *
-   * @param p - 目標頁碼
-   */
   function setPage(p: number) {
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev)
@@ -102,7 +93,6 @@ function BillsPage() {
         }
       />
 
-      {/* Bill list */}
       {isLoading ? (
         <LoadingState />
       ) : error ? (
@@ -112,59 +102,16 @@ function BillsPage() {
       ) : (
         <div className="space-y-3">
           {data.data.map((bill) => (
-            <div
+            <BillRow
               key={bill.id}
-              className="flex items-center justify-between rounded-lg border border-border p-4"
-            >
-              <div className="space-y-1">
-                <p className="font-medium">{bill.bank_name ?? bill.bank_code}</p>
-                <p className="text-sm text-muted-foreground">
-                  {bill.billing_month} / 到期日: {bill.due_date}
-                </p>
-                <p className="text-lg font-bold">{formatAmount(bill.total_amount)}</p>
-              </div>
-
-              <div className="flex items-center gap-2">
-                {bill.pdf_url && (
-                  <a
-                    href={bill.pdf_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
-                    aria-label={`開啟 ${bill.bank_name ?? bill.bank_code} PDF`}
-                  >
-                    <ExternalLink className="size-4" />
-                    PDF
-                  </a>
-                )}
-                <Button
-                  variant={bill.is_paid ? 'secondary' : 'outline'}
-                  size="sm"
-                  disabled={togglePaid.isPending}
-                  onClick={() =>
-                    togglePaid.mutate({ id: bill.id, is_paid: !bill.is_paid })
-                  }
-                  aria-label={bill.is_paid ? '標記為未繳' : '標記為已繳'}
-                >
-                  {bill.is_paid ? (
-                    <>
-                      <Check className="size-4" data-icon="inline-start" />
-                      已繳
-                    </>
-                  ) : (
-                    <>
-                      <Clock className="size-4" data-icon="inline-start" />
-                      未繳
-                    </>
-                  )}
-                </Button>
-              </div>
-            </div>
+              bill={bill}
+              onTogglePaid={(id, isPaid) => togglePaid.mutate({ id, is_paid: isPaid })}
+              isPending={togglePaid.isPending}
+            />
           ))}
         </div>
       )}
 
-      {/* Pagination */}
       {pagination && pagination.total_pages > 1 && (
         <div className="flex items-center justify-center gap-2">
           <Button
@@ -191,6 +138,143 @@ function BillsPage() {
         </div>
       )}
     </div>
+  )
+}
+
+interface BillRowProps {
+  bill: BillItem
+  onTogglePaid: (id: number, isPaid: boolean) => void
+  isPending: boolean
+}
+
+function BillRow({ bill, onTogglePaid, isPending }: BillRowProps) {
+  const [isOpen, setIsOpen] = useState(false)
+  const name = bill.bank_name ?? bill.bank_code
+
+  const { data: txData, isLoading: txLoading } = useQuery({
+    queryKey: ['bill-transactions', bill.id],
+    queryFn: () => apiGet<ApiResponse<TransactionItem[]>>(`/api/bills/${bill.id}/transactions`),
+    enabled: isOpen,
+    staleTime: 5 * 60_000,
+  })
+
+  return (
+    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+      <div className="rounded-lg border border-border">
+        <div className="flex items-center justify-between p-4">
+          <div className="space-y-1">
+            <p className="font-medium">{name}</p>
+            <p className="text-sm text-muted-foreground">
+              {bill.billing_month} / 到期日: {bill.due_date}
+            </p>
+            <p className="text-lg font-bold">{formatAmount(bill.total_amount)}</p>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <CollapsibleTrigger
+              render={
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label={isOpen ? `收起 ${name} 帳單明細` : `展開 ${name} 帳單明細`}
+                />
+              }
+            >
+              {isOpen ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
+            </CollapsibleTrigger>
+
+            {bill.pdf_url && (
+              <a
+                href={bill.pdf_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
+                aria-label={`開啟 ${name} PDF`}
+              >
+                <ExternalLink className="size-4" />
+                PDF
+              </a>
+            )}
+
+            <Button
+              variant={bill.is_paid ? 'secondary' : 'outline'}
+              size="sm"
+              disabled={isPending}
+              onClick={() => onTogglePaid(bill.id, !bill.is_paid)}
+              aria-label={bill.is_paid ? '標記為未繳' : '標記為已繳'}
+            >
+              {bill.is_paid ? (
+                <>
+                  <Check className="size-4" data-icon="inline-start" />
+                  已繳
+                </>
+              ) : (
+                <>
+                  <Clock className="size-4" data-icon="inline-start" />
+                  未繳
+                </>
+              )}
+            </Button>
+          </div>
+        </div>
+
+        <CollapsiblePanel>
+          <div className="border-t border-border px-4 pb-4 pt-3 space-y-3">
+            <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm sm:grid-cols-4">
+              <dt className="text-muted-foreground">帳單月份</dt>
+              <dd className="font-medium">{bill.billing_month}</dd>
+              <dt className="text-muted-foreground">繳費截止日</dt>
+              <dd className="font-medium">{bill.due_date}</dd>
+              <dt className="text-muted-foreground">應繳總額</dt>
+              <dd className="font-bold">{formatAmount(bill.total_amount)}</dd>
+              <dt className="text-muted-foreground">付款狀態</dt>
+              <dd className={cn('font-medium', bill.is_paid ? 'text-green-600' : 'text-amber-600')}>
+                {bill.is_paid ? '已繳' : '未繳'}
+              </dd>
+            </dl>
+
+            {txLoading ? (
+              <p className="text-sm text-muted-foreground">載入交易明細...</p>
+            ) : txData?.data.length ? (
+              <div className="overflow-x-auto rounded-md border border-border">
+                <table className="w-full text-sm">
+                  <thead className="bg-muted text-left">
+                    <tr>
+                      <th className="px-3 py-1.5">日期</th>
+                      <th className="px-3 py-1.5">商家</th>
+                      <th className="px-3 py-1.5">分類</th>
+                      <th className="px-3 py-1.5">卡末4碼</th>
+                      <th className="px-3 py-1.5 text-right">金額</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {txData.data.map((tx) => (
+                      <tr key={tx.id} className="border-t border-border">
+                        <td className="px-3 py-1.5 whitespace-nowrap">{tx.trans_date}</td>
+                        <td className="px-3 py-1.5">{tx.merchant}</td>
+                        <td className="px-3 py-1.5">
+                          {tx.category ? (
+                            <span className="rounded-full bg-secondary px-2 py-0.5 text-xs">
+                              {tx.category}
+                            </span>
+                          ) : '-'}
+                        </td>
+                        <td className="px-3 py-1.5">{tx.card_last4 ?? '-'}</td>
+                        <td className="px-3 py-1.5 text-right whitespace-nowrap">
+                          {formatAmount(tx.amount, tx.currency)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">此帳單無交易明細</p>
+            )}
+          </div>
+        </CollapsiblePanel>
+      </div>
+    </Collapsible>
   )
 }
 
