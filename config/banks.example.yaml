@@ -16,6 +16,26 @@ banks:
     active_parser_version: v1
     is_active: true
 
+  - bank_code: ESUN
+    gmail_filter: "from:estatement@esunbank.com subject:玉山銀行 subject:信用卡電子帳單"
+    active_parser_version: v1
+    is_active: true
+
+  - bank_code: TAISHIN
+    gmail_filter: "from:webmaster@bhurecv.taishinbank.com.tw subject:台新信用卡電子帳單"
+    active_parser_version: v1
+    is_active: true
+
+  - bank_code: UBOT
+    gmail_filter: "from:estatement@ebillv2.card.ubot.com.tw subject:聯邦銀行信用卡 subject:電子帳單"
+    active_parser_version: v1
+    is_active: true
+
+  - bank_code: CATHAY
+    gmail_filter: "from:service@pxbillrc01.cathaybk.com.tw subject:國泰世華銀行信用卡 subject:電子帳單"
+    active_parser_version: v1
+    is_active: true
+
   - bank_code: FUBON
     gmail_filter: "from:rs@cf.taipeifubon.com.tw subject:台北富邦銀行 subject:信用卡帳單"
     active_parser_version: v1
