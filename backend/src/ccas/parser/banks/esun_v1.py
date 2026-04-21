@@ -91,15 +91,22 @@ _RE_TRANSACTION_LINE_SIMPLE = re.compile(
 )
 
 
-def _parse_date(raw: str, billing_year: int) -> date | None:
-    """Parse a date string in various formats (YYYY/MM/DD, MM/DD, ROC YYY/MM/DD)."""
+def _parse_date(raw: str, billing_year: int, billing_month_num: int = 0) -> date | None:
+    """Parse a date string in various formats (YYYY/MM/DD, MM/DD, ROC YYY/MM/DD).
+
+    When billing_month_num is provided and the parsed month exceeds it, the year
+    is shifted back by one to handle cross-year billing cycles.
+    """
     parts = raw.split("/")
     if len(parts) != 3 and len(parts) != 2:
         return None
 
     try:
         if len(parts) == 2:
-            return date(billing_year, int(parts[0]), int(parts[1]))
+            mm = int(parts[0])
+            cross_year = billing_month_num > 0 and mm > billing_month_num
+            year = billing_year - 1 if cross_year else billing_year
+            return date(year, mm, int(parts[1]))
         year_part = int(parts[0])
         month = int(parts[1])
         day = int(parts[2])
@@ -110,12 +117,15 @@ def _parse_date(raw: str, billing_year: int) -> date | None:
         return None
 
 
-def _parse_mmdd(raw: str, year: int) -> date | None:
+def _parse_mmdd(raw: str, billing_year: int, billing_month_num: int = 0) -> date | None:
     """Parse an 'MM/DD' string into a Python date using the given year."""
     match = _RE_DATE_MMDD.match(raw)
     if not match:
         return None
-    return date(year, int(match.group(1)), int(match.group(2)))
+    mm = int(match.group(1))
+    cross_year = billing_month_num > 0 and mm > billing_month_num
+    year = billing_year - 1 if cross_year else billing_year
+    return date(year, mm, int(match.group(2)))
 
 
 class EsunV1Parser(BankParser):
@@ -146,7 +156,10 @@ class EsunV1Parser(BankParser):
             pages = pdf.pages
             billing_month, total_amount, due_date = self._extract_summary(pages)
             billing_year = int(billing_month.split("-")[0])
-            transactions = self._extract_transactions(pages, billing_year)
+            billing_month_num = int(billing_month.split("-")[1])
+            transactions = self._extract_transactions(
+                pages, billing_year, billing_month_num
+            )
 
         return ParseResult(
             bank_code=self.bank_code,
@@ -253,16 +266,17 @@ class EsunV1Parser(BankParser):
         self,
         pages: list[pdfplumber.page.Page],
         billing_year: int,
+        billing_month_num: int = 0,
     ) -> tuple[TransactionItem, ...]:
         """Extract transaction items from all pages.
 
         Tries table extraction first, then text line parsing.
         """
-        items = _extract_transactions_table(pages, billing_year)
+        items = _extract_transactions_table(pages, billing_year, billing_month_num)
         if items:
             return tuple(items)
 
-        items = _extract_transactions_text(pages, billing_year)
+        items = _extract_transactions_text(pages, billing_year, billing_month_num)
         return tuple(items)
 
 
@@ -272,6 +286,7 @@ class EsunV1Parser(BankParser):
 def _extract_transactions_table(
     pages: list[pdfplumber.page.Page],
     billing_year: int,
+    billing_month_num: int = 0,
 ) -> list[TransactionItem]:
     """Extract transactions from tables."""
     items: list[TransactionItem] = []
@@ -280,7 +295,7 @@ def _extract_transactions_table(
             if not _is_transaction_table(table):
                 continue
             for row in table[1:]:
-                item = _parse_transaction_row(row, billing_year)
+                item = _parse_transaction_row(row, billing_year, billing_month_num)
                 if item is not None:
                     items.append(item)
     return items
@@ -298,6 +313,7 @@ def _is_transaction_table(table: list[list[str | None]]) -> bool:
 def _parse_transaction_row(
     row: list[str | None],
     year: int,
+    billing_month_num: int = 0,
 ) -> TransactionItem | None:
     """Parse a single table row into a TransactionItem.
 
@@ -314,17 +330,17 @@ def _parse_transaction_row(
             merchant = cells[3]
             raw_amount = cells[4]
 
-            trans_date = _parse_mmdd(raw_trans_date, year)
+            trans_date = _parse_mmdd(raw_trans_date, year, billing_month_num)
             if trans_date is None:
-                trans_date = _parse_date(raw_trans_date, year)
+                trans_date = _parse_date(raw_trans_date, year, billing_month_num)
             if trans_date is None:
                 logger.warning("跳過無法解析交易日的行: %s", cells)
                 return None
 
             amount = int(raw_amount.replace(",", ""))
-            posting_date = _parse_mmdd(raw_posting_date, year)
+            posting_date = _parse_mmdd(raw_posting_date, year, billing_month_num)
             if posting_date is None:
-                posting_date = _parse_date(raw_posting_date, year)
+                posting_date = _parse_date(raw_posting_date, year, billing_month_num)
             is_valid_card = raw_card_last4.isdigit() and len(raw_card_last4) == 4
             card_last4 = raw_card_last4 if is_valid_card else None
 
@@ -340,9 +356,9 @@ def _parse_transaction_row(
             merchant = cells[1]
             raw_amount = cells[2]
 
-            trans_date = _parse_mmdd(raw_trans_date, year)
+            trans_date = _parse_mmdd(raw_trans_date, year, billing_month_num)
             if trans_date is None:
-                trans_date = _parse_date(raw_trans_date, year)
+                trans_date = _parse_date(raw_trans_date, year, billing_month_num)
             if trans_date is None:
                 logger.warning("跳過無法解析交易日的行: %s", cells)
                 return None
@@ -367,6 +383,7 @@ def _parse_transaction_row(
 def _extract_transactions_text(
     pages: list[pdfplumber.page.Page],
     billing_year: int,
+    billing_month_num: int = 0,
 ) -> list[TransactionItem]:
     """Extract transactions from text lines.
 
@@ -379,7 +396,7 @@ def _extract_transactions_text(
         text = page.extract_text() or ""
         page_spans: list[tuple[int, int]] = []
         for match in _RE_ESUN_TXN_LINE.finditer(text):
-            item = _parse_esun_real_transaction(match, billing_year)
+            item = _parse_esun_real_transaction(match, billing_year, billing_month_num)
             if item is not None:
                 items.append(item)
                 page_spans.append(match.span())
@@ -388,7 +405,9 @@ def _extract_transactions_text(
         for match in _RE_ESUN_TXN_SINGLE_DATE.finditer(text):
             if any(s <= match.start() < e for s, e in page_spans):
                 continue
-            item = _parse_esun_single_date_transaction(match, billing_year)
+            item = _parse_esun_single_date_transaction(
+                match, billing_year, billing_month_num
+            )
             if item is not None:
                 items.append(item)
         consumed_spans.extend(page_spans)
@@ -398,25 +417,32 @@ def _extract_transactions_text(
     for page in pages:
         text = page.extract_text() or ""
         for match in _RE_TRANSACTION_LINE.finditer(text):
-            item = _parse_text_transaction(match, billing_year)
+            item = _parse_text_transaction(match, billing_year, billing_month_num)
             if item is not None:
                 items.append(item)
 
         if not items:
             for match in _RE_TRANSACTION_LINE_SIMPLE.finditer(text):
-                item = _parse_simple_text_transaction(match, billing_year)
+                item = _parse_simple_text_transaction(
+                    match, billing_year, billing_month_num
+                )
                 if item is not None:
                     items.append(item)
     return items
 
 
-def _parse_mmdd_loose(raw: str, year: int) -> date | None:
+def _parse_mmdd_loose(
+    raw: str, billing_year: int, billing_month_num: int = 0
+) -> date | None:
     """Parse MM/DD or M/D into a date (tolerant of 1-digit components)."""
     parts = raw.split("/")
     if len(parts) != 2:
         return None
     try:
-        return date(year, int(parts[0]), int(parts[1]))
+        mm = int(parts[0])
+        cross_year = billing_month_num > 0 and mm > billing_month_num
+        year = billing_year - 1 if cross_year else billing_year
+        return date(year, mm, int(parts[1]))
     except ValueError:
         return None
 
@@ -424,11 +450,14 @@ def _parse_mmdd_loose(raw: str, year: int) -> date | None:
 def _parse_esun_real_transaction(
     match: re.Match[str],
     billing_year: int,
+    billing_month_num: int = 0,
 ) -> TransactionItem | None:
     """Parse a real-ESUN MM/DD + TWD transaction line."""
     try:
-        trans_date = _parse_mmdd_loose(match.group(1), billing_year)
-        posting_date = _parse_mmdd_loose(match.group(2), billing_year)
+        trans_date = _parse_mmdd_loose(match.group(1), billing_year, billing_month_num)
+        posting_date = _parse_mmdd_loose(
+            match.group(2), billing_year, billing_month_num
+        )
         merchant = match.group(3).strip()
         amount = int(match.group(4).replace(",", ""))
 
@@ -453,10 +482,11 @@ def _parse_esun_real_transaction(
 def _parse_esun_single_date_transaction(
     match: re.Match[str],
     billing_year: int,
+    billing_month_num: int = 0,
 ) -> TransactionItem | None:
     """Parse a single-date ESUN refund/payment line."""
     try:
-        trans_date = _parse_mmdd_loose(match.group(1), billing_year)
+        trans_date = _parse_mmdd_loose(match.group(1), billing_year, billing_month_num)
         merchant = match.group(2).strip()
         amount = int(match.group(3).replace(",", ""))
 
@@ -480,11 +510,12 @@ def _parse_esun_single_date_transaction(
 def _parse_text_transaction(
     match: re.Match[str],
     billing_year: int,
+    billing_month_num: int = 0,
 ) -> TransactionItem | None:
     """Parse a full-format text transaction line."""
     try:
-        trans_date = _parse_date(match.group(1), billing_year)
-        posting_date = _parse_date(match.group(2), billing_year)
+        trans_date = _parse_date(match.group(1), billing_year, billing_month_num)
+        posting_date = _parse_date(match.group(2), billing_year, billing_month_num)
         merchant = match.group(3).strip()
         amount = int(match.group(4).replace(",", ""))
 
@@ -505,10 +536,11 @@ def _parse_text_transaction(
 def _parse_simple_text_transaction(
     match: re.Match[str],
     billing_year: int,
+    billing_month_num: int = 0,
 ) -> TransactionItem | None:
     """Parse a simple-format text transaction line."""
     try:
-        trans_date = _parse_date(match.group(1), billing_year)
+        trans_date = _parse_date(match.group(1), billing_year, billing_month_num)
         merchant = match.group(2).strip()
         amount = int(match.group(3).replace(",", ""))
 

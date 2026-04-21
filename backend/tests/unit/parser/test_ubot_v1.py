@@ -249,6 +249,17 @@ class TestParseDate:
     def test_invalid_date_values_returns_none(self):
         assert _parse_date("2026/13/40", 2026) is None
 
+    def test_mmdd_cross_year_december_in_march_statement(self):
+        # billing_month=2026-03; December transaction belongs to 2025
+        assert _parse_date("12/30", 2026, 3) == date(2025, 12, 30)
+
+    def test_mmdd_same_year_within_billing_month(self):
+        assert _parse_date("03/05", 2026, 3) == date(2026, 3, 5)
+
+    def test_mmdd_no_cross_year_when_billing_month_num_zero(self):
+        # billing_month_num=0 disables cross-year logic
+        assert _parse_date("12/30", 2026, 0) == date(2026, 12, 30)
+
 
 class TestParseMmdd:
     def test_valid_mmdd(self):
@@ -259,6 +270,12 @@ class TestParseMmdd:
 
     def test_non_date_returns_none(self):
         assert _parse_mmdd("abc", 2026) is None
+
+    def test_cross_year_december_in_march_statement(self):
+        assert _parse_mmdd("12/30", 2026, 3) == date(2025, 12, 30)
+
+    def test_same_year_within_billing_month(self):
+        assert _parse_mmdd("02/15", 2026, 3) == date(2026, 2, 15)
 
 
 # -- ROC date format tests --
@@ -419,6 +436,22 @@ class TestRealPdfFormat:
         assert len(txns) == 1
         assert txns[0].amount == 12152
         assert txns[0].trans_date == date(2026, 12, 30)
+
+    def test_cross_year_december_in_march_statement(self):
+        # billing_month=2026-03 (March): December transaction → 2025
+        parser = _make_parser()
+        page = make_mock_page(
+            "12/30 12/26 某保險公司 ＸＸＸＸＸＸＸＸＸＸＸ TW 12,152\n"
+        )
+
+        txns = parser._extract_transactions(
+            cast(list[pdfplumber.page.Page], [page]),
+            2026,
+            3,
+        )
+
+        assert len(txns) == 1
+        assert txns[0].trans_date == date(2025, 12, 30)
 
     def test_extracts_real_foreign_transaction(self):
         parser = _make_parser()
