@@ -42,7 +42,9 @@ class TestIngestStage:
             pdf_attachments=(fake_attachment,),
         )
 
-        staged_file = Path(staging_dir) / "TESTBANK" / "msg-100_2026_202603_statement.pdf"
+        staged_file = (
+            Path(staging_dir) / "TESTBANK" / "msg-100_2026_202603_statement.pdf"
+        )
 
         mock_settings = MagicMock()
         mock_settings.staging_dir = staging_dir
