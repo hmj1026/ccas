@@ -135,6 +135,23 @@ async def _run_stage(
     """Execute a single pipeline stage and return its summary."""
     logger.info("Pipeline stage %d/%d: %s", stage_num, total_stages, stage_name)
 
+    try:
+        return await _dispatch_stage(stage_name, session, options)
+    except Exception as exc:
+        logger.error("Pipeline stage %s crashed: %s", stage_name, exc, exc_info=True)
+        return StageSummary(
+            stage=stage_name,
+            counts={"failed": 1},
+            errors=[f"{type(exc).__name__}: {exc}"],
+        )
+
+
+async def _dispatch_stage(
+    stage_name: str,
+    session: AsyncSession,
+    options: PipelineOptions | None,
+) -> StageSummary:
+    """Dispatch to the appropriate stage handler."""
     if stage_name == "ingest":
         result = await run_ingestion_job(session, options)
         return _ingest_stage_summary(result)

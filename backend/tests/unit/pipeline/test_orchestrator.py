@@ -239,6 +239,55 @@ class TestFaultTolerance:
         assert summary.stages[2].counts["parsed"] == 0
         assert summary.stages[3].counts["classified"] == 0
 
+    @pytest.mark.asyncio
+    async def test_stage_exception_does_not_crash_pipeline(self, mock_session):
+        """階段級異常（如 GmailAuthError）不應中斷整個 pipeline。"""
+        stages_called = []
+
+        async def mock_ingest_crash(session, options=None):
+            stages_called.append("ingest")
+            raise RuntimeError("Token 檔案不存在")
+
+        async def mock_decrypt(session, options=None):
+            stages_called.append("decrypt")
+            return _make_decrypt_summary()
+
+        async def mock_parse(session, options=None):
+            stages_called.append("parse")
+            return _make_parse_summary()
+
+        async def mock_classify(session):
+            stages_called.append("classify")
+            return _make_classify_summary()
+
+        async def mock_notify(session, *, bill_ids=None):
+            stages_called.append("notify")
+            return _make_notify_summary()
+
+        with (
+            patch(
+                "ccas.pipeline.orchestrator.run_ingestion_job",
+                side_effect=mock_ingest_crash,
+            ),
+            patch(
+                "ccas.pipeline.orchestrator.run_decryption_job",
+                side_effect=mock_decrypt,
+            ),
+            patch("ccas.pipeline.orchestrator.run_parse_job", side_effect=mock_parse),
+            patch(
+                "ccas.pipeline.orchestrator.run_classify_job", side_effect=mock_classify
+            ),
+            patch("ccas.pipeline.orchestrator.run_notify_job", side_effect=mock_notify),
+        ):
+            summary = await run_pipeline(mock_session)
+
+        assert len(stages_called) == 5
+        assert summary.stages[0].stage == "ingest"
+        assert summary.stages[0].counts["failed"] == 1
+        assert "RuntimeError" in summary.stages[0].errors[0]
+        assert summary.stages[1].stage == "decrypt"
+        assert summary.stages[1].counts["decrypted"] == 2
+
 
 class TestSummaryAggregation:
     """5.3: 驗證各階段統計數字正確反映處理結果。"""

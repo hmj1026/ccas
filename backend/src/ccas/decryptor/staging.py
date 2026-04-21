@@ -17,16 +17,25 @@ async def fetch_pending_attachments(
     session: AsyncSession,
     options: PipelineOptions | None = None,
 ) -> Sequence[StagedAttachment]:
-    """查詢狀態為 ``staged`` 的附件，可依 options 篩選。
+    """查詢待解密附件，可依 options 篩選。
+
+    正常模式僅查詢 ``staged``；force 模式額外包含
+    ``decrypted`` 和 ``decrypt_failed``，允許重新解密。
 
     Args:
         session: 非同步 DB Session。
-        options: Pipeline 選項（bank_code / date range 篩選）。
+        options: Pipeline 選項（bank_code / date range / force 篩選）。
 
     Returns:
         待解密的 StagedAttachment 記錄清單。
     """
-    stmt = select(StagedAttachment).where(StagedAttachment.status == "staged")
+    force = options.force if options else False
+    if force:
+        stmt = select(StagedAttachment).where(
+            StagedAttachment.status.in_(["staged", "decrypted", "decrypt_failed"])
+        )
+    else:
+        stmt = select(StagedAttachment).where(StagedAttachment.status == "staged")
     stmt = apply_pipeline_filters(stmt, options)
     result = await session.execute(stmt)
     return result.scalars().all()
