@@ -49,6 +49,10 @@ Docker Compose 啟動時會再覆寫成容器內的 `/data/` 掛載點。
 
 Pre-commit hook 針對 staged 檔案執行 gitleaks secret scan、ruff auto-fix、pyright、frontend ESLint。Pre-push hook 模擬完整 CI（lint + unit test ≥ 70% + frontend build & test）。需要 gitleaks：`brew install gitleaks`。
 
+常見失敗模式：
+- Python 變更只通過 `ruff check` 不代表 CI 會過；`ruff format --check` 也會擋下過長行與格式不一致。提交前請至少跑 `./scripts/dev-lint.sh` 或 `cd backend && uv run ruff format --check .`
+- `pnpm test` 只允許執行 Vitest 單元測試。Playwright 規格必須放在 `frontend/e2e/`，並透過 `pnpm e2e` 執行；不要讓 `vite.config.ts` 的 Vitest `include` 收到 `e2e/**`，否則 CI 會在 Vitest 階段因 `test.describe()` 失敗
+
 ## 4. 啟動開發伺服器（Docker，推薦）
 
 ```bash
@@ -275,6 +279,11 @@ GitHub Actions（`.github/workflows/ci.yaml`）分四個 job：
 | backend-test | unit tests，`--cov-fail-under=70` |
 | backend-integration-test | integration tests，`--timeout=120` |
 | frontend-lint-test | eslint + tsc build + vitest |
+
+#### CI 排錯備忘
+
+- `Backend Lint & Type Check` 失敗時，先區分是 `ruff check`、`ruff format --check` 還是 `pyright`。`ruff check` 過關不代表 format check 已過關
+- `Frontend Lint & Test` 的 `Test` 步驟固定跑 `pnpm test`，也就是 Vitest。若錯誤訊息提到 `Playwright Test did not expect test.describe()`，代表 `e2e/*.spec.ts` 被 Vitest 誤收，應檢查 `frontend/vite.config.ts` 的 `test.include/exclude`
 
 ## 9. 資料庫 Migration
 

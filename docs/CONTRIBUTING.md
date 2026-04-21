@@ -87,6 +87,11 @@ test: add stage control unit tests
 | pytest (unit, --cov ≥ 70%) | Unit test coverage 門檻 |
 | pnpm lint + build + test | 前端完整驗證（TypeScript 編譯含其中）|
 
+注意：
+- `pnpm test` 是 Vitest 單元測試，不應執行 `frontend/e2e/*.spec.ts`
+- Playwright E2E 測試請用 `pnpm e2e`；若 CI 在前端 `Test` 步驟出現 `test.describe()` 錯誤，通常是 Vitest 設定誤收了 `e2e/**`
+- Python 變更請同時注意 `ruff check` 與 `ruff format --check`；長行或格式偏差常在後者才被擋下
+
 ## 程式碼品質要求
 
 ### 執行測試
