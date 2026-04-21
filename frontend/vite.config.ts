@@ -27,6 +27,9 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./src/test-setup.ts'],
     css: true,
+    // Keep Vitest scoped to src/. Playwright specs live under e2e/ and must
+    // only run via `pnpm e2e`, otherwise CI will load them with the wrong
+    // runner and fail on `test.describe()`.
     include: ['src/**/*.test.{ts,tsx}', 'src/**/*.spec.{ts,tsx}'],
     exclude: ['e2e/**', 'node_modules/**', 'dist/**'],
     coverage: {
