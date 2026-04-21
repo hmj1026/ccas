@@ -119,7 +119,7 @@ async def export_transactions(
     q: str | None = Query(default=None),
     session: AsyncSession = Depends(get_db_session),
 ):
-    """匯出交易明細為 CSV（UTF-8 with BOM）。"""
+    """匯出交易明細為 CSV（UTF-8）。"""
     base = _build_filter_stmt(month, year, bank_code, category, q)
     base = base.order_by(Transaction.trans_date)
     result = await session.execute(base)
@@ -158,7 +158,7 @@ async def export_transactions(
         filename += f"-{bank_code}"
     filename += ".csv"
 
-    content = output.getvalue().encode("utf-8-sig")
+    content = output.getvalue().encode("utf-8")
     return StreamingResponse(
         io.BytesIO(content),
         media_type="text/csv; charset=utf-8",

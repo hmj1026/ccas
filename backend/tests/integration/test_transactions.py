@@ -176,7 +176,7 @@ async def test_list_transactions_pagination(
 
 
 async def test_export_csv(client: AsyncClient, db_session: AsyncSession):
-    """CSV 匯出包含 BOM 與正確欄位。"""
+    """CSV 匯出為 UTF-8 且包含正確欄位。"""
     await _seed_transactions(db_session)
 
     response = await client.get(
@@ -187,7 +187,7 @@ async def test_export_csv(client: AsyncClient, db_session: AsyncSession):
     assert "text/csv" in response.headers["content-type"]
     assert "ccas-transactions-2026-03.csv" in response.headers["content-disposition"]
 
-    content = response.content.decode("utf-8-sig")
+    content = response.content.decode("utf-8")
     lines = content.strip().split("\n")
     # header + 3 data rows
     assert len(lines) == 4
