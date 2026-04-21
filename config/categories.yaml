@@ -18,6 +18,8 @@ categories:
     keywords:
       - 麥當勞
       - 肯德基
+      - KFC
+      - 漢堡王
       - 摩斯漢堡
       - SUBWAY
       - 必勝客
@@ -36,6 +38,15 @@ categories:
       - 路易莎
       - CAMA
       - 拿坡里
+      - 豆府
+      - 饗食天堂
+      - 西堤
+      - 陶板屋
+      - 原燒
+      - 乾杯
+      - 時時香
+      - 吉野家
+      - MOS BURGER
 
   - category: 咖啡飲料
     keywords:
@@ -63,6 +74,7 @@ categories:
       - 全家FAMILY
       - FAMILYMART
       - 萊爾富
+      - Hi-Life
       - OK超商
       - OKMART
 
@@ -102,11 +114,20 @@ categories:
       - MITSUI OUTLET
       - LaLaport
       - 蝦皮
+      - Shopee
       - PChome
       - MOMO
       - momo購物
+      - Yahoo購物
       - 露天拍賣
       - 博客來
+      - 燦坤
+      - 全國電子
+      - IKEA
+      - 無印良品
+      - UNIQLO
+      - H&M
+      - ZARA
 
   - category: 娛樂
     keywords:
@@ -176,3 +197,45 @@ categories:
       - 台水
       - 大台北瓦斯
       - 欣欣瓦斯
+
+  - category: 醫療藥局
+    keywords:
+      - 屈臣氏
+      - 康是美
+      - 大樹藥局
+      - 杏一醫療
+      - 藥局
+      - 診所
+      - 醫院
+      - 藥妝
+      - 聯合醫院
+      - 台大醫院
+      - 長庚醫院
+      - 榮總
+
+  - category: 旅遊住宿
+    keywords:
+      - Agoda
+      - AGODA
+      - Booking.com
+      - BOOKING
+      - Airbnb
+      - AIRBNB
+      - 飯店
+      - 民宿
+      - 台灣高鐵訂票
+      - 易遊網
+      - 雄獅旅遊
+      - 可樂旅遊
+      - 燦星旅遊
+
+  - category: 健身運動
+    keywords:
+      - World Gym
+      - WORLD GYM
+      - 健身工廠
+      - 健身房
+      - Fitness
+      - 運動中心
+      - 游泳池
+      - 球場
