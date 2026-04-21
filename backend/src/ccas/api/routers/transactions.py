@@ -126,8 +126,6 @@ async def export_transactions(
     items = [_to_item(row) for row in result.all()]
 
     output = io.StringIO()
-    # UTF-8 BOM
-    output.write("\ufeff")
     writer = csv.writer(output)
     writer.writerow(
         [
