@@ -25,7 +25,7 @@ class TestIngestStage:
     """3.2: mock Gmail API，驗證 staging record 正確建立。"""
 
     async def test_ingest_creates_staged_record(
-        self, db_session: AsyncSession, bank_config: BankConfig
+        self, db_session: AsyncSession, bank_config: BankConfig, staging_dir: str
     ) -> None:
         from ccas.ingestor.gmail_client import GmailAttachmentMeta, GmailMessage
 
@@ -42,6 +42,11 @@ class TestIngestStage:
             pdf_attachments=(fake_attachment,),
         )
 
+        staged_file = Path(staging_dir) / "TESTBANK" / "msg-100_2026_202603_statement.pdf"
+
+        mock_settings = MagicMock()
+        mock_settings.staging_dir = staging_dir
+
         with (
             patch("ccas.ingestor.job.load_credentials") as mock_creds,
             patch("ccas.ingestor.job.build_gmail_service") as mock_svc,
@@ -49,8 +54,9 @@ class TestIngestStage:
             patch("ccas.ingestor.job.download_attachment", return_value=b"%PDF-fake"),
             patch(
                 "ccas.ingestor.job.build_staged_path",
-                return_value=Path("/tmp/test/statement.pdf"),
+                return_value=staged_file,
             ),
+            patch("ccas.ingestor.job.get_settings", return_value=mock_settings),
             patch("pathlib.Path.mkdir"),
             patch("pathlib.Path.write_bytes"),
         ):

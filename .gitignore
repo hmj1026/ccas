@@ -14,6 +14,7 @@ openspec/*.log
 
 # Playwright snapshots (local testing artifacts)
 .playwright-cli/
+test-results/
 
 # Logs
 *.log

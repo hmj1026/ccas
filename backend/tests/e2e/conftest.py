@@ -7,6 +7,7 @@
 import os
 from collections.abc import AsyncGenerator
 from datetime import datetime
+from pathlib import Path
 
 import pytest
 from sqlalchemy.ext.asyncio import (
@@ -54,6 +55,14 @@ async def bank_config(db_session: AsyncSession) -> BankConfig:
     db_session.add(config)
     await db_session.commit()
     return config
+
+
+@pytest.fixture
+def staging_dir(tmp_path: Path) -> str:
+    """Provide a temporary staging directory for pipeline tests."""
+    staging = tmp_path / "staging"
+    staging.mkdir()
+    return str(staging)
 
 
 @pytest.fixture
