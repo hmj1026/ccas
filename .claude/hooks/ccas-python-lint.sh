@@ -40,6 +40,7 @@ fi
 FORMAT_OUT=$((cd "$BACKEND_DIR" && uv run ruff format --check "$FILE") 2>&1)
 if echo "$FORMAT_OUT" | grep -q "would reformat"; then
     echo "[format-check]"
+    echo "[Hook] CI also runs uv run ruff format --check ."
     echo "[Hook] SUGGESTION: Run uv run ruff format $FILE"
 fi
 

@@ -87,3 +87,5 @@ Relevant ECC skills: `python-patterns`, `python-testing`, `backend-patterns`, `a
 1. **Edit/Write Python 功能後？** → python-reviewer 已跑？ YES/NO
 2. **Bug fix/新功能？** → tdd-guide 已跑？ YES/NO
 3. **SQL/Alembic 修改？** → database-reviewer 已跑？ YES/NO
+4. **有動到 Python 檔？** → 不只看 `ruff check`；至少確認 `ruff format --check` 也通過，避免 CI 因格式失敗
+5. **有動到 frontend 測試設定或 `frontend/e2e/*.spec.ts`？** → 明確區分 runner：`pnpm test` 只能跑 Vitest 單元測試，Playwright 只能走 `pnpm e2e`

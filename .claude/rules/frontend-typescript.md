@@ -51,6 +51,9 @@ paths:
 - Use `vitest` (not jest) APIs: `describe`, `it`, `expect`, `vi.fn()`
 - Use `@testing-library/react` for component tests: `render`, `screen`, `userEvent`
 - Avoid testing implementation details; test user-visible behavior
+- `pnpm test` is Vitest-only and must stay scoped to `src/**`
+- Playwright specs live under `frontend/e2e/` and must run via `pnpm e2e` / `pnpm e2e:ui`
+- If you edit `vite.config.ts` / `vitest.config.ts`, preserve `test.include` / `test.exclude` so Vitest does not collect `e2e/**`
 
 ## API Integration
 

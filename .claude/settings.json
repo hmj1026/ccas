@@ -111,8 +111,8 @@
           {
             "type": "command",
             "command": "bash .claude/hooks/ccas-frontend-lint.sh",
-            "timeout": 15,
-            "statusMessage": "Running frontend lint...",
+            "timeout": 30,
+            "statusMessage": "Running frontend checks...",
             "async": true
           },
           {
