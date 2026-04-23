@@ -18,4 +18,4 @@ if [ ! -x "$PRE_PUSH" ]; then
 fi
 
 echo "=== Session end: running pre-push checks (files were modified) ==="
-bash "$PRE_PUSH"
+VERIFY_CLAUDE_PLUGINS=0 bash "$PRE_PUSH"

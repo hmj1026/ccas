@@ -17,6 +17,7 @@ fi
 
 # Run uv commands from backend/ where pyproject.toml lives
 BACKEND_DIR=$(git -C "$(dirname "$FILE")" rev-parse --show-toplevel 2>/dev/null)/backend
+[ -d "$BACKEND_DIR" ] || exit 0
 
 # 1. Ruff lint
 echo "[ruff-check]"

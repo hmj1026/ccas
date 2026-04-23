@@ -86,3 +86,4 @@ docker-compose.local.yml
 .claude/settings.local.json
 
 compact-notes/
+backend/data/captcha-archive/

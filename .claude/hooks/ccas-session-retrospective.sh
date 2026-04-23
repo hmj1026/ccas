@@ -42,7 +42,7 @@ echo ""
 ENCODED_PATH=$(echo "$PROJECT_ROOT" | tr '/' '-')
 MEMORY_FILE="$HOME/.claude/projects/$ENCODED_PATH/memory/MEMORY.md"
 if [ -f "$MEMORY_FILE" ]; then
-    MEMORY_MOD=$(stat -f %m "$MEMORY_FILE" 2>/dev/null || stat -c %Y "$MEMORY_FILE" 2>/dev/null)
+    MEMORY_MOD=$(stat -c %Y "$MEMORY_FILE" 2>/dev/null || stat -f %m "$MEMORY_FILE" 2>/dev/null)
     CURRENT_TIME=$(date +%s)
     TIME_DIFF=$((CURRENT_TIME - MEMORY_MOD))
 

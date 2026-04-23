@@ -79,7 +79,8 @@
       "Read(//tmp/**)",
       "Bash(sqlite3 *)",
       "Bash(uv run coverage *)",
-      "Bash(uv run mypy *)"
+      "Bash(uv run mypy *)",
+      "Bash(cx *)"
     ]
   },
   "hooks": {

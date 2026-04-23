@@ -19,6 +19,6 @@ PROJECT_ROOT=$(git -C "$(dirname "$FILE")" rev-parse --show-toplevel 2>/dev/null
 cd "$PROJECT_ROOT/backend"
 
 echo "[tdd-red-check] Running $FILE to confirm RED state..."
-uv run pytest "$FILE" -x --tb=short 2>&1 | tail -30
+uv run pytest "$FILE" -x --tb=short 2>&1 | tail -30 || true
 
 exit 0
