@@ -1,4 +1,4 @@
-<!-- Generated: 2026-04-19 | Files scanned: ~90 | Token estimate: ~980 -->
+<!-- Generated: 2026-04-22 | Files scanned: ~92 | Token estimate: ~980 -->
 
 # Backend
 
@@ -16,9 +16,10 @@ Dashboard:
   GET    /overview             overview.py
 
 Bills:
-  GET    /bills                bills.py
-  PATCH  /bills/{id}           bills.py (mark paid)
-  GET    /bills/{id}/pdf       bills.py (download)
+  GET    /bills                     bills.py
+  PATCH  /bills/{id}                bills.py (mark paid)
+  GET    /bills/{id}/transactions   bills.py (inline transaction list)
+  GET    /bills/{id}/pdf            bills.py (download)
 
 Transactions:
   GET    /transactions         transactions.py (filter, paginate, sort)
@@ -80,10 +81,10 @@ Supports `--from`/`--to` stage range via `PipelineOptions`.
 |--------|-------|-----|---------|
 | api | 12 | 1310 | FastAPI routes, schemas, deps, security headers middleware |
 | parser | 17 | 4604 | 7 bank parsers (CTBC/ESUN/Taishin/UBOT/Cathay/SinoPac/Fubon), registry, result, OCR fallback; fubon_v1 支援分期 + 卡號群組繼承 |
-| ingestor | 18 | 2268 | Gmail download + staging + retry; `fetcher/` sub-module (FUBON web-fetch + captcha preprocess + confidence gate + archive) |
+| ingestor | 18 | 2337 | Gmail download + staging + retry; `fetcher/` sub-module (FUBON web-fetch + captcha preprocess + confidence gate + archive) |
 | bot | 10 | 932 | Telegram commands, notifications, auto-query pending bills (is_notified=False) |
 | pipeline | 7 | 637 | Orchestrator, worker, CLI, options, stage range |
-| tools | 4 | 736 | Bank configs (YAML), Gmail auth, categories seed |
+| tools | 4 | 773 | Bank configs (YAML), Gmail auth, categories seed, reclassify utility |
 | classifier | 5 | 327 | Keyword engine, rules |
 | decryptor | 5 | 386 | PDF password resolution + legacy fallback; staged_path 以相對路徑儲存 |
 | storage | 4 | 265 | ORM models, async DB session, queries |

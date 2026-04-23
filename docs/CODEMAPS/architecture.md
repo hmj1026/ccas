@@ -1,4 +1,4 @@
-<!-- Generated: 2026-04-19 | Files scanned: ~90 | Token estimate: ~650 -->
+<!-- Generated: 2026-04-22 | Files scanned: ~92 | Token estimate: ~650 -->
 
 # Architecture
 
@@ -57,7 +57,7 @@ backend/src/ccas/
 ├── pipeline/     5-stage orchestrator with stage range control (--from/--to)
 ├── scheduler/    APScheduler cron jobs
 ├── storage/      SQLAlchemy models, database, queries
-├── tools/        Bank configs, Gmail auth helpers
+├── tools/        Bank configs, Gmail auth helpers, reclassify utility
 ├── config.py     Pydantic Settings
 ├── errors.py     Exception hierarchy
 └── log.py        Structured JSON logging

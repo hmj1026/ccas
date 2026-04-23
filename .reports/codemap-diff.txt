@@ -1,44 +1,38 @@
-Codemap Diff Report — 2026-04-19
-Previous scan: 2026-04-12
+Codemap Diff Report — 2026-04-22
+Previous scan: 2026-04-19 (frontend.md: 2026-04-11)
 ========================================
 
-## Files Modified (backend/src)
-- parser/banks/fubon_v1.py  (+370 lines): 分期資訊提取、卡號分組標頭繼承
-- parser/job.py             (+25 lines):  路徑相對化對齊
-- ingestor/fetcher/banks/fubon/captcha.py (+52 lines): 預處理 + 置信度門檻
-- ingestor/fetcher/banks/fubon/client.py  (+9 lines):  錯誤分類強化
-- ingestor/fetcher/banks/fubon/flow.py    (+17 lines): captcha archive 機制
-- ingestor/job.py           (+21 lines):  ingest 穩定性
-- ingestor/staging.py       (+37 lines):  staged_path 相對路徑
-- decryptor/job.py          (+22 lines):  STAGING_DIR + 相對路徑組合
+## Files Updated
 
-## Backend Scripts Added
-- backend/scripts/eval_captcha.py          (90 LOC)
-- backend/scripts/harvest_captcha.py       (102 LOC)
-- backend/scripts/migrate_staging_paths.py (61 LOC)
+frontend.md  (was 2026-04-11, 11 days stale — most outdated)
+  + ui/dialog.tsx (158 LOC) added to components list
+  + ui/collapsible.tsx (25 LOC) added — used by bills expandable rows
+  + staged-attachments-warning.tsx (157 LOC) added to components list
+  + shared/filter-bar.tsx (227 LOC) added to components list
+  + bills.tsx: noted expandable transaction detail feature
+  + api-client.ts: apiFetchBlob added to function list
+  + lib/types.ts: full type list with LOC documented
 
-## Module LOC Changes
-- parser:    4342 → 4604  (+6%)
-- ingestor:  1600 → 2268  (+42%)  ← significant
-- decryptor:  308 →  386  (+25%)
-- tools:      409 →  736  (+80%)  ← categories.py added
-- Total:    10800 → 12185 (+13%)
+backend.md  (was 2026-04-19)
+  + GET /api/bills/{id}/transactions — bills inline transaction list
+  ~ tools LOC: 736 → 773 (reclassify utility added)
+  ~ ingestor LOC: 2268 → 2337
 
-## New Dependencies
-- pytest-timeout (dev): integration test timeout guard
+architecture.md  (was 2026-04-19)
+  ~ tools/: added "reclassify utility" to module description
 
-## Architecture Changes
-- staged_path 改為相對路徑，decryptor job 於執行時組合絕對路徑
-- fubon_v1 parser 新增：分期欄位、卡號分組標頭屬性繼承
+## Files Unchanged
 
-## Schema Changes
-- None (migrations unchanged since 2026-04-12)
+data.md         (2026-04-19) — no schema or migration changes
+dependencies.md (2026-04-19) — no new external services or packages
+
+## Architecture Changes Since Last Scan
+
+- New feature: bills page expandable row shows inline transactions
+  Route: GET /api/bills/{id}/transactions  |  Component: ui/collapsible.tsx
+- New utility: reclassify tool in tools/ module
+- New UI primitives: ui/dialog.tsx (158 LOC), ui/collapsible.tsx (25 LOC)
 
 ## Staleness Warnings
-- None: all docs/CODEMAPS updated today
 
-## Codemaps Updated
-- docs/CODEMAPS/backend.md       (Module inventory LOC + file counts + stage notes)
-- docs/CODEMAPS/dependencies.md  (pytest-timeout; Backend utility scripts table)
-- docs/CODEMAPS/architecture.md  (testing line; date)
-- docs/CODEMAPS/data.md          (header date only; no schema changes)
+None — all codemaps now current as of 2026-04-22
