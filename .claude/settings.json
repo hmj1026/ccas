@@ -138,7 +138,13 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash .claude/hooks/ccas-session-retrospective.sh",
+            "command": "bash -c 'REPO=$(git rev-parse --show-toplevel 2>/dev/null) && bash \"$REPO/.claude/hooks/ccas-pre-push-stop.sh\"'",
+            "timeout": 120,
+            "statusMessage": "Running pre-push checks (session end)..."
+          },
+          {
+            "type": "command",
+            "command": "bash -c 'REPO=$(git rev-parse --show-toplevel 2>/dev/null) && bash \"$REPO/.claude/hooks/ccas-session-retrospective.sh\"'",
             "timeout": 10,
             "statusMessage": "Running session retrospective...",
             "async": true
