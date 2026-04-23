@@ -172,28 +172,31 @@ async def _create_attachment_test_db():
 
 
 class TestProcessAttachmentRetryNoDelete:
-    """_process_attachment: force retry to the same path must not delete the new file."""
+    """_process_attachment: force retry to the same path must not delete
+    the new file."""
 
     async def test_force_retry_same_path_preserves_file(self, tmp_path: Path):
-        """When force=True downloads to the identical staged path, the file must survive."""
+        """When force=True downloads to the identical staged path,
+        the file must survive."""
         engine, factory = await _create_attachment_test_db()
-        _FAKE_PDF = b"%PDF-1.4 fake"
+        fake_pdf = b"%PDF-1.4 fake"
 
         def fake_download(service, message_id, attachment_id):
-            return _FAKE_PDF
+            return fake_pdf
 
         attachment = GmailAttachmentMeta(
             message_id="msg-att-force",
             attachment_id="att-001",
             filename="statement.pdf",
             message_date=datetime(2026, 3, 15),
-            size=len(_FAKE_PDF),
+            size=len(fake_pdf),
             part_id="1",
         )
 
+        dl_patch = "ccas.ingestor.job.download_attachment"
         async with factory() as session:
             # First call: stage the file normally
-            with patch("ccas.ingestor.job.download_attachment", side_effect=fake_download):
+            with patch(dl_patch, side_effect=fake_download):
                 await _process_attachment(
                     session,
                     MagicMock(),
@@ -209,7 +212,7 @@ class TestProcessAttachmentRetryNoDelete:
 
             # Second call with force=True: same message_id + filename → same staged path
             second_summary = IngestionSummary()
-            with patch("ccas.ingestor.job.download_attachment", side_effect=fake_download):
+            with patch(dl_patch, side_effect=fake_download):
                 await _process_attachment(
                     session,
                     MagicMock(),
@@ -224,7 +227,7 @@ class TestProcessAttachmentRetryNoDelete:
             # File must still be on disk and contain valid content
             pdf_files = list(tmp_path.rglob("*.pdf"))
             assert len(pdf_files) == 1
-            assert pdf_files[0].read_bytes() == _FAKE_PDF
+            assert pdf_files[0].read_bytes() == fake_pdf
             assert second_summary.staged_count == 1
 
         await engine.dispose()

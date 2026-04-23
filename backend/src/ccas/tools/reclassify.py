@@ -4,6 +4,7 @@ Re-loads the latest keyword rules from the categories table and
 re-classifies every transaction. Only the `category` column is
 updated; original transaction data is not modified.
 """
+
 from __future__ import annotations
 
 import argparse

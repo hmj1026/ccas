@@ -321,7 +321,9 @@ async def _process_web_fetch(
         is_expired = any(marker in exc_str for marker in _EXPIRED_FETCH_MARKERS)
 
         if is_expired:
-            error_msg = f"Web-fetch 略過（連結已失效）({bank_code}/{message.message_id}): {exc}"
+            error_msg = (
+                f"Web-fetch 略過（連結已失效）({bank_code}/{message.message_id}): {exc}"
+            )
             summary.skipped_count += 1
             logger.warning(error_msg)
             new_status = "fetch_expired"
