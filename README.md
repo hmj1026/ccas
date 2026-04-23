@@ -44,6 +44,29 @@ staged --> decrypted --> parsed       (success path)
 | Integrations | Gmail API (PDF download), Telegram Bot (notifications) |
 | Infrastructure | Docker Compose, Redis (job queue) |
 
+## 透過 AI 協助安裝
+
+不熟悉命令列或想省去查文件的時間？複製下方提示詞，貼入 Claude、ChatGPT 或任何 AI 聊天介面，AI 會閱讀 [`docs/ai-setup-guide.md`](docs/ai-setup-guide.md) 並一步一步引導你完成所有設定。
+
+````
+我想在本地安裝 CCAS 信用卡帳單自動化系統。
+這個系統會自動從 Gmail 收取信用卡帳單 PDF、解析交易明細、分類消費，
+並可透過 Telegram Bot 接收帳單提醒，以及透過前端儀表板查看整理後的信用卡資訊。
+
+請先閱讀以下安裝引導文件的內容（docs/ai-setup-guide.md），然後：
+1. 先詢問我的作業系統、是否已安裝 Docker、使用哪些銀行信用卡、是否需要 Telegram Bot
+2. 根據我的回答決定安裝路線
+3. 一個步驟確認完成再進行下一步
+
+---
+
+[將 docs/ai-setup-guide.md 的全部內容貼在此處]
+````
+
+> 使用方式：先用文字編輯器開啟 `docs/ai-setup-guide.md`，複製全部內容，貼入上方 `[將 docs/ai-setup-guide.md 的全部內容貼在此處]` 的位置，再把整段文字送給 AI。
+
+---
+
 ## 快速開始
 
 給第一次接觸這個專案的人，先依角色挑選對應文件：
@@ -195,7 +218,11 @@ pnpm test                      # run tests
 pnpm lint                      # lint check
 ```
 
-### Git hooks（一次性安裝）
+### Git hooks
+
+**Claude Code 使用者**：無需安裝。Session 結束且有檔案異動時，Stop hook（`.claude/hooks/ccas-pre-push-stop.sh`）自動執行完整品質檢查。
+
+**非 Claude 工作流**（手動 git push）：
 
 ```bash
 ./scripts/setup-hooks.sh       # 安裝 pre-commit + pre-push（需先 `brew install gitleaks`）
@@ -260,9 +287,9 @@ ccas/
 | `test.sh` | 與 `dev-test.sh` 等價的 pytest wrapper（CI 亦呼叫同一支） | 手動 / CI |
 | `pipeline.sh` | `docker compose exec backend uv run python -m ccas.pipeline "$@"`；在執行中的 backend 容器內跑 pipeline | 手動 |
 | `get-telegram-chat-id.sh` | 以 Bot Token 呼叫 `getUpdates` 列出最近聊天室 ID；可帶參數或讀 `.env` 的 `TELEGRAM_BOT_TOKEN` | 手動 |
-| `setup-hooks.sh` | 將 `pre-commit.sh` / `pre-push.sh` symlink 到 `.git/hooks/`；偵測 gitleaks 是否安裝並提醒 | 手動（首次） |
+| `setup-hooks.sh` | 將 `pre-commit.sh` / `pre-push.sh` symlink 到 `.git/hooks/`；非 Claude 工作流使用；偵測 gitleaks 是否安裝並提醒 | 手動（首次，非必要）|
 | `pre-commit.sh` | git hook：`gitleaks protect --staged` 掃描 staged diff，偵測秘密即中止 commit | `git commit` |
-| `pre-push.sh` | git hook：backend `ruff`＋`pyright`＋`pytest --cov`（門檻 70%），frontend `lint`＋`build`＋`test` | `git push` |
+| `pre-push.sh` | CI 模擬：backend `ruff`＋`pyright`＋`pytest --cov`（門檻 70%），frontend `lint`＋`build`＋`test` | Claude Code Stop hook（自動）/ `git push`（需安裝）|
 | `docker-entrypoint.sh` | Backend 容器 entrypoint：驗證環境變數 → 檢查 tesseract → `alembic upgrade head` → `exec uvicorn` | Docker Compose 自動 |
 
 ## 文件索引

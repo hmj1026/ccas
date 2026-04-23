@@ -58,7 +58,14 @@ test: add stage control unit tests
 
 ## Git Hooks 設定
 
-安裝 pre-commit 與 pre-push hooks（建議在 clone 後立即執行）：
+### Claude Code 使用者（自動）
+
+使用 Claude Code 開發時，**無需手動安裝任何 hook**。  
+Session 結束時，若有檔案異動，`.claude/hooks/ccas-pre-push-stop.sh` 會自動執行 `scripts/pre-push.sh`，在 session 關閉前完成完整品質檢查。此機制不依賴 git，Claude 若發現問題仍可在同一 session 內修正。
+
+### 非 Claude 工作流（手動 git push）
+
+若直接使用 `git push` 而非透過 Claude Code，建議安裝 git hooks：
 
 ```bash
 ./scripts/setup-hooks.sh
@@ -78,7 +85,12 @@ test: add stage control unit tests
 
 ### Pre-push hook（`scripts/pre-push.sh`）
 
-模擬完整 CI，push 前完整驗證：
+模擬完整 CI，執行完整驗證。觸發方式有兩種：
+
+| 觸發 | 條件 |
+|------|------|
+| Claude Code Stop hook（自動） | Session 結束且有檔案異動 |
+| git pre-push hook | 執行 `git push`（需先跑 `setup-hooks.sh`）|
 
 | 步驟 | 說明 |
 |------|------|
