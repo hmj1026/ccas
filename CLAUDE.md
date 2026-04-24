@@ -14,6 +14,7 @@ CCAS（Credit Card Automation System）— 信用卡帳單自動化 pipeline：G
 | OpenSpec spec-driven 流程（proposal → specs → design → tasks → archive） | `/opsx:*` 系列（外部套件提供） |
 | Bug 根因追查 | `bug-investigation`（外部） |
 | 架構決策 / 模組邊界 | `software-architecture`（外部） |
+| 完整產品驗收、QA 測試、smoke test | `ccas-qa-acceptance` |
 
 ## Rules 指標（`.claude/rules/`）
 
