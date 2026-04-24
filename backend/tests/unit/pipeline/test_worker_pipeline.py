@@ -25,6 +25,22 @@ def _make_summary() -> PipelineSummary:
     )
 
 
+def _mock_asyncio_run_returning(value):
+    def _run(coro):
+        coro.close()
+        return value
+
+    return _run
+
+
+def _mock_asyncio_run_raising(error: Exception):
+    def _run(coro):
+        coro.close()
+        raise error
+
+    return _run
+
+
 class TestRunPipelineSync:
     """驗證 run_pipeline_sync 的序列化與呼叫邏輯。
 
@@ -41,7 +57,7 @@ class TestRunPipelineSync:
         self, mock_from_dict, mock_run, mock_sf, mock_engine, mock_asyncio_run
     ):
         summary = _make_summary()
-        mock_asyncio_run.return_value = summary
+        mock_asyncio_run.side_effect = _mock_asyncio_run_returning(summary)
         mock_from_dict.return_value = MagicMock()
 
         result = run_pipeline_sync({"force": True, "bank_code": "CTBC"})
@@ -64,7 +80,7 @@ class TestRunPipelineSync:
         self, mock_from_dict, mock_run, mock_sf, mock_engine, mock_asyncio_run
     ):
         summary = PipelineSummary(stages=(), total_seconds=0.1)
-        mock_asyncio_run.return_value = summary
+        mock_asyncio_run.side_effect = _mock_asyncio_run_returning(summary)
         mock_from_dict.return_value = MagicMock()
 
         result = run_pipeline_sync(None)
@@ -106,7 +122,7 @@ class TestOnFailureHandler:
 
     @patch("ccas.pipeline.worker.asyncio.run")
     def test_marks_review_when_no_retries_left(self, mock_asyncio_run):
-        mock_asyncio_run.return_value = 5
+        mock_asyncio_run.side_effect = _mock_asyncio_run_returning(5)
         job = MagicMock()
         job.id = "job-1"
         job.retries_left = 0
@@ -117,7 +133,7 @@ class TestOnFailureHandler:
 
     @patch("ccas.pipeline.worker.asyncio.run")
     def test_marks_review_when_no_retries_attr(self, mock_asyncio_run):
-        mock_asyncio_run.return_value = 2
+        mock_asyncio_run.side_effect = _mock_asyncio_run_returning(2)
         job = MagicMock(spec=[])  # no retries_left attribute
         job.id = "job-2"
 
@@ -135,8 +151,11 @@ class TestOnFailureHandler:
             )
             mock_run.assert_not_called()
 
-    @patch("ccas.pipeline.worker.asyncio.run", side_effect=RuntimeError("db down"))
+    @patch("ccas.pipeline.worker.asyncio.run")
     def test_logs_error_on_mark_failure(self, mock_asyncio_run):
+        mock_asyncio_run.side_effect = _mock_asyncio_run_raising(
+            RuntimeError("db down")
+        )
         job = MagicMock()
         job.id = "job-3"
         job.retries_left = 0
