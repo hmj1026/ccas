@@ -23,7 +23,7 @@ const SetupGmailCallbackPage = lazy(
 )
 const SetupBanksPage = lazy(() => import('@/pages/setup/banks'))
 const SetupSecretsPage = lazy(() => import('@/pages/setup/secrets'))
-const SetupPlaceholder = lazy(() => import('@/pages/setup/_placeholder'))
+const SetupAdminPage = lazy(() => import('@/pages/setup/admin'))
 
 function createQueryClient() {
   return new QueryClient({
@@ -80,7 +80,7 @@ function App() {
               />
               <Route
                 path="admin"
-                element={<Suspense fallback={<LoadingState />}><SetupPlaceholder section="admin" /></Suspense>}
+                element={<Suspense fallback={<LoadingState />}><SetupAdminPage /></Suspense>}
               />
             </Route>
           </Route>

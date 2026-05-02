@@ -4,6 +4,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { Plus, Trash2 } from 'lucide-react'
 import { useState } from 'react'
+import { Link } from 'react-router'
 import { apiGet, apiPost, apiPatch, apiDelete } from '@/lib/api-client'
 import type {
   ApiResponse,
@@ -223,8 +224,20 @@ function SettingsPage() {
     <div className="space-y-8">
       <h1 className="text-2xl font-bold">設定</h1>
 
+      <div
+        role="note"
+        className="rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-800 dark:text-amber-200"
+      >
+        銀行啟用 / 密碼 / API token 管理已遷移至{' '}
+        <Link to="/setup/banks" className="font-medium underline">
+          設定中心
+        </Link>
+        。本頁僅保留分類關鍵字編輯，後續 bills-management-and-insights
+        change 落地時將整體遷出。
+      </div>
+
       <section>
-        <h2 className="mb-3 text-lg font-semibold">銀行設定</h2>
+        <h2 className="mb-3 text-lg font-semibold">銀行設定（舊版）</h2>
         <BankConfigSection />
       </section>
 
