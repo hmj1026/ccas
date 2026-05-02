@@ -83,9 +83,30 @@ Relevant ECC skills: `python-patterns`, `python-testing`, `backend-patterns`, `a
 
 ## 自檢清單（每次任務回覆前）
 
-0. **這是 small change（inspect → patch，非功能/bug fix）？** → 僅確認 hooks 警告，跳過 1-3
-1. **Edit/Write Python 功能後？** → python-reviewer 已跑？ YES/NO
-2. **Bug fix/新功能？** → tdd-guide 已跑？ YES/NO
-3. **SQL/Alembic 修改？** → database-reviewer 已跑？ YES/NO
-4. **有動到 Python 檔？** → 不只看 `ruff check`；至少確認 `ruff format --check` 也通過，避免 CI 因格式失敗
-5. **有動到 frontend 測試設定或 `frontend/e2e/*.spec.ts`？** → 明確區分 runner：`pnpm test` 只能跑 Vitest 單元測試，Playwright 只能走 `pnpm e2e`
+| # | 觸發條件 | 必查項 | 對應規範 |
+|---|---|---|---|
+| 0 | **這是 small change？**（inspect → patch；非 bug fix；非新功能；**且未動到任何 SSOT 列表中的檔**） | hooks 警告處理；跳過 1-7 | 本檔「任務模式」 |
+| 1 | Edit/Write Python 功能後 | `python-reviewer` 已跑？ | 本檔「強制後置步驟」 |
+| 2 | Bug fix 或新功能 | `tdd-guide` 已跑？ | 本檔「強制後置步驟」 |
+| 3 | SQL / Alembic 修改 | `database-reviewer` 已跑？migration 已 `alembic upgrade head` 過？ | `python-db.md` |
+| 4 | 任一 Python 檔修改 | `ruff check` + **`ruff format --check`** 都過？（避免 CI 因格式失敗） | `python.md` |
+| 5 | Frontend 測試設定 / `frontend/e2e/*.spec.ts` 修改 | 區分 runner：`pnpm test` = Vitest（`src/**`）；Playwright 走 `pnpm e2e` | `frontend-typescript.md` |
+| 6 | **任一 SSOT 列表中的檔修改**（`scripts/docker-entrypoint.sh`、`scripts/check-env.sh`、`.env.example`、`config/*.example.yaml`） | `./scripts/sync-docker-image-assets.sh` 已跑？mirror 已 stage？ | `docker-deploy.md` 「SSOT Sync」 |
+| 7 | Dockerfile / docker-compose 修改 | `docker compose config` validate 過；prod stage 改動需本機 build 一次驗證 | `docker-deploy.md` |
+
+**第 0 項 small change 豁免條件**：「touched 任一 SSOT 列表中的檔則不算 small change」（避免 SSOT 漂移情境又落入豁免）。
+
+## PostToolUse Hooks（hook 與 rule 的對應）
+
+下列 hook 由 `.claude/settings.json` 在 Edit/Write 後自動跑，是**警告層**、不取代 rules。一條紀律若被 hook 覆蓋，仍應在 rules 中以人類可讀文字寫一遍。
+
+| Hook | 覆蓋範圍 | 對應 rule |
+|---|---|---|
+| `ccas-python-lint.sh` | Python Edit/Write 即時 ruff + bandit 警告 | `python.md` |
+| `ccas-sqlalchemy-model-check.sh` | `**/models*.py` 即時驗 ORM 慣例 | `python-db.md` |
+| `ccas-tdd-red-check.sh` | `tests/` 新增測試後跑該檔確認 RED | `python-testing.md` |
+| `ccas-frontend-lint.sh` | `frontend/**/*.{ts,tsx}` 即時 eslint | `frontend-typescript.md` |
+| `ccas-alembic-migration-check.sh` | migration 檔即時驗安全性（drop column 警告等） | `python-db.md` |
+| `ccas-docker-check.sh` | Dockerfile / compose 即時驗慣例 | `docker-deploy.md` |
+| `ccas-pre-push-stop.sh`（Stop event） | session 結束跑 pre-push 完整檢查 | `docker-deploy.md` 「Repo-level Process Gates」 |
+| `ccas-session-retrospective.sh`（Stop） | 寫 session log | — |

@@ -58,6 +58,41 @@ paths:
 - **Error handling**: Use `set -euo pipefail` at the top of every script
 - **Cross-platform**: Use `$(command)` not backticks; use `$HOME` not `~` in scripts
 
+## SSOT Sync（root → backend/docker-image/）
+
+backend image production stage 透過 `backend/` build context 把以下檔案 bake 進 image，因此 repo 內存在「SSOT」與「mirror」兩份。**所有編輯只能改 SSOT**，mirror 由 `scripts/sync-docker-image-assets.sh` 從 SSOT 覆寫。
+
+| SSOT（編輯這個） | mirror（不要手改） |
+|---|---|
+| `scripts/docker-entrypoint.sh` | `backend/docker-image/scripts/docker-entrypoint.sh` |
+| `scripts/check-env.sh` | `backend/docker-image/scripts/check-env.sh` |
+| `.env.example` | `backend/docker-image/.env.example` |
+| `config/banks.example.yaml` | `backend/docker-image/default-config/banks.example.yaml` |
+| `config/bank-code-registry.example.yaml` | `backend/docker-image/default-config/bank-code-registry.example.yaml` |
+| `config/categories.example.yaml` | `backend/docker-image/default-config/categories.example.yaml` |
+
+**規則**：
+- 修改任一 SSOT 來源後，**同一個 commit** 內必須執行 `./scripts/sync-docker-image-assets.sh` 並把更新後的 mirror 一起 stage
+- 禁止直接編輯 `backend/docker-image/scripts/`、`backend/docker-image/default-config/`、`backend/docker-image/.env.example`（這些是被覆寫對象）；要新增同步檔請改 `scripts/sync-docker-image-assets.sh` 的 `FILE_PAIRS`
+- `docker/example.env` 是 `.env.example` 的子集（補 docker overrides），由 `scripts/check-env-sync.sh` 驗證；改其中一個務必檢查另一個
+- 本機 `scripts/pre-push.sh` 與 CI `Scripts & Env Sync Checks` job 都會跑 `--check`；本機提交前自行跑 `./scripts/sync-docker-image-assets.sh --check` 與 `./scripts/check-env-sync.sh` 才不會撞 CI
+
+## Repo-level Process Gates
+
+四層 gate 職責表（任一新增檢查須同步進對應層，不重複、不遺漏）：
+
+| 層 | 觸發時機 | 職責 | 工具 / 設定檔 |
+|---|---|---|---|
+| **PostToolUse hooks** | 每次 Edit/Write | 即時 lint / typecheck / TDD red / SQLAlchemy / Alembic / Docker / frontend lint（**警告層、不擋**） | `.claude/settings.json` + `.claude/hooks/ccas-*.sh`（8 個） |
+| **`scripts/pre-commit.sh`**（→ `.git/hooks/pre-commit`） | git commit | gitleaks 機密掃描 + 對 staged Python 跑 `ruff check --fix` 與 `ruff format` 自動修 + `pyright` 補檢 + 對 staged TS 跑 `eslint` | `scripts/pre-commit.sh`（版控 SSOT） |
+| **`scripts/pre-push.sh`**（→ `.git/hooks/pre-push`） | git push | `verify-claude-plugins.sh` + `check-env-sync.sh` + `sync-docker-image-assets.sh --check` + 全 repo `ruff check` / `ruff format --check` / `pyright` / `pytest --cov-fail-under=70` + `eslint` / `pnpm build` / `pnpm test`（vitest） | `scripts/pre-push.sh`（版控 SSOT） |
+| **CI**（`.github/workflows/ci.yaml`） | push / PR | last-resort gate；與 pre-push 等價並加 e2e 測試 | `.github/workflows/ci.yaml` |
+
+**設計原則**：
+- pre-push.sh 與 CI scripts-checks 必須**等價**（任一新增檢查同步進兩處），CI 不該獨佔 SSOT 漂移檢查
+- PostToolUse 是「即時友善提醒」、不擋；pre-commit 是「commit-time 自動修+靜態檢查」、會擋；pre-push 是「全套品質 gate」、會擋；CI 是「last-resort + e2e」
+- 安裝本機 hook：`./scripts/setup-hooks.sh`（symlink `scripts/pre-*.sh` 進 `.git/hooks/`）
+
 ## Entrypoint Pattern
 
 - `scripts/docker-entrypoint.sh`: Validates env → runs migrations → seeds configs → starts uvicorn
