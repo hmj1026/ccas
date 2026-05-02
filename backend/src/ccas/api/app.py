@@ -19,6 +19,7 @@ from ccas.api.routers import (
     staged_attachments,
     transactions,
 )
+from ccas.api.routers.setup import admin as setup_admin
 from ccas.api.routers.setup import banks as setup_banks
 from ccas.api.routers.setup import gmail as setup_gmail
 from ccas.api.routers.setup import secrets as setup_secrets
@@ -90,5 +91,6 @@ def create_app() -> FastAPI:
     app.include_router(setup_gmail.router, dependencies=api_dependencies)
     app.include_router(setup_banks.router, dependencies=api_dependencies)
     app.include_router(setup_secrets.router, dependencies=api_dependencies)
+    app.include_router(setup_admin.router, dependencies=api_dependencies)
 
     return app
