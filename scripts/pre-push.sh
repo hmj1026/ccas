@@ -11,6 +11,10 @@ if [ "$VERIFY_CLAUDE_PLUGINS" = "1" ]; then
     "$REPO_ROOT/scripts/verify-claude-plugins.sh"
 fi
 
+echo "=== SSOT Sync Checks ==="
+"$REPO_ROOT/scripts/check-env-sync.sh"
+"$REPO_ROOT/scripts/sync-docker-image-assets.sh" --check
+
 if [ "$RUN_BACKEND" = "1" ]; then
     echo "=== Backend Checks ==="
     cd "$REPO_ROOT/backend"
