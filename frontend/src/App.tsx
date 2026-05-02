@@ -21,6 +21,8 @@ const SetupGmailPage = lazy(() => import('@/pages/setup/gmail'))
 const SetupGmailCallbackPage = lazy(
   () => import('@/pages/setup/gmail-callback'),
 )
+const SetupBanksPage = lazy(() => import('@/pages/setup/banks'))
+const SetupSecretsPage = lazy(() => import('@/pages/setup/secrets'))
 const SetupPlaceholder = lazy(() => import('@/pages/setup/_placeholder'))
 
 function createQueryClient() {
@@ -70,11 +72,11 @@ function App() {
               />
               <Route
                 path="banks"
-                element={<Suspense fallback={<LoadingState />}><SetupPlaceholder section="banks" /></Suspense>}
+                element={<Suspense fallback={<LoadingState />}><SetupBanksPage /></Suspense>}
               />
               <Route
                 path="secrets"
-                element={<Suspense fallback={<LoadingState />}><SetupPlaceholder section="secrets" /></Suspense>}
+                element={<Suspense fallback={<LoadingState />}><SetupSecretsPage /></Suspense>}
               />
               <Route
                 path="admin"
