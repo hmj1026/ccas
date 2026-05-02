@@ -277,3 +277,61 @@ class GmailConnectionStatus(BaseModel):
     connected: bool
     email: str | None = None
     granted_scopes: list[str] = []
+
+
+# -- Setup: Bank management UI --
+
+
+class SetupBankItem(BaseModel):
+    """設定中心列表項：合併 ``bank_configs`` metadata 與 ``bank_settings`` 偏好。"""
+
+    code: str
+    display_name: str | None = None
+    enabled: bool
+    has_settings_row: bool
+    metadata_missing: bool
+    total_pdfs: int = 0
+    last_ingest_at: datetime | None = None
+
+
+class BankSettingsUpdateRequest(BaseModel):
+    """``PUT /api/setup/banks/{code}`` request body。"""
+
+    enabled: bool
+    display_name: str | None = Field(default=None, max_length=128)
+    notes: str | None = None
+
+
+# -- Setup: PDF secrets management --
+
+PdfSecretSource = Literal["db", "env", "none"]
+
+
+class BankSecretStatus(BaseModel):
+    """每銀行 PDF 密碼來源狀態（不含明文）。"""
+
+    bank_code: str
+    has_db_secret: bool
+    has_env_secret: bool
+    effective_source: PdfSecretSource
+
+
+class BankSecretWriteRequest(BaseModel):
+    """``PUT /api/setup/secrets/{code}`` request body。"""
+
+    password: str = Field(min_length=1)
+
+
+class BankSecretWriteResult(BaseModel):
+    """``PUT /api/setup/secrets/{code}`` response（不回明文）。"""
+
+    bank_code: str
+    effective_source: PdfSecretSource
+
+
+class ImportFromEnvResult(BaseModel):
+    """``POST /api/setup/secrets/import-from-env`` 結果摘要。"""
+
+    imported: int
+    skipped_already_in_db: int
+    bank_codes_imported: list[str] = []
