@@ -1,0 +1,187 @@
+# CCAS prod compose（pull-only / 發布版）
+#
+# 僅引用 GHCR 發布 image，不含 build:。終端使用者只需下載本檔 + example.env，
+# 編輯 .env 必要變數後執行：
+#   docker compose -f docker-compose.yml pull
+#   docker compose -f docker-compose.yml up -d
+#
+# 設計原則（rules/docker-deploy.md「Prod compose 設計鐵律」）：
+#   - backend / worker / scheduler / bot 共用 ccas-backend image，僅 command: 不同
+#   - 僅 proxy service 對 host 暴露 ${CCAS_PORT:-8080}:8080；其他 service 一律不開 host port
+#   - host volume 路徑使用 ${CCAS_*_LOCATION} 變數，便於使用者自訂位置
+#   - redis 用 bind mount 落地至 ${CCAS_DATA_LOCATION}/redis（非 named volume），確保備份單一目錄即足夠
+#   - bot service 不使用 profiles；TELEGRAM_BOT_TOKEN 缺值時應由 bot 內部處理為 idle，不 crashloop
+#
+# 注意：本檔不引用 dev-tools profile（sqlite-web / redis-commander 屬 dev only）。
+
+x-shared-env: &shared-env
+  DATABASE_URL: "sqlite+aiosqlite:////data/ccas.db"
+  STAGING_DIR: "/data/staging"
+  FUBON_MANUAL_STAGING_DIR: "/data/manual-staging/FUBON"
+  GMAIL_CREDENTIALS_PATH: "/data/credentials.json"
+  GMAIL_TOKEN_PATH: "/data/token.json"
+  REDIS_URL: redis://redis:6379/0
+  LOG_DIR: "/logs"
+  BANK_CONFIG_DIR: "/config"
+
+services:
+  backend:
+    image: ghcr.io/${REPO_OWNER}/ccas-backend:${CCAS_VERSION:-release}
+    volumes:
+      - ${CCAS_DATA_LOCATION:-./data}:/data
+      - ${CCAS_CONFIG_LOCATION:-./config}:/config
+      - ${CCAS_LOG_LOCATION:-./logs}:/logs
+    env_file:
+      - ./.env
+    environment:
+      <<: *shared-env
+      LOG_FILE_PREFIX: "ccas-backend"
+    entrypoint: ["/scripts/docker-entrypoint.sh"]
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+    stop_grace_period: 15s
+    restart: unless-stopped
+
+  worker:
+    image: ghcr.io/${REPO_OWNER}/ccas-backend:${CCAS_VERSION:-release}
+    volumes:
+      - ${CCAS_DATA_LOCATION:-./data}:/data
+      - ${CCAS_CONFIG_LOCATION:-./config}:/config
+      - ${CCAS_LOG_LOCATION:-./logs}:/logs
+    env_file:
+      - ./.env
+    environment:
+      <<: *shared-env
+      LOG_FILE_PREFIX: "ccas-worker"
+      # 跳過 alembic / yaml seed（由 backend service 負責；worker 共用同一 data volume）
+      SKIP_DB_BOOTSTRAP: "1"
+    depends_on:
+      backend:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: ["uv", "run", "rq", "worker", "--url", "redis://redis:6379/0"]
+    healthcheck:
+      # rq info 連線 redis 列出 queue/worker 狀態；--quiet 抑制輸出，rc=0 表示 redis 可連
+      test: ["CMD-SHELL", "uv run rq info -u $$REDIS_URL --quiet || exit 1"]
+      interval: 30s
+      timeout: 10s
+      start_period: 20s
+      retries: 3
+    stop_grace_period: 30s
+    restart: unless-stopped
+
+  scheduler:
+    image: ghcr.io/${REPO_OWNER}/ccas-backend:${CCAS_VERSION:-release}
+    volumes:
+      - ${CCAS_DATA_LOCATION:-./data}:/data
+      - ${CCAS_CONFIG_LOCATION:-./config}:/config
+      - ${CCAS_LOG_LOCATION:-./logs}:/logs
+    env_file:
+      - ./.env
+    environment:
+      <<: *shared-env
+      SCHEDULER_API_BASE_URL: "http://backend:8000"
+      LOG_FILE_PREFIX: "ccas-scheduler"
+      SKIP_DB_BOOTSTRAP: "1"
+    depends_on:
+      redis:
+        condition: service_healthy
+    command: ["uv", "run", "python", "-m", "ccas.scheduler"]
+    healthcheck:
+      # 檢查 scheduler 寫入的 heartbeat 檔最近 60s 內有更新；scheduler runtime 須負責寫入此檔
+      test: ["CMD-SHELL", "test -f /data/scheduler-heartbeat && find /data/scheduler-heartbeat -mmin -1 | grep -q ."]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+    stop_grace_period: 10s
+    restart: unless-stopped
+
+  bot:
+    image: ghcr.io/${REPO_OWNER}/ccas-backend:${CCAS_VERSION:-release}
+    volumes:
+      - ${CCAS_DATA_LOCATION:-./data}:/data
+      - ${CCAS_CONFIG_LOCATION:-./config}:/config
+      - ${CCAS_LOG_LOCATION:-./logs}:/logs
+    env_file:
+      - ./.env
+    environment:
+      <<: *shared-env
+      LOG_FILE_PREFIX: "ccas-bot"
+      SKIP_DB_BOOTSTRAP: "1"
+    depends_on:
+      redis:
+        condition: service_healthy
+    command: ["uv", "run", "python", "-m", "ccas.bot"]
+    healthcheck:
+      # 未設 TELEGRAM_BOT_TOKEN 時 bot 應 idle，healthcheck 直接視為 healthy；
+      # 已設時打 Telegram getMe API 驗證 token 有效。
+      test:
+        - "CMD-SHELL"
+        - |
+          if [ -z "$$TELEGRAM_BOT_TOKEN" ]; then
+            exit 0
+          fi
+          python -c "import os, urllib.request; urllib.request.urlopen(f\"https://api.telegram.org/bot{os.environ['TELEGRAM_BOT_TOKEN']}/getMe\", timeout=5).read()" || exit 1
+      interval: 60s
+      timeout: 10s
+      start_period: 15s
+      retries: 3
+    stop_grace_period: 10s
+    restart: on-failure
+
+  frontend:
+    image: ghcr.io/${REPO_OWNER}/ccas-frontend:${CCAS_VERSION:-release}
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/health || exit 1"]
+      interval: 30s
+      timeout: 3s
+      start_period: 5s
+      retries: 3
+    restart: unless-stopped
+
+  proxy:
+    image: ghcr.io/${REPO_OWNER}/ccas-proxy:${CCAS_VERSION:-release}
+    ports:
+      - "${CCAS_PORT:-8080}:8080"
+    depends_on:
+      backend:
+        condition: service_healthy
+      frontend:
+        condition: service_healthy
+    healthcheck:
+      # 同時驗 proxy /health 與透過 proxy 抵達 backend /api/health
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/health && wget -qO- http://localhost:8080/api/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      # bind mount，與 ${CCAS_DATA_LOCATION} 共用同一備份點（D8）
+      - ${CCAS_DATA_LOCATION:-./data}/redis:/data
+    command: >
+      redis-server
+        --maxmemory ${REDIS_MAXMEMORY:-256mb}
+        --maxmemory-policy ${REDIS_MAXMEMORY_POLICY:-allkeys-lru}
+        --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped

@@ -70,8 +70,11 @@ node_modules/
 dist/
 build/
 
-# Local config (use banks.example.yaml as template)
+# Local config (使用 *.example.yaml 為範本，啟動時 entrypoint 會自動 seed）
 config/banks.yaml
+config/bank-code-registry.yaml
+config/categories.yaml
+!config/*.example.yaml
 
 # Docker Compose：docker-compose.override.yml 為專案 dev 預設，已納入版控。
 # 個人化客製請用 docker-compose.local.yml（本 gitignore）：
