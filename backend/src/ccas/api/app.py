@@ -19,6 +19,7 @@ from ccas.api.routers import (
     staged_attachments,
     transactions,
 )
+from ccas.api.routers.setup import gmail as setup_gmail
 from ccas.config import get_settings
 
 # Same CSP policy as nginx.conf（defense in depth；修改時請同步兩處）。
@@ -83,5 +84,7 @@ def create_app() -> FastAPI:
     app.include_router(settings.router, dependencies=api_dependencies)
     app.include_router(pipeline.router, dependencies=api_dependencies)
     app.include_router(staged_attachments.router, dependencies=api_dependencies)
+    # Setup UX routers（oauth-onboarding-ui）— 共用 verify_token 保護。
+    app.include_router(setup_gmail.router, dependencies=api_dependencies)
 
     return app
