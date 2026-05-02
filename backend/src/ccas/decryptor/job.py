@@ -15,6 +15,7 @@ from ccas.config import get_settings
 from ccas.decryptor.decrypt import DecryptionError, decrypt_pdf_multi
 from ccas.decryptor.password import resolve_passwords
 from ccas.decryptor.staging import fetch_pending_attachments, update_attachment_status
+from ccas.errors import DecryptError
 from ccas.ingestor.staging import resolve_staged_path
 from ccas.pipeline.options import PipelineOptions
 from ccas.storage.models import StagedAttachment
@@ -48,7 +49,20 @@ async def _process_attachment(
 ) -> None:
     """處理單一附件的解密。"""
     settings = get_settings()
-    passwords = resolve_passwords(settings, attachment.bank_code)
+    try:
+        passwords = await resolve_passwords(session, settings, attachment.bank_code)
+    except DecryptError as exc:
+        error_msg = (
+            f"密碼解析失敗 ({attachment.bank_code}/"
+            f"{attachment.original_filename}): {exc}"
+        )
+        summary.failed_count += 1
+        summary.errors.append(error_msg)
+        logger.error(error_msg)
+        await update_attachment_status(
+            session, attachment, status="decrypt_failed", error_reason=str(exc)
+        )
+        return
     raw_path = attachment.staged_path
 
     if raw_path is None:

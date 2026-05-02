@@ -35,7 +35,7 @@ from ccas.ingestor.staging import (
     update_staged_record_failure,
 )
 from ccas.pipeline.options import PipelineOptions
-from ccas.storage.models import BankConfig
+from ccas.storage.models import BankConfig, BankSettings
 
 logger = logging.getLogger(__name__)
 
@@ -69,6 +69,28 @@ class IngestionSummary:
     errors: list[str] = field(default_factory=list)
 
 
+async def _apply_bank_settings_filter(
+    session: AsyncSession, configs: list[BankConfig]
+) -> list[BankConfig]:
+    """Drop configs whose ``bank_settings.enabled`` was explicitly set to False.
+
+    DB row precedence (oauth-onboarding-ui §4.4):
+    ``bank_settings.enabled`` (if present) > ``bank_configs.is_active`` (already
+    filtered upstream by base SQL) > default True.
+
+    Implemented as a post-filter to avoid touching the existing SQL query that
+    also enforces ``gmail_filter != ""``.
+    """
+    if not configs:
+        return configs
+    codes = [c.bank_code for c in configs]
+    rows = await session.execute(
+        select(BankSettings).where(BankSettings.code.in_(codes))
+    )
+    overrides = {r.code: r.enabled for r in rows.scalars().all()}
+    return [c for c in configs if overrides.get(c.bank_code, True)]
+
+
 async def _fetch_active_banks(
     session: AsyncSession,
     options: PipelineOptions | None = None,
@@ -76,6 +98,9 @@ async def _fetch_active_banks(
     """查詢所有啟用中且具有有效 gmail_filter 的銀行設定。
 
     若 options.bank_code 有值，僅回傳該銀行。
+
+    對 ``bank_settings.enabled = false`` 的條目，於後處理層過濾掉
+    （oauth-onboarding-ui §4.4 DB 優先 fallback 鏈）。
     """
     stmt = select(BankConfig).where(
         BankConfig.is_active == True,  # noqa: E712
@@ -85,7 +110,8 @@ async def _fetch_active_banks(
     if options and options.bank_code:
         stmt = stmt.where(BankConfig.bank_code == options.bank_code)
     result = await session.execute(stmt)
-    return list(result.scalars().all())
+    configs = list(result.scalars().all())
+    return await _apply_bank_settings_filter(session, configs)
 
 
 def _build_gmail_query(

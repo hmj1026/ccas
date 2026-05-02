@@ -96,7 +96,7 @@ class TestDecryptStage:
             ),
             patch(
                 "ccas.decryptor.job.resolve_passwords",
-                return_value=("test-password",),
+                new=AsyncMock(return_value=("test-password",)),
             ),
         ):
             from ccas.decryptor.job import run_decryption_job

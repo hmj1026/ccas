@@ -58,7 +58,10 @@ class TestDecryptFailureIsolation:
 
         with (
             patch("ccas.decryptor.job.decrypt_pdf_multi", side_effect=mock_decrypt),
-            patch("ccas.decryptor.job.resolve_passwords", return_value=("pw",)),
+            patch(
+                "ccas.decryptor.job.resolve_passwords",
+                new=AsyncMock(return_value=("pw",)),
+            ),
         ):
             from ccas.decryptor.job import run_decryption_job
 
