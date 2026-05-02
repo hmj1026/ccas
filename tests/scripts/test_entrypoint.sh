@@ -76,7 +76,7 @@ test_master_key_first_run() {
   [[ "$size" -eq 44 ]] || fail "master.key 大小應為 44 bytes (Fernet base64 key) (got $size)"
 
   local perms
-  perms="$(stat -f '%A' "$key_file" 2>/dev/null || stat -c '%a' "$key_file")"
+  perms="$(stat -c '%a' "$key_file" 2>/dev/null || stat -f '%A' "$key_file")"
   [[ "$perms" == "600" ]] || fail "master.key 權限不是 0600 (got $perms)"
 
   cleanup_sandbox
@@ -147,7 +147,7 @@ test_token_generate_new() {
 
   # 檔案權限驗證（0600）
   local perms
-  perms="$(stat -f '%A' "$token_file" 2>/dev/null || stat -c '%a' "$token_file")"
+  perms="$(stat -c '%a' "$token_file" 2>/dev/null || stat -f '%A' "$token_file")"
   [[ "$perms" == "600" ]] || fail "secrets 檔權限不是 0600 (got $perms)"
 
   cleanup_sandbox
