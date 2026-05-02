@@ -37,7 +37,7 @@ EXPOSE 8000
 # 接管啟動流程，以下 CMD 通常不會直接執行。
 CMD ["uv", "run", "uvicorn", "ccas.api.app:create_app", "--host", "0.0.0.0", "--port", "8000", "--factory"]
 
-# Stage: production — non-root user, health check
+# Stage: production — non-root user, health check, image-internal entrypoint + config templates
 FROM python:3.12-slim AS production
 LABEL org.opencontainers.image.title="ccas-backend" \
       org.opencontainers.image.description="CCAS Backend API, worker, scheduler, and bot"
@@ -52,9 +52,16 @@ COPY --chown=appuser:appgroup pyproject.toml uv.lock ./
 COPY --chown=appuser:appgroup alembic/ ./alembic/
 COPY --chown=appuser:appgroup alembic.ini ./
 COPY --chown=appuser:appgroup src/ ./src/
+# Image-internal entrypoint + env validation + default config templates（D12）
+# 終端使用者只持有 .env 與 volumes，repo `./scripts` 與 `./.env.example` 不再 host-mount。
+COPY --chown=appuser:appgroup --chmod=0755 docker-image/scripts/docker-entrypoint.sh /scripts/docker-entrypoint.sh
+COPY --chown=appuser:appgroup --chmod=0755 docker-image/scripts/check-env.sh /scripts/check-env.sh
+COPY --chown=appuser:appgroup docker-image/.env.example /app/.env.example
+COPY --chown=appuser:appgroup docker-image/default-config/ /app/default-config/
 RUN mkdir -p /data /logs && chown appuser:appgroup /data /logs
 USER appuser
 EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
   CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" || exit 1
+ENTRYPOINT ["/scripts/docker-entrypoint.sh"]
 CMD ["uv", "run", "uvicorn", "ccas.api.app:create_app", "--host", "0.0.0.0", "--port", "8000", "--factory"]
