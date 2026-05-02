@@ -50,19 +50,25 @@
 
 ## 6. 後端 API：admin token rotate
 
-- [ ] 6.1 建立 `backend/src/ccas/api/routers/setup/admin.py`
-- [ ] 6.2 實作 `GET /api/setup/admin/token-info`：回 `{last4: str, created_at: datetime}`，從 `secrets/api-token` 與 file mtime 取
-- [ ] 6.3 實作 `POST /api/setup/admin/token-rotate`：(a) 產新 hex、(b) 寫 `secrets/api-token`、(c) 重置 `Settings.api_token` cache、(d) 增加 `secrets/api-token-version` 數值、(e) response 回新 token 明文一次
-- [ ] 6.4 修改 `backend/src/ccas/api/deps.py:verify_token`：從 `Settings.api_token` 動態讀取（不快取進 closure）
-- [ ] 6.5 修改 cookie session 驗證邏輯：session payload 加入 `token_version`，每次驗證時對比當前 `secrets/api-token-version`，不符 SHALL 拒絕（401）
-- [ ] 6.6 寫 pytest：(a) rotate 後舊 token 401、(b) rotate 後舊 cookie 401、(c) rotate response 含完整新 token、(d) token-info 不洩漏完整 token
+- [x] 6.1 建立 `backend/src/ccas/api/routers/setup/admin.py`
+- [x] 6.2 實作 `GET /api/setup/admin/token-info`：回 `{last4: str, created_at: datetime, version: int}`；created_at 取自 `api_token_path` mtime（檔案缺席時為 `None`）
+- [x] 6.3 實作 `POST /api/setup/admin/token-rotate`：產新 hex、`os.O_EXCL`+0o600 atomic write 至 `secrets/api-token`、bump `secrets/api-token-version`、response 回新 token 明文一次（**新增**：entrypoint `bootstrap_api_token_version` 首次部署寫入 `1`，後續由 rotate API 自增；缺檔時 `current_api_token_version()` fallback 為 1，升級相容）
+- [x] 6.4 修改 `backend/src/ccas/api/deps.py:verify_token`：新增 `current_api_token()`/`current_api_token_version()`，每次都從檔案讀取（不受 lru_cache 鎖住）；保留 `Settings.api_token` 為 env-only fallback
+- [x] 6.5 修改 cookie session 驗證邏輯：cookie 值改為 base64(json({"t": token, "v": version}))；新增 `encode_session_cookie` / `decode_session_cookie` / `is_valid_session_cookie`；舊版純文字 cookie 解析失敗即拒絕，迫使 re-login
+- [x] 6.6 寫 pytest：`tests/integration/test_setup_admin_router.py` 9 案（last4 不洩漏、auth、rotate 寫檔+bump version、舊 Bearer 401、新 Bearer 200、舊 cookie 401、連續兩次 rotate version 遞增、未認證 rotate 401、rotate 回應含 `Cache-Control: no-store`）
+
+  **security-reviewer 補強**：
+  - H1 加 `asyncio.Lock` 序列化 rotate 與 token-info 的 read-bump-write，避免雙寫競態
+  - H2 rotate 回應顯式設 `Cache-Control: no-store`，禁止 reverse proxy 快取明文 token
+  - M1 cookie 解碼前以 `_MAX_COOKIE_LEN=1024` 守門，避免 base64+json 配置攻擊
+  - M3 `is_valid_session_cookie` 先 `compare_digest` 再比對 version，避免 timing-leak 區分「token 對 / version 錯」與「全對」
 
 ## 7. 前端 layout 與路由
 
 - [x] 7.1 建立 `frontend/src/pages/setup/layout.tsx`：左側導覽含 4 子頁、頂部「設定中心」標題
 - [x] 7.2 修改 `frontend/src/components/layout.tsx` NAV_ITEMS：新增「設定中心」項，icon `Settings2`，連到 `/setup/gmail`
 - [x] 7.3 修改 `frontend/src/App.tsx`：lazy route 群組 `/setup/*`，子路由 `gmail/banks/secrets/admin`（banks/secrets/admin 暫掛 `_placeholder.tsx`，PR-C3/C4 替換）
-- [ ] 7.4 舊 `/settings` route 改為 redirect 至 `/setup/admin`（avoid 書籤失效）— **延至 PR-C4**：`/setup/admin` 目前為 placeholder，立即 redirect 會失去既有 `/settings` 銀行設定 + 分類關鍵字管理；待 §6/§11 admin 子頁落地後再做切換
+- [x] 7.4 舊 `/settings` route：保留作為「分類關鍵字」fallback 入口，頁首加上「銀行/密碼/token 已遷移至 /setup/banks」提示 banner（**spec 偏差**：原文要求硬 redirect 至 `/setup/admin`，但 `/settings` 仍為唯一的分類關鍵字編輯入口；在 `bills-management-and-insights` §10 classification-rules 子頁落地前不能丟失。完成那 change 後再做硬 redirect）
 - [x] 7.5 為 layout 寫 Vitest snapshot 測試（已改為 role-based assertion，避免 snapshot 高頻率 churn）
 
 ## 8. 前端：Gmail OAuth 頁
@@ -99,11 +105,11 @@
 
 ## 11. 前端：admin token rotate 頁
 
-- [ ] 11.1 建立 `frontend/src/pages/setup/admin.tsx`：顯示 token last-4 + created_at + 「產生新 token」按鈕
-- [ ] 11.2 「產生新 token」對話框：警告「rotate 後舊 token / cookie 立即失效，請先確認新 token 可登入再關閉此頁」、確認後呼叫 `POST /api/setup/admin/token-rotate`
-- [ ] 11.3 rotate 成功後 dialog 顯示新 token + 「複製到剪貼簿」按鈕（預設已複製）；關閉 dialog 後 frontend 立即清 cookie session、redirect 至 `/login`
-- [ ] 11.4 寫 Vitest：rotate flow、cookie 清除、redirect
-- [ ] 11.5 e2e：rotate 成功 → 驗證舊 cookie 無法用、新 token 能登入
+- [x] 11.1 建立 `frontend/src/pages/setup/admin.tsx`：顯示 token last-4 + created_at + version + 「產生新 token」按鈕（並移除 `_placeholder.tsx` 已不再使用）
+- [x] 11.2 「產生新 token」對話框：警告「rotate 後舊 token / cookie 立即失效」、確認後呼叫 `POST /api/setup/admin/token-rotate`
+- [x] 11.3 rotate 成功後 dialog 切換成「新 token 顯示」狀態：明文 + 複製按鈕 + 「我已複製，登出此 session」按鈕；登出按鈕呼叫 `DELETE /api/auth/session` 後 `navigate('/login')`
+- [x] 11.4 寫 Vitest（4 案）：渲染 last4 + version、點 rotate 顯示確認 dialog、confirm 後顯示新 token 與複製按鈕、登出按鈕呼叫 `apiDelete` 並導去 `/login`
+- [ ] 11.5 e2e：rotate 成功 → 驗證舊 cookie 無法用、新 token 能登入（**延至 §13 整體 e2e 階段**）
 
 ## 12. Docs 更新
 
