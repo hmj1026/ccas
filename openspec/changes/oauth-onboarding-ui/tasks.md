@@ -29,24 +29,24 @@
 
 ## 4. 後端 API：bank-management
 
-- [ ] 4.1 建立 `backend/src/ccas/api/routers/setup/banks.py`
-- [ ] 4.2 實作 `GET /api/setup/banks`：JOIN banks.yaml metadata + bank_settings DB，回 `[{code, display_name, enabled, last_ingest_at, total_pdfs, ...}]`
-- [ ] 4.3 實作 `PUT /api/setup/banks/{code}`：body `{enabled: bool, display_name?, notes?}`，UPDATE bank_settings；不存在 code 回 404
-- [ ] 4.4 修改 `backend/src/ccas/ingestor/job.py`：bank enabled 檢查改為「`bank_settings.enabled`（DB）→ banks.yaml.enabled → 預設 true」優先序
-- [ ] 4.5 修改 `parser/job.py` 與 `classifier/job.py`：同樣優先序
-- [ ] 4.6 寫 pytest：DB enabled=false 時 ingest skip；DB 無 row + yaml.enabled=false 時 ingest skip；DB 無 row + yaml 無 enabled 欄位時預設 enabled
-- [ ] 4.7 為 `GET /banks` 與 `PUT /banks/{code}` 寫 router 整合測試
+- [x] 4.1 建立 `backend/src/ccas/api/routers/setup/banks.py`
+- [x] 4.2 實作 `GET /api/setup/banks`：JOIN banks.yaml metadata + bank_settings DB，回 `[{code, display_name, enabled, last_ingest_at, total_pdfs, ...}]`（含 `metadata_missing` 旗標、staged_attachments aggregate 統計）
+- [x] 4.3 實作 `PUT /api/setup/banks/{code}`：body `{enabled, display_name?, notes?}`，UPSERT bank_settings；code 自動 upper 化（**spec 偏差**：原文要求「不存在 code 回 404」，實作改為允許 UPSERT 任意 code 以支援前置佈建——`metadata_missing=true` 由 GET 回應中標示，符合 spec §9.3 孤兒顯示需求）
+- [x] 4.4 修改 `backend/src/ccas/ingestor/job.py`：新增 `_apply_bank_settings_filter`，bank enabled 檢查改為「`bank_settings.enabled`（DB）→ `bank_configs.is_active`（由 banks.yaml seed）→ 預設 true」優先序（**spec 偏差**：原文寫 yaml.enabled，實際 banks.yaml 欄位為 `is_active` 且 ingestor 從 `bank_configs` DB 表讀取；改為等價的 DB 後處理層 wrap，避免動到既有 SQL）
+- [x] 4.5 ~~修改 `parser/job.py` 與 `classifier/job.py`：同樣優先序~~ — **無需修改**：parser/classifier 處理已 staged / 已 parsed 的資料，bank enabled 過濾只作用於 ingestor 入口（上游已過濾，下游無需重複）
+- [x] 4.6 寫 pytest：DB enabled=false 時 ingest skip；DB 無 row 時 fallback 至 `bank_configs.is_active`；inactive config 即使 DB enabled=true 也不會被 resurrect（已加入 `TestApplyBankSettingsFilter` 三案）
+- [x] 4.7 為 `GET /banks` 與 `PUT /banks/{code}` 寫 router 整合測試（9 案：列表、override、孤兒、aggregate、auth、UPSERT 三路徑、auth）
 
 ## 5. 後端 API：pdf-secrets
 
-- [ ] 5.1 建立 `backend/src/ccas/api/routers/setup/secrets.py`
-- [ ] 5.2 實作 `GET /api/setup/secrets`：回 `[{bank_code, has_db_secret: bool, has_env_secret: bool, effective_source: "db"|"env"|"none"}]`，**不回密碼明文**
-- [ ] 5.3 實作 `PUT /api/setup/secrets/{code}`：body `{password: str}`，用 master.key Fernet 加密、UPSERT bank_secrets
-- [ ] 5.4 實作 `DELETE /api/setup/secrets/{code}`：刪除 bank_secrets row（env fallback 仍生效）
-- [ ] 5.5 實作 `POST /api/setup/secrets/import-from-env`：掃描 `Settings.bank_passwords`（既有 env 解析）、對每個 env-only 條目 UPSERT bank_secrets、回 `{imported: N, skipped_already_in_db: M}`
-- [ ] 5.6 修改 `backend/src/ccas/decryptor/passwords.py`：密碼解析優先序改為 `bank_secrets`（DB Fernet decrypt）→ env → 無；密碼錯誤訊息明確區分「DB 解密失敗（master.key 不匹配）」與「密碼錯誤」
-- [ ] 5.7 寫 pytest：(a) DB 有 secret 優先 env、(b) 無 DB row 用 env、(c) DB 解密失敗 raise specific exception、(d) import-from-env 冪等
-- [ ] 5.8 為四個端點寫 router 整合測試；驗證 `GET /secrets` 回應**不含**密碼明文（grep response body 應無實際密碼字串）
+- [x] 5.1 建立 `backend/src/ccas/api/routers/setup/secrets.py`
+- [x] 5.2 實作 `GET /api/setup/secrets`：回 `[{bank_code, has_db_secret, has_env_secret, effective_source}]`，**不回密碼明文**（universe = bank_configs ∪ bank_secrets ∪ env-mentioned codes）
+- [x] 5.3 實作 `PUT /api/setup/secrets/{code}`：body `{password}`，用 master.key Fernet 加密、UPSERT bank_secrets；code 自動 upper 化
+- [x] 5.4 實作 `DELETE /api/setup/secrets/{code}`：刪除 bank_secrets row（env fallback 仍生效）；missing 時冪等回 200
+- [x] 5.5 實作 `POST /api/setup/secrets/import-from-env`：掃描 `settings._env_map` 中的 `PDF_PASSWORD_<CODE>` 鍵（不含 `_LEGACY_*`）、對每個 env-only 條目 UPSERT bank_secrets、回 `{imported, skipped_already_in_db, bank_codes_imported}`（**spec 偏差**：原文稱呼 `Settings.bank_passwords` 屬性不存在；實際透過 `_env_map` 掃描，等價）
+- [x] 5.6 修改 `backend/src/ccas/decryptor/password.py`：密碼解析改為 async + 注入 session；優先序 `bank_secrets`（DB Fernet decrypt）→ env → None；DB 解密失敗時 raise `DecryptError` 含「master.key 與密文不匹配」訊息；caller `decryptor/job.py` 已同步更新並包 try/except 維持單筆失敗不中斷整體 batch 之契約
+- [x] 5.7 寫 pytest：(a) DB 有 secret 優先 env、(b) 無 DB row 用 env、(c) DB 解密失敗 raise `DecryptError` 含 `bank_code` context、(d) import-from-env 冪等（重複呼叫只匯入新增）
+- [x] 5.8 為四個端點寫 router 整合測試（13 案）；驗證 `GET /secrets`、`PUT /secrets/{code}`、`POST /import-from-env` 回應**不含**密碼明文與密文（assert plaintext / ciphertext not in resp.text）
 
 ## 6. 後端 API：admin token rotate
 
@@ -79,23 +79,23 @@
 
 ## 9. 前端：bank-management 頁
 
-- [ ] 9.1 建立 `frontend/src/pages/setup/banks.tsx`：表格（code / display_name / enabled toggle / 已收 PDF 數 / 最後 ingest 時間 / 操作按鈕）
-- [ ] 9.2 enabled toggle 用 `<Switch>`（shadcn）：onChange 觸發 `useMutation` 對 `PUT /api/setup/banks/{code}`、樂觀更新
-- [ ] 9.3 顯示「孤兒」標記：DB 有 row 但 banks.yaml 已無對應條目（`metadata_missing: true`），含「移除此 row」按鈕
-- [ ] 9.4 列表頂部顯示「N 銀行已啟用 / M 已停用」摘要
-- [ ] 9.5 寫 Vitest：toggle 觸發 PUT、樂觀更新、API 失敗時 revert
-- [ ] 9.6 e2e：登入 → 進 `/setup/banks` → toggle 一個銀行 → 重整後狀態保留
+- [x] 9.1 建立 `frontend/src/pages/setup/banks.tsx`：列表卡片（display_name / code / 啟用按鈕 / 已收 PDF 數 / 最後 ingest 時間 / 孤兒 badge）
+- [x] 9.2 enabled toggle 用 `<Button>` 切換（沿用 `pages/settings.tsx` 既有模式，與專案無 shadcn Switch 元件相符）：onClick 觸發 `useMutation` 對 `PUT /api/setup/banks/{code}`、樂觀更新（`onMutate` setQueryData / `onError` revert）
+- [x] 9.3 顯示「孤兒」標記：`metadata_missing: true` 顯示橙色 badge 並 tooltip 說明「banks.yaml 已無此銀行」；**未實作**「移除此 row」按鈕——後端尚未提供 DELETE bank_settings endpoint，留待 PR-C4 §6 範圍補
+- [x] 9.4 列表頂部顯示「已啟用 N / 共 M」摘要（含孤兒計數）
+- [x] 9.5 寫 Vitest（4 案）：列表渲染與孤兒 badge、toggle 觸發 PUT、mutation 失敗顯示 alert、empty state
+- [ ] 9.6 e2e：登入 → 進 `/setup/banks` → toggle 一個銀行 → 重整後狀態保留（**延至 PR-C4 §13 整體 e2e**）
 
 ## 10. 前端：pdf-secrets 頁
 
-- [ ] 10.1 建立 `frontend/src/pages/setup/secrets.tsx`：表格（bank_code / 來源 badge / 「設定密碼」按鈕 / 「刪除 DB 條目」按鈕）
-- [ ] 10.2 來源 badge 顏色：DB 綠、env 黃、none 灰；tooltip 顯示「DB 優先 env」邏輯
-- [ ] 10.3 「設定密碼」對話框：input type=password、提交呼叫 `PUT /api/setup/secrets/{code}`
-- [ ] 10.4 「刪除 DB 條目」對話框：確認後呼叫 `DELETE /api/setup/secrets/{code}`，明示「刪除後若 env 仍有則 fallback 生效，否則該銀行 PDF 解密將失敗」
-- [ ] 10.5 「匯入 env 密碼」橫幅：頁面載入時若偵測 `has_env_secret` 且 `!has_db_secret` 條目存在 → 顯示「偵測到 N 個 env 密碼，是否一鍵匯入？」按鈕
-- [ ] 10.6 master.key warning banner：頁面頂部顯示「master.key 是備份的關鍵，請定期備份 `${CCAS_DATA_LOCATION}` 目錄」（永久顯示，不可關閉）
-- [ ] 10.7 寫 Vitest：來源 badge 渲染、設定 / 刪除 mutation、import-from-env 流程
-- [ ] 10.8 e2e：設定一個密碼 → 重整後 source=db → 刪除 → source 變 env 或 none
+- [x] 10.1 建立 `frontend/src/pages/setup/secrets.tsx`：列表卡片（bank_code / 來源 badge / 「設定密碼」按鈕 / 「刪除 DB 條目」按鈕——後者僅在 has_db_secret 時顯示）
+- [x] 10.2 來源 badge 顏色：DB 綠、env 黃、none 灰；tooltip 顯示「DB 優先 env；DB 刪除後 env 仍生效則自動 fallback」
+- [x] 10.3 「設定密碼」對話框：input type=password、提交呼叫 `PUT /api/setup/secrets/{code}`，成功後 invalidate query
+- [x] 10.4 「刪除 DB 條目」對話框：確認後呼叫 `DELETE /api/setup/secrets/{code}`，依 `has_env_fallback` 動態切換警示文字
+- [x] 10.5 「匯入 env 密碼」橫幅：頁面載入時若偵測 `has_env_secret && !has_db_secret` 條目 → 顯示「偵測到 N 筆環境變數密碼...」按鈕，點擊呼叫 `POST /import-from-env`
+- [x] 10.6 master.key warning banner：頁面頂部顯示備份提醒（永久顯示，不可關閉，role=note）
+- [x] 10.7 寫 Vitest（5 案）：來源 badge 渲染 + master.key banner、import banner 流程、無 env-only 時隱藏 banner、設定密碼 form / 刪除 confirm
+- [ ] 10.8 e2e：設定一個密碼 → 重整後 source=db → 刪除 → source 變 env 或 none（**延至 PR-C4 §13 整體 e2e**）
 
 ## 11. 前端：admin token rotate 頁
 
