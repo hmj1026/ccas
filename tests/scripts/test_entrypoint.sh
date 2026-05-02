@@ -2,6 +2,7 @@
 # Tests for scripts/docker-entrypoint.sh
 #
 # 涵蓋：
+#   - bootstrap_master_key：首次產生（0600）/ 既有檔不覆寫
 #   - bootstrap_api_token：env 已設定 / secrets 檔已存在 / 兩者皆無
 #   - bootstrap_api_token 冪等性（重複呼叫不變）
 #   - bootstrap_api_token 檔案權限 0600
@@ -15,6 +16,11 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 ENTRYPOINT="${ROOT_DIR}/scripts/docker-entrypoint.sh"
+
+# entrypoint 內部呼叫 `uv run python -m ccas.tools.*`；該指令需要 backend
+# pyproject.toml 在 cwd 或祖先目錄。在 image 內 cwd = /app 且 ccas package
+# 已 install；本機跑測試時手動切到 backend/ 確保 uv 能解析專案。
+cd "${ROOT_DIR}/backend"
 
 GREEN='\033[0;32m'
 RED='\033[0;31m'
@@ -55,6 +61,46 @@ load_entrypoint_functions() {
 # ------------------------------------------------------------------------------
 # Test cases
 # ------------------------------------------------------------------------------
+
+test_master_key_first_run() {
+  new_sandbox
+  load_entrypoint_functions
+
+  bootstrap_master_key >/dev/null
+
+  local key_file="${CCAS_DATA_DIR}/secrets/master.key"
+  [[ -f "$key_file" ]] || fail "未產生 master.key"
+  local size
+  size="$(wc -c < "$key_file" | tr -d ' ')"
+  # Fernet key = 32 bytes, base64 url-safe encoded → 44 chars (no newline)
+  [[ "$size" -eq 44 ]] || fail "master.key 大小應為 44 bytes (Fernet base64 key) (got $size)"
+
+  local perms
+  perms="$(stat -f '%A' "$key_file" 2>/dev/null || stat -c '%a' "$key_file")"
+  [[ "$perms" == "600" ]] || fail "master.key 權限不是 0600 (got $perms)"
+
+  cleanup_sandbox
+  pass "bootstrap_master_key: 首次啟動 → 產生 0600 + 44 bytes Fernet key"
+}
+
+test_master_key_idempotent() {
+  new_sandbox
+  load_entrypoint_functions
+
+  /bin/mkdir -p "${CCAS_DATA_DIR}/secrets"
+  printf 'pre-existing-key-must-not-be-overwritten=' > "${CCAS_DATA_DIR}/secrets/master.key"
+  /bin/chmod 0600 "${CCAS_DATA_DIR}/secrets/master.key"
+
+  bootstrap_master_key >/dev/null
+
+  local content
+  content="$(<"${CCAS_DATA_DIR}/secrets/master.key")"
+  [[ "$content" == "pre-existing-key-must-not-be-overwritten=" ]] || \
+    fail "既有 master.key 被覆寫 (got '$content')"
+
+  cleanup_sandbox
+  pass "bootstrap_master_key: 既有檔 → 不覆寫"
+}
 
 test_token_env_already_set() {
   new_sandbox
@@ -172,6 +218,8 @@ test_seed_config_both_missing() {
 # ------------------------------------------------------------------------------
 # Main
 # ------------------------------------------------------------------------------
+test_master_key_first_run
+test_master_key_idempotent
 test_token_env_already_set
 test_token_secrets_file_exists
 test_token_generate_new

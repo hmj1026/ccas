@@ -2,12 +2,14 @@
 # Docker entrypoint for CCAS backend / worker / scheduler / bot.
 #
 # Order:
+#   0. Bootstrap master.key（Fernet 對稱加密；oauth-onboarding-ui §1.2）
 #   1. Bootstrap API_TOKEN（D11 三段式：env > secrets 檔 > 自動產生）
 #   2. Validate env against /app/.env.example（image-internal SSOT）
 #   3. Seed config from image-internal templates if user mount lacks them（D5）
 #   4. Apply alembic migration（backend only — gated by CCAS_RUN_MIGRATIONS）
 #   5. Seed bank_configs / categories from yaml（backend only）
-#   6. exec service command（uvicorn / rq worker / scheduler / bot）
+#   6. Seed bank_settings from banks.yaml（oauth-onboarding-ui §2.6；backend only）
+#   7. exec service command（uvicorn / rq worker / scheduler / bot）
 #
 # Usage：本腳本作為 backend image 的 ENTRYPOINT；CMD（uvicorn / rq worker / ...）
 # 從 docker-compose.yml 的 `command:` 注入。worker / scheduler / bot 不需跑 migration
@@ -26,6 +28,39 @@ CCAS_CONFIG_DIR="${BANK_CONFIG_DIR:-/config}"
 CCAS_DEFAULT_CONFIG_DIR="${CCAS_DEFAULT_CONFIG_DIR:-/app/default-config}"
 SECRETS_DIR="${CCAS_DATA_DIR}/secrets"
 API_TOKEN_FILE="${SECRETS_DIR}/api-token"
+MASTER_KEY_FILE="${SECRETS_DIR}/master.key"
+
+# ------------------------------------------------------------------------------
+# 0. master.key bootstrap（oauth-onboarding-ui §1.2）
+# ------------------------------------------------------------------------------
+# Fernet 對稱加密金鑰；用於 bank_secrets / Gmail token 之類的密文欄位。
+# 三段式（與 API_TOKEN 一致）：env > secrets 檔 > 自動產生。
+# 不可外洩、不可遺失：遺失後既有 ciphertext 將永久無法解密，需從備份還原
+# ${CCAS_DATA_LOCATION} 整個目錄。
+#
+# 委派給 ``ccas.storage.secrets.MasterKeyManager.load_or_create``：
+# - 該實作以 ``os.open(..., O_EXCL, 0o600)`` 寫檔，避免 race 條件
+# - 不經 stdout，key bytes 不會出現在 ``/proc/<pid>/fd/1`` 視窗內
+# - 與 backend service 啟動後的解密路徑共用同一個產生邏輯，避免 base64 / 二進位
+#   格式偏差
+bootstrap_master_key() {
+  if [[ -f "${MASTER_KEY_FILE}" ]]; then
+    return 0
+  fi
+
+  if ! mkdir -p "${SECRETS_DIR}"; then
+    printf '[ERROR] 無法建立 %s（檢查 ${CCAS_DATA_LOCATION} volume 是否可寫）\n' "${SECRETS_DIR}" >&2
+    return 1
+  fi
+
+  uv run python -c "
+import sys
+from pathlib import Path
+from ccas.storage.secrets import MasterKeyManager
+MasterKeyManager(Path(sys.argv[1])).load_or_create()
+" "${MASTER_KEY_FILE}"
+  printf '[INFO] 已自動產生 master.key 於 %s（首次啟動，請務必納入 ${CCAS_DATA_LOCATION} 備份）\n' "${MASTER_KEY_FILE}"
+}
 
 # ------------------------------------------------------------------------------
 # 1. API_TOKEN bootstrap（D11）
@@ -141,6 +176,23 @@ db_bootstrap() {
     printf '[ERROR] 請檢查 %s/categories.yaml 是否存在且格式正確。\n' "${CCAS_CONFIG_DIR}" >&2
     exit 1
   fi
+
+  # bank_settings seed（oauth-onboarding-ui §2.6）：
+  # 為 banks.yaml 中每個銀行寫入預設 BankSettings row（enabled=True）。
+  # 既有 row 不覆寫，保留使用者透過 /setup/banks UI 做的修改。fail-soft：
+  # 不阻擋啟動，避免 seed 異常讓使用者連登入都進不去。
+  printf '==> Seed bank_settings from %s\n' "${CCAS_CONFIG_DIR}"
+  if ! uv run python -m ccas.tools.seed_bank_settings; then
+    printf '[WARN] bank_settings seed 失敗，可至 /setup/banks 手動補；不阻擋啟動。\n' >&2
+  fi
+
+  # gmail_oauth_state 清理（oauth-onboarding-ui §3.8）：
+  # 清掉 24 小時以上未使用的 OAuth state row，避免堆積。一次性查詢，
+  # 即便 router 端因 callback 流程已自動刪除多數 state，啟動時做總體清掃。
+  printf '==> 清理 gmail_oauth_state 過期條目\n'
+  if ! uv run python -m ccas.tools.cleanup_gmail_state; then
+    printf '[WARN] gmail_oauth_state 清理失敗（不阻擋啟動）。\n' >&2
+  fi
 }
 
 # ------------------------------------------------------------------------------
@@ -165,6 +217,7 @@ if [[ "${BASH_SOURCE[0]}" != "${0}" ]]; then
   return 0 2>/dev/null || true
 fi
 
+bootstrap_master_key
 bootstrap_api_token
 validate_env
 check_ocr
