@@ -1,4 +1,13 @@
-# CCAS Production 部署指南
+# CCAS 進階部署指南（自建 build）
+
+> 📌 **終端使用者請改看 [docs/install-quickstart.md](install-quickstart.md)**。
+>
+> 本指南針對需要**自建 image / 客製化部署 / 從原始碼建置**的進階使用者：
+> - 內網環境無法存取 GHCR
+> - 需要修改 Dockerfile 或加私有依賴
+> - 開發團隊建立 staging 環境
+>
+> 一般使用者只需下載 release 的 `docker-compose.yml` + `example.env` 即可，不需 clone repo。
 
 本指南說明如何將 CCAS 部署到遠端伺服器或任何安裝了 Docker 的環境。
 

@@ -2,6 +2,32 @@
 
 自動化信用卡帳單處理流水線：從 Gmail 收取 PDF 帳單、解密、解析交易明細、分類消費類別，最終透過 REST API 儀表板與 Telegram Bot 呈現結果。
 
+## 快速安裝（已完成 Gmail 設定後 30 秒）
+
+> ⚠️ 請先完成 [Gmail OAuth 設定](docs/gmail-setup.md)（取得 `credentials.json`），CCAS 需要它才能收取帳單。
+
+```bash
+mkdir ~/ccas && cd ~/ccas
+RELEASE=v0.1.0   # 改為要安裝的精確版號
+curl -fsSL -o docker-compose.yml \
+  "https://github.com/<owner>/ccas/releases/download/${RELEASE}/docker-compose.yml"
+curl -fsSL -o example.env \
+  "https://github.com/<owner>/ccas/releases/download/${RELEASE}/example.env"
+cp example.env .env
+# 編輯 .env：填入 REPO_OWNER、CCAS_VERSION、PDF_PASSWORD_<BANK>
+mkdir -p data && cp /path/to/credentials.json data/credentials.json
+docker compose -f docker-compose.yml pull
+docker compose -f docker-compose.yml up -d
+```
+
+啟動後：
+1. 取得登入 token：`cat ./data/secrets/api-token`
+2. 瀏覽器開 `http://localhost:8080/login`，貼上 token 即可進入 dashboard
+
+完整步驟（含每個變數說明、PDF 密碼設定、銀行清單管理）見
+[docs/install-quickstart.md](docs/install-quickstart.md)。
+升級流程見 [docs/upgrade-guide.md](docs/upgrade-guide.md)。
+
 ## 系統架構
 
 ### 資料流
