@@ -252,3 +252,28 @@ class PipelineTriggerData(BaseModel):
     """Pipeline 觸發回應資料。"""
 
     job_id: str
+
+
+# -- Setup: Gmail OAuth Web flow --
+
+
+class GmailCredentialsUploadResult(BaseModel):
+    """credentials.json 上傳結果。"""
+
+    saved_path: str
+    client_id_last8: str  # 末 8 字元，用於 UI 顯示提示，不洩漏完整 ID
+
+
+class GmailAuthorizeUrl(BaseModel):
+    """OAuth authorize URL 與 state（前端跳轉用）。"""
+
+    authorize_url: str
+    state: str
+
+
+class GmailConnectionStatus(BaseModel):
+    """Gmail 連線狀態（不含 access token 本體）。"""
+
+    connected: bool
+    email: str | None = None
+    granted_scopes: list[str] = []

@@ -195,3 +195,50 @@ class TestPathNormalization:
         assert settings.gmail_credentials_path == "/data/credentials.json"
         assert settings.gmail_token_path == "/data/token.json"
         assert settings.staging_dir == "/data/staging"
+
+
+class TestMasterKeyManager:
+    """Settings.master_key_manager 為 lazy property，首次存取時 instantiate。"""
+
+    def test_master_key_path_default_resolves_under_backend_root(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        settings = _make_settings(monkeypatch, tmp_path, env_file_arg=None)
+
+        assert settings.master_key_path == str(
+            (_backend_root() / "data/secrets/master.key").resolve()
+        )
+
+    def test_master_key_path_absolute_override_preserved(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        target = tmp_path / "custom-secrets" / "master.key"
+        settings = _make_settings(
+            monkeypatch,
+            tmp_path,
+            env_file_content={"MASTER_KEY_PATH": str(target)},
+        )
+
+        assert settings.master_key_path == str(target.resolve())
+
+    def test_master_key_manager_is_lazy_and_cached(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        target = tmp_path / "secrets" / "master.key"
+        settings = _make_settings(
+            monkeypatch,
+            tmp_path,
+            env_file_content={"MASTER_KEY_PATH": str(target)},
+        )
+
+        # File should NOT exist yet — Settings init must not touch the filesystem.
+        assert not target.exists()
+
+        mgr1 = settings.master_key_manager
+        mgr2 = settings.master_key_manager
+
+        assert mgr1 is mgr2
+        # First decrypt/encrypt triggers load_or_create.
+        ct = mgr1.encrypt("hello")
+        assert mgr1.decrypt(ct) == "hello"
+        assert target.exists()

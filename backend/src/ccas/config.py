@@ -6,12 +6,15 @@
 import os
 from functools import lru_cache
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from dotenv import dotenv_values
 from pydantic import Field, PrivateAttr, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from pydantic_settings.sources.types import ENV_FILE_SENTINEL, DotenvType
+
+if TYPE_CHECKING:
+    from ccas.storage.secrets import MasterKeyManager
 
 _APP_ROOT = Path(__file__).resolve().parents[2]
 _DEFAULT_ENV_FILES = (_APP_ROOT / ".env", _APP_ROOT.parent / ".env")
@@ -78,7 +81,19 @@ class Settings(BaseSettings):
     fubon_manual_staging_dir: str = "./data/manual-staging/FUBON"
     anthropic_api_key: SecretStr = SecretStr("")
 
+    # master.key 路徑（Fernet 對稱加密；oauth-onboarding-ui §1.4）。entrypoint
+    # 在啟動時自動產生此檔（首次）；本欄位僅指向位置，並透過
+    # ``master_key_manager`` lazy property 暴露 ``MasterKeyManager``。
+    master_key_path: str = "./data/secrets/master.key"
+
+    # 對外可見的 base URL（oauth-onboarding-ui §3.7）；用於組成 Gmail OAuth
+    # callback ``redirect_uri``。預設假設透過 nginx proxy 暴露於 8080；
+    # 若使用者透過外部 reverse proxy 暴露需更新此值。任何尾端 ``/`` 皆會
+    # 在 ``get_public_base_url`` 中被去除以避免雙斜線。
+    public_base_url: str = "http://localhost:8080"
+
     _env_map: dict[str, str] = PrivateAttr(default_factory=dict)
+    _master_key_manager: "MasterKeyManager | None" = PrivateAttr(default=None)
 
     def __init__(self, **kwargs: Any) -> None:
         raw = kwargs.get("_env_file", ENV_FILE_SENTINEL)
@@ -102,6 +117,7 @@ class Settings(BaseSettings):
         "gmail_token_path",
         "staging_dir",
         "fubon_manual_staging_dir",
+        "master_key_path",
         mode="after",
     )
     @classmethod
@@ -171,6 +187,32 @@ class Settings(BaseSettings):
         return [
             item.strip() for item in self.frontend_origins.split(",") if item.strip()
         ]
+
+    def get_public_base_url(self) -> str:
+        """回傳去掉尾端 ``/`` 的 public base URL。
+
+        例：``http://localhost:8080/`` → ``http://localhost:8080``。OAuth
+        ``redirect_uri`` 串接子路徑時可避免雙斜線。
+        """
+        return self.public_base_url.rstrip("/")
+
+    @property
+    def master_key_manager(self) -> "MasterKeyManager":
+        """Lazy 取得 ``MasterKeyManager``（首次存取時 instantiate）。
+
+        不在 ``__init__`` 讀檔；entrypoint 已負責確保 master.key 存在，
+        但此處仍允許 ``MasterKeyManager.load_or_create`` 自動產生（單機 dev
+        場景跳過 entrypoint 時也能用）。
+
+        遠端缺檔時 raise 由 ``MasterKeyManager`` 處理（fail-loud）。
+        """
+        if self._master_key_manager is None:
+            # Local import to avoid module load-time cycle (storage imports errors,
+            # config also defines errors-adjacent settings).
+            from ccas.storage.secrets import MasterKeyManager
+
+            self._master_key_manager = MasterKeyManager(Path(self.master_key_path))
+        return self._master_key_manager
 
 
 def _build_env_map(

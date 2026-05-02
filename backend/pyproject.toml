@@ -24,6 +24,10 @@ dependencies = [
     "pytesseract>=0.3.13",
     "httpx",
     "beautifulsoup4",
+    # Fernet 對稱加密：用於 master.key + bank_secrets / Gmail token / token rotate
+    # 流程；oauth-onboarding-ui §1.5 將其顯式宣告為主依賴（既有由
+    # google-auth-oauthlib 傳遞拉入，此處鎖定 >=42 安全下限以避免漂移）。
+    "cryptography>=42",
     # Captcha-specialized OCR: CNN + ONNX runtime (~76 MB wheel bundles
     # common.onnx / common_det.onnx). Replaces EasyOCR+torch for the FUBON
     # captcha solver — see openspec archive/fix-fubon-captcha-solver-accuracy.

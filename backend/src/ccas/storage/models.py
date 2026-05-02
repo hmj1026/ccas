@@ -6,6 +6,9 @@
 - categories: 關鍵字分類對照
 - bank_configs: 銀行設定
 - staged_attachments: Gmail 附件 staging 記錄
+- bank_settings: 銀行 enabled toggle 與 display metadata（oauth-onboarding-ui §2.1）
+- bank_secrets: PDF 解密密碼密文儲存（oauth-onboarding-ui §2.2）
+- gmail_oauth_state: Gmail OAuth Web flow PKCE state（oauth-onboarding-ui §2.3）
 """
 
 from datetime import UTC, date, datetime
@@ -17,6 +20,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Integer,
+    String,
     Text,
     UniqueConstraint,
 )
@@ -179,3 +183,65 @@ class PaymentReminder(Base):
     )
     reminder_type: Mapped[str] = mapped_column(Text, nullable=False)
     sent_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+
+
+class BankSettings(Base):
+    """銀行 UI 設定（oauth-onboarding-ui §2.1）。
+
+    取代 ``banks.yaml`` 的 ``enabled`` 欄位作為 SSOT；保留 yaml 為 fallback。
+    PK 為 ``code``（與 banks.yaml 的 bank_code 同名、皆為大寫）。
+
+    與 ``bank_configs`` 並列：
+    - ``bank_configs``：解析器設定（gmail filter / pdf 規則 / parser 版本）
+    - ``bank_settings``：使用者偏好（enabled toggle / display name / notes）
+    """
+
+    __tablename__ = "bank_settings"
+
+    code: Mapped[str] = mapped_column(String(32), primary_key=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    display_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=_utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=_utcnow, onupdate=_utcnow, nullable=False
+    )
+
+
+class BankSecret(Base):
+    """PDF 解密密碼密文儲存（oauth-onboarding-ui §2.2）。
+
+    ``encrypted_password`` 為 ``MasterKeyManager.encrypt`` 產生的 base64
+    Fernet ciphertext；明文密碼絕不入庫。master.key 必須與密文同備份還原，
+    否則解密將失敗（``MasterKeyMismatchError``）。
+    """
+
+    __tablename__ = "bank_secrets"
+
+    bank_code: Mapped[str] = mapped_column(String(32), primary_key=True)
+    encrypted_password: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=_utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=_utcnow, onupdate=_utcnow, nullable=False
+    )
+
+
+class GmailOAuthState(Base):
+    """Gmail OAuth Web flow 一次性 PKCE state（oauth-onboarding-ui §2.3）。
+
+    ``state`` 由 ``/api/setup/gmail/authorize`` 產生並寫入；callback 驗證後
+    刪除。entrypoint 啟動時清理 ``created_at`` 超過 1 天的條目（避免堆積
+    過期 state）。
+    """
+
+    __tablename__ = "gmail_oauth_state"
+
+    state: Mapped[str] = mapped_column(String(128), primary_key=True)
+    code_verifier: Mapped[str] = mapped_column(String(256), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=_utcnow, nullable=False
+    )
