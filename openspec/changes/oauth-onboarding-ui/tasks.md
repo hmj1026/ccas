@@ -1,31 +1,31 @@
 ## 1. 加密與 master key 機制
 
-- [ ] 1.1 新增 `backend/src/ccas/storage/secrets.py`：`MasterKeyManager` class（load_or_create、get_fernet、encrypt、decrypt 四個方法）；單元測試覆蓋 (a) 首次產生、(b) 既有讀取、(c) decrypt 錯誤訊息明確
-- [ ] 1.2 修改 `scripts/docker-entrypoint.sh`：在 `API_TOKEN` bootstrap 段落之前新增 master.key 自動產生邏輯（`${CCAS_DATA_LOCATION}/secrets/master.key`，權限 0600，stdout INFO log）
-- [ ] 1.3 為 entrypoint 段落寫 bats 單元測試：(a) 首次啟動產生 + 權限 0600、(b) 既有 master.key 不覆蓋
-- [ ] 1.4 backend `Settings` 新增 `master_key_path` 與 lazy `master_key` property，從 file 讀取；測試覆蓋 file 不存在時的 error path
-- [ ] 1.5 在 pyproject.toml `[project.optional-dependencies] api` 顯式宣告 `cryptography>=42` 版本下限
+- [x] 1.1 新增 `backend/src/ccas/storage/secrets.py`：`MasterKeyManager` class（load_or_create、get_fernet、encrypt、decrypt 四個方法）；單元測試覆蓋 (a) 首次產生、(b) 既有讀取、(c) decrypt 錯誤訊息明確
+- [x] 1.2 修改 `scripts/docker-entrypoint.sh`：在 `API_TOKEN` bootstrap 段落之前新增 master.key 自動產生邏輯（`${CCAS_DATA_LOCATION}/secrets/master.key`，權限 0600，stdout INFO log）
+- [x] 1.3 為 entrypoint 段落寫 bats 單元測試：(a) 首次啟動產生 + 權限 0600、(b) 既有 master.key 不覆蓋
+- [x] 1.4 backend `Settings` 新增 `master_key_path` 與 lazy `master_key` property，從 file 讀取；測試覆蓋 file 不存在時的 error path
+- [x] 1.5 在 pyproject.toml 顯式宣告 `cryptography>=42` 版本下限（**spec 偏差**：原文寫 `[project.optional-dependencies] api` extra group 不存在；改放主 `[project] dependencies` 因 entrypoint 與 backend service 共用，無法以 extra 條件性安裝。將於本 change archive 前 `/opsx:verify` 對齊 spec 文字）
 
 ## 2. DB 模型與 migration
 
-- [ ] 2.1 在 `backend/src/ccas/storage/models.py` 新增 `BankSettings` 模型（`code` PK, `enabled`, `display_name`, `notes`, `created_at`, `updated_at`）
-- [ ] 2.2 新增 `BankSecret` 模型（`bank_code` PK, `encrypted_password`, `created_at`, `updated_at`）；註解明示 encrypted_password 為 base64 Fernet ciphertext
-- [ ] 2.3 新增 `GmailOAuthState` 模型（`state` PK, `code_verifier`, `created_at`）
-- [ ] 2.4 建立 alembic migration `<ts>_add_setup_tables.py`：建三張表，無外鍵到 banks.yaml；downgrade = drop tables
-- [ ] 2.5 在乾淨 DB 跑 `alembic upgrade head` + `alembic downgrade -1` + `alembic upgrade head` 驗證冪等
-- [ ] 2.6 修改 entrypoint：在 alembic 之後新增 bank_settings seed 邏輯（讀 banks.yaml → INSERT OR IGNORE 預設 row）；單元測試覆蓋首次 seed、既有 row 不覆蓋
+- [x] 2.1 在 `backend/src/ccas/storage/models.py` 新增 `BankSettings` 模型（`code` PK, `enabled`, `display_name`, `notes`, `created_at`, `updated_at`）
+- [x] 2.2 新增 `BankSecret` 模型（`bank_code` PK, `encrypted_password`, `created_at`, `updated_at`）；註解明示 encrypted_password 為 base64 Fernet ciphertext
+- [x] 2.3 新增 `GmailOAuthState` 模型（`state` PK, `code_verifier`, `created_at`）
+- [x] 2.4 建立 alembic migration `2570bbdebf54_add_setup_tables.py`：建三張表，無外鍵到 banks.yaml；downgrade = drop tables。**加值**：額外加入 SQLite triggers 確保 `updated_at` 在 Core-style bulk update 下也自動刷新（database-reviewer 指出 `onupdate=` 僅 ORM-tracked instance update 才生效）
+- [x] 2.5 在乾淨 DB 跑 `alembic upgrade head` + `alembic downgrade -1` + `alembic upgrade head` 驗證冪等
+- [x] 2.6 修改 entrypoint：在 alembic 之後新增 bank_settings seed 邏輯（讀 banks.yaml → INSERT OR IGNORE 預設 row）；單元測試覆蓋首次 seed、既有 row 不覆蓋
 
 ## 3. 後端 API：Gmail OAuth Web flow
 
-- [ ] 3.1 建立 `backend/src/ccas/api/routers/setup/__init__.py` 與 `gmail.py`
-- [ ] 3.2 實作 `POST /api/setup/gmail/credentials`：multipart upload，驗證 JSON 結構（含 `installed.client_id` 與 `installed.client_secret`）、寫入 `${CCAS_DATA_LOCATION}/gmail/credentials.json` 權限 0600
-- [ ] 3.3 實作 `GET /api/setup/gmail/authorize`：產 PKCE code_verifier + state、寫入 `gmail_oauth_state` 表、回傳 Google authorize URL（含 `code_challenge`、`scope`、`redirect_uri`、`state`）
-- [ ] 3.4 實作 `GET /api/setup/gmail/callback?code=&state=`：驗證 state 存在 + 未過期（10 分鐘），用 code + code_verifier 換 token、寫 `${CCAS_DATA_LOCATION}/gmail/token.json`、刪除 state row、redirect 回 `/setup/gmail?status=connected`
-- [ ] 3.5 實作 `GET /api/setup/gmail/status`：回 `{connected: bool, email?: str, granted_scopes?: list}`，從 token.json 解析（若存在）
-- [ ] 3.6 實作 `POST /api/setup/gmail/revoke`：刪除 token.json、撤銷 Google 端 token（呼叫 Google revoke endpoint）、回 200
-- [ ] 3.7 新增 `Settings.public_base_url` env（預設 `http://localhost:${CCAS_PORT:-8080}`），用於組成 redirect_uri；docs 註明若使用者透過外部 reverse proxy 暴露需更新
-- [ ] 3.8 entrypoint 啟動時 `DELETE FROM gmail_oauth_state WHERE created_at < NOW() - 1 day`（清理過期 state）
-- [ ] 3.9 為四個端點寫 pytest 整合測試：覆蓋 happy path、state 過期、redirect_uri_mismatch（Google 端模擬 400）、credentials.json 缺失
+- [x] 3.1 建立 `backend/src/ccas/api/routers/setup/__init__.py` 與 `gmail.py`
+- [x] 3.2 實作 `POST /api/setup/gmail/credentials`：multipart upload，驗證 JSON 結構（接受 `web` 或 `installed` block，皆需 `client_id` + `client_secret`）、寫入 `gmail_credentials_path` 權限 0600
+- [x] 3.3 實作 `GET /api/setup/gmail/authorize`：產 PKCE code_verifier (S256) + state、寫入 `gmail_oauth_state` 表、回傳 Google authorize URL（含 `code_challenge`、`scope`、`redirect_uri`、`state`、`access_type=offline`、`prompt=consent`）
+- [x] 3.4 實作 `GET /api/setup/gmail/callback?code=&state=`：驗證 state 存在 + 未過期（10 分鐘），用 httpx async POST 至 Google token endpoint、寫 `gmail_token_path`（google-auth Credentials 兼容格式）、刪除 state row、303 redirect 回 `/setup/gmail?status=connected`
+- [x] 3.5 實作 `GET /api/setup/gmail/status`：回 `{connected: bool, email?: str, granted_scopes?: list}`，從 token.json 解析（email 留 null，PR-C2 不打 userinfo）
+- [x] 3.6 實作 `POST /api/setup/gmail/revoke`：呼叫 Google revoke endpoint（best-effort，非 2xx 記 WARN log）、刪除 token.json、回 200
+- [x] 3.7 新增 `Settings.public_base_url` env（預設 `http://localhost:8080`），用於組成 redirect_uri；尾端 `/` 自動去除
+- [x] 3.8 entrypoint 啟動時清理 24 小時以上過期 `gmail_oauth_state` 條目（`ccas.tools.cleanup_gmail_state`，fail-soft）
+- [x] 3.9 為五個端點寫 pytest 整合測試（12 案）+ cleanup CLI 單元測試（2 案）：覆蓋 happy path、state 過期/未知、credentials.json 缺失、token.json 缺失、revoke 無 token 冪等
 
 ## 4. 後端 API：bank-management
 
@@ -59,23 +59,23 @@
 
 ## 7. 前端 layout 與路由
 
-- [ ] 7.1 建立 `frontend/src/pages/setup/layout.tsx`：左側導覽含 4 子頁、頂部「設定中心」標題
-- [ ] 7.2 修改 `frontend/src/components/layout.tsx` NAV_ITEMS：新增「設定中心」項，icon `Settings2`，連到 `/setup/gmail`
-- [ ] 7.3 修改 `frontend/src/App.tsx`：lazy route 群組 `/setup/*`，子路由 `gmail/banks/secrets/admin`
-- [ ] 7.4 舊 `/settings` route 改為 redirect 至 `/setup/admin`（avoid 書籤失效）
-- [ ] 7.5 為 layout 寫 Vitest snapshot 測試
+- [x] 7.1 建立 `frontend/src/pages/setup/layout.tsx`：左側導覽含 4 子頁、頂部「設定中心」標題
+- [x] 7.2 修改 `frontend/src/components/layout.tsx` NAV_ITEMS：新增「設定中心」項，icon `Settings2`，連到 `/setup/gmail`
+- [x] 7.3 修改 `frontend/src/App.tsx`：lazy route 群組 `/setup/*`，子路由 `gmail/banks/secrets/admin`（banks/secrets/admin 暫掛 `_placeholder.tsx`，PR-C3/C4 替換）
+- [ ] 7.4 舊 `/settings` route 改為 redirect 至 `/setup/admin`（avoid 書籤失效）— **延至 PR-C4**：`/setup/admin` 目前為 placeholder，立即 redirect 會失去既有 `/settings` 銀行設定 + 分類關鍵字管理；待 §6/§11 admin 子頁落地後再做切換
+- [x] 7.5 為 layout 寫 Vitest snapshot 測試（已改為 role-based assertion，避免 snapshot 高頻率 churn）
 
 ## 8. 前端：Gmail OAuth 頁
 
-- [ ] 8.1 建立 `frontend/src/pages/setup/gmail.tsx`：階段式 UI（step 1 上傳 credentials.json、step 2 顯示 redirect URI 提示、step 3 「授權 Google」按鈕、step 4 連線狀態 + 「revoke」按鈕）
-- [ ] 8.2 file input 上傳 credentials.json：使用 `useMutation` 對 `POST /api/setup/gmail/credentials`、成功後跳到 step 2
-- [ ] 8.3 「授權 Google」按鈕：呼叫 `GET /api/setup/gmail/authorize` 取得 URL → `window.location.href = url` 跳轉 Google
-- [ ] 8.4 callback 頁（route `/setup/gmail/callback`）：讀 query params、轉發到後端 `GET /api/setup/gmail/callback?code=...&state=...`、後端處理完 redirect 回 `/setup/gmail?status=connected`
-- [ ] 8.5 連線狀態區塊：每 5 秒輪詢 `GET /api/setup/gmail/status`（直到 connected）；connected 後顯示 email + scopes
-- [ ] 8.6 「revoke」按鈕：confirm dialog → `POST /api/setup/gmail/revoke`、成功後回 step 1
-- [ ] 8.7 redirect URI 顯示區塊：明示「目前 redirect URI 為 `http://localhost:${CCAS_PORT}/setup/gmail/callback`，請確認 GCP Console 已加入此 URL」，含 docs 連結
-- [ ] 8.8 為頁面寫 Vitest 測試（mock fetch）：上傳 → 授權 → 模擬 callback → 顯示 connected
-- [ ] 8.9 撰寫 Playwright e2e `setup-gmail.spec.ts`：上傳 fixture credentials → 跳轉到模擬 OAuth 頁（mock Google）→ 驗證 callback 後狀態
+- [x] 8.1 建立 `frontend/src/pages/setup/gmail.tsx`：階段式 UI（step 1 上傳 credentials.json、step 2 顯示 redirect URI 提示、step 3 「授權 Google」按鈕、step 4 連線狀態 + 「revoke」按鈕）
+- [x] 8.2 file input 上傳 credentials.json：使用 `useMutation` 對 `POST /api/setup/gmail/credentials`、成功後跳到 step 2
+- [x] 8.3 「授權 Google」按鈕：呼叫 `GET /api/setup/gmail/authorize` 取得 URL → `window.location.href = url` 跳轉 Google
+- [x] 8.4 callback 頁（route `/setup/gmail/callback`）：讀 query params、轉發到後端 `GET /api/setup/gmail/callback?code=...&state=...`、後端處理完 redirect 回 `/setup/gmail?status=connected`
+- [x] 8.5 連線狀態區塊：每 5 秒輪詢 `GET /api/setup/gmail/status`（直到 connected）；connected 後顯示 email + scopes
+- [x] 8.6 「revoke」按鈕：confirm dialog → `POST /api/setup/gmail/revoke`、成功後回 step 1
+- [x] 8.7 redirect URI 顯示區塊：明示「目前 redirect URI 為 `http://localhost:${CCAS_PORT}/setup/gmail/callback`，請確認 GCP Console 已加入此 URL」，含 docs 連結（docs 連結延後到 §12 docs 步驟補上）
+- [x] 8.8 為頁面寫 Vitest 測試（mock fetch）：未連線顯示三步驟、已連線顯示 connected view、revoke flow 驗證 API 呼叫（authorize 跳轉與 callback 流程留待 Playwright）
+- [ ] 8.9 撰寫 Playwright e2e `setup-gmail.spec.ts`：上傳 fixture credentials → 跳轉到模擬 OAuth 頁（mock Google）→ 驗證 callback 後狀態（**延至 PR-C4 §13.2 整體 e2e 階段以 mock Google 補**）
 
 ## 9. 前端：bank-management 頁
 

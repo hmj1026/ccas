@@ -16,6 +16,12 @@ const TransactionsPage = lazy(() => import('@/pages/transactions'))
 const AnalyticsPage = lazy(() => import('@/pages/analytics'))
 const BillsPage = lazy(() => import('@/pages/bills'))
 const SettingsPage = lazy(() => import('@/pages/settings'))
+const SetupLayout = lazy(() => import('@/pages/setup/layout'))
+const SetupGmailPage = lazy(() => import('@/pages/setup/gmail'))
+const SetupGmailCallbackPage = lazy(
+  () => import('@/pages/setup/gmail-callback'),
+)
+const SetupPlaceholder = lazy(() => import('@/pages/setup/_placeholder'))
 
 function createQueryClient() {
   return new QueryClient({
@@ -49,6 +55,32 @@ function App() {
             <Route path="analytics" element={<Suspense fallback={<LoadingState />}><AnalyticsPage /></Suspense>} />
             <Route path="bills" element={<Suspense fallback={<LoadingState />}><BillsPage /></Suspense>} />
             <Route path="settings" element={<Suspense fallback={<LoadingState />}><SettingsPage /></Suspense>} />
+            <Route
+              path="setup"
+              element={<Suspense fallback={<LoadingState />}><SetupLayout /></Suspense>}
+            >
+              <Route index element={<Navigate to="/setup/gmail" replace />} />
+              <Route
+                path="gmail"
+                element={<Suspense fallback={<LoadingState />}><SetupGmailPage /></Suspense>}
+              />
+              <Route
+                path="gmail/callback"
+                element={<Suspense fallback={<LoadingState />}><SetupGmailCallbackPage /></Suspense>}
+              />
+              <Route
+                path="banks"
+                element={<Suspense fallback={<LoadingState />}><SetupPlaceholder section="banks" /></Suspense>}
+              />
+              <Route
+                path="secrets"
+                element={<Suspense fallback={<LoadingState />}><SetupPlaceholder section="secrets" /></Suspense>}
+              />
+              <Route
+                path="admin"
+                element={<Suspense fallback={<LoadingState />}><SetupPlaceholder section="admin" /></Suspense>}
+              />
+            </Route>
           </Route>
         </Routes>
       </BrowserRouter>

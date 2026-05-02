@@ -10,6 +10,7 @@ import {
   BarChart3,
   FileText,
   Settings,
+  Settings2,
   Menu,
   X,
   LogOut,
@@ -26,6 +27,7 @@ const NAV_ITEMS = [
   { to: '/analytics', label: '分析', icon: BarChart3 },
   { to: '/bills', label: '帳單', icon: FileText },
   { to: '/settings', label: '設定', icon: Settings },
+  { to: '/setup/gmail', label: '設定中心', icon: Settings2 },
 ] as const
 
 function Layout() {
