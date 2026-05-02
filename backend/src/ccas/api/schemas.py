@@ -335,3 +335,22 @@ class ImportFromEnvResult(BaseModel):
     imported: int
     skipped_already_in_db: int
     bank_codes_imported: list[str] = []
+
+
+# -- Setup: Admin token rotate --
+
+
+class AdminTokenInfo(BaseModel):
+    """``GET /api/setup/admin/token-info`` response（不洩漏完整 token）。"""
+
+    last4: str
+    created_at: datetime | None = None
+    version: int
+
+
+class AdminTokenRotateResult(BaseModel):
+    """``POST /api/setup/admin/token-rotate`` response（一次性回傳新 token 明文）。"""
+
+    token: str
+    version: int
+    last4: str

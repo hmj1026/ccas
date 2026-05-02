@@ -3,6 +3,11 @@
 from fastapi import Response
 from starlette.requests import Request
 
+from ccas.api.deps import (
+    current_api_token_version,
+    decode_session_cookie,
+    encode_session_cookie,
+)
 from ccas.api.routers.auth import create_session, delete_session, get_session_status
 from ccas.api.schemas import SessionLoginRequest
 from ccas.config import get_settings
@@ -25,8 +30,11 @@ class TestAuthRouter:
     async def test_get_session_status_detects_valid_cookie(self, monkeypatch):
         monkeypatch.setenv("API_TOKEN", "test-token")
         get_settings.cache_clear()
+        cookie_value = encode_session_cookie("test-token", current_api_token_version())
 
-        response = await get_session_status(_make_request("ccas_session=test-token"))
+        response = await get_session_status(
+            _make_request(f"ccas_session={cookie_value}")
+        )
 
         assert response.data.authenticated is True
 
@@ -39,7 +47,12 @@ class TestAuthRouter:
         await create_session(request, SessionLoginRequest(token="test-token"), response)
 
         set_cookie = response.headers["set-cookie"]
-        assert "ccas_session=test-token" in set_cookie
+        # Cookie value is opaque (token + version packed); decode to verify.
+        prefix = "ccas_session="
+        start = set_cookie.index(prefix) + len(prefix)
+        end = set_cookie.index(";", start)
+        decoded = decode_session_cookie(set_cookie[start:end])
+        assert decoded == ("test-token", current_api_token_version())
         assert "HttpOnly" in set_cookie
         assert "SameSite=lax" in set_cookie
 

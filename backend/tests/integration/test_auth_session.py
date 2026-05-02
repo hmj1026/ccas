@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from httpx import AsyncClient
 
+from ccas.api.deps import current_api_token_version, encode_session_cookie
 from ccas.config import get_settings
 from tests.integration.conftest import TEST_TOKEN, auth_headers
 
@@ -35,9 +36,10 @@ async def test_delete_session_with_bearer_clears_cookie(client: AsyncClient):
 
 async def test_delete_session_with_cookie_clears_cookie(client: AsyncClient):
     """帶有效 session cookie → 204 + Set-Cookie 含 Max-Age=0。"""
+    cookie_value = encode_session_cookie(TEST_TOKEN, current_api_token_version())
     resp = await client.delete(
         "/api/auth/session",
-        headers={"Cookie": f"{_COOKIE_NAME}={TEST_TOKEN}"},
+        headers={"Cookie": f"{_COOKIE_NAME}={cookie_value}"},
     )
     assert resp.status_code == 204
     set_cookie = resp.headers.get("set-cookie", "")

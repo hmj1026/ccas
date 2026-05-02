@@ -28,6 +28,7 @@ CCAS_CONFIG_DIR="${BANK_CONFIG_DIR:-/config}"
 CCAS_DEFAULT_CONFIG_DIR="${CCAS_DEFAULT_CONFIG_DIR:-/app/default-config}"
 SECRETS_DIR="${CCAS_DATA_DIR}/secrets"
 API_TOKEN_FILE="${SECRETS_DIR}/api-token"
+API_TOKEN_VERSION_FILE="${SECRETS_DIR}/api-token-version"
 MASTER_KEY_FILE="${SECRETS_DIR}/master.key"
 
 # ------------------------------------------------------------------------------
@@ -95,6 +96,27 @@ bootstrap_api_token() {
   API_TOKEN="${new_token}"
   export API_TOKEN
   printf '[INFO] 已自動產生 API_TOKEN，請至 %s 取得（首次啟動）\n' "${API_TOKEN_FILE}"
+}
+
+# ------------------------------------------------------------------------------
+# 1b. API token 版本檔（oauth-onboarding-ui §6.3）
+# ------------------------------------------------------------------------------
+# 由 rotate API 在每次 rotate 時 +1；entrypoint 僅負責「首次部署寫入 1」。
+# 缺檔時 backend ``current_api_token_version()`` fallback 為 1，因此既有部署
+# 升級到含本檔的版本不會破壞行為，但會在第一次 rotate 後有檔。
+bootstrap_api_token_version() {
+  if [[ -f "${API_TOKEN_VERSION_FILE}" ]]; then
+    return 0
+  fi
+
+  if ! mkdir -p "${SECRETS_DIR}"; then
+    printf '[ERROR] 無法建立 %s（檢查 ${CCAS_DATA_LOCATION} volume 是否可寫）\n' "${SECRETS_DIR}" >&2
+    return 1
+  fi
+
+  ( umask 077 && printf '%s' "1" > "${API_TOKEN_VERSION_FILE}" )
+  chmod 0600 "${API_TOKEN_VERSION_FILE}"
+  printf '[INFO] 已初始化 API token 版本檔 %s（v1）\n' "${API_TOKEN_VERSION_FILE}"
 }
 
 # ------------------------------------------------------------------------------
@@ -219,6 +241,7 @@ fi
 
 bootstrap_master_key
 bootstrap_api_token
+bootstrap_api_token_version
 validate_env
 check_ocr
 seed_configs

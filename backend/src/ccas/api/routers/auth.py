@@ -4,7 +4,14 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 
-from ccas.api.deps import get_session_cookie_token, is_valid_api_token, verify_token
+from ccas.api.deps import (
+    current_api_token_version,
+    encode_session_cookie,
+    get_session_cookie_token,
+    is_valid_api_token,
+    is_valid_session_cookie,
+    verify_token,
+)
 from ccas.api.schemas import ApiResponse, SessionLoginRequest, SessionStatus
 from ccas.config import get_settings
 
@@ -14,9 +21,12 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
 def _set_session_cookie(response: Response, token: str) -> None:
-    """Set an HttpOnly session cookie on the response.
+    """Set an HttpOnly session cookie carrying token + current token version.
 
-    Uses settings for cookie name, max-age, and secure flag.
+    Cookie value is the opaque base64(json({"t": token, "v": version})) blob
+    produced by ``encode_session_cookie``; this lets the server invalidate
+    every active cookie atomically when ``api-token-version`` is bumped by
+    the rotate endpoint, without any per-cookie revocation list.
 
     SameSite=Lax is used (not Strict) because Chrome's stricter Strict
     enforcement on the ``localhost`` host drops the cookie on the initial
@@ -25,15 +35,12 @@ def _set_session_cookie(response: Response, token: str) -> None:
     (which browsers never send cross-site with Lax cookies), and CORS
     ``allow_headers`` restricts custom Authorization headers so cookie-as-
     bearer cannot be replayed cross-origin.
-
-    Args:
-        response: FastAPI Response to attach the cookie to.
-        token: The API token value to store in the cookie.
     """
     settings = get_settings()
+    cookie_value = encode_session_cookie(token, current_api_token_version())
     response.set_cookie(
         key=settings.api_session_cookie_name,
-        value=token,
+        value=cookie_value,
         max_age=settings.api_session_max_age,
         httponly=True,
         samesite="lax",
@@ -64,8 +71,8 @@ def _clear_session_cookie(response: Response) -> None:
 @router.get("/session", response_model=ApiResponse[SessionStatus])
 async def get_session_status(request: Request):
     """回傳目前瀏覽器是否已具備有效 session。"""
-    cookie_token = get_session_cookie_token(request)
-    data = SessionStatus(authenticated=is_valid_api_token(cookie_token))
+    cookie_value = get_session_cookie_token(request)
+    data = SessionStatus(authenticated=is_valid_session_cookie(cookie_value))
     return ApiResponse(data=data)
 
 
