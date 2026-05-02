@@ -1,0 +1,194 @@
+name: Release Docker Images
+
+# 觸發：
+#   - push tag v*  → 建 multi-arch（amd64+arm64）image，並上傳 docker-compose.yml /
+#                    docker/example.env 為 GitHub Release artifact
+#   - push main / master → 僅 amd64，floating tag `release` + `sha-<short>`
+#
+# Tag 策略（D3）：
+#   main / master 推送 → release, sha-<short>
+#   git tag v0.1.0    → v0.1.0, v0.1, v0, release, sha-<short>
+
+on:
+  push:
+    branches: [main, master]
+    tags: ["v*"]
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  preflight:
+    name: Tag Existence Preflight
+    runs-on: ubuntu-latest
+    outputs:
+      is_tag: ${{ steps.detect.outputs.is_tag }}
+      ref_name: ${{ steps.detect.outputs.ref_name }}
+    steps:
+      - name: Detect ref kind
+        id: detect
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            echo "is_tag=true" >> "$GITHUB_OUTPUT"
+            echo "ref_name=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_tag=false" >> "$GITHUB_OUTPUT"
+            echo "ref_name=${GITHUB_REF#refs/heads/}" >> "$GITHUB_OUTPUT"
+          fi
+
+      # tag push 時：偵測 GHCR 上是否已存在同 tag 的三個 image，避免覆蓋發布版
+      - name: Login to GHCR (manifest probe)
+        if: steps.detect.outputs.is_tag == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Probe existing image manifests
+        if: steps.detect.outputs.is_tag == 'true'
+        env:
+          REPO_OWNER: ${{ github.repository_owner }}
+          TAG: ${{ steps.detect.outputs.ref_name }}
+        run: |
+          set -e
+          conflicts=()
+          for image in ccas-backend ccas-frontend ccas-proxy; do
+            ref="${REGISTRY}/${REPO_OWNER}/${image}:${TAG}"
+            if docker manifest inspect "$ref" >/dev/null 2>&1; then
+              conflicts+=("$ref")
+            fi
+          done
+          if [[ ${#conflicts[@]} -gt 0 ]]; then
+            printf '::error::偵測到既有 tag image，請改用新版號或刪除舊 image：\n'
+            for c in "${conflicts[@]}"; do printf '  - %s\n' "$c"; done
+            exit 1
+          fi
+
+  build-and-push:
+    name: Build & Push (${{ matrix.image }})
+    needs: preflight
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - image: ccas-backend
+            context: backend
+            dockerfile: backend/Dockerfile
+            target: production
+          - image: ccas-frontend
+            context: frontend
+            dockerfile: frontend/Dockerfile
+            target: production
+          - image: ccas-proxy
+            context: docker/proxy
+            dockerfile: docker/proxy/Dockerfile
+            target: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute tags
+        id: tags
+        env:
+          IMAGE: ${{ matrix.image }}
+          REPO_OWNER: ${{ github.repository_owner }}
+          IS_TAG: ${{ needs.preflight.outputs.is_tag }}
+          REF_NAME: ${{ needs.preflight.outputs.ref_name }}
+        run: |
+          set -e
+          base="${REGISTRY}/${REPO_OWNER}/${IMAGE}"
+          short_sha="${GITHUB_SHA::7}"
+          declare -a tags
+          if [[ "$IS_TAG" == "true" ]]; then
+            # 預期格式 v<MAJOR>.<MINOR>.<PATCH>[-suffix]
+            ver="${REF_NAME#v}"
+            major="${ver%%.*}"
+            rest="${ver#*.}"
+            minor="${rest%%.*}"
+            tags+=("${base}:${REF_NAME}")
+            tags+=("${base}:v${major}.${minor}")
+            tags+=("${base}:v${major}")
+            tags+=("${base}:release")
+          else
+            tags+=("${base}:release")
+          fi
+          tags+=("${base}:sha-${short_sha}")
+          # 用換行串接成 build-push-action 可接收的格式
+          {
+            echo 'tags<<EOF'
+            for t in "${tags[@]}"; do echo "$t"; done
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Compute platforms
+        id: platforms
+        env:
+          IS_TAG: ${{ needs.preflight.outputs.is_tag }}
+        run: |
+          if [[ "$IS_TAG" == "true" ]]; then
+            echo "platforms=linux/amd64,linux/arm64" >> "$GITHUB_OUTPUT"
+          else
+            echo "platforms=linux/amd64" >> "$GITHUB_OUTPUT"
+          fi
+
+      # backend image 需要 root 的 scripts/ + .env.example + config/*.example.yaml；
+      # 本 workflow 採用 backend/ 為 build context（spec §4.4），透過事前同步腳本
+      # 將 SSOT 複製進 backend/docker-image/。同步漂移檢查由 ci.yaml 的 scripts-checks
+      # job 把關，本 workflow 仍多執行一次以確保 release artifact 與 source 一致。
+      - name: Sync image-baked deploy assets (backend only)
+        if: matrix.image == 'ccas-backend'
+        run: ./scripts/sync-docker-image-assets.sh
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          target: ${{ matrix.target }}
+          platforms: ${{ steps.platforms.outputs.platforms }}
+          push: true
+          tags: ${{ steps.tags.outputs.tags }}
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,scope=${{ matrix.image }},mode=max
+          provenance: false
+
+  release-artifacts:
+    name: Upload Release Artifacts
+    needs: [preflight, build-and-push]
+    if: needs.preflight.outputs.is_tag == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Stage release artifacts
+        run: |
+          mkdir -p release-artifacts
+          /bin/cp docker/docker-compose.yml release-artifacts/docker-compose.yml
+          /bin/cp docker/example.env release-artifacts/example.env
+
+      - name: Create / update GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.preflight.outputs.ref_name }}
+          generate_release_notes: true
+          files: |
+            release-artifacts/docker-compose.yml
+            release-artifacts/example.env

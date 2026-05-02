@@ -82,6 +82,22 @@ jobs:
       - name: Run integration tests
         run: uv run pytest tests/integration/ --timeout=120
 
+  scripts-checks:
+    name: Scripts & Env Sync Checks
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: docker/example.env ⊆ .env.example sync
+        run: ./scripts/check-env-sync.sh
+
+      - name: backend/docker-image SSOT sync
+        run: ./scripts/sync-docker-image-assets.sh --check
+
+      - name: docker-entrypoint.sh unit tests
+        run: ./tests/scripts/test_entrypoint.sh
+
   frontend-lint-test:
     name: Frontend Lint & Test
     runs-on: ubuntu-latest
