@@ -81,7 +81,7 @@
 - [x] 8.6 「revoke」按鈕：confirm dialog → `POST /api/setup/gmail/revoke`、成功後回 step 1
 - [x] 8.7 redirect URI 顯示區塊：明示「目前 redirect URI 為 `http://localhost:${CCAS_PORT}/setup/gmail/callback`，請確認 GCP Console 已加入此 URL」，含 docs 連結（docs 連結延後到 §12 docs 步驟補上）
 - [x] 8.8 為頁面寫 Vitest 測試（mock fetch）：未連線顯示三步驟、已連線顯示 connected view、revoke flow 驗證 API 呼叫（authorize 跳轉與 callback 流程留待 Playwright）
-- [ ] 8.9 撰寫 Playwright e2e `setup-gmail.spec.ts`：上傳 fixture credentials → 跳轉到模擬 OAuth 頁（mock Google）→ 驗證 callback 後狀態（**延至 PR-C4 §13.2 整體 e2e 階段以 mock Google 補**）
+- [x] 8.9 撰寫 Playwright e2e `frontend/e2e/setup.spec.ts`：上傳 fixture credentials → 模擬 authorize 後回到 connected；另覆蓋 `/setup/gmail/callback` 轉發 `code/state` 至後端 callback 後顯示 connected
 
 ## 9. 前端：bank-management 頁
 
@@ -90,7 +90,7 @@
 - [x] 9.3 顯示「孤兒」標記：`metadata_missing: true` 顯示橙色 badge 並 tooltip 說明「banks.yaml 已無此銀行」；**未實作**「移除此 row」按鈕——後端尚未提供 DELETE bank_settings endpoint，留待 PR-C4 §6 範圍補
 - [x] 9.4 列表頂部顯示「已啟用 N / 共 M」摘要（含孤兒計數）
 - [x] 9.5 寫 Vitest（4 案）：列表渲染與孤兒 badge、toggle 觸發 PUT、mutation 失敗顯示 alert、empty state
-- [ ] 9.6 e2e：登入 → 進 `/setup/banks` → toggle 一個銀行 → 重整後狀態保留（**延至 PR-C4 §13 整體 e2e**）
+- [x] 9.6 e2e：登入 → 進 `/setup/banks` → toggle 一個銀行 → 重整後狀態保留
 
 ## 10. 前端：pdf-secrets 頁
 
@@ -101,7 +101,7 @@
 - [x] 10.5 「匯入 env 密碼」橫幅：頁面載入時若偵測 `has_env_secret && !has_db_secret` 條目 → 顯示「偵測到 N 筆環境變數密碼...」按鈕，點擊呼叫 `POST /import-from-env`
 - [x] 10.6 master.key warning banner：頁面頂部顯示備份提醒（永久顯示，不可關閉，role=note）
 - [x] 10.7 寫 Vitest（5 案）：來源 badge 渲染 + master.key banner、import banner 流程、無 env-only 時隱藏 banner、設定密碼 form / 刪除 confirm
-- [ ] 10.8 e2e：設定一個密碼 → 重整後 source=db → 刪除 → source 變 env 或 none（**延至 PR-C4 §13 整體 e2e**）
+- [x] 10.8 e2e：設定一個密碼 → 重整後 source=db → 刪除 → source 變 env 或 none
 
 ## 11. 前端：admin token rotate 頁
 
@@ -109,15 +109,15 @@
 - [x] 11.2 「產生新 token」對話框：警告「rotate 後舊 token / cookie 立即失效」、確認後呼叫 `POST /api/setup/admin/token-rotate`
 - [x] 11.3 rotate 成功後 dialog 切換成「新 token 顯示」狀態：明文 + 複製按鈕 + 「我已複製，登出此 session」按鈕；登出按鈕呼叫 `DELETE /api/auth/session` 後 `navigate('/login')`
 - [x] 11.4 寫 Vitest（4 案）：渲染 last4 + version、點 rotate 顯示確認 dialog、confirm 後顯示新 token 與複製按鈕、登出按鈕呼叫 `apiDelete` 並導去 `/login`
-- [ ] 11.5 e2e：rotate 成功 → 驗證舊 cookie 無法用、新 token 能登入（**延至 §13 整體 e2e 階段**）
+- [x] 11.5 e2e：rotate 成功 → 驗證舊 cookie 無法用、新 token 能登入
 
 ## 12. Docs 更新
 
-- [ ] 12.1 修改 `docs/install-quickstart.md`「目前仍需手動設定的項目」章節：改為「進入 `/setup/*` 完成設定」段落，提供四子頁連結；CLI / yaml fallback 段落收進「進階」附錄
-- [ ] 12.2 修改 `docs/gmail-setup.md`：保留 GCP Console 步驟，於「取得 token.json」段落新增「Web flow 取代 CLI（推薦）」章節，連結 `/setup/gmail`；CLI 章節改為 fallback
-- [ ] 12.3 撰寫 `docs/secrets-management.md`：master.key 機制、備份建議、env 與 DB 雙來源解析優先序、token rotate 流程
-- [ ] 12.4 README 設定中心連結：簡介四子頁用途
-- [ ] 12.5 在 `docs/upgrade-guide.md` 加入「升級到含 `/setup/*` 版本」段落：說明 master.key 自動產生、bank_settings seed、env fallback 仍生效
+- [x] 12.1 修改 `docs/install-quickstart.md`「目前仍需手動設定的項目」章節：改為「進入 `/setup/*` 完成設定」段落，提供四子頁連結；CLI / yaml fallback 段落收進「進階」附錄
+- [x] 12.2 修改 `docs/gmail-setup.md`：保留 GCP Console 步驟，於「取得 token.json」段落新增「Web flow 取代 CLI（推薦）」章節，連結 `/setup/gmail`；CLI 章節改為 fallback
+- [x] 12.3 撰寫 `docs/secrets-management.md`：master.key 機制、備份建議、env 與 DB 雙來源解析優先序、token rotate 流程
+- [x] 12.4 README 設定中心連結：簡介四子頁用途
+- [x] 12.5 在 `docs/upgrade-guide.md` 加入「升級到含 `/setup/*` 版本」段落：說明 master.key 自動產生、bank_settings seed、env fallback 仍生效
 
 ## 13. 端對端驗證
 
@@ -134,6 +134,6 @@
 
 ## 14. OpenSpec 收尾
 
-- [ ] 14.1 `openspec validate oauth-onboarding-ui --strict` 通過
+- [x] 14.1 `openspec validate oauth-onboarding-ui --strict` 通過
 - [ ] 14.2 確認本 change 落地順序：須在 `compose-pull-deploy` 已合入後啟動實作（為 master.key 機制需要 entrypoint 結構）
 - [ ] 14.3 完成後 `/opsx:archive oauth-onboarding-ui`，確認 delta 同步至 `openspec/specs/`

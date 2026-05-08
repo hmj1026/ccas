@@ -11,16 +11,13 @@
 
 ---
 
-## 步驟 0：完成 Gmail OAuth 前置設定（必做）
+## 步驟 0：準備 Gmail OAuth credentials（必做）
 
-CCAS 需要從你的 Gmail 收取信用卡帳單 PDF。在啟動 Docker 之前，**必須**先取得 Google
-OAuth `credentials.json`：
+CCAS 需要從你的 Gmail 收取信用卡帳單 PDF。先到 Google Cloud Console 建立 OAuth client
+並下載 `credentials.json`；token 授權可在服務啟動後透過 `/setup/gmail` 完成。
 
 完整步驟見 [docs/gmail-setup.md](gmail-setup.md)（建立 GCP project → 啟用 Gmail API →
-設定 OAuth consent screen → 下載 credentials.json）。
-
-> 終端使用者的 Web UI 化（瀏覽器內完成 OAuth）規劃在下一個 change `oauth-onboarding-ui`，
-> 屆時可省略本步驟並改用 `/setup/gmail` 頁面。當前版本仍需手動。
+設定 OAuth consent screen → 建立 OAuth client → 下載 credentials.json）。
 
 ## 步驟 1：建立工作目錄
 
@@ -52,24 +49,20 @@ cp example.env .env
 | `REPO_OWNER` | GHCR namespace（即 release 連結中的 `<owner>`） |
 | `CCAS_VERSION` | 與 release tag 一致（例：`v0.1.0`） |
 
+**可稍後在 Web UI 設定**：
+
+- 各銀行 PDF 密碼：啟動後進 `/setup/secrets` 設定；env `PDF_PASSWORD_<BANK_CODE>` 仍是 fallback
+- 銀行啟用清單：啟動後進 `/setup/banks` 切換；`config/banks.yaml` 仍是 fallback
+
 **選填但常見**：
 
-- `PDF_PASSWORD_<BANK_CODE>`：各銀行 PDF 密碼（多家銀行各自填）
+- `PUBLIC_BASE_URL`：OAuth redirect URI 使用；若改 `CCAS_PORT` 或使用自訂網域，請同步改成實際外部網址
 - `TELEGRAM_BOT_TOKEN`、`TELEGRAM_CHAT_ID`：填妥則 bot 自動啟用，不需 `--profile`
 
 > `API_TOKEN` **可不填**：entrypoint 首啟會自動產生 32-byte token 並落地至
 > `${CCAS_DATA_LOCATION}/secrets/api-token`（檔案權限 0600）。若顯式設為空字串會被驗證腳本擋下。
 
-## 步驟 4：放置 Gmail credentials
-
-```bash
-mkdir -p ./data
-cp /path/to/credentials.json ./data/credentials.json
-```
-
-`./data` 對應 `.env` 的 `CCAS_DATA_LOCATION` 預設值；改路徑時兩邊同步。
-
-## 步驟 5：啟動
+## 步驟 4：啟動
 
 ```bash
 docker compose -f docker-compose.yml pull
@@ -94,7 +87,7 @@ curl -fsS "http://localhost:${CCAS_PORT:-8080}/api/health"
 # {"status":"ok",...}
 ```
 
-## 步驟 6：首次登入
+## 步驟 5：首次登入
 
 CCAS 採「API token 即 Web UI 登入憑證」設計（首次部署不需要使用者帳號註冊）：
 
@@ -109,21 +102,32 @@ cat ./data/secrets/api-token   # CCAS_DATA_LOCATION 對應路徑
 #    成功後即進入 dashboard
 ```
 
-> 之後想換 token？目前需手動覆寫 `./data/secrets/api-token` 並重啟 backend
-> （`docker compose restart backend`）。下一個 change `oauth-onboarding-ui` 將提供
-> `/setup/admin` 頁面內的 rotate UI。
+> 之後想換 token？進 `/setup/admin` 使用「產生新 token」。rotate 後舊 token 與舊 cookie
+> 會立即失效，請先複製新 token 再登出。
 
 ---
 
-## 目前仍需手動設定的項目
+## 步驟 6：進設定中心完成 onboarding
 
-本版（`compose-pull-deploy`）尚未涵蓋 onboarding Web UI；以下設定仍需手動編輯，待
-下一個 change `oauth-onboarding-ui` 落地後可改在 `/setup/*` 頁面內完成：
+登入後從左側導覽進「設定中心」，依序完成：
+
+| 頁面 | 用途 |
+|---|---|
+| `/setup/gmail` | 上傳 `credentials.json`、確認 redirect URI、點「授權 Google」、查看 connected 狀態或 revoke |
+| `/setup/banks` | 啟用 / 停用銀行，查看已收 PDF 數與最後 ingest 時間 |
+| `/setup/secrets` | 設定各銀行 PDF 密碼；密碼以 `master.key` 加密存入 DB，可一鍵匯入既有 env 密碼 |
+| `/setup/admin` | 查看 token last-4 / version，旋轉 API token |
+
+`/setup/secrets` 會永久顯示 master.key 備份提醒。請定期備份整個 `${CCAS_DATA_LOCATION}`
+目錄；詳見 [secrets-management.md](secrets-management.md)。
+
+---
+
+## 進階 fallback：檔案與 env 設定
 
 ### 各銀行 PDF 密碼
 
-每家銀行的帳單 PDF 都有自己的解密密碼規則（多為身分證後 N 碼 + 生日 / 自設密碼），
-需填入 `.env` 的 `PDF_PASSWORD_<BANK_CODE>=...`：
+建議使用 `/setup/secrets`。若偏好 env fallback，也可在 `.env` 填 `PDF_PASSWORD_<BANK_CODE>=...`：
 
 | 銀行 | 環境變數 | 取得方式 |
 |---|---|---|
@@ -135,10 +139,10 @@ cat ./data/secrets/api-token   # CCAS_DATA_LOCATION 對應路徑
 | 永豐 | `PDF_PASSWORD_SINOPAC` | 帳單通知信中說明 |
 | 富邦 | `PDF_PASSWORD_FUBON` | 預設身分證號 |
 
-### 啟用 / 停用銀行清單
+### 啟用 / 停用銀行清單 fallback
 
 `config/banks.yaml`（首次啟動由 image 內建範本自動 seed 至 `${CCAS_CONFIG_LOCATION}`）
-預設啟用全部支援銀行。若你只用其中幾家，請編輯該檔案將不需要的銀行 `is_active: false`：
+預設啟用全部支援銀行。建議使用 `/setup/banks`。若要用 yaml fallback，可編輯該檔案將不需要的銀行 `is_active: false`：
 
 ```yaml
 banks:
@@ -154,7 +158,11 @@ banks:
 docker compose restart backend
 ```
 
-> 下一個 change `oauth-onboarding-ui` 將提供 `/setup/banks` 頁面取代手動編輯。
+### Gmail CLI fallback
+
+建議使用 `/setup/gmail` Web flow。無 GUI 或需要在 host shell 完成授權時，仍可依
+[gmail-setup.md](gmail-setup.md) 的 CLI fallback 產生 `token.json`，再放到
+`${CCAS_DATA_LOCATION}` 對應目錄。
 
 ---
 

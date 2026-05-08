@@ -1,11 +1,7 @@
 # Gmail OAuth 設定指南
 
 CCAS 從 Gmail 收取信用卡帳單 PDF，需要使用者授權 OAuth。本文件說明如何在 Google
-Cloud Console 取得 `credentials.json` 並完成首次 token 授權。
-
-> **規劃中**：下一個 change `oauth-onboarding-ui` 將提供 `/setup/gmail` Web 頁面，
-> 在瀏覽器內完成所有 OAuth 步驟（含 credentials 上傳與 token 取得），屆時可省略本文。
-> 當前版本仍需手動操作 Google Cloud Console 與 CLI。
+Cloud Console 取得 `credentials.json`，並使用 `/setup/gmail` Web flow 完成 token 授權。
 
 ---
 
@@ -36,18 +32,37 @@ Cloud Console 取得 `credentials.json` 並完成首次 token 授權。
 5. **Test users**：點「+ Add Users」→ 填入要授權的 Gmail（即你自己），存檔
    - 不送上架審查時 OAuth 限「test users」最多 100 人，個人使用足夠
 
-### A.4 建立 OAuth client ID
+### A.4 建立 OAuth client ID（Web flow 推薦）
 
 1. APIs & Services → **Credentials** → 點上方「+ Create Credentials」→ **OAuth client ID**
-2. Application type: **Desktop app**（重要：不要選 Web application）
-3. Name: `CCAS Desktop`
-4. 建立後跳出 client_id / client_secret，**下載 JSON** → 存成 `credentials.json`
+2. Application type: **Web application**
+3. Name: `CCAS Web`
+4. Authorized redirect URIs 加入你的 CCAS callback：
+   - 預設：`http://localhost:8080/setup/gmail/callback`
+   - 若 `.env` 設 `CCAS_PORT=12283`：`http://localhost:12283/setup/gmail/callback`
+   - 若使用網域：`https://ccas.example.com/setup/gmail/callback`，並同步設定 `.env` 的 `PUBLIC_BASE_URL`
+5. 建立後下載 JSON → 存成 `credentials.json`
+
+> CLI fallback 可另外建立 **Desktop app** client；Web flow 建議使用 Web application，redirect URI
+> 才能明確綁到 `/setup/gmail/callback`。
 
 ---
 
 ## B. 取得 `token.json`（首次 OAuth 授權）
 
-### 方式 1：使用 CLI（當前可用）
+### 方式 1：Web flow（推薦）
+
+1. 啟動 CCAS 並登入 Web UI
+2. 開啟 `http://localhost:${CCAS_PORT:-8080}/setup/gmail`
+3. 上傳從 Google Cloud Console 下載的 `credentials.json`
+4. 確認頁面顯示的 redirect URI 已存在於 OAuth client 的 Authorized redirect URIs
+5. 點「授權 Google」，在 Google consent 頁同意 Gmail 權限
+6. Google 會導回 `/setup/gmail/callback`，成功後頁面顯示 connected
+
+Web flow 會把 token 寫入 `GMAIL_TOKEN_PATH`（prod 預設 `/data/token.json`），不用在 host
+機器執行 Python CLI。
+
+### 方式 2：CLI fallback
 
 ```bash
 # 在 repo 根目錄
@@ -61,21 +76,13 @@ uv run python -m ccas.tools.gmail_auth
 2. 你選擇 Gmail 帳號 → 同意 readonly + modify scope
 3. 瀏覽器導回 localhost，token 落地至 `backend/data/token.json`
 
-### 方式 2：Web UI（規劃中，`oauth-onboarding-ui` change）
-
-未來版本將支援：
-1. 開瀏覽器至 `/setup/gmail`
-2. 點「上傳 credentials.json」
-3. 點「開始授權」→ 自動完成 OAuth dance
-4. 連線狀態顯示 connected
-
-無需 host 端 CLI。
+CLI 適用於無 GUI 或暫時無法設定 Web redirect URI 的環境；一般安裝請優先使用 Web flow。
 
 ---
 
 ## C. 部署到 Docker
 
-prod 部署時將兩個檔案放入 `${CCAS_DATA_LOCATION}`（預設 `./data`）：
+使用 Web flow 時只需要在 `/setup/gmail` 上傳 `credentials.json`。若使用 CLI fallback，請將兩個檔案放入 `${CCAS_DATA_LOCATION}`（預設 `./data`）：
 
 ```bash
 mkdir -p ./data
@@ -99,7 +106,8 @@ GMAIL_TOKEN_PATH=/data/token.json
 
 ### Q: token.json 過期了
 
-OAuth refresh token 有效期長（目前 6 個月，Google 不定期調整）。過期後執行：
+OAuth refresh token 有效期長（目前 6 個月，Google 不定期調整）。過期後建議進
+`/setup/gmail` 點 revoke 後重新授權；CLI fallback 可執行：
 
 ```bash
 rm backend/data/token.json   # 或 ${CCAS_DATA_LOCATION}/token.json
@@ -113,11 +121,18 @@ cd backend && uv run python -m ccas.tools.gmail_auth   # 重跑
 
 ### Q: 換了 Google 帳號要重新授權？
 
-是。token.json 綁定特定帳號。要改用另一個 Gmail：刪除 token.json + 重跑 `gmail_auth`。
+是。token.json 綁定特定帳號。要改用另一個 Gmail：進 `/setup/gmail` revoke 後重新授權；
+CLI fallback 則刪除 token.json + 重跑 `gmail_auth`。
 
 ### Q: scope 改了之後 token 是否要重新產生？
 
-是。Gmail API scope 變動會讓既有 token invalid，須刪除 token.json 重跑授權。
+是。Gmail API scope 變動會讓既有 token invalid，須透過 `/setup/gmail` 重新授權。
+
+### Q: 出現 `redirect_uri_mismatch`
+
+代表 Google OAuth client 沒有加入目前 CCAS 顯示的 callback URL。回到
+Google Cloud Console → APIs & Services → Credentials → 你的 OAuth client →
+Authorized redirect URIs，加入 `/setup/gmail` 頁面顯示的完整 redirect URI。
 
 ---
 
