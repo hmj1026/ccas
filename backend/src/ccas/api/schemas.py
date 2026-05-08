@@ -393,3 +393,56 @@ class AdminTokenRotateResult(BaseModel):
     token: str
     version: int
     last4: str
+
+
+# -- bills-management-and-insights §4: User classification rules ---------------
+
+PatternTypeLiteral = Literal["keyword", "exact", "regex"]
+
+
+class ClassificationRuleItem(BaseModel):
+    """單筆使用者自訂分類規則（含對應 category 名稱）。"""
+
+    id: int
+    pattern: str
+    pattern_type: PatternTypeLiteral
+    category_id: int
+    category_name: str
+    priority: int
+    enabled: bool
+    created_at: datetime
+    updated_at: datetime
+
+
+class ClassificationRuleCreateRequest(BaseModel):
+    """``POST /api/rules`` request body。"""
+
+    pattern: str = Field(min_length=1)
+    pattern_type: PatternTypeLiteral
+    category_id: int = Field(ge=1)
+    priority: int = Field(default=0)
+    enabled: bool = Field(default=True)
+
+
+class ClassificationRuleUpdateRequest(BaseModel):
+    """``PUT /api/rules/{id}`` request body（所有欄位皆可選）。"""
+
+    pattern: str | None = Field(default=None, min_length=1)
+    pattern_type: PatternTypeLiteral | None = None
+    category_id: int | None = Field(default=None, ge=1)
+    priority: int | None = None
+    enabled: bool | None = None
+
+
+class ClassificationRuleTestRequest(BaseModel):
+    """``POST /api/rules/test`` request body（即時 UI 預覽用）。"""
+
+    pattern: str = Field(min_length=1)
+    pattern_type: PatternTypeLiteral
+    sample_text: str
+
+
+class ClassificationRuleTestResponse(BaseModel):
+    """``POST /api/rules/test`` response。"""
+
+    matches: bool

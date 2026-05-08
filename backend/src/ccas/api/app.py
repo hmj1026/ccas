@@ -15,6 +15,7 @@ from ccas.api.routers import (
     bills,
     overview,
     pipeline,
+    rules,
     settings,
     staged_attachments,
     transactions,
@@ -86,6 +87,7 @@ def create_app() -> FastAPI:
     app.include_router(bills.router, dependencies=api_dependencies)
     app.include_router(settings.router, dependencies=api_dependencies)
     app.include_router(pipeline.router, dependencies=api_dependencies)
+    app.include_router(rules.router, dependencies=api_dependencies)
     app.include_router(staged_attachments.router, dependencies=api_dependencies)
     # Setup UX routers（oauth-onboarding-ui）— 共用 verify_token 保護。
     app.include_router(setup_gmail.router, dependencies=api_dependencies)
