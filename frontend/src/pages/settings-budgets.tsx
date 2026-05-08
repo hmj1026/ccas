@@ -1,0 +1,301 @@
+/**
+ * Settings 子頁：預算管理（bills-management-and-insights §12）。
+ *
+ * 列出所有預算 + 每筆當月進度卡。提供新增 / 編輯 / 刪除。
+ * 預算 scope：monthly_total / monthly_category / monthly_bank。
+ */
+import {
+  useMutation,
+  useQueries,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query'
+import { Plus, Trash2 } from 'lucide-react'
+import { useState } from 'react'
+import { apiDelete, apiGet, apiPost, apiPut } from '@/lib/api-client'
+import { BudgetProgressCard } from '@/components/budget-progress-card'
+import { Button } from '@/components/ui/button'
+import {
+  EmptyState,
+  ErrorState,
+  LoadingState,
+} from '@/components/shared/states'
+import type {
+  ApiResponse,
+  BudgetCreateRequest,
+  BudgetCurrentPeriod,
+  BudgetItem,
+  BudgetScope,
+  BudgetUpdateRequest,
+} from '@/lib/types'
+
+const SCOPE_OPTIONS: ReadonlyArray<{ value: BudgetScope; label: string }> = [
+  { value: 'monthly_total', label: '整月支出' },
+  { value: 'monthly_category', label: '單一類別' },
+  { value: 'monthly_bank', label: '單一銀行' },
+]
+
+function CreateBudgetDialog({
+  onCreate,
+  isPending,
+}: {
+  readonly onCreate: (body: BudgetCreateRequest) => void
+  readonly isPending: boolean
+}) {
+  const [open, setOpen] = useState(false)
+  const [scope, setScope] = useState<BudgetScope>('monthly_total')
+  const [scopeRef, setScopeRef] = useState('')
+  const [amount, setAmount] = useState('')
+  const [threshold, setThreshold] = useState('80')
+  const [error, setError] = useState<string | null>(null)
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    setError(null)
+    const amountNum = Number.parseInt(amount, 10)
+    const thresholdNum = Number.parseInt(threshold, 10)
+    if (!Number.isFinite(amountNum) || amountNum <= 0) {
+      setError('金額必須為正整數')
+      return
+    }
+    if (!Number.isFinite(thresholdNum) || thresholdNum < 1 || thresholdNum > 100) {
+      setError('閾值必須在 1-100 之間')
+      return
+    }
+    if (scope !== 'monthly_total' && !scopeRef.trim()) {
+      setError(`${scope} 必須指定範圍（類別名 / 銀行代碼）`)
+      return
+    }
+    onCreate({
+      scope,
+      scope_ref: scope === 'monthly_total' ? null : scopeRef.trim(),
+      amount_minor_units: amountNum,
+      alert_threshold_percent: thresholdNum,
+      enabled: true,
+    })
+    setOpen(false)
+    setScope('monthly_total')
+    setScopeRef('')
+    setAmount('')
+    setThreshold('80')
+  }
+
+  if (!open) {
+    return (
+      <Button onClick={() => setOpen(true)}>
+        <Plus className="size-4" data-icon="inline-start" />
+        新增預算
+      </Button>
+    )
+  }
+
+  return (
+    <form
+      onSubmit={handleSubmit}
+      className="space-y-3 rounded-lg border border-border p-4"
+    >
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-semibold">新增預算</h3>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={() => setOpen(false)}
+        >
+          取消
+        </Button>
+      </div>
+      <label className="flex flex-col text-sm">
+        <span className="text-muted-foreground">範圍</span>
+        <select
+          className="rounded border border-input bg-background px-2 py-1"
+          value={scope}
+          onChange={(e) => setScope(e.target.value as BudgetScope)}
+        >
+          {SCOPE_OPTIONS.map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      {scope !== 'monthly_total' && (
+        <label className="flex flex-col text-sm">
+          <span className="text-muted-foreground">
+            {scope === 'monthly_category' ? '類別名稱' : '銀行代碼'}
+          </span>
+          <input
+            type="text"
+            className="rounded border border-input bg-background px-2 py-1"
+            value={scopeRef}
+            onChange={(e) => setScopeRef(e.target.value)}
+            placeholder={
+              scope === 'monthly_category' ? '例如：餐飲' : '例如：CTBC'
+            }
+          />
+        </label>
+      )}
+      <label className="flex flex-col text-sm">
+        <span className="text-muted-foreground">月度上限金額（元）</span>
+        <input
+          type="number"
+          min={1}
+          className="rounded border border-input bg-background px-2 py-1"
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+          required
+        />
+      </label>
+      <label className="flex flex-col text-sm">
+        <span className="text-muted-foreground">
+          警示閾值（%）— {threshold}%
+        </span>
+        <input
+          type="range"
+          min={1}
+          max={100}
+          value={threshold}
+          onChange={(e) => setThreshold(e.target.value)}
+        />
+      </label>
+      {error && <p className="text-xs text-destructive">{error}</p>}
+      <Button type="submit" disabled={isPending}>
+        建立
+      </Button>
+    </form>
+  )
+}
+
+function BudgetCard({
+  budget,
+  current,
+  onUpdate,
+  onDelete,
+  isPending,
+}: {
+  readonly budget: BudgetItem
+  readonly current: BudgetCurrentPeriod | null
+  readonly onUpdate: (body: BudgetUpdateRequest) => void
+  readonly onDelete: () => void
+  readonly isPending: boolean
+}) {
+  return (
+    <div className="space-y-2">
+      <BudgetProgressCard budget={budget} current={current} />
+      <div className="flex items-center gap-2">
+        <label className="flex items-center gap-1 text-xs">
+          <input
+            type="checkbox"
+            checked={budget.enabled}
+            disabled={isPending}
+            onChange={(e) => onUpdate({ enabled: e.target.checked })}
+          />
+          啟用
+        </label>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onDelete}
+          disabled={isPending}
+        >
+          <Trash2 className="size-4" data-icon="inline-start" />
+          刪除
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+function SettingsBudgetsPage() {
+  const queryClient = useQueryClient()
+  const { data, isLoading, error } = useQuery({
+    queryKey: ['budgets', 'list'],
+    queryFn: () =>
+      apiGet<ApiResponse<readonly BudgetItem[]>>('/api/budgets'),
+  })
+
+  const budgetIds = (data?.data ?? []).map((b) => b.id)
+  const currentQueries = useQueries({
+    queries: budgetIds.map((id) => ({
+      queryKey: ['budgets', 'current', id] as const,
+      queryFn: () =>
+        apiGet<ApiResponse<BudgetCurrentPeriod>>(
+          `/api/budgets/${id}/current-period`,
+        ),
+      enabled: budgetIds.length > 0,
+    })),
+  })
+
+  const createMutation = useMutation({
+    mutationFn: (body: BudgetCreateRequest) =>
+      apiPost<ApiResponse<BudgetItem>>('/api/budgets', body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['budgets'] })
+    },
+  })
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, body }: { id: number; body: BudgetUpdateRequest }) =>
+      apiPut<ApiResponse<BudgetItem>>(`/api/budgets/${id}`, body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['budgets'] })
+    },
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) =>
+      apiDelete<ApiResponse<{ deleted_id: number }>>(`/api/budgets/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['budgets'] })
+    },
+  })
+
+  if (isLoading) return <LoadingState />
+  if (error) return <ErrorState message={error.message} />
+
+  const budgets = data?.data ?? []
+  const currentByBudgetId: Record<number, BudgetCurrentPeriod | null> = {}
+  budgetIds.forEach((id, idx) => {
+    currentByBudgetId[id] = currentQueries[idx]?.data?.data ?? null
+  })
+
+  const isPending =
+    createMutation.isPending ||
+    updateMutation.isPending ||
+    deleteMutation.isPending
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <h1 className="text-xl font-bold">預算管理</h1>
+        <p className="text-sm text-muted-foreground">
+          設定每月支出上限與警示閾值；超過閾值會推 Telegram + dashboard banner。
+        </p>
+      </div>
+      <CreateBudgetDialog
+        onCreate={(body) => createMutation.mutate(body)}
+        isPending={createMutation.isPending}
+      />
+      {budgets.length === 0 ? (
+        <EmptyState message="尚未設定任何預算，建立第一筆來啟用警示。" />
+      ) : (
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          {budgets.map((b) => (
+            <BudgetCard
+              key={b.id}
+              budget={b}
+              current={currentByBudgetId[b.id] ?? null}
+              onUpdate={(body) =>
+                updateMutation.mutate({ id: b.id, body })
+              }
+              onDelete={() => deleteMutation.mutate(b.id)}
+              isPending={isPending}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+export default SettingsBudgetsPage

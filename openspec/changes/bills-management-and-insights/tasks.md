@@ -39,26 +39,26 @@
 
 ## 5. 後端：付款提醒 API
 
-- [ ] 5.1 建立 `backend/src/ccas/api/routers/reminders_settings.py`（既有 `reminders.py` 為 readonly 列表，本 change 補 settings CRUD）
-- [ ] 5.2 實作 `GET /api/reminders/settings`：列出全部 reminders 與其設定
-- [ ] 5.3 實作 `PUT /api/reminders/{bill_id}/settings`：body `{enabled?, days_before?, channel?}`
-- [ ] 5.4 實作 `POST /api/reminders/{bill_id}/test`：立即推送一次測試訊息（給 channel）
-- [ ] 5.5 為三個端點寫 router 整合測試
+- [x] 5.1 建立 `backend/src/ccas/api/routers/reminders_settings.py`（**spec deviation**：design §D9 假設既有 PaymentReminder 含 `(days_before, channel, enabled)`，實際只有 `(bill_id, reminder_type, sent_at)` sent log；故獨立新表 `reminder_settings` 儲存設定，PaymentReminder 不動。新增 alembic migration `9b3e2c8a4f10_add_reminder_settings.py`）
+- [x] 5.2 實作 `GET /api/reminders/settings`：列出全部「未付帳單」與其設定（settings 缺席時回預設 `enabled=true / days_before=[3,1] / channel=telegram`，與 change 前 scheduler 行為等價）
+- [x] 5.3 實作 `PUT /api/reminders/{bill_id}/settings`：partial upsert；驗證 days_before 元素為正整數
+- [x] 5.4 實作 `POST /api/reminders/{bill_id}/test`：依 channel 路由（telegram/both → send_message；ui_banner → 不外送回提示）
+- [x] 5.5 為三個端點寫 router 整合測試（11 案：list 三路徑 + update CRUD + 404/422/auth + test push 三 channel）
 
 ## 6. 後端：預算 API + scheduler job
 
-- [ ] 6.1 建立 `backend/src/ccas/api/routers/budgets.py`
-- [ ] 6.2 實作 `GET /api/budgets`：列出全部 budgets，可選 `?scope=` filter
-- [ ] 6.3 實作 `POST /api/budgets`：body `{scope, scope_ref?, amount_minor_units, alert_threshold_percent?, enabled?}`、建立 budget；驗證 scope_ref 與 scope 一致（monthly_total 不得有 scope_ref；monthly_category 必須有 valid category_id；monthly_bank 必須有 valid bank_code）
-- [ ] 6.4 實作 `PUT /api/budgets/{id}` 與 `DELETE /api/budgets/{id}`
-- [ ] 6.5 實作 `GET /api/budgets/{id}/current-period`：回當月對應 scope 的累計金額 + threshold 狀態
-- [ ] 6.6 建立 `backend/src/ccas/scheduler/budget_evaluator.py`：`evaluate_budgets()` 函式遍歷 enabled budgets、計算當月累計、超 threshold 觸發 alert（INSERT BudgetAlert + 推 Telegram）
-- [ ] 6.7 在 `backend/src/ccas/scheduler/jobs.py` 註冊每日 02:00 跑 `evaluate_budgets()`
-- [ ] 6.8 evaluator 加入「同月同 budget 同 threshold 不重複觸發」邏輯（query budget_alerts 已存在判斷）
-- [ ] 6.9 Telegram 訊息聚合：同日多預算超支合併為單則訊息（hourly batch）；單元測試覆蓋
-- [ ] 6.10 為 evaluator 寫整合測試：(a) 80% threshold 觸發、(b) 100% threshold 觸發、(c) 已觸發不重複、(d) enabled=false 不觸發、(e) Telegram disabled 時不 raise
-- [ ] 6.11 實作 `GET /api/budgets/alerts/active`：回當前月份 + 7 天內未確認 alert，給 dashboard banner 用
-- [ ] 6.12 實作 `POST /api/budgets/alerts/{id}/acknowledge`：UPDATE acknowledged_at = now()
+- [x] 6.1 建立 `backend/src/ccas/api/routers/budgets.py`
+- [x] 6.2 實作 `GET /api/budgets`：列出全部 budgets，可選 `?scope=` filter
+- [x] 6.3 實作 `POST /api/budgets`：scope_ref 一致性驗證（monthly_total 拒絕 scope_ref；monthly_category 驗 categories.category；monthly_bank 驗 bank_configs.bank_code）
+- [x] 6.4 實作 `PUT /api/budgets/{id}` 與 `DELETE /api/budgets/{id}`（partial update + scope/scope_ref 改動 re-validate + 404）
+- [x] 6.5 實作 `GET /api/budgets/{id}/current-period`：當月累計 + percent + threshold_breached
+- [x] 6.6 建立 `backend/src/ccas/scheduler/budget_evaluator.py`：`evaluate_budgets()` 兩階 threshold ladder（configured + 100%）+ INSERT BudgetAlert + 聚合 Telegram 推送
+- [x] 6.7 `scheduler/jobs.py` 新增 `run_budget_evaluator_sync` + `__main__.py` 註冊每日 02:00 cron job（含 unit test 覆蓋 cron schedule）
+- [x] 6.8 evaluator 以 `(budget_id, period_year_month, threshold)` 既存查詢去重；同月同 threshold 不重複觸發
+- [x] 6.9 Telegram 訊息聚合：每次 evaluator run 內所有新增 alert 合併為單則訊息（單元測試 `test_aggregates_multiple_alerts_into_single_message` 覆蓋）
+- [x] 6.10 evaluator 整合測試 6 案：80% / 100%（更高階再觸發）/ 不重複 / disabled / Telegram disabled 不 raise / 多 budget 聚合
+- [x] 6.11 實作 `GET /api/budgets/alerts/active`：未確認且當月 alert（含 budget meta）
+- [x] 6.12 實作 `POST /api/budgets/alerts/{id}/acknowledge`：UPDATE acknowledged_at = utcnow()
 
 ## 7. 後端：Insights API（analytics v2）
 
@@ -102,19 +102,19 @@
 
 ## 11. 前端：付款提醒 UI
 
-- [ ] 11.1 建立 `frontend/src/pages/settings/reminders.tsx`：列出所有 PaymentReminder 含 enabled toggle / days_before / channel select
-- [ ] 11.2 「測試發送」按鈕：呼叫 `POST /api/reminders/{bill_id}/test`、toast 顯示成功 / 失敗
-- [ ] 11.3 為頁面寫 Vitest
+- [x] 11.1 建立 `frontend/src/pages/settings-reminders.tsx`（**spec deviation**：路徑為 `/settings/reminders` 但檔案在 `pages/settings-reminders.tsx`，與既有命名一致）— 列出所有未付帳單含 enabled toggle / days_before（逗號 input on blur commit）/ channel select
+- [x] 11.2 「測試發送」按鈕：呼叫 `POST /api/reminders/{bill_id}/test`、行內顯示 detail（telegram 顯示 ✓ 已送出、ui_banner 顯示 detail）
+- [x] 11.3 為頁面寫 Vitest（6 案：empty / list / toggle enabled / channel change / test push / days parse-on-blur）
 
 ## 12. 前端：預算 UI
 
-- [ ] 12.1 建立 `frontend/src/pages/settings/budgets.tsx`：列出全部 budgets + 當月進度條
-- [ ] 12.2 「新增預算」對話框：scope select、scope_ref（依 scope 顯示 category / bank picker）、amount input、threshold slider
-- [ ] 12.3 budget 卡片顯示「當月已花 / 預算 / 百分比」進度條（綠 / 黃 / 紅 三色階）
-- [ ] 12.4 修改 `frontend/src/pages/overview.tsx`：頁面頂部新增「預算超支警示」banner（呼叫 `/api/budgets/alerts/active`）、含 acknowledge 按鈕
-- [ ] 12.5 建立 `frontend/src/components/budget-progress-card.tsx` 組件
-- [ ] 12.6 為頁面與組件寫 Vitest
-- [ ] 12.7 e2e `budgets.spec.ts`：建立 80% threshold 預算 → mock 超支 → 驗證 banner 顯示 → acknowledge → banner 消失
+- [x] 12.1 建立 `frontend/src/pages/settings-budgets.tsx`：列出全部 budgets + 每筆 BudgetProgressCard
+- [x] 12.2 「新增預算」對話框：scope select / scope_ref text input（monthly_total 隱藏）/ amount number input / threshold slider；含本地 validation
+- [x] 12.3 budget 卡片顯示「當月已花 / 預算 / 百分比」進度條（綠 < 80 / 黃 80-100 / 紅 ≥ 100）
+- [x] 12.4 修改 `frontend/src/pages/overview.tsx`：頁面頂部新增 `<BudgetAlertBanner>`（呼叫 `/api/budgets/alerts/active`、含 acknowledge 按鈕；無 alert 不渲染）
+- [x] 12.5 建立 `frontend/src/components/budget-progress-card.tsx` 組件 + `budget-alert-banner.tsx`（拆分 banner 元件以保持 overview 簡潔）
+- [x] 12.6 為頁面與組件寫 Vitest（6 案：empty / 渲染進度 / 建立預算 / monthly_category 缺 scope_ref 拒絕 / 刪除 / toggle enabled）
+- [ ] 12.7 e2e `budgets.spec.ts`（PR-D4 §15 集中跑 e2e；本 PR 僅 Vitest 覆蓋）
 
 ## 13. 前端：Insights 頁
 

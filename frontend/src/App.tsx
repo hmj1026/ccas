@@ -18,6 +18,8 @@ const AnalyticsPage = lazy(() => import('@/pages/analytics'))
 const BillsPage = lazy(() => import('@/pages/bills'))
 const OperationsPage = lazy(() => import('@/pages/operations'))
 const SettingsPage = lazy(() => import('@/pages/settings'))
+const SettingsRemindersPage = lazy(() => import('@/pages/settings-reminders'))
+const SettingsBudgetsPage = lazy(() => import('@/pages/settings-budgets'))
 const SetupLayout = lazy(() => import('@/pages/setup/layout'))
 const SetupGmailPage = lazy(() => import('@/pages/setup/gmail'))
 const SetupGmailCallbackPage = lazy(
@@ -61,6 +63,8 @@ function App() {
             <Route path="bills" element={<Suspense fallback={<LoadingState />}><BillsPage /></Suspense>} />
             <Route path="operations" element={<Suspense fallback={<LoadingState />}><OperationsPage /></Suspense>} />
             <Route path="settings" element={<Suspense fallback={<LoadingState />}><SettingsPage /></Suspense>} />
+            <Route path="settings/reminders" element={<Suspense fallback={<LoadingState />}><SettingsRemindersPage /></Suspense>} />
+            <Route path="settings/budgets" element={<Suspense fallback={<LoadingState />}><SettingsBudgetsPage /></Suspense>} />
             <Route
               path="setup"
               element={<Suspense fallback={<LoadingState />}><SetupLayout /></Suspense>}

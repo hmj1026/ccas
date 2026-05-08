@@ -12,6 +12,8 @@ import {
   Workflow,
   Settings,
   Settings2,
+  Bell,
+  Wallet,
   Menu,
   X,
   LogOut,
@@ -29,6 +31,8 @@ const NAV_ITEMS = [
   { to: '/bills', label: '帳單', icon: FileText },
   { to: '/operations', label: '操作中心', icon: Workflow },
   { to: '/settings', label: '設定', icon: Settings },
+  { to: '/settings/reminders', label: '提醒', icon: Bell },
+  { to: '/settings/budgets', label: '預算', icon: Wallet },
   { to: '/setup/gmail', label: '設定中心', icon: Settings2 },
 ] as const
 
