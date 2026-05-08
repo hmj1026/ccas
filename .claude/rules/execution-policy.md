@@ -44,7 +44,6 @@ Default: execute directly toward user's goal without over-planning. All flows en
 Reply format for each task:
 ```
 Conclusion (what was done)
-→ Changed files (list)
 → Verification (how to confirm correctness)
 → Risks / pending items (if any)
 ```

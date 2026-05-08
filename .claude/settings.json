@@ -80,7 +80,8 @@
       "Bash(sqlite3 *)",
       "Bash(uv run coverage *)",
       "Bash(uv run mypy *)",
-      "Bash(cx *)"
+      "Bash(cx *)",
+      "Bash(/opt/homebrew/bin/cx *)"
     ]
   },
   "hooks": {
@@ -90,42 +91,42 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash .claude/hooks/ccas-python-lint.sh",
+            "command": "bash -c 'REPO=$(git rev-parse --show-toplevel 2>/dev/null) && bash \"$REPO/.claude/hooks/ccas-python-lint.sh\"'",
             "timeout": 30,
             "statusMessage": "Running Python lint & security checks...",
             "async": true
           },
           {
             "type": "command",
-            "command": "bash .claude/hooks/ccas-sqlalchemy-model-check.sh",
+            "command": "bash -c 'REPO=$(git rev-parse --show-toplevel 2>/dev/null) && bash \"$REPO/.claude/hooks/ccas-sqlalchemy-model-check.sh\"'",
             "timeout": 5,
             "statusMessage": "Validating SQLAlchemy model...",
             "async": true
           },
           {
             "type": "command",
-            "command": "bash .claude/hooks/ccas-tdd-red-check.sh",
+            "command": "bash -c 'REPO=$(git rev-parse --show-toplevel 2>/dev/null) && bash \"$REPO/.claude/hooks/ccas-tdd-red-check.sh\"'",
             "timeout": 30,
             "statusMessage": "Running test to confirm RED state...",
             "async": true
           },
           {
             "type": "command",
-            "command": "bash .claude/hooks/ccas-frontend-lint.sh",
+            "command": "bash -c 'REPO=$(git rev-parse --show-toplevel 2>/dev/null) && bash \"$REPO/.claude/hooks/ccas-frontend-lint.sh\"'",
             "timeout": 30,
             "statusMessage": "Running frontend checks...",
             "async": true
           },
           {
             "type": "command",
-            "command": "bash .claude/hooks/ccas-alembic-migration-check.sh",
+            "command": "bash -c 'REPO=$(git rev-parse --show-toplevel 2>/dev/null) && bash \"$REPO/.claude/hooks/ccas-alembic-migration-check.sh\"'",
             "timeout": 5,
             "statusMessage": "Checking Alembic migration safety...",
             "async": true
           },
           {
             "type": "command",
-            "command": "bash .claude/hooks/ccas-docker-check.sh",
+            "command": "bash -c 'REPO=$(git rev-parse --show-toplevel 2>/dev/null) && bash \"$REPO/.claude/hooks/ccas-docker-check.sh\"'",
             "timeout": 5,
             "statusMessage": "Checking Docker conventions...",
             "async": true
