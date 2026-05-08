@@ -40,6 +40,6 @@ async def client(app, db_session):
 
 ## Type Safety in Tests
 
-- Test fakes/stubs 必須繼承被替代的 ABC（nominal typing），避免 pyright `reportArgumentType`
-- 函式參數若只需 read-only 存取集合，用 `Sequence` 而非 `list`（`list` 是 invariant）
-- 參考 `tests/unit/parser/test_registry.py` 的 `FakeParser(BankParser)` 寫法
+- Test fakes/stubs must inherit from the ABC they replace (nominal typing) to avoid pyright `reportArgumentType`
+- Use `Sequence` instead of `list` for parameters needing only read-only collection access (`list` is invariant)
+- See `tests/unit/parser/test_registry.py` `FakeParser(BankParser)` pattern as reference

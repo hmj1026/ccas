@@ -90,3 +90,4 @@ docker-compose.local.yml
 
 compact-notes/
 backend/data/captcha-archive/
+.gitnexus

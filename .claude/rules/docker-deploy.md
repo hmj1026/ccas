@@ -17,8 +17,8 @@ paths:
 - **uv binary**: Copied from `ghcr.io/astral-sh/uv:0.10` — never `pip install uv`
 - **pnpm**: Via `corepack enable` in Node base stage — never `npm install -g pnpm`
 - **Image naming**:
-  - **dev compose**（根目錄 `docker-compose.yaml`）：do NOT use shared `image:` tags across services with different override targets (causes target conflict in dev mode); let Compose auto-deduplicate by context+target
-  - **prod compose**（`docker/docker-compose.yml`）：所有 service 拉 GHCR 發布 image：`ghcr.io/${REPO_OWNER}/ccas-backend:${CCAS_VERSION:-release}`、`ghcr.io/${REPO_OWNER}/ccas-frontend:${CCAS_VERSION:-release}`、`ghcr.io/${REPO_OWNER}/ccas-proxy:${CCAS_VERSION:-release}`。backend / worker / scheduler / bot 四個 service 共用 `ccas-backend` image，僅 `command:` 不同
+  - **dev compose** (root `docker-compose.yaml`): do NOT use shared `image:` tags across services with different override targets (causes target conflict in dev mode); let Compose auto-deduplicate by context+target
+  - **prod compose** (`docker/docker-compose.yml`): all services pull GHCR release images: `ghcr.io/${REPO_OWNER}/ccas-backend:${CCAS_VERSION:-release}`, `ccas-frontend`, `ccas-proxy`. backend / worker / scheduler / bot share `ccas-backend` image, differ only in `command:`
 - **OCI labels**: Production stages must include `org.opencontainers.image.title` and `description`
 
 ## Docker Compose
@@ -30,19 +30,19 @@ paths:
 - **Volumes**: Named volumes for persistent data (`ccas-redis`)
 - **Health checks**: Required for backend and redis; other services depend on healthy state
 - **stop_grace_period**: worker 30s, backend 15s, scheduler/bot 10s
-- **Redis**: `--maxmemory ${REDIS_MAXMEMORY:-256mb} --maxmemory-policy ${REDIS_MAXMEMORY_POLICY:-allkeys-lru} --appendonly yes`（可透過 `.env` 覆寫）
-- **Compose 啟動路徑（dev / prod 二分法）**：
-  - **dev**：根目錄 `docker-compose.yaml`（含 `build:`，target 為 `production`）+ `docker-compose.override.yml`（自動載入切到 `dev` target、bind mount 原始碼、`UVICORN_RELOAD=1`、frontend 改走 Vite dev server 5173）。指令：`docker compose up -d`
-  - **prod（pull-only，發布版）**：`docker/docker-compose.yml`（純 `image:`，無 `build:`，從 GHCR 拉 release image），對外只透過 `proxy` service 單一 port 暴露。指令：`docker compose -f docker/docker-compose.yml pull && docker compose -f docker/docker-compose.yml up -d`
-- **本機驗證 production image**：需自建 image 驗證 prod compose 時，先 `docker build --target production -t ghcr.io/<owner>/ccas-backend:local backend/`（frontend / proxy 同理），再以 `CCAS_VERSION=local REPO_OWNER=<owner> docker compose -f docker/docker-compose.yml up -d` 啟動。**不**在根目錄 `docker-compose.yaml` 上跳過 override 來模擬 prod（已棄用的中間路徑）
-- **Compose 版本需求**：≥ v2.24（override.yml 使用 `!override` YAML tag 取代 ports 清單，舊版會 parse 失敗）
-- **個人化客製**：團隊共用 dev 設定請改 `docker-compose.override.yml`；只屬於你個人的調整放 `docker-compose.local.yml`（已 gitignore，可參考 `docker-compose.local.yml.example`）
-- **Prod compose 設計鐵律**：
-  - 所有 CCAS-managed service 一律 `image:`，**不得**含 `build:`
-  - 僅 `proxy` service 對 host 暴露 `${CCAS_PORT:-8080}:8080`；backend / worker / scheduler / bot / frontend / redis 一律不宣告 host `ports:`
-  - host volume 路徑使用 `${CCAS_DATA_LOCATION:-./data}` / `${CCAS_CONFIG_LOCATION:-./config}` / `${CCAS_LOG_LOCATION:-./logs}` 變數，便於使用者自訂位置
-  - redis 使用 bind mount `${CCAS_DATA_LOCATION:-./data}/redis:/data`（不再用 named volume），確保「備份單一 data 目錄即足夠」承諾完整
-  - bot service 不使用 `profiles`；token 缺值時以 disabled idle 處理、不 crashloop
+- **Redis**: `--maxmemory ${REDIS_MAXMEMORY:-256mb} --maxmemory-policy ${REDIS_MAXMEMORY_POLICY:-allkeys-lru} --appendonly yes` (overrideable via `.env`)
+- **Startup paths (dev / prod split)**:
+  - **dev**: root `docker-compose.yaml` (with `build:`, target `production`) + `docker-compose.override.yml` (auto-loaded: switches to `dev` target, bind-mounts source, `UVICORN_RELOAD=1`, frontend uses Vite dev server at 5173). Command: `docker compose up -d`
+  - **prod (pull-only, release)**: `docker/docker-compose.yml` (pure `image:`, no `build:`, pulls from GHCR), only `proxy` service exposes external port. Command: `docker compose -f docker/docker-compose.yml pull && docker compose -f docker/docker-compose.yml up -d`
+- **Local production image verification**: when you need to test prod compose with a locally built image: `docker build --target production -t ghcr.io/<owner>/ccas-backend:local backend/` (same for frontend/proxy), then `CCAS_VERSION=local REPO_OWNER=<owner> docker compose -f docker/docker-compose.yml up -d`. Do NOT skip the override on root `docker-compose.yaml` to simulate prod (deprecated approach)
+- **Compose version requirement**: ≥ v2.24 (override.yml uses `!override` YAML tag to replace port lists; older versions will fail to parse)
+- **Personal customization**: shared dev settings go in `docker-compose.override.yml`; personal-only adjustments go in `docker-compose.local.yml` (gitignored; see `docker-compose.local.yml.example`)
+- **Prod compose iron laws**:
+  - All CCAS-managed services must use `image:`, never `build:`
+  - Only `proxy` service exposes `${CCAS_PORT:-8080}:8080` to host; all others declare no host `ports:`
+  - Host volume paths use `${CCAS_DATA_LOCATION:-./data}` / `${CCAS_CONFIG_LOCATION:-./config}` / `${CCAS_LOG_LOCATION:-./logs}` for user customization
+  - Redis uses bind mount `${CCAS_DATA_LOCATION:-./data}/redis:/data` (not named volume), fulfilling "backup single data directory" promise
+  - bot service does not use `profiles`; handle missing token with disabled idle, not crashloop
 
 ## Environment Variables
 
@@ -58,11 +58,11 @@ paths:
 - **Error handling**: Use `set -euo pipefail` at the top of every script
 - **Cross-platform**: Use `$(command)` not backticks; use `$HOME` not `~` in scripts
 
-## SSOT Sync（root → backend/docker-image/）
+## SSOT Sync (root → backend/docker-image/)
 
-backend image production stage 透過 `backend/` build context 把以下檔案 bake 進 image，因此 repo 內存在「SSOT」與「mirror」兩份。**所有編輯只能改 SSOT**，mirror 由 `scripts/sync-docker-image-assets.sh` 從 SSOT 覆寫。
+The backend image production stage bakes the following files into the image via `backend/` build context, so the repo has "SSOT" and "mirror" copies. **Edit only the SSOT**; mirrors are overwritten from SSOT by `scripts/sync-docker-image-assets.sh`.
 
-| SSOT（編輯這個） | mirror（不要手改） |
+| SSOT (edit here) | Mirror (do not edit directly) |
 |---|---|
 | `scripts/docker-entrypoint.sh` | `backend/docker-image/scripts/docker-entrypoint.sh` |
 | `scripts/check-env.sh` | `backend/docker-image/scripts/check-env.sh` |
@@ -71,39 +71,39 @@ backend image production stage 透過 `backend/` build context 把以下檔案 b
 | `config/bank-code-registry.example.yaml` | `backend/docker-image/default-config/bank-code-registry.example.yaml` |
 | `config/categories.example.yaml` | `backend/docker-image/default-config/categories.example.yaml` |
 
-**規則**：
-- 修改任一 SSOT 來源後，**同一個 commit** 內必須執行 `./scripts/sync-docker-image-assets.sh` 並把更新後的 mirror 一起 stage
-- 禁止直接編輯 `backend/docker-image/scripts/`、`backend/docker-image/default-config/`、`backend/docker-image/.env.example`（這些是被覆寫對象）；要新增同步檔請改 `scripts/sync-docker-image-assets.sh` 的 `FILE_PAIRS`
-- `docker/example.env` 是 `.env.example` 的子集（補 docker overrides），由 `scripts/check-env-sync.sh` 驗證；改其中一個務必檢查另一個
-- 本機 `scripts/pre-push.sh` 與 CI `Scripts & Env Sync Checks` job 都會跑 `--check`；本機提交前自行跑 `./scripts/sync-docker-image-assets.sh --check` 與 `./scripts/check-env-sync.sh` 才不會撞 CI
+**Rules**:
+- After modifying any SSOT source, run `./scripts/sync-docker-image-assets.sh` **in the same commit** and stage the updated mirrors together
+- Never edit `backend/docker-image/scripts/`, `backend/docker-image/default-config/`, or `backend/docker-image/.env.example` directly (these are overwrite targets); to add new sync pairs, edit `FILE_PAIRS` in `scripts/sync-docker-image-assets.sh`
+- `docker/example.env` is a subset of `.env.example` (with docker overrides); validated by `scripts/check-env-sync.sh`; changing one requires checking the other
+- Local `scripts/pre-push.sh` and CI `Scripts & Env Sync Checks` job both run `--check`; run `./scripts/sync-docker-image-assets.sh --check` and `./scripts/check-env-sync.sh` locally before pushing to avoid CI failures
 
 ## Repo-level Process Gates
 
-四層 gate 職責表（任一新增檢查須同步進對應層，不重複、不遺漏）：
+Four-layer gate responsibility table (any new check must be added to exactly one layer, no duplication):
 
-| 層 | 觸發時機 | 職責 | 工具 / 設定檔 |
+| Layer | Trigger | Responsibility | Tools / Config |
 |---|---|---|---|
-| **PostToolUse hooks** | 每次 Edit/Write | 即時 lint / typecheck / TDD red / SQLAlchemy / Alembic / Docker / frontend lint（**警告層、不擋**） | `.claude/settings.json` + `.claude/hooks/ccas-*.sh`（8 個） |
-| **`scripts/pre-commit.sh`**（→ `.git/hooks/pre-commit`） | git commit | gitleaks 機密掃描 + 對 staged Python 跑 `ruff check --fix` 與 `ruff format` 自動修 + `pyright` 補檢 + 對 staged TS 跑 `eslint` | `scripts/pre-commit.sh`（版控 SSOT） |
-| **`scripts/pre-push.sh`**（→ `.git/hooks/pre-push`） | git push | `verify-claude-plugins.sh` + `check-env-sync.sh` + `sync-docker-image-assets.sh --check` + 全 repo `ruff check` / `ruff format --check` / `pyright` / `pytest --cov-fail-under=70` + `eslint` / `pnpm build` / `pnpm test`（vitest） | `scripts/pre-push.sh`（版控 SSOT） |
-| **CI**（`.github/workflows/ci.yaml`） | push / PR | last-resort gate；與 pre-push 等價並加 e2e 測試 | `.github/workflows/ci.yaml` |
+| **PostToolUse hooks** | Every Edit/Write | Real-time lint / typecheck / TDD red / SQLAlchemy / Alembic / Docker / frontend lint (**warning layer, non-blocking**) | `.claude/settings.json` + `.claude/hooks/ccas-*.sh` (8 scripts) |
+| **`scripts/pre-commit.sh`** (→ `.git/hooks/pre-commit`) | git commit | gitleaks secret scan + `ruff check --fix` + `ruff format` on staged Python + `pyright` + `eslint` on staged TS | `scripts/pre-commit.sh` (versioned SSOT) |
+| **`scripts/pre-push.sh`** (→ `.git/hooks/pre-push`) | git push | `verify-claude-plugins.sh` + `check-env-sync.sh` + `sync-docker-image-assets.sh --check` + full repo `ruff check` / `ruff format --check` / `pyright` / `pytest --cov-fail-under=70` + `eslint` / `pnpm build` / `pnpm test` (vitest) | `scripts/pre-push.sh` (versioned SSOT) |
+| **CI** (`.github/workflows/ci.yaml`) | push / PR | Last-resort gate; equivalent to pre-push plus e2e tests | `.github/workflows/ci.yaml` |
 
-**設計原則**：
-- pre-push.sh 與 CI scripts-checks 必須**等價**（任一新增檢查同步進兩處），CI 不該獨佔 SSOT 漂移檢查
-- PostToolUse 是「即時友善提醒」、不擋；pre-commit 是「commit-time 自動修+靜態檢查」、會擋；pre-push 是「全套品質 gate」、會擋；CI 是「last-resort + e2e」
-- 安裝本機 hook：`./scripts/setup-hooks.sh`（symlink `scripts/pre-*.sh` 進 `.git/hooks/`）
+**Design principles**:
+- pre-push.sh and CI scripts-checks must be **equivalent** (any new check added to both); CI must not be the sole guardian of SSOT drift checks
+- PostToolUse = real-time friendly warning, non-blocking; pre-commit = commit-time auto-fix + static check, blocking; pre-push = full quality gate, blocking; CI = last-resort + e2e
+- Install local hooks: `./scripts/setup-hooks.sh` (symlinks `scripts/pre-*.sh` into `.git/hooks/`)
 
 ## Entrypoint Pattern
 
-- `scripts/docker-entrypoint.sh`: Validates env → runs migrations → seeds configs → starts uvicorn
+- `scripts/docker-entrypoint.sh`: validates env → runs migrations → seeds configs → starts uvicorn
 - Always check required env vars before proceeding
 - Run `alembic upgrade head` before starting the application
 - Use `exec` for the final command to properly handle signals
-- **Hot reload**：`UVICORN_RELOAD=1` 由 `docker-compose.override.yml` 注入，讓 entrypoint 附加 `--reload`；生產環境不設定此變數
+- **Hot reload**: `UVICORN_RELOAD=1` is injected by `docker-compose.override.yml`; entrypoint appends `--reload` when set; not present in production
 
 ## Volume Mounts
 
-**dev compose**（根目錄 `docker-compose.yaml`）：
+**dev compose** (root `docker-compose.yaml`):
 
 | Volume | Purpose | Mount Point |
 |--------|---------|-------------|
@@ -112,7 +112,7 @@ backend image production stage 透過 `backend/` build context 把以下檔案 b
 | `./logs` | service log file | `/logs` |
 | `ccas-redis` | Redis persistence (named volume) | `/data` (redis container) |
 
-**prod compose**（`docker/docker-compose.yml`）：所有 host volume 走 `${CCAS_*_LOCATION}` 變數，redis 改 bind mount，使用者只需備份 `${CCAS_DATA_LOCATION}` 目錄即可保留全部狀態：
+**prod compose** (`docker/docker-compose.yml`): all host volumes use `${CCAS_*_LOCATION}` variables; redis uses bind mount; backing up `${CCAS_DATA_LOCATION}` is sufficient to preserve all state:
 
 | Host path | Purpose | Mount Point |
 |-----------|---------|-------------|
