@@ -13,6 +13,7 @@ import LoginPage from '@/pages/login'
 
 const OverviewPage = lazy(() => import('@/pages/overview'))
 const TransactionsPage = lazy(() => import('@/pages/transactions'))
+const TransactionDetailPage = lazy(() => import('@/pages/transaction-detail'))
 const AnalyticsPage = lazy(() => import('@/pages/analytics'))
 const BillsPage = lazy(() => import('@/pages/bills'))
 const OperationsPage = lazy(() => import('@/pages/operations'))
@@ -55,6 +56,7 @@ function App() {
             <Route index element={<Navigate to="/overview" replace />} />
             <Route path="overview" element={<Suspense fallback={<LoadingState />}><OverviewPage /></Suspense>} />
             <Route path="transactions" element={<Suspense fallback={<LoadingState />}><TransactionsPage /></Suspense>} />
+            <Route path="transactions/:id" element={<Suspense fallback={<LoadingState />}><TransactionDetailPage /></Suspense>} />
             <Route path="analytics" element={<Suspense fallback={<LoadingState />}><AnalyticsPage /></Suspense>} />
             <Route path="bills" element={<Suspense fallback={<LoadingState />}><BillsPage /></Suspense>} />
             <Route path="operations" element={<Suspense fallback={<LoadingState />}><OperationsPage /></Suspense>} />

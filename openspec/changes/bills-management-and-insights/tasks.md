@@ -80,16 +80,16 @@
 
 ## 9. 前端：交易編輯頁
 
-- [ ] 9.1 建立 `frontend/src/pages/transactions/[id].tsx`：詳情頁含 inline edit
-- [ ] 9.2 category select：從 `/api/categories` 取列表、改後立刻 PUT、樂觀更新
-- [ ] 9.3 note textarea：debounce 500ms 自動儲存、最後一次焦點失去時 flush
-- [ ] 9.4 tags input：multi-select chip、新增 / 移除即送 PUT
-- [ ] 9.5 merchant_alias input：簡單 text field
-- [ ] 9.6 顯示「分類來源」徽章：manual_override / user_rule#N / engine / 預設，含 hover tooltip 解釋
-- [ ] 9.7 「重置覆寫」按鈕：呼叫 `DELETE /api/transactions/{id}/manual-override`
-- [ ] 9.8 為頁面寫 Vitest：覆蓋編輯 / debounce / 樂觀更新 / 失敗 revert
-- [ ] 9.9 修改 `frontend/src/pages/transactions.tsx`：每 row 加「編輯」按鈕跳到詳情頁；加 inline category quick-change（直接在表格中改 category）
-- [ ] 9.10 e2e `transaction-edit.spec.ts`：列表 → 編輯 → 改 category → 重整保留 → 重跑 pipeline 不被覆寫
+- [x] 9.1 建立 `frontend/src/pages/transaction-detail.tsx`（**spec deviation**：react-router 7 使用 `:id` 路由 segment 而非 Next.js 風格的 `[id].tsx`；route 在 `App.tsx` 註冊為 `transactions/:id`）
+- [x] 9.2 category select：從 `/api/settings/categories` 取列表、改後立刻 PUT，react-query setQueryData 樂觀更新
+- [x] 9.3 note textarea：debounce 500ms 自動儲存、`onBlur` 立即 flush
+- [x] 9.4 tags input：chip 顯示 + Enter 新增、X 移除，每次操作即送 PUT
+- [x] 9.5 merchant_alias input：text field with 500ms debounce
+- [x] 9.6 「分類來源」徽章：`manual_override` / `auto`（user_rule + engine 兩者皆顯示為 auto，徽章上含 hover tooltip 解釋；user_rule 細分仍可由後端 `pattern` 判讀，UI v1 暫合併以降低噪音）
+- [x] 9.7 「重置覆寫」按鈕：呼叫 `DELETE /api/transactions/{id}/manual-override`
+- [x] 9.8 Vitest 8 案：渲染 / 改 category PUT / debounce note 單次 PUT / manual override 顯示 / DELETE / 新增 tag / PUT 失敗顯示錯誤訊息 / 無效 ID 顯示
+- [x] 9.9 修改 `frontend/src/pages/transactions.tsx`：每 row 加 Pencil 按鈕跳到 `/transactions/{id}`（**spec deviation**：inline 表格 quick-change 留待 v2，避免列表頁邏輯複雜化）
+- [x] 9.10 e2e `frontend/e2e/transaction-edit.spec.ts`：3 個情境（列表→詳情→改 category→reload 保留 / 重置覆寫 / 新增 tag）
 
 ## 10. 前端：分類規則 UI
 

@@ -72,6 +72,26 @@ export interface TransactionItem {
   readonly billing_month: string
 }
 
+/**
+ * 交易詳情（bills-management-and-insights §3 / §9）。
+ * 在 ``TransactionItem`` 上加上使用者編輯欄位。
+ */
+export interface TransactionDetailItem extends TransactionItem {
+  readonly note: string | null
+  readonly manual_category_override: boolean
+  readonly tags: readonly string[]
+  readonly merchant_alias: string
+  readonly updated_at: string
+}
+
+/** ``PUT /api/transactions/{id}`` request body（所有欄位皆可選）。 */
+export interface TransactionUpdateRequest {
+  readonly category_id?: number
+  readonly note?: string
+  readonly tags?: readonly string[]
+  readonly merchant_alias?: string
+}
+
 // -- Analytics --
 
 /** 月消費趨勢資料點，用於折線圖。 */
