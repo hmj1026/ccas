@@ -476,3 +476,104 @@ class ClassificationRuleTestResponse(BaseModel):
     """``POST /api/rules/test`` response。"""
 
     matches: bool
+
+
+# -- bills-management-and-insights §5: Reminder settings ----------------------
+
+ReminderChannelLiteral = Literal["telegram", "ui_banner", "both"]
+
+
+class ReminderSettingItem(BaseModel):
+    """單張帳單的提醒設定 + 帳單摘要（給設定頁列表用）。"""
+
+    bill_id: int
+    bank_code: str
+    bank_name: str | None = None
+    billing_month: str
+    due_date: date
+    is_paid: bool
+    enabled: bool
+    days_before: list[int]
+    channel: ReminderChannelLiteral
+    has_setting: bool
+
+
+class ReminderSettingUpdateRequest(BaseModel):
+    """``PUT /api/reminders/{bill_id}/settings`` request body（all optional）。"""
+
+    enabled: bool | None = None
+    days_before: list[int] | None = Field(default=None, max_length=10)
+    channel: ReminderChannelLiteral | None = None
+
+
+class ReminderTestResult(BaseModel):
+    """``POST /api/reminders/{bill_id}/test`` response。"""
+
+    sent: bool
+    channel: ReminderChannelLiteral
+    detail: str = ""
+
+
+# -- bills-management-and-insights §6: Budgets --------------------------------
+
+BudgetScopeLiteral = Literal["monthly_total", "monthly_category", "monthly_bank"]
+
+
+class BudgetItem(BaseModel):
+    """單筆預算設定。"""
+
+    id: int
+    scope: BudgetScopeLiteral
+    scope_ref: str | None
+    amount_minor_units: int
+    alert_threshold_percent: int
+    enabled: bool
+    created_at: datetime
+    updated_at: datetime
+
+
+class BudgetCreateRequest(BaseModel):
+    """``POST /api/budgets`` request body。"""
+
+    scope: BudgetScopeLiteral
+    scope_ref: str | None = Field(default=None, max_length=64)
+    amount_minor_units: int = Field(ge=1)
+    alert_threshold_percent: int = Field(default=80, ge=1, le=100)
+    enabled: bool = Field(default=True)
+
+
+class BudgetUpdateRequest(BaseModel):
+    """``PUT /api/budgets/{id}`` request body（all optional）。"""
+
+    scope: BudgetScopeLiteral | None = None
+    scope_ref: str | None = Field(default=None, max_length=64)
+    amount_minor_units: int | None = Field(default=None, ge=1)
+    alert_threshold_percent: int | None = Field(default=None, ge=1, le=100)
+    enabled: bool | None = None
+
+
+class BudgetCurrentPeriod(BaseModel):
+    """``GET /api/budgets/{id}/current-period`` response。"""
+
+    budget_id: int
+    period_year_month: str
+    amount_minor_units: int
+    current_amount_minor_units: int
+    percent: float
+    threshold_breached: bool
+    alert_threshold_percent: int
+
+
+class BudgetAlertItem(BaseModel):
+    """active 預算超支警示（給 banner / dashboard 用）。"""
+
+    id: int
+    budget_id: int
+    scope: BudgetScopeLiteral
+    scope_ref: str | None
+    period_year_month: str
+    threshold_breached_percent: int
+    current_amount_minor_units: int
+    amount_minor_units: int
+    triggered_at: datetime
+    acknowledged_at: datetime | None
