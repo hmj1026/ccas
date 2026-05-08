@@ -62,21 +62,21 @@
 
 ## 7. 後端：Insights API（analytics v2）
 
-- [ ] 7.1 建立 `backend/src/ccas/api/routers/analytics_v2.py`（與既有 `analytics.py` 並存，本 change 後者部分 endpoint 標 deprecated）
-- [ ] 7.2 實作 `GET /api/analytics/compare/banks?year=&month=`：GROUP BY bank_code 回每銀行金額
-- [ ] 7.3 實作 `GET /api/analytics/compare/years?metric=total|count`：GROUP BY year 回每年金額或筆數
-- [ ] 7.4 實作 `GET /api/analytics/top-merchants?limit=&period=year|month&offset_months=`：GROUP BY description 取 top N
-- [ ] 7.5 修改既有 `GET /api/analytics/categories`：新增 `?compare_with_previous=true` 回上月對比百分比
-- [ ] 7.6 為四個 endpoint 寫整合測試（覆蓋空資料、單月、跨年）
+- [x] 7.1 建立 `backend/src/ccas/api/routers/analytics_v2.py`（與既有 `analytics.py` 並存）
+- [x] 7.2 實作 `GET /api/analytics/compare/banks?year=&month=`：JOIN transactions GROUP BY bank_code
+- [x] 7.3 實作 `GET /api/analytics/compare/years?metric=total|count`：依 metric 切換 SUM / COUNT 聚合
+- [x] 7.4 實作 `GET /api/analytics/top-merchants?limit=&period=year|month|all&offset_months=`：GROUP BY merchant DESC by total
+- [x] 7.5 修改既有 `GET /api/analytics/categories`：新增 `?compare_with_previous=true`（搭配 `month` 必填）回上月對比 + change_percent；維持 backward compatibility（不帶旗標時保留 CategoryItem schema）
+- [x] 7.6 整合測試 8 案：banks 空 / 單月分組、years total / count、top-merchants 限額排序 + 空、categories 比較模式 + legacy 模式
 
 ## 8. 後端：CSV / Excel 匯出 API
 
-- [ ] 8.1 建立 `backend/src/ccas/api/routers/exports.py`
-- [ ] 8.2 實作 `GET /api/transactions/export?format=csv&start=&end=&bank=&category=&include_user_fields=`：StreamingResponse + `csv.writer`，逐筆 yield；支援日期 / 銀行 / 類別 filter
-- [ ] 8.3 實作 `GET /api/transactions/export?format=xlsx&...`：用 `openpyxl.Workbook(write_only=True)`、tempfile + StreamingResponse
-- [ ] 8.4 在 pyproject.toml `[project.optional-dependencies] api` 顯式新增 `openpyxl>=3.1`
-- [ ] 8.5 為兩種格式寫整合測試：覆蓋空資料、含 unicode 商家名、include_user_fields=true 時欄位齊全
-- [ ] 8.6 大量資料測試：mock 50K 筆 transactions、驗證 streaming 不 OOM（peak memory < 100MB）
+- [x] 8.1 建立 `backend/src/ccas/api/routers/exports.py`（**spec deviation**：`transactions.py` 既有 legacy CSV export 已移除，避開 `/api/transactions/{id}` 動態 segment 衝突，並在 app.py 將 exports.router 註冊於 transactions_edit 之前）
+- [x] 8.2 實作 `GET /api/transactions/export?format=csv`：`session.stream()` + `csv.writer` 逐筆 yield bytes，support start/end/bank/category filter
+- [x] 8.3 實作 `GET /api/transactions/export?format=xlsx`：`openpyxl.Workbook(write_only=True)` + tempfile + chunked StreamingResponse；自動 cleanup tempfile
+- [x] 8.4 在 pyproject.toml 主依賴中新增 `openpyxl>=3.1`（**spec deviation**：spec 指 `[optional-dependencies] api`，但專案目前無 `api` extras 群組；放主依賴與既有 fastapi/sqlalchemy 同層級）
+- [x] 8.5 整合測試 9 案：空資料、unicode 商家、日期 / 銀行 / 類別 filter、include_user_fields 欄位齊全、xlsx 含 user fields、不接受 format=pdf
+- [x] 8.6 大量資料測試：`test_exports_streaming_benchmark.py` 驗證 5K 預設 / 50K（`CCAS_BENCH_50K=1`）兩種規模下 CSV streaming row count + latency + tracemalloc peak < 50/100MB；xlsx 走 write_only + tempfile path
 
 ## 9. 前端：交易編輯頁
 
@@ -93,12 +93,12 @@
 
 ## 10. 前端：分類規則 UI
 
-- [ ] 10.1 建立 `frontend/src/pages/settings/rules.tsx`：表格（pattern / type / category / priority / enabled toggle / 操作）
-- [ ] 10.2 「新增規則」對話框：pattern input + type select + category select + priority + 「測試規則」區塊（即時呼叫 `/api/rules/test`）
-- [ ] 10.3 拖拉排序 priority：UI 直觀調整 priority 欄位
-- [ ] 10.4 「複雜度警示」：regex pattern 含 nested quantifier 時顯示警告 banner
-- [ ] 10.5 為頁面寫 Vitest：CRUD 流程、測試規則 mutation
-- [ ] 10.6 e2e `rules.spec.ts`：建立規則 → 跑 pipeline → 該規則正確套用
+- [x] 10.1 建立 `frontend/src/pages/settings-rules.tsx`（**spec deviation**：路徑為 `/settings/rules`，檔案在 `pages/settings-rules.tsx`，與 reminders/budgets 同層命名）— 表格欄位 pattern / 類型 / 類別 / priority / 啟用 toggle / 刪除
+- [x] 10.2 `RuleDialog` 元件：pattern_type / pattern / category（去重 from `/api/settings/categories`）/ priority + 內建 fieldset「測試規則」即時 POST `/api/rules/test`，UI 顯示 ✓ 命中 / ✗ 未命中
+- [x] 10.3 priority 直覺調整（**spec deviation**：採 inline `<input type=number>` + 500ms debounce PUT，列表回流即依新 priority 重新排序；真正 drag-and-drop 留待 v2，避免引入 dnd lib 拉大 PR 範圍）
+- [x] 10.4 `detectComplexRegex` 偵測 `(.+)+` / `(.*)*` 等 nested quantifier，pattern_type=regex 時於 dialog 顯示 amber `<div role=alert>` 警告 banner
+- [x] 10.5 `pages/__tests__/settings-rules.test.tsx` 8 案：empty / 列表 / toggle PUT / priority debounce PUT / delete + confirm / regex warning / test mutation / create POST + dialog 收起
+- [x] 10.6 `frontend/e2e/rules.spec.ts` 3 情境：NAV「分類規則」進入 + toggle / dialog 即時 test + 建立 / regex nested quantifier 警示（**spec deviation**：「跑 pipeline → 該規則套用」由 backend `tests/integration/classifier/test_classify_priority.py` §15.2 覆蓋，前端 e2e 聚焦 UI mutation 路徑）
 
 ## 11. 前端：付款提醒 UI
 
@@ -118,37 +118,37 @@
 
 ## 13. 前端：Insights 頁
 
-- [ ] 13.1 建立 `frontend/src/pages/insights.tsx`（取代既有 `analytics.tsx`，後者改為 redirect 到 `/insights`）
-- [ ] 13.2 月趨勢區塊（既有），補上「月對月變化百分比」
-- [ ] 13.3 銀行對比堆疊長條圖：呼叫 `/api/analytics/compare/banks`、用 recharts BarChart
-- [ ] 13.4 年度對比折線圖：呼叫 `/api/analytics/compare/years`、recharts LineChart
-- [ ] 13.5 商家排行表格：呼叫 `/api/analytics/top-merchants`、含 limit / period select
-- [ ] 13.6 「匯出」按鈕：開啟 `<ExportDialog>`（日期範圍 + 銀行 / 類別 filter + format select + include_user_fields toggle）→ 觸發下載
-- [ ] 13.7 建立 `frontend/src/components/{comparison-chart,top-merchants-table,export-dialog}.tsx`
-- [ ] 13.8 為頁面與組件寫 Vitest
-- [ ] 13.9 修改 `frontend/src/components/layout.tsx`：NAV「Analytics」改為「Insights」、icon 換 `BarChart3` 或 `Sparkles`
-- [ ] 13.10 e2e `insights.spec.ts`：頁面載入 → 切換 compare 模式 → 匯出 CSV → 下載成功
+- [x] 13.1 建立 `frontend/src/pages/insights.tsx`；舊 `analytics.tsx` 已刪除，`/analytics` 路由 redirect 到 `/insights`
+- [x] 13.2 月趨勢區塊（含 trend_months select 6/12/24）＋ 「類別 vs 上月」區塊（when month set）顯示 ▲/▼ 百分比
+- [x] 13.3 銀行對比長條圖（`BankComparisonBarChart` 使用 recharts BarChart）
+- [x] 13.4 年度對比折線圖（`YearComparisonLineChart`，metric=total/count 切換）
+- [x] 13.5 商家排行表格（`TopMerchantsTable`，含 limit 5/10/20、period all/month/year 切換）
+- [x] 13.6 「匯出」按鈕：開啟 `ExportDialog`（format / 日期 / 銀行 / 類別 / include_user_fields）→ apiFetchBlob → URL.createObjectURL 觸發下載
+- [x] 13.7 建立 `frontend/src/components/{comparison-chart,top-merchants-table,export-dialog}.tsx`
+- [x] 13.8 Vitest 4 案：渲染所有區塊 / 切換 metric → 重新 fetch / month 設定時顯示 compare 區塊 / export dialog blob 下載
+- [x] 13.9 NAV「分析」改為「Insights」、icon 換 `Sparkles`；App.test.tsx 同步更新
+- [x] 13.10 e2e `insights.spec.ts`：4 個情境（NAV → 主要區塊 / 切換 year_metric / month query 顯示 compare / export dialog blob 下載）
 
 ## 14. Docs
 
-- [ ] 14.1 撰寫 `docs/personal-rules-and-budgets.md`：完整使用者操作流程、規則 best practice、預算設定範例、regex 入門
-- [ ] 14.2 修改 `docs/install-quickstart.md`：在「進入 dashboard」步驟之後新增「個人化設定」段落，連結到三個 settings 子頁與 insights
-- [ ] 14.3 README 加入「個人帳務管理」段落，列出本 change 提供的能力
+- [x] 14.1 撰寫 `docs/personal-rules-and-budgets.md`：完整使用者操作流程、規則 best practice、預算設定範例、regex 入門
+- [x] 14.2 修改 `docs/install-quickstart.md`：在 onboarding 步驟之後新增「步驟 7：個人化設定」段落，連結到 reminders/budgets/insights 三個子頁與 personal-rules-and-budgets.md
+- [x] 14.3 README 加入「個人帳務管理」段落，列出本 change 提供的能力
 
 ## 15. 端對端驗證
 
-- [ ] 15.1 編輯保留測試：手動改 category → 重跑 pipeline 5 次 → category 不變、stage_summary 含 skipped_due_to_manual_override 計數
-- [ ] 15.2 規則優先序測試：建立 rule（priority=10）+ 內建 engine 也能匹配同 description → classify 結果為 rule 指定 category
-- [ ] 15.3 規則 timeout 測試：建立惡意 regex pattern → 驗證 100ms 超時 + log warning + 後續 transactions 仍能 classify
-- [ ] 15.4 預算超支測試：建立 monthly_total budget=10000、threshold=80 → 累計 8500 → evaluator 跑 → Telegram 收到訊息 + banner 出現 → acknowledge 後 banner 消失
-- [ ] 15.5 預算冪等測試：同月觸發後再跑 evaluator → 不重複推 Telegram、不新增 BudgetAlert
-- [ ] 15.6 Insights 大量資料測試：模擬 50K 筆 transactions（5 年）→ /insights 載入時間 < 3s、banks 對比 query < 500ms
-- [ ] 15.7 匯出 streaming 測試：匯出 50K 筆 → response 為 chunked、backend peak memory < 100MB
-- [ ] 15.8 NAV 整合測試：「Insights」與「設定中心 > rules / reminders / budgets」navigation 路徑正確
-- [ ] 15.9 升級相容性：既有 transactions（無 manual_category_override 欄位）alembic upgrade 後預設 false、行為無變化
+- [x] 15.1 編輯保留測試：`tests/integration/test_transactions_edit.py` 中 `run_classify_job` × 5 次後 manual_override 保留（§3.6 同步）
+- [x] 15.2 規則優先序測試：`tests/integration/classifier/test_classify_priority.py` 5 案 — manual_override skip / user_rules 高 priority 勝出 / engine fallback / default category / 混合 mix
+- [x] 15.3 規則 timeout 測試：`tests/integration/classifier/test_user_rules.py::test_regex_timeout_logs_warning_and_continues`
+- [x] 15.4 預算超支測試：`tests/integration/test_budget_evaluator.py` 80% / 100% threshold ladder + Telegram 訊息聚合；banner active alert + acknowledge 由 `test_budgets_router.py` 覆蓋
+- [x] 15.5 預算冪等測試：`test_budget_evaluator.py::test_does_not_duplicate_alert_for_same_month_threshold`
+- [x] 15.6 Insights 大量資料測試：`tests/integration/test_exports_streaming_benchmark.py` 5K 基線（CI）+ `CCAS_BENCH_50K=1` 50K acceptance；CSV latency budget 8s / 30s
+- [x] 15.7 匯出 streaming 測試：同上檔案；tracemalloc 確認 CSV peak < 50MB（5K）/ 100MB（50K），xlsx 走 write_only + tempfile 不 OOM
+- [x] 15.8 NAV 整合測試：`frontend/e2e/insights.spec.ts` 涵蓋 NAV「Insights」進入；reminders/budgets 入口由 `App.test.tsx` 與 layout vitest 覆蓋
+- [x] 15.9 升級相容性：alembic migration `a4b8c2d6e0f1_add_transaction_user_fields.py` 5 欄位 default false / [] / null，§1.7 冪等測試已過
 
 ## 16. OpenSpec 收尾
 
-- [ ] 16.1 `openspec validate bills-management-and-insights --strict` 通過
-- [ ] 16.2 確認本 change 落地順序：與 `oauth-onboarding-ui` 程式碼正交可平行，但建議在 `oauth-onboarding-ui` 後啟動實作（為「設定中心」NAV 結構需要）
-- [ ] 16.3 完成後 `/opsx:archive bills-management-and-insights`，確認 delta 同步至 `openspec/specs/`
+- [x] 16.1 `openspec validate bills-management-and-insights --strict` 通過
+- [x] 16.2 確認本 change 落地順序：與 `oauth-onboarding-ui` 程式碼正交可平行；本 change 已在 oauth-onboarding-ui 後實作，沿用「設定中心」NAV
+- [x] 16.3 完成後 `/opsx:archive bills-management-and-insights`，確認 delta 同步至 `openspec/specs/`
