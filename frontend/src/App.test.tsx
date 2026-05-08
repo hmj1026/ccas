@@ -41,7 +41,7 @@ describe('App', () => {
       expect(screen.getByText('總覽')).toBeInTheDocument()
     })
     expect(screen.getByText('交易')).toBeInTheDocument()
-    expect(screen.getByText('分析')).toBeInTheDocument()
+    expect(screen.getByText('Insights')).toBeInTheDocument()
     expect(screen.getByText('帳單')).toBeInTheDocument()
     expect(screen.getByText('設定')).toBeInTheDocument()
   })

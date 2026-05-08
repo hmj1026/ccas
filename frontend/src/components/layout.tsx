@@ -7,13 +7,14 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   LayoutDashboard,
   Receipt,
-  BarChart3,
+  Sparkles,
   FileText,
   Workflow,
   Settings,
   Settings2,
   Bell,
   Wallet,
+  Tags,
   Menu,
   X,
   LogOut,
@@ -27,12 +28,13 @@ import { Button } from '@/components/ui/button'
 const NAV_ITEMS = [
   { to: '/overview', label: '總覽', icon: LayoutDashboard },
   { to: '/transactions', label: '交易', icon: Receipt },
-  { to: '/analytics', label: '分析', icon: BarChart3 },
+  { to: '/insights', label: 'Insights', icon: Sparkles },
   { to: '/bills', label: '帳單', icon: FileText },
   { to: '/operations', label: '操作中心', icon: Workflow },
   { to: '/settings', label: '設定', icon: Settings },
   { to: '/settings/reminders', label: '提醒', icon: Bell },
   { to: '/settings/budgets', label: '預算', icon: Wallet },
+  { to: '/settings/rules', label: '分類規則', icon: Tags },
   { to: '/setup/gmail', label: '設定中心', icon: Settings2 },
 ] as const
 

@@ -14,12 +14,13 @@ import LoginPage from '@/pages/login'
 const OverviewPage = lazy(() => import('@/pages/overview'))
 const TransactionsPage = lazy(() => import('@/pages/transactions'))
 const TransactionDetailPage = lazy(() => import('@/pages/transaction-detail'))
-const AnalyticsPage = lazy(() => import('@/pages/analytics'))
+const InsightsPage = lazy(() => import('@/pages/insights'))
 const BillsPage = lazy(() => import('@/pages/bills'))
 const OperationsPage = lazy(() => import('@/pages/operations'))
 const SettingsPage = lazy(() => import('@/pages/settings'))
 const SettingsRemindersPage = lazy(() => import('@/pages/settings-reminders'))
 const SettingsBudgetsPage = lazy(() => import('@/pages/settings-budgets'))
+const SettingsRulesPage = lazy(() => import('@/pages/settings-rules'))
 const SetupLayout = lazy(() => import('@/pages/setup/layout'))
 const SetupGmailPage = lazy(() => import('@/pages/setup/gmail'))
 const SetupGmailCallbackPage = lazy(
@@ -59,12 +60,14 @@ function App() {
             <Route path="overview" element={<Suspense fallback={<LoadingState />}><OverviewPage /></Suspense>} />
             <Route path="transactions" element={<Suspense fallback={<LoadingState />}><TransactionsPage /></Suspense>} />
             <Route path="transactions/:id" element={<Suspense fallback={<LoadingState />}><TransactionDetailPage /></Suspense>} />
-            <Route path="analytics" element={<Suspense fallback={<LoadingState />}><AnalyticsPage /></Suspense>} />
+            <Route path="insights" element={<Suspense fallback={<LoadingState />}><InsightsPage /></Suspense>} />
+            <Route path="analytics" element={<Navigate to="/insights" replace />} />
             <Route path="bills" element={<Suspense fallback={<LoadingState />}><BillsPage /></Suspense>} />
             <Route path="operations" element={<Suspense fallback={<LoadingState />}><OperationsPage /></Suspense>} />
             <Route path="settings" element={<Suspense fallback={<LoadingState />}><SettingsPage /></Suspense>} />
             <Route path="settings/reminders" element={<Suspense fallback={<LoadingState />}><SettingsRemindersPage /></Suspense>} />
             <Route path="settings/budgets" element={<Suspense fallback={<LoadingState />}><SettingsBudgetsPage /></Suspense>} />
+            <Route path="settings/rules" element={<Suspense fallback={<LoadingState />}><SettingsRulesPage /></Suspense>} />
             <Route
               path="setup"
               element={<Suspense fallback={<LoadingState />}><SetupLayout /></Suspense>}

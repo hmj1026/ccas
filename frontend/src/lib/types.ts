@@ -363,3 +363,79 @@ export interface BudgetAlertItem {
   readonly triggered_at: string
   readonly acknowledged_at: string | null
 }
+
+// -- Insights v2 (bills-management-and-insights §7) --
+
+/** 銀行對比 (`/api/analytics/compare/banks`)。 */
+export interface BankCompareItem {
+  readonly bank_code: string
+  readonly bank_name: string | null
+  readonly total: number
+}
+
+/** 年度對比 (`/api/analytics/compare/years`)。 */
+export interface YearCompareItem {
+  readonly year: number
+  readonly value: number
+}
+
+/** Top merchant 排行 (`/api/analytics/top-merchants`)。 */
+export interface TopMerchantItem {
+  readonly merchant: string
+  readonly total: number
+  readonly count: number
+}
+
+/** Category with month-over-month compare (`compare_with_previous=true`)。 */
+export interface CategoryWithCompareItem {
+  readonly category: string
+  readonly total: number
+  readonly previous_total: number | null
+  readonly change_percent: number | null
+}
+
+export type YearMetric = 'total' | 'count'
+export type TopMerchantPeriod = 'year' | 'month' | 'all'
+export type ExportFormat = 'csv' | 'xlsx'
+
+// -- User classification rules (bills-management-and-insights §4 §10) --
+
+export type PatternType = 'keyword' | 'exact' | 'regex'
+
+export interface ClassificationRuleItem {
+  readonly id: number
+  readonly pattern: string
+  readonly pattern_type: PatternType
+  readonly category_id: number
+  readonly category_name: string
+  readonly priority: number
+  readonly enabled: boolean
+  readonly created_at: string
+  readonly updated_at: string
+}
+
+export interface ClassificationRuleCreateRequest {
+  readonly pattern: string
+  readonly pattern_type: PatternType
+  readonly category_id: number
+  readonly priority?: number
+  readonly enabled?: boolean
+}
+
+export interface ClassificationRuleUpdateRequest {
+  readonly pattern?: string
+  readonly pattern_type?: PatternType
+  readonly category_id?: number
+  readonly priority?: number
+  readonly enabled?: boolean
+}
+
+export interface ClassificationRuleTestRequest {
+  readonly pattern: string
+  readonly pattern_type: PatternType
+  readonly sample_text: string
+}
+
+export interface ClassificationRuleTestResponse {
+  readonly matches: boolean
+}

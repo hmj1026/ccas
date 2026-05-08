@@ -1,0 +1,273 @@
+/**
+ * Vitest for SettingsRulesPage (bills-management-and-insights §10.5)。
+ *
+ * 覆蓋：
+ * - empty state
+ * - 列表渲染（priority DESC + id ASC）
+ * - toggle enabled 觸發 PUT
+ * - 編輯 priority debounce 後送 PUT
+ * - delete 流程（含 confirm）
+ * - 開啟 dialog → test 規則 mutation
+ * - regex nested quantifier 警示
+ * - dialog 建立規則
+ */
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+vi.mock('@/lib/api-client', () => ({
+  apiGet: vi.fn(),
+  apiPost: vi.fn(),
+  apiPut: vi.fn(),
+  apiDelete: vi.fn(),
+}))
+
+import { apiDelete, apiGet, apiPost, apiPut } from '@/lib/api-client'
+import SettingsRulesPage from '@/pages/settings-rules'
+import type {
+  CategoryKeywordItem,
+  ClassificationRuleItem,
+} from '@/lib/types'
+
+const mockedGet = vi.mocked(apiGet)
+const mockedPost = vi.mocked(apiPost)
+const mockedPut = vi.mocked(apiPut)
+const mockedDelete = vi.mocked(apiDelete)
+
+const RULE_A: ClassificationRuleItem = {
+  id: 1,
+  pattern: '星巴克',
+  pattern_type: 'keyword',
+  category_id: 10,
+  category_name: '餐飲',
+  priority: 20,
+  enabled: true,
+  created_at: '2026-05-01T00:00:00Z',
+  updated_at: '2026-05-01T00:00:00Z',
+}
+
+const RULE_B: ClassificationRuleItem = {
+  id: 2,
+  pattern: 'UBER',
+  pattern_type: 'exact',
+  category_id: 11,
+  category_name: '交通',
+  priority: 10,
+  enabled: false,
+  created_at: '2026-05-01T00:00:00Z',
+  updated_at: '2026-05-01T00:00:00Z',
+}
+
+const CATEGORIES: CategoryKeywordItem[] = [
+  { id: 10, keyword: '星巴克', category: '餐飲' },
+  { id: 11, keyword: 'UBER', category: '交通' },
+  { id: 12, keyword: '蝦皮', category: '購物' },
+]
+
+function setupRoutes(rules: ClassificationRuleItem[]) {
+  mockedGet.mockImplementation((path: string) => {
+    if (path === '/api/rules') {
+      return Promise.resolve({ success: true, data: rules, message: '' })
+    }
+    if (path === '/api/settings/categories') {
+      return Promise.resolve({
+        success: true,
+        data: CATEGORIES,
+        message: '',
+      })
+    }
+    return Promise.resolve({ success: true, data: null, message: '' })
+  })
+}
+
+function renderPage() {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  })
+  return render(
+    <QueryClientProvider client={client}>
+      <SettingsRulesPage />
+    </QueryClientProvider>,
+  )
+}
+
+describe('SettingsRulesPage', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('shows empty state when no rules', async () => {
+    setupRoutes([])
+    renderPage()
+    await waitFor(() => {
+      expect(screen.getByText(/尚未建立規則/)).toBeInTheDocument()
+    })
+  })
+
+  it('renders rules in priority order with type/category', async () => {
+    setupRoutes([RULE_A, RULE_B])
+    renderPage()
+    await waitFor(() => {
+      expect(screen.getByText('星巴克')).toBeInTheDocument()
+    })
+    expect(screen.getByText('UBER')).toBeInTheDocument()
+    expect(screen.getByText('餐飲')).toBeInTheDocument()
+    expect(screen.getByText('交通')).toBeInTheDocument()
+  })
+
+  it('toggling enabled sends PUT', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    setupRoutes([RULE_A])
+    mockedPut.mockResolvedValue({
+      success: true,
+      data: { ...RULE_A, enabled: false },
+      message: '',
+    })
+    renderPage()
+
+    const toggle = await screen.findByLabelText('toggle 星巴克')
+    await user.click(toggle)
+
+    await waitFor(() => {
+      expect(mockedPut).toHaveBeenCalledWith('/api/rules/1', {
+        enabled: false,
+      })
+    })
+  })
+
+  it('editing priority debounces a PUT', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    setupRoutes([RULE_A])
+    mockedPut.mockResolvedValue({
+      success: true,
+      data: { ...RULE_A, priority: 35 },
+      message: '',
+    })
+    renderPage()
+
+    const input = await screen.findByLabelText('priority of 星巴克')
+    await user.clear(input)
+    await user.type(input, '35')
+    // 還沒過 debounce 不該送
+    expect(mockedPut).not.toHaveBeenCalled()
+    vi.advanceTimersByTime(500)
+
+    await waitFor(() => {
+      expect(mockedPut).toHaveBeenCalledWith('/api/rules/1', { priority: 35 })
+    })
+  })
+
+  it('deleting calls DELETE after confirm', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    setupRoutes([RULE_A])
+    mockedDelete.mockResolvedValue({
+      success: true,
+      data: { deleted_id: 1 },
+      message: '',
+    })
+    vi.spyOn(window, 'confirm').mockReturnValue(true)
+    renderPage()
+
+    const delBtn = await screen.findByLabelText('delete 星巴克')
+    await user.click(delBtn)
+
+    await waitFor(() => {
+      expect(mockedDelete).toHaveBeenCalledWith('/api/rules/1')
+    })
+  })
+
+  it('shows nested-quantifier warning in regex dialog', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    setupRoutes([])
+    renderPage()
+
+    await user.click(await screen.findByRole('button', { name: '新增規則' }))
+    await user.selectOptions(screen.getByLabelText('pattern_type'), 'regex')
+    await user.type(screen.getByLabelText('pattern'), '(a+)+')
+
+    expect(
+      screen.getByText(/nested quantifier/i),
+    ).toBeInTheDocument()
+  })
+
+  it('test rule mutation calls /api/rules/test', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    setupRoutes([])
+    mockedPost.mockImplementation((path: string) => {
+      if (path === '/api/rules/test') {
+        return Promise.resolve({
+          success: true,
+          data: { matches: true },
+          message: '',
+        })
+      }
+      return Promise.resolve({ success: true, data: null, message: '' })
+    })
+    renderPage()
+
+    await user.click(await screen.findByRole('button', { name: '新增規則' }))
+    await user.type(screen.getByLabelText('pattern'), '星巴克')
+    await user.type(screen.getByLabelText('sample_text'), '星巴克 #1234')
+    await user.click(screen.getByRole('button', { name: '測試' }))
+
+    await waitFor(() => {
+      expect(mockedPost).toHaveBeenCalledWith('/api/rules/test', {
+        pattern: '星巴克',
+        pattern_type: 'keyword',
+        sample_text: '星巴克 #1234',
+      })
+    })
+    expect(await screen.findByText('✓ 命中')).toBeInTheDocument()
+  })
+
+  it('creating a rule submits POST /api/rules and closes dialog', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    setupRoutes([])
+    mockedPost.mockImplementation((path: string) => {
+      if (path === '/api/rules') {
+        return Promise.resolve({
+          success: true,
+          data: {
+            ...RULE_A,
+            id: 99,
+            pattern: '蝦皮',
+            category_id: 12,
+            category_name: '購物',
+            priority: 15,
+          },
+          message: '',
+        })
+      }
+      return Promise.resolve({ success: true, data: null, message: '' })
+    })
+    renderPage()
+
+    await user.click(await screen.findByRole('button', { name: '新增規則' }))
+    await user.type(screen.getByLabelText('pattern'), '蝦皮')
+    await user.selectOptions(screen.getByLabelText('category'), '12')
+    await user.clear(screen.getByLabelText('priority'))
+    await user.type(screen.getByLabelText('priority'), '15')
+    await user.click(screen.getByRole('button', { name: /建立規則/ }))
+
+    await waitFor(() => {
+      expect(mockedPost).toHaveBeenCalledWith('/api/rules', {
+        pattern: '蝦皮',
+        pattern_type: 'keyword',
+        category_id: 12,
+        priority: 15,
+        enabled: true,
+      })
+    })
+    // dialog 收起後就拿不到「建立規則」按鈕（dialog 不再渲染）
+    await waitFor(() => {
+      expect(
+        screen.queryByRole('dialog'),
+      ).not.toBeInTheDocument()
+    })
+  })
+})
