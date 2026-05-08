@@ -18,6 +18,10 @@ StagedAttachmentStatusLiteral = Literal[
     "failed",
     "fetch_expired",
 ]
+PipelineRunStatusLiteral = Literal[
+    "queued", "running", "succeeded", "failed", "cancelled"
+]
+PipelineStageLiteral = Literal["ingest", "decrypt", "parse", "classify", "notify"]
 
 # -- 共用信封 --
 
@@ -246,12 +250,47 @@ class PipelineTriggerRequest(BaseModel):
     bank_code: str | None = None
     year: int | None = Field(default=None, ge=2000, le=2099)
     month: int | None = Field(default=None, ge=1, le=12)
+    from_stage: PipelineStageLiteral | None = None
+    to_stage: PipelineStageLiteral | None = None
 
 
 class PipelineTriggerData(BaseModel):
     """Pipeline 觸發回應資料。"""
 
     job_id: str
+    run_id: str
+
+
+class PipelineStageEntry(BaseModel):
+    """Pipeline 階段進度摘要。"""
+
+    stage: str
+    ok: int
+    fail: int
+    elapsed_ms: int
+
+
+class PipelineRunSummary(BaseModel):
+    """Pipeline 執行紀錄列表項目。"""
+
+    id: str
+    job_id: str
+    status: PipelineRunStatusLiteral
+    triggered_by: str
+    params: dict
+    current_stage: str | None
+    current_stage_processed: int
+    current_stage_total: int
+    stage_summary: list[PipelineStageEntry]
+    error_message: str | None
+    started_at: datetime | None
+    completed_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class PipelineRunDetail(PipelineRunSummary):
+    """Pipeline 執行紀錄詳情。"""
 
 
 # -- Setup: Gmail OAuth Web flow --

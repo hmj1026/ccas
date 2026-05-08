@@ -35,6 +35,7 @@ from ccas.ingestor.staging import (
     update_staged_record_failure,
 )
 from ccas.pipeline.options import PipelineOptions
+from ccas.pipeline.progress import NoopProgressReporter, ProgressReporter
 from ccas.storage.models import BankConfig, BankSettings
 
 logger = logging.getLogger(__name__)
@@ -388,6 +389,7 @@ async def _process_web_fetch(
 async def run_ingestion_job(
     session: AsyncSession,
     options: PipelineOptions | None = None,
+    reporter: ProgressReporter | None = None,
 ) -> IngestionSummary:
     """執行單次 Gmail ingestion batch。
 
@@ -400,6 +402,12 @@ async def run_ingestion_job(
     Args:
         session: 非同步 DB Session（由呼叫端注入）。
         options: Pipeline 執行參數（可選）。
+        reporter: 進度回報（pipeline-operations-center §3A.1）。``None`` 時走
+            NoopProgressReporter。Ingest 為三層 nested loop（bank → message
+            → attachment），Gmail 搜尋發生在外層 loop 內、無法在進入前
+            pre-flatten。採 spec D11 「per-bank reset」方案：每銀行 Gmail
+            搜尋完成後 emit 一次 ``stage_started("ingest", total=bank_total)``
+            重置 processed 與 total，前端容忍跨 bank 的 total 變動。
 
     Returns:
         IngestionSummary 統計摘要。
@@ -407,6 +415,9 @@ async def run_ingestion_job(
     Raises:
         GmailAuthError: Gmail 驗證失敗時拋出（整個 job 無法繼續）。
     """
+    if reporter is None:
+        reporter = NoopProgressReporter()
+
     settings = get_settings()
     summary = IngestionSummary()
 
@@ -423,6 +434,7 @@ async def run_ingestion_job(
         )
         logger.warning(msg)
         summary.errors.append(msg)
+        await reporter.stage_started("ingest", total=0)
         return summary
 
     force = options.force if options else False
@@ -442,28 +454,48 @@ async def run_ingestion_job(
 
         summary.messages_found += len(messages)
 
+        # Per-bank flatten: count items the inner loop will actually process.
+        bank_total = sum(
+            len(msg.pdf_attachments)
+            if msg.pdf_attachments
+            else (1 if msg.html_body is not None else 0)
+            for msg in messages
+        )
+        await reporter.stage_started("ingest", total=bank_total)
+        bank_processed = 0
+
         for message in messages:
             if message.pdf_attachments:
                 for attachment in message.pdf_attachments:
-                    await _process_attachment(
+                    try:
+                        await _process_attachment(
+                            session,
+                            service,
+                            bank.bank_code,
+                            attachment,
+                            settings.staging_dir,
+                            summary,
+                            force=force,
+                        )
+                    finally:
+                        bank_processed += 1
+                        await reporter.stage_item_done(
+                            "ingest", processed=bank_processed
+                        )
+            elif message.html_body is not None:
+                try:
+                    await _process_web_fetch(
                         session,
-                        service,
                         bank.bank_code,
-                        attachment,
+                        message,
                         settings.staging_dir,
+                        settings,
                         summary,
                         force=force,
                     )
-            elif message.html_body is not None:
-                await _process_web_fetch(
-                    session,
-                    bank.bank_code,
-                    message,
-                    settings.staging_dir,
-                    settings,
-                    summary,
-                    force=force,
-                )
+                finally:
+                    bank_processed += 1
+                    await reporter.stage_item_done("ingest", processed=bank_processed)
 
     await session.commit()
 

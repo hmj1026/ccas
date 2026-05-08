@@ -83,23 +83,23 @@ class TestPipelineStageOrder:
     async def test_stages_called_in_order(self, mock_session):
         call_order = []
 
-        async def mock_ingest(session, options=None):
+        async def mock_ingest(session, options=None, **kwargs):
             call_order.append("ingest")
             return _make_ingest_summary()
 
-        async def mock_decrypt(session, options=None):
+        async def mock_decrypt(session, options=None, **kwargs):
             call_order.append("decrypt")
             return _make_decrypt_summary()
 
-        async def mock_parse(session, options=None):
+        async def mock_parse(session, options=None, **kwargs):
             call_order.append("parse")
             return _make_parse_summary()
 
-        async def mock_classify(session):
+        async def mock_classify(session, **kwargs):
             call_order.append("classify")
             return _make_classify_summary()
 
-        async def mock_notify(session, *, bill_ids=None):
+        async def mock_notify(session, *, bill_ids=None, **kwargs):
             call_order.append("notify")
             return _make_notify_summary()
 
@@ -159,25 +159,25 @@ class TestFaultTolerance:
         """Ingest 有失敗項目時，後續階段仍然被呼叫。"""
         stages_called = []
 
-        async def mock_ingest(session, options=None):
+        async def mock_ingest(session, options=None, **kwargs):
             stages_called.append("ingest")
             return _make_ingest_summary(
                 staged_count=1, failed_count=1, errors=["bank X failed"]
             )
 
-        async def mock_decrypt(session, options=None):
+        async def mock_decrypt(session, options=None, **kwargs):
             stages_called.append("decrypt")
             return _make_decrypt_summary()
 
-        async def mock_parse(session, options=None):
+        async def mock_parse(session, options=None, **kwargs):
             stages_called.append("parse")
             return _make_parse_summary()
 
-        async def mock_classify(session):
+        async def mock_classify(session, **kwargs):
             stages_called.append("classify")
             return _make_classify_summary()
 
-        async def mock_notify(session, *, bill_ids=None):
+        async def mock_notify(session, *, bill_ids=None, **kwargs):
             stages_called.append("notify")
             return _make_notify_summary()
 
@@ -244,23 +244,23 @@ class TestFaultTolerance:
         """階段級異常（如 GmailAuthError）不應中斷整個 pipeline。"""
         stages_called = []
 
-        async def mock_ingest_crash(session, options=None):
+        async def mock_ingest_crash(session, options=None, **kwargs):
             stages_called.append("ingest")
             raise RuntimeError("Token 檔案不存在")
 
-        async def mock_decrypt(session, options=None):
+        async def mock_decrypt(session, options=None, **kwargs):
             stages_called.append("decrypt")
             return _make_decrypt_summary()
 
-        async def mock_parse(session, options=None):
+        async def mock_parse(session, options=None, **kwargs):
             stages_called.append("parse")
             return _make_parse_summary()
 
-        async def mock_classify(session):
+        async def mock_classify(session, **kwargs):
             stages_called.append("classify")
             return _make_classify_summary()
 
-        async def mock_notify(session, *, bill_ids=None):
+        async def mock_notify(session, *, bill_ids=None, **kwargs):
             stages_called.append("notify")
             return _make_notify_summary()
 

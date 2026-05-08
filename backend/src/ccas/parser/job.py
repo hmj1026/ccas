@@ -29,6 +29,7 @@ from ccas.parser.staging import (
     update_attachment_status,
 )
 from ccas.pipeline.options import PipelineOptions
+from ccas.pipeline.progress import NoopProgressReporter, ProgressReporter
 from ccas.storage.models import StagedAttachment
 
 logger = logging.getLogger(__name__)
@@ -278,6 +279,7 @@ async def _process_attachment(
 async def run_parse_job(
     session: AsyncSession,
     options: PipelineOptions | None = None,
+    reporter: ProgressReporter | None = None,
 ) -> ParseSummary:
     """執行單次批次 PDF 解析。
 
@@ -294,16 +296,25 @@ async def run_parse_job(
     Returns:
         ParseSummary 統計摘要。
     """
+    if reporter is None:
+        reporter = NoopProgressReporter()
+
     summary = ParseSummary()
     force = options.force if options else False
 
     attachments = await fetch_parseable_attachments(session, options)
+    await reporter.stage_started("parse", total=len(attachments))
     if not attachments:
         logger.info("沒有待解析的附件，跳過 parsing")
         return summary
 
+    processed = 0
     for attachment in attachments:
-        await _process_attachment(attachment, session, summary, force=force)
+        try:
+            await _process_attachment(attachment, session, summary, force=force)
+        finally:
+            processed += 1
+            await reporter.stage_item_done("parse", processed=processed)
 
     await session.commit()
 

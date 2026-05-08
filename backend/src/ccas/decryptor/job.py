@@ -18,6 +18,7 @@ from ccas.decryptor.staging import fetch_pending_attachments, update_attachment_
 from ccas.errors import DecryptError
 from ccas.ingestor.staging import resolve_staged_path
 from ccas.pipeline.options import PipelineOptions
+from ccas.pipeline.progress import NoopProgressReporter, ProgressReporter
 from ccas.storage.models import StagedAttachment
 
 logger = logging.getLogger(__name__)
@@ -149,6 +150,7 @@ async def _process_attachment(
 async def run_decryption_job(
     session: AsyncSession,
     options: PipelineOptions | None = None,
+    reporter: ProgressReporter | None = None,
 ) -> DecryptionSummary:
     """執行單次批次 PDF 解密。
 
@@ -161,19 +163,30 @@ async def run_decryption_job(
     Args:
         session: 非同步 DB Session（由呼叫端注入）。
         options: Pipeline 選項（bank_code / date range 篩選）。
+        reporter: 進度回報（pipeline-operations-center §3A.2）。``None``
+            時走 NoopProgressReporter。
 
     Returns:
         DecryptionSummary 統計摘要。
     """
+    if reporter is None:
+        reporter = NoopProgressReporter()
+
     summary = DecryptionSummary()
 
     attachments = await fetch_pending_attachments(session, options)
+    await reporter.stage_started("decrypt", total=len(attachments))
     if not attachments:
         logger.info("沒有待解密的附件，跳過 decryption")
         return summary
 
+    processed = 0
     for attachment in attachments:
-        await _process_attachment(attachment, session, summary)
+        try:
+            await _process_attachment(attachment, session, summary)
+        finally:
+            processed += 1
+            await reporter.stage_item_done("decrypt", processed=processed)
 
     await session.commit()
 

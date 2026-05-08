@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ccas.bot.client import send_message
 from ccas.config import get_settings
+from ccas.pipeline.progress import NoopProgressReporter, ProgressReporter
 from ccas.storage.models import Bill
 from ccas.storage.queries import fetch_bank_names
 
@@ -36,6 +37,7 @@ class NotifySummary:
 
 async def run_notify_job(
     session: AsyncSession,
+    reporter: ProgressReporter | None = None,
 ) -> NotifySummary:
     """查詢未通知帳單並發送 Telegram 通知。
 
@@ -43,15 +45,21 @@ async def run_notify_job(
 
     Args:
         session: 非同步 DB Session。
+        reporter: 進度回報（pipeline-operations-center §3A.5）。``None``
+            時走 NoopProgressReporter。
 
     Returns:
         NotifySummary 統計摘要。
     """
+    if reporter is None:
+        reporter = NoopProgressReporter()
+
     summary = NotifySummary()
 
     settings = get_settings()
     if not settings.telegram_bot_token or not settings.telegram_chat_id:
         logger.info("TELEGRAM_BOT_TOKEN 或 TELEGRAM_CHAT_ID 未設定，跳過 notify stage")
+        await reporter.stage_started("notify", total=0)
         return summary
 
     stmt = select(Bill).where(Bill.is_notified.is_(False))
@@ -60,6 +68,7 @@ async def run_notify_job(
 
     if not bills:
         logger.info("沒有未通知的帳單，跳過通知")
+        await reporter.stage_started("notify", total=0)
         return summary
 
     bank_names = await fetch_bank_names(session)
@@ -70,6 +79,8 @@ async def run_notify_job(
         (b.id, b.bank_code, b.billing_month, b.total_amount, b.due_date) for b in bills
     ]
 
+    await reporter.stage_started("notify", total=len(bill_rows))
+    processed = 0
     for bill_id, bill_code, bill_month, bill_total, bill_due in bill_rows:
         try:
             bank_name = bank_names.get(bill_code, bill_code)
@@ -101,5 +112,8 @@ async def run_notify_job(
             summary.failed_count += 1
             summary.errors.append(error_msg)
             logger.error(error_msg)
+        finally:
+            processed += 1
+            await reporter.stage_item_done("notify", processed=processed)
 
     return summary

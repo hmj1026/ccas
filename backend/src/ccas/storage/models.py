@@ -9,20 +9,25 @@
 - bank_settings: 銀行 enabled toggle 與 display metadata（oauth-onboarding-ui §2.1）
 - bank_secrets: PDF 解密密碼密文儲存（oauth-onboarding-ui §2.2）
 - gmail_oauth_state: Gmail OAuth Web flow PKCE state（oauth-onboarding-ui §2.3）
+- pipeline_runs: pipeline 執行歷史與即時進度 SSOT（pipeline-operations-center §1）
 """
 
 from datetime import UTC, date, datetime
-from typing import Literal
+from enum import StrEnum
+from typing import Any, Literal
 
 from sqlalchemy import (
+    JSON,
     Boolean,
     Date,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -244,4 +249,87 @@ class GmailOAuthState(Base):
     code_verifier: Mapped[str] = mapped_column(String(256), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=_utcnow, nullable=False
+    )
+
+
+class PipelineRunStatus(StrEnum):
+    """Pipeline 執行狀態（pipeline-operations-center D5）。
+
+    queued: 已建立 row 等待 worker 取出
+    running: worker 已開始執行
+    succeeded: 全部階段完成（item-level failure 仍算 succeeded，
+        計入 stage_summary.fail）
+    failed: 階段 crash / RQ timeout / unhandled exception
+    cancelled: 預留欄位，本 change 不實作 cancel API（Phase 2）
+    """
+
+    QUEUED = "queued"
+    RUNNING = "running"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+
+class PipelineRun(Base):
+    """Pipeline 執行歷史與即時進度 SSOT（pipeline-operations-center §1）。
+
+    取代「trigger 後只回 job_id、跑完即遺」的舊行為；每筆 trigger 對應
+    一筆 row，由 ``DbProgressReporter`` 在 worker 執行期間更新進度欄位。
+    CLI 與 scheduler 路徑走 ``NoopProgressReporter`` 不寫此表（D10）。
+
+    欄位：
+    - ``id``: UUID PK，由 router 端產生（不依賴 DB autoincrement）
+    - ``job_id``: RQ enqueue 後的 job id，與 ``id`` 一對一
+    - ``status``: 狀態 enum，初始 queued、worker 開始 running、終態 succeeded/failed
+    - ``triggered_by``: ``"api"`` / ``"cli"`` / ``"scheduler"`` 等字面值（D2.1）
+    - ``params``: trigger 時的 PipelineOptions JSON（force / bank_code / year /
+      month / from_stage / to_stage）
+    - ``current_stage``: 當前正在執行的階段名稱（ingest/decrypt/parse/classify/notify）
+    - ``current_stage_processed``: 當前階段已處理 item 數
+    - ``current_stage_total``: 當前階段總 item 數
+    - ``stage_summary``: 已完成階段陣列，每筆 ``{stage, ok, fail, elapsed_ms}``
+    - ``error_message``: 階段 crash 或 RQ timeout 訊息
+    - ``started_at`` / ``completed_at`` / ``created_at`` / ``updated_at``: 時間戳
+
+    SQLite trigger 確保 ``updated_at`` 在 Core-style bulk UPDATE 下亦自動刷新
+    （與 ``bank_settings`` 同 pattern，見 alembic ``2570bbdebf54``）。
+    """
+
+    __tablename__ = "pipeline_runs"
+    __table_args__ = (
+        Index(
+            "ix_pipeline_runs_created_at_desc",
+            text("created_at DESC"),
+        ),
+        Index("ix_pipeline_runs_status", "status"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    job_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[PipelineRunStatus] = mapped_column(
+        String(16),
+        nullable=False,
+        default=PipelineRunStatus.QUEUED,
+        server_default=PipelineRunStatus.QUEUED.value,
+    )
+    triggered_by: Mapped[str] = mapped_column(String(32), nullable=False)
+    params: Mapped[dict[str, Any]] = mapped_column(JSON, nullable=False, default=dict)
+    current_stage: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    current_stage_processed: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    current_stage_total: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    stage_summary: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSON, nullable=False, default=list
+    )
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=_utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=_utcnow, onupdate=_utcnow, nullable=False
     )

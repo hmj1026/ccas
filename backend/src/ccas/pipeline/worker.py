@@ -8,13 +8,17 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from datetime import UTC, datetime
 from types import TracebackType
 
 from redis import Redis
 from rq import Retry
 from rq.job import Job
+from sqlalchemy import update
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from ccas.pipeline.summary import PipelineSummary
+from ccas.storage.models import PipelineRun, PipelineRunStatus
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +35,68 @@ def get_retry() -> Retry:
     return Retry(max=MAX_RETRIES, interval=_calculate_retry_delays())
 
 
-def run_pipeline_sync(opts: dict | None = None) -> dict:
+async def _set_pipeline_run_status(
+    session: AsyncSession,
+    run_id: str,
+    status: PipelineRunStatus,
+    *,
+    started_at: datetime | None = None,
+    completed_at: datetime | None = None,
+    error_message: str | None = None,
+) -> None:
+    """寫入 PipelineRun 狀態與對應時間戳。
+
+    僅設置呼叫端顯式傳入的欄位（``None`` 不寫入），避免在 running → failed
+    轉換時誤覆寫 ``started_at``。
+    """
+    values: dict[str, object] = {"status": status}
+    if started_at is not None:
+        values["started_at"] = started_at
+    if completed_at is not None:
+        values["completed_at"] = completed_at
+    if error_message is not None:
+        values["error_message"] = error_message
+
+    await session.execute(
+        update(PipelineRun).where(PipelineRun.id == run_id).values(**values)
+    )
+    await session.commit()
+
+
+async def mark_pipeline_run_running(session: AsyncSession, run_id: str) -> None:
+    """將 PipelineRun 標記為 running 並記錄 started_at。"""
+    await _set_pipeline_run_status(
+        session,
+        run_id,
+        PipelineRunStatus.RUNNING,
+        started_at=datetime.now(UTC),
+    )
+
+
+async def mark_pipeline_run_succeeded(session: AsyncSession, run_id: str) -> None:
+    """將 PipelineRun 標記為 succeeded 並記錄 completed_at。"""
+    await _set_pipeline_run_status(
+        session,
+        run_id,
+        PipelineRunStatus.SUCCEEDED,
+        completed_at=datetime.now(UTC),
+    )
+
+
+async def mark_pipeline_run_failed(
+    session: AsyncSession, run_id: str, error_message: str
+) -> None:
+    """將 PipelineRun 標記為 failed 並記錄錯誤訊息。"""
+    await _set_pipeline_run_status(
+        session,
+        run_id,
+        PipelineRunStatus.FAILED,
+        completed_at=datetime.now(UTC),
+        error_message=error_message,
+    )
+
+
+def run_pipeline_sync(opts: dict | None = None, run_id: str | None = None) -> dict:
     """RQ worker 執行的同步入口。
 
     建立 async event loop 執行 run_pipeline()，
@@ -39,22 +104,41 @@ def run_pipeline_sync(opts: dict | None = None) -> dict:
 
     Args:
         opts: 可選的 pipeline 參數 dict（由 API 端序列化傳入）。
+        run_id: 可選的 PipelineRun id（由 API trigger 建 row 後傳入）。
 
     若執行失敗且重試次數已達上限，將所有 staging 項目
     標記為 manual_review_needed。
     """
     from ccas.pipeline.options import PipelineOptions
     from ccas.pipeline.orchestrator import run_pipeline
+    from ccas.pipeline.progress import DbProgressReporter
     from ccas.storage.database import get_engine, get_session_factory
 
     options = PipelineOptions.from_dict(opts)
 
     async def _run() -> PipelineSummary:
         session_factory = get_session_factory()
-        async with session_factory() as session:
-            result = await run_pipeline(session, options)
-        await get_engine().dispose()
-        return result
+        try:
+            if run_id is not None:
+                async with session_factory() as session:
+                    await mark_pipeline_run_running(session, run_id)
+
+            reporter = (
+                DbProgressReporter(run_id, session_factory)
+                if run_id is not None
+                else None
+            )
+            async with session_factory() as session:
+                result = await run_pipeline(
+                    session, options, progress_reporter=reporter
+                )
+
+            if run_id is not None:
+                async with session_factory() as session:
+                    await mark_pipeline_run_succeeded(session, run_id)
+            return result
+        finally:
+            await get_engine().dispose()
 
     summary = asyncio.run(_run())
     return {
@@ -113,6 +197,10 @@ def on_failure_handler(
             session_factory = get_session_factory()
             async with session_factory() as session:
                 count = await mark_manual_review(session)
+                run_id = getattr(job, "kwargs", {}).get("run_id")
+                if run_id:
+                    error_message = f"{typ.__name__}: {value}"
+                    await mark_pipeline_run_failed(session, run_id, error_message)
             await get_engine().dispose()
             return count
 

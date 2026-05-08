@@ -16,6 +16,7 @@ from ccas.classifier.staging import (
     fetch_unclassified_transactions,
     update_transaction_category,
 )
+from ccas.pipeline.progress import NoopProgressReporter, ProgressReporter
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +36,10 @@ class ClassifySummary:
     total_count: int
 
 
-async def run_classify_job(session: AsyncSession) -> ClassifySummary:
+async def run_classify_job(
+    session: AsyncSession,
+    reporter: ProgressReporter | None = None,
+) -> ClassifySummary:
     """對所有未分類交易執行關鍵字分類。
 
     流程：
@@ -46,22 +50,33 @@ async def run_classify_job(session: AsyncSession) -> ClassifySummary:
 
     Args:
         session: 非同步 DB Session（由呼叫端注入）。
+        reporter: 進度回報（pipeline-operations-center §3A.4）。``None``
+            時走 NoopProgressReporter。
 
     Returns:
         ClassifySummary 統計摘要。
     """
+    if reporter is None:
+        reporter = NoopProgressReporter()
+
     rule_set = await load_rules(session)
 
     transactions = await fetch_unclassified_transactions(session)
+    await reporter.stage_started("classify", total=len(transactions))
     if not transactions:
         logger.info("沒有未分類的交易，跳過分類")
         return ClassifySummary(classified_count=0, skipped_count=0, total_count=0)
 
     classified_count = 0
+    processed = 0
     for txn in transactions:
-        category = classify(txn.merchant, rule_set)
-        await update_transaction_category(session, txn.id, category)
-        classified_count += 1
+        try:
+            category = classify(txn.merchant, rule_set)
+            await update_transaction_category(session, txn.id, category)
+            classified_count += 1
+        finally:
+            processed += 1
+            await reporter.stage_item_done("classify", processed=processed)
 
     await session.commit()
 
