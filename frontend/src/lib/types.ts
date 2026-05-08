@@ -192,3 +192,61 @@ export interface CategoryKeywordUpdateRequest {
   readonly keyword?: string
   readonly category?: string
 }
+
+// -- Pipeline Operations --
+
+/** Pipeline 階段名稱。 */
+export type PipelineStage = 'ingest' | 'decrypt' | 'parse' | 'classify' | 'notify'
+
+/** Pipeline 執行狀態。 */
+export type PipelineRunStatus =
+  | 'queued'
+  | 'running'
+  | 'succeeded'
+  | 'failed'
+  | 'cancelled'
+
+/** Pipeline 觸發請求參數。 */
+export interface PipelineTriggerRequest {
+  readonly force?: boolean
+  readonly bank_code?: string | null
+  readonly year?: number | null
+  readonly month?: number | null
+  readonly from_stage?: PipelineStage | null
+  readonly to_stage?: PipelineStage | null
+}
+
+/** Pipeline 觸發回應資料。 */
+export interface PipelineTriggerData {
+  readonly job_id: string
+  readonly run_id: string
+}
+
+/** Pipeline 單一階段摘要。 */
+export interface PipelineStageEntry {
+  readonly stage: PipelineStage | string
+  readonly ok: number
+  readonly fail: number
+  readonly elapsed_ms: number
+}
+
+/** Pipeline 執行紀錄列表項目。 */
+export interface PipelineRunSummary {
+  readonly id: string
+  readonly job_id: string
+  readonly status: PipelineRunStatus
+  readonly triggered_by: string
+  readonly params: PipelineTriggerRequest
+  readonly current_stage: PipelineStage | string | null
+  readonly current_stage_processed: number
+  readonly current_stage_total: number
+  readonly stage_summary: readonly PipelineStageEntry[]
+  readonly error_message: string | null
+  readonly started_at: string | null
+  readonly completed_at: string | null
+  readonly created_at: string
+  readonly updated_at: string
+}
+
+/** Pipeline 執行紀錄詳情。 */
+export type PipelineRunDetail = PipelineRunSummary

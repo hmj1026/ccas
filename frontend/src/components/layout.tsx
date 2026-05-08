@@ -9,6 +9,7 @@ import {
   Receipt,
   BarChart3,
   FileText,
+  Workflow,
   Settings,
   Settings2,
   Menu,
@@ -26,6 +27,7 @@ const NAV_ITEMS = [
   { to: '/transactions', label: '交易', icon: Receipt },
   { to: '/analytics', label: '分析', icon: BarChart3 },
   { to: '/bills', label: '帳單', icon: FileText },
+  { to: '/operations', label: '操作中心', icon: Workflow },
   { to: '/settings', label: '設定', icon: Settings },
   { to: '/setup/gmail', label: '設定中心', icon: Settings2 },
 ] as const
