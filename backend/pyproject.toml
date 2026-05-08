@@ -35,6 +35,8 @@ dependencies = [
     # silent upgrade to a compromised future release. uv.lock captures the
     # wheel hash for reproducibility.
     "ddddocr==1.6.1",
+    # Excel export streaming（write_only mode）— bills-management-and-insights §8
+    "openpyxl>=3.1",
 ]
 
 [project.optional-dependencies]

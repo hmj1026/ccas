@@ -577,3 +577,47 @@ class BudgetAlertItem(BaseModel):
     amount_minor_units: int
     triggered_at: datetime
     acknowledged_at: datetime | None
+
+
+# -- bills-management-and-insights §7: Insights v2 -----------------------------
+
+
+class BankCompareItem(BaseModel):
+    """``/api/analytics/compare/banks`` 單筆。"""
+
+    bank_code: str
+    bank_name: str | None = None
+    total: int
+
+
+class YearCompareItem(BaseModel):
+    """``/api/analytics/compare/years`` 單筆。"""
+
+    year: int
+    value: int  # total or count, depending on metric
+
+
+class TopMerchantItem(BaseModel):
+    """``/api/analytics/top-merchants`` 單筆。"""
+
+    merchant: str
+    total: int
+    count: int
+
+
+class CategoryWithCompareItem(BaseModel):
+    """``/api/analytics/categories?compare_with_previous=true`` 單筆。"""
+
+    category: str
+    total: int
+    previous_total: int | None = None
+    change_percent: float | None = None
+
+
+YearMetricLiteral = Literal["total", "count"]
+TopMerchantPeriodLiteral = Literal["year", "month", "all"]
+
+
+# -- bills-management-and-insights §8: Exports ---------------------------------
+
+ExportFormatLiteral = Literal["csv", "xlsx"]

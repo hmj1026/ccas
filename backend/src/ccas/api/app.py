@@ -11,9 +11,11 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from ccas.api.deps import verify_token
 from ccas.api.routers import (
     analytics,
+    analytics_v2,
     auth,
     bills,
     budgets,
+    exports,
     overview,
     pipeline,
     reminders_settings,
@@ -86,8 +88,12 @@ def create_app() -> FastAPI:
     api_dependencies = [Depends(verify_token)]
     app.include_router(overview.router, dependencies=api_dependencies)
     app.include_router(transactions.router, dependencies=api_dependencies)
+    # Register exports BEFORE transactions_edit so the static /transactions/export
+    # path resolves before the {transaction_id} dynamic segment in transactions_edit.
+    app.include_router(exports.router, dependencies=api_dependencies)
     app.include_router(transactions_edit.router, dependencies=api_dependencies)
     app.include_router(analytics.router, dependencies=api_dependencies)
+    app.include_router(analytics_v2.router, dependencies=api_dependencies)
     app.include_router(bills.router, dependencies=api_dependencies)
     app.include_router(settings.router, dependencies=api_dependencies)
     app.include_router(pipeline.router, dependencies=api_dependencies)
