@@ -19,6 +19,7 @@ from ccas.api.routers import (
     settings,
     staged_attachments,
     transactions,
+    transactions_edit,
 )
 from ccas.api.routers.setup import admin as setup_admin
 from ccas.api.routers.setup import banks as setup_banks
@@ -83,6 +84,7 @@ def create_app() -> FastAPI:
     api_dependencies = [Depends(verify_token)]
     app.include_router(overview.router, dependencies=api_dependencies)
     app.include_router(transactions.router, dependencies=api_dependencies)
+    app.include_router(transactions_edit.router, dependencies=api_dependencies)
     app.include_router(analytics.router, dependencies=api_dependencies)
     app.include_router(bills.router, dependencies=api_dependencies)
     app.include_router(settings.router, dependencies=api_dependencies)

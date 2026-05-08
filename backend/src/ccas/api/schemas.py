@@ -117,6 +117,36 @@ class TransactionItem(BaseModel):
     billing_month: str
 
 
+class TransactionDetailItem(TransactionItem):
+    """交易詳情（bills-management-and-insights §3 / §9）含使用者編輯欄位。"""
+
+    note: str | None
+    manual_category_override: bool
+    tags: list[str]
+    merchant_alias: str
+    updated_at: datetime
+
+
+class TransactionUpdateRequest(BaseModel):
+    """``PUT /api/transactions/{id}`` request body（所有欄位皆可選）。
+
+    若提供 ``category_id`` 則同步設 ``manual_category_override = true``。
+
+    長度上限為 defense-in-depth，避免 token 洩漏後寫入過大內容打爆 DB／UI。
+    """
+
+    category_id: int | None = Field(default=None, ge=1)
+    note: str | None = Field(default=None, max_length=2000)
+    tags: list[str] | None = Field(default=None, max_length=50)
+    merchant_alias: str | None = Field(default=None, max_length=200)
+
+
+class TransactionNoteRequest(BaseModel):
+    """``POST /api/transactions/{id}/note`` request body。"""
+
+    note: str = Field(default="", max_length=2000)
+
+
 # -- Analytics --
 
 

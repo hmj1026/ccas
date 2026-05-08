@@ -19,12 +19,12 @@
 
 ## 3. 後端：交易編輯 API
 
-- [ ] 3.1 建立 `backend/src/ccas/api/routers/transactions_edit.py`
-- [ ] 3.2 實作 `PUT /api/transactions/{id}`：body `{category_id?, note?, tags?, merchant_alias?}`，更新對應欄位、設 `updated_at = now()`、若改 category_id 同步設 `manual_category_override = true`
-- [ ] 3.3 實作 `POST /api/transactions/{id}/note`：body `{note: str}`，僅更新 note 欄位（簡化常用操作）
-- [ ] 3.4 實作 `DELETE /api/transactions/{id}/manual-override`：清除 manual_category_override + 重新走 classify 邏輯（即時或標記下次 pipeline 處理）
-- [ ] 3.5 為三個端點寫 router 整合測試：覆蓋成功 / 404 / 422
-- [ ] 3.6 為 manual_override 機制寫端對端測試：編輯 category → 重跑 pipeline → 該筆 category 保留、stage_summary 記錄 skipped_due_to_manual_override
+- [x] 3.1 建立 `backend/src/ccas/api/routers/transactions_edit.py`（含 GET 詳情 + PUT/POST/DELETE 編輯共 4 端點）
+- [x] 3.2 實作 `PUT /api/transactions/{id}`：body `{category_id?, note?, tags?, merchant_alias?}`，更新對應欄位（`updated_at` 由 SQLAlchemy `onupdate=_utcnow` + SQLite trigger 雙保險自動寫入）、若改 category_id 同步設 `manual_category_override = true`；invalid category_id → 422
+- [x] 3.3 實作 `POST /api/transactions/{id}/note`：body `{note: str}`，僅更新 note 欄位（不影響 manual_override）
+- [x] 3.4 實作 `DELETE /api/transactions/{id}/manual-override`：清除 manual_override flag + 即時跑 `user_rules → engine` classify（**spec deviation**：採「即時」路徑，與 pipeline `run_classify_job` 邏輯共用）
+- [x] 3.5 為四個端點寫 router 整合測試（17 案：CRUD happy path + 404 + 422 + auth + GET detail + 多欄位部分更新 + reclassify behavior）
+- [x] 3.6 為 manual_override 機制寫端對端測試：編輯 category → 連跑 5 次 `run_classify_job` → category 保留為使用者編輯值；同步把 `run_reclassify_job` 改為遵守 `manual_override → user_rules → engine` 優先序（§15.1 acceptance）
 
 ## 4. 後端：分類規則 API
 
