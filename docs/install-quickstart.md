@@ -123,6 +123,21 @@ cat ./data/secrets/api-token   # CCAS_DATA_LOCATION 對應路徑
 
 ---
 
+## 步驟 7：個人化設定（選用）
+
+完成 onboarding 後，可至下列頁面開啟「個人帳務管理」相關功能（詳細操作見
+[docs/personal-rules-and-budgets.md](personal-rules-and-budgets.md)）：
+
+| 頁面 | 用途 |
+|---|---|
+| `/insights` | 月趨勢、銀行對比、年度對比、商家排行、類別月對月變化；右上角「匯出」可下載 CSV / xlsx |
+| `/settings/reminders` | 為每筆未付帳單設定提醒：`enabled / days_before / channel`（telegram / ui_banner / both）+ 一鍵測試發送 |
+| `/settings/budgets` | 三種 scope 預算（每月總額 / 單類別 / 單銀行）+ 80% / 100% 兩階 Telegram 告警；overview 頁頂部會顯示 active alert banner |
+| `/transactions/{id}` | 從交易列表點鉛筆 icon 進入：可改類別（手動覆寫）、備註、標籤、商家別名；手動覆寫後重跑 pipeline 不會被覆蓋 |
+| `/settings/rules` | 個人分類規則 CRUD：keyword / exact / regex 三種 pattern + priority + 即時規則測試；regex nested quantifier 警示 banner |
+
+---
+
 ## 進階 fallback：檔案與 env 設定
 
 ### 各銀行 PDF 密碼

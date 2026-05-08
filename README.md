@@ -28,6 +28,19 @@ docker compose -f docker-compose.yml up -d
 [docs/install-quickstart.md](docs/install-quickstart.md)。
 升級流程見 [docs/upgrade-guide.md](docs/upgrade-guide.md)。
 
+## 個人帳務管理
+
+`bills-management-and-insights` 提供：
+
+- **交易編輯**：在 `/transactions/{id}` 手動改類別（建立 manual override，pipeline 不會覆寫）、備註、標籤、商家別名
+- **個人分類規則**：`/settings/rules` keyword / exact / regex 三種 pattern + priority + 即時規則測試；含 100ms regex timeout fail-soft 與 nested quantifier 警示
+- **付款提醒**：`/settings/reminders` 為每筆未付帳單設定 `enabled / days_before / channel`（telegram / ui_banner / both）+ 一鍵測試
+- **預算告警**：`/settings/budgets` 三種 scope（每月總額 / 單類別 / 單銀行）+ 80% / 100% 兩階 Telegram 推播 + overview banner
+- **Insights**：`/insights` 含月趨勢、銀行對比、年度對比、商家排行、類別 vs 上月
+- **匯出**：CSV / xlsx 串流匯出，支援日期 / 銀行 / 類別 filter 及 `include_user_fields`
+
+詳細操作流程、API 範例與規則 best practice 見 [docs/personal-rules-and-budgets.md](docs/personal-rules-and-budgets.md)。
+
 ## 系統架構
 
 ### 資料流
