@@ -1,21 +1,21 @@
 ## 1. DB 模型與 migration
 
-- [ ] 1.1 在 `backend/src/ccas/storage/models.py` `Transaction` 新增 5 欄位：`manual_category_override` (bool default false)、`note` (text default '')、`tags` (JSON array default '[]')、`merchant_alias` (str default '')、`updated_at` (datetime)
-- [ ] 1.2 新增 `ClassificationRule` 模型（`id` PK、`pattern` text、`pattern_type` enum、`category_id` FK、`priority` int、`enabled` bool、`created_at`、`updated_at`）
-- [ ] 1.3 新增 `Budget` 模型（`id` PK、`scope` enum、`scope_ref` text nullable、`amount_minor_units` int、`alert_threshold_percent` int default 80、`enabled` bool、`created_at`、`updated_at`）
-- [ ] 1.4 新增 `BudgetAlert` 模型（`id` PK、`budget_id` FK、`period_year_month` str、`threshold_breached_percent` int、`current_amount_minor_units` int、`triggered_at`、`acknowledged_at` nullable）
-- [ ] 1.5 建立 alembic migration `<ts>_add_transaction_user_fields.py`：加 5 欄位 + 索引 `(category_id, transaction_date)`（補強 insights 查詢）
-- [ ] 1.6 建立 alembic migration `<ts>_add_user_rules_budgets.py`：建 3 表 + 索引 `classification_rules(priority DESC, enabled)`、`budgets(scope, scope_ref)`、`budget_alerts(triggered_at DESC)`
-- [ ] 1.7 兩 migration 都驗證 `upgrade head` + `downgrade -1` + `upgrade head` 冪等
+- [x] 1.1 在 `backend/src/ccas/storage/models.py` `Transaction` 新增 5 欄位（**spec deviation**：note 已存在保留 nullable Text；其餘四欄位新增）
+- [x] 1.2 新增 `ClassificationRule` 模型（**spec deviation**：Python class 改名 `UserClassificationRule` 避開既有 `classifier/rules.py:ClassificationRule` dataclass；table 名仍為 `classification_rules`）
+- [x] 1.3 新增 `Budget` 模型（`id` PK、`scope` enum、`scope_ref` text nullable、`amount_minor_units` int、`alert_threshold_percent` int default 80、`enabled` bool、`created_at`、`updated_at`）
+- [x] 1.4 新增 `BudgetAlert` 模型（`id` PK、`budget_id` FK、`period_year_month` str、`threshold_breached_percent` int、`current_amount_minor_units` int、`triggered_at`、`acknowledged_at` nullable）
+- [x] 1.5 建立 alembic migration `a4b8c2d6e0f1_add_transaction_user_fields.py`（**spec deviation**：索引改為 `(category, trans_date)` — 既有 schema 無 category_id FK，等價支援 insights group by）
+- [x] 1.6 建立 alembic migration `5f9d4a7b3c8e_add_user_rules_budgets.py`：3 表 + 全部 spec 索引 + SQLite updated_at triggers
+- [x] 1.7 兩 migration 都驗證 `upgrade head` + `downgrade -2` + `upgrade head` 冪等
 
 ## 2. 後端：分類規則引擎
 
-- [ ] 2.1 建立 `backend/src/ccas/classifier/user_rules.py`：`UserRuleMatcher` class（query enabled rules、match by pattern_type、含 100ms per-rule timeout）
-- [ ] 2.2 為三種 pattern_type 寫單元測試：keyword / exact / regex 各覆蓋 happy path + edge case（empty string、unicode、case insensitive）
-- [ ] 2.3 為 regex timeout 寫測試：catastrophic backtracking pattern + sleep（fake `re.search`）→ 觸發 timeout、log warning、不阻斷其他規則
-- [ ] 2.4 修改 `backend/src/ccas/classifier/engine.py`：classify 流程改為「manual_override → user_rules → 既有 engine → 預設」優先序
-- [ ] 2.5 為新優先序寫整合測試：(a) manual_override=true 時跳過、(b) user_rules 命中、(c) user_rules 不命中走 engine、(d) 全不命中走預設
-- [ ] 2.6 在 stage_summary 內紀錄各層命中數（`manual_override_count`、`user_rule_hits`、`engine_hits`、`unclassified`）
+- [x] 2.1 建立 `backend/src/ccas/classifier/user_rules.py`：`UserRuleMatcher` 含 100ms timeout via `asyncio.wait_for(loop.run_in_executor(...))`
+- [x] 2.2 為三種 pattern_type 寫單元測試：keyword / exact / regex 各覆蓋 happy path + edge case
+- [x] 2.3 為 regex timeout 寫測試（monkeypatch `_re_search` 模擬慢）→ 觸發 timeout、log warning、不阻斷其他規則
+- [x] 2.4 修改 `backend/src/ccas/classifier/job.py`（**spec deviation**：spec 寫修改 `engine.py`，實際在 job.py 編排優先序保持 engine 純函式不動）
+- [x] 2.5 為新優先序寫整合測試 5 案：manual_override skip / user_rules win / engine fallback / default category / 混合 mix breakdown
+- [ ] 2.6 在 stage_summary 內紀錄各層命中數（**partial**：ClassifySummary 已含欄位 + logger.info 輸出；尚未串接到 PipelineRun.stage_summary[-1] 額外 key — 需擴展 ProgressReporter.stage_finished 契約，留下個 PR 補）
 
 ## 3. 後端：交易編輯 API
 
@@ -28,14 +28,14 @@
 
 ## 4. 後端：分類規則 API
 
-- [ ] 4.1 建立 `backend/src/ccas/api/routers/rules.py`
-- [ ] 4.2 實作 `GET /api/rules`：列出全部 rules、按 priority DESC，支援 `?enabled=true|false` filter
-- [ ] 4.3 實作 `POST /api/rules`：body `{pattern, pattern_type, category_id, priority?, enabled?}`，建立 rule
-- [ ] 4.4 實作 `PUT /api/rules/{id}`：更新 rule
-- [ ] 4.5 實作 `DELETE /api/rules/{id}`：刪除 rule
-- [ ] 4.6 實作 `POST /api/rules/test`：body `{pattern, pattern_type, sample_text}`，回 `{matches: bool}`，提供 UI 端「測試規則」即時預覽
-- [ ] 4.7 為五個端點寫 router 整合測試
-- [ ] 4.8 為 priority 排序與 enabled filter 寫測試覆蓋
+- [x] 4.1 建立 `backend/src/ccas/api/routers/rules.py`
+- [x] 4.2 實作 `GET /api/rules`：列出全部 rules、按 priority DESC + id ASC，支援 `?enabled=true|false` filter
+- [x] 4.3 實作 `POST /api/rules`：body `{pattern, pattern_type, category_id, priority?, enabled?}`；invalid category_id → 422
+- [x] 4.4 實作 `PUT /api/rules/{id}`：partial update；不存在 → 404
+- [x] 4.5 實作 `DELETE /api/rules/{id}`：不存在 → 404
+- [x] 4.6 實作 `POST /api/rules/test`：重用 UserRuleMatcher（含 100ms regex timeout fail-soft）保證與 pipeline 行為一致
+- [x] 4.7 為五個端點寫 router 整合測試（17 案：CRUD happy path + 404 + 422 + auth + regex compile error fail-soft）
+- [x] 4.8 為 priority 排序與 enabled filter 寫測試覆蓋
 
 ## 5. 後端：付款提醒 API
 
