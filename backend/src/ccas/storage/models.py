@@ -93,6 +93,24 @@ class Transaction(Base):
     note: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
 
+    # bills-management-and-insights §1.1 — 使用者編輯欄位
+    manual_category_override: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("0")
+    )
+    tags: Mapped[list[str]] = mapped_column(
+        JSON, nullable=False, default=list, server_default=text("'[]'")
+    )
+    merchant_alias: Mapped[str] = mapped_column(
+        Text, nullable=False, default="", server_default=""
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        nullable=False,
+        default=_utcnow,
+        onupdate=_utcnow,
+        server_default=text("CURRENT_TIMESTAMP"),
+    )
+
     bill: Mapped["Bill"] = relationship(back_populates="transactions")
 
 
@@ -333,3 +351,144 @@ class PipelineRun(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=_utcnow, onupdate=_utcnow, nullable=False
     )
+
+
+class PatternType(StrEnum):
+    """使用者分類規則的比對策略（bills-management-and-insights §1.2）。
+
+    keyword: 子字串比對（case-insensitive，正規化後）
+    exact: 完全相等（normalize 後）
+    regex: 正規表示式（含 100ms timeout 保護，避免 catastrophic backtracking）
+    """
+
+    KEYWORD = "keyword"
+    EXACT = "exact"
+    REGEX = "regex"
+
+
+class UserClassificationRule(Base):
+    """使用者自訂進階分類規則（bills-management-and-insights §1.2）。
+
+    與既有 ``categories`` 表（keyword + 字串 category）並列：
+    - ``categories``：seed yaml 與簡單 keyword 規則（內建分類引擎）
+    - ``classification_rules``：使用者自訂進階規則，支援 keyword / exact /
+      regex 三種 pattern_type、priority 排序、enabled toggle
+
+    classify 流程依序：``manual_category_override`` → user rules
+    （priority DESC）→ 內建 engine → ``DEFAULT_CATEGORY``。
+
+    **Spec deviation**：spec §1.2 命名為 ``ClassificationRule``；為避免與
+    既有 ``classifier/rules.py:ClassificationRule`` (in-memory dataclass for
+    keyword Category snapshot) 命名衝突，Python class 改名為
+    ``UserClassificationRule``。table 名仍為 ``classification_rules`` 與 spec
+    一致；對 API / migration / FK reference 完全等價。
+    """
+
+    __tablename__ = "classification_rules"
+    __table_args__ = (
+        Index(
+            "ix_classification_rules_priority_enabled",
+            text("priority DESC"),
+            "enabled",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    pattern: Mapped[str] = mapped_column(Text, nullable=False)
+    pattern_type: Mapped[PatternType] = mapped_column(
+        String(16), nullable=False, default=PatternType.KEYWORD
+    )
+    category_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("categories.id"), nullable=False
+    )
+    priority: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default=text("1")
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=_utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=_utcnow,
+        onupdate=_utcnow,
+        nullable=False,
+        server_default=text("CURRENT_TIMESTAMP"),
+    )
+
+
+class BudgetScope(StrEnum):
+    """預算範圍（bills-management-and-insights §1.3）。
+
+    monthly_total: 整月總支出 cap（``scope_ref`` 必為 NULL）
+    monthly_category: 單一分類月支出 cap（``scope_ref`` 為 category 名稱）
+    monthly_bank: 單一銀行月支出 cap（``scope_ref`` 為 bank_code）
+    """
+
+    MONTHLY_TOTAL = "monthly_total"
+    MONTHLY_CATEGORY = "monthly_category"
+    MONTHLY_BANK = "monthly_bank"
+
+
+class Budget(Base):
+    """預算上限與警示閾值（bills-management-and-insights §1.3）。
+
+    每筆 row 為一個 active 預算規則。``scope_ref`` 依 ``scope`` 不同有不同
+    解讀（見 BudgetScope docstring）；evaluator 每日跑一次（scheduler），
+    超過 ``alert_threshold_percent`` 即建立 BudgetAlert + 推 Telegram。
+    """
+
+    __tablename__ = "budgets"
+    __table_args__ = (Index("ix_budgets_scope_ref", "scope", "scope_ref"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    scope: Mapped[BudgetScope] = mapped_column(String(32), nullable=False)
+    scope_ref: Mapped[str | None] = mapped_column(Text, nullable=True)
+    amount_minor_units: Mapped[int] = mapped_column(Integer, nullable=False)
+    alert_threshold_percent: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=80, server_default="80"
+    )
+    enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default=text("1")
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=_utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=_utcnow,
+        onupdate=_utcnow,
+        nullable=False,
+        server_default=text("CURRENT_TIMESTAMP"),
+    )
+
+
+class BudgetAlert(Base):
+    """預算超支警示記錄（bills-management-and-insights §1.4）。
+
+    evaluator 偵測到超過閾值即建立一筆。同月同 budget 同 threshold 不重
+    複觸發（evaluator 端去重）。``acknowledged_at`` 由 dashboard banner 的
+    確認按鈕填入。
+    """
+
+    __tablename__ = "budget_alerts"
+    __table_args__ = (
+        Index(
+            "ix_budget_alerts_triggered_at_desc",
+            text("triggered_at DESC"),
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    budget_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("budgets.id"), nullable=False
+    )
+    period_year_month: Mapped[str] = mapped_column(String(7), nullable=False)
+    threshold_breached_percent: Mapped[int] = mapped_column(Integer, nullable=False)
+    current_amount_minor_units: Mapped[int] = mapped_column(Integer, nullable=False)
+    triggered_at: Mapped[datetime] = mapped_column(
+        DateTime, default=_utcnow, nullable=False
+    )
+    acknowledged_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
