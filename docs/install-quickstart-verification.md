@@ -7,6 +7,23 @@ release-docker workflow 推送 `v0.1.0-rc.1` image 至 GHCR 後，**release mana
 > 本 runbook 中提到的 `${CCAS_PORT}` / `${CCAS_DATA_LOCATION}` 等變數，請以你 `.env`
 > 中的實際值替換；下列範例使用預設 `8080` / `./data`。
 
+## 目前本機預驗證紀錄
+
+2026-05-09 以本機 production image 預驗證，不取代 release manager 的 GHCR
+`v0.1.0-rc.1` sign-off：
+
+- 工作目錄：`/tmp/ccas-openspec-verify`
+- 映像：`ghcr.io/hmj1026/ccas-backend:local`、`ccas-frontend:local`、`ccas-proxy:local`
+- `.env`：`CCAS_VERSION=local`、`CCAS_PORT=12284`、`PUBLIC_BASE_URL=http://localhost:12284`
+- 通過：`/api/health` 200、`data/secrets/{api-token,api-token-version,master.key}` 自動建立且 0600、首次登入 `/login` → `/overview`
+- 通過：`/setup/secrets` env-only 橫幅顯示 7 筆，點「一鍵匯入 env 密碼」後 7 筆皆轉為 DB source，env fallback 仍可見，SQLite 中 ciphertext 不含 env 明文
+- 通過：`/setup/gmail` 顯示 `http://localhost:12284/setup/gmail/callback`，上傳 `credentials.json` 後 authorize URL 使用同一 redirect URI 與 PKCE S256
+- 通過：`/tmp/ccas-telegram-verify` 以同一份 `.env` 補入 Telegram 變數、`CCAS_VERSION=local`、`CCAS_PORT=12285`，不使用 `--profile`；bot service `healthy`、Telegram `getMe.ok=true`、`sendMessage.ok=true`，proxy `/api/health` 200（token/chat id 未寫入紀錄）
+
+仍需 release / 外部服務驗證：GHCR 假 tag workflow、真實 Google OAuth
+consent / callback / revoke、`v0.1.0-rc.1` → `v0.1.0-rc.2` 升級、多架構 pull、
+正式 tag 與 archive。
+
 ---
 
 ## 環境準備

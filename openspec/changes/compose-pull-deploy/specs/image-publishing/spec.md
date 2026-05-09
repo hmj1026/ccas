@@ -2,7 +2,7 @@
 
 ### Requirement: GHCR 自動發布工作流
 
-系統 SHALL 提供 `.github/workflows/release-docker.yaml`，於下列觸發條件執行 image 建置與發布到 GitHub Container Registry：(1) push tag 符合 `v*`，(2) push branch `main` 或 `master`。Workflow SHALL 建置並發布 `ccas-backend`、`ccas-frontend`、`ccas-proxy` 三個 image。Workflow SHALL 使用 `GITHUB_TOKEN` 認證 GHCR、不得在 source 中硬編 token。
+系統 SHALL 提供 `.github/workflows/release-docker.yaml`，於下列觸發條件執行 image 建置與發布到 GitHub Container Registry：(1) push tag 符合 `v*`，(2) push branch `main` 或 `master`。Workflow SHALL 建置並發布 `ccas-backend`、`ccas-frontend`、`ccas-proxy` 三個 image。Workflow SHALL 使用 `GITHUB_TOKEN` 認證 GHCR 與建立 GitHub Release、不得在 source 中硬編 token，且 SHALL 宣告 `permissions: contents: write, packages: write`。
 
 #### Scenario: tag 觸發完整版本發布
 
