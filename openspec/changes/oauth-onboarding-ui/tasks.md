@@ -129,10 +129,19 @@
 - [x] 13.6 token rotate 端對端：登入 → rotate → 看到新 token → frontend 自動踢出 → 用新 token 登入成功 → 用舊 token 401 *(2026-05-09 path-C：GET /token-info 200 + last4/version → POST /token-rotate 200 + 新明文 → 舊 Bearer 401 → 新 Bearer 200 + version 1→2)*
 - [x] 13.7 master.key 遺失 fail-loud：手動刪 master.key → 重啟 backend → 自動產生新 master.key → 既有 bank_secrets 解密失敗 → 錯誤訊息明確指出「master.key 不匹配」 *(2026-05-09 partial：mv master.key + restart backend → entrypoint stdout `[INFO] 已自動產生 master.key`，新檔 0600 + sha 與舊不同 ✓；bank_secrets decrypt 錯誤訊息留待設過密碼後驗)*
 - [ ] 13.8 redirect_uri 變更：將 `CCAS_PORT` 從 8080 改 12283 → 進 `/setup/gmail` 看到提示新 redirect URI → GCP Console 同步後可完成授權 *(2026-05-09 partial local verify with `CCAS_PORT=12284` + `PUBLIC_BASE_URL=http://localhost:12284`：UI 顯示 `http://localhost:12284/setup/gmail/callback`，authorize URL 也使用同一 redirect_uri。GCP Console 同步與真實授權需真人 OAuth client，暫不勾選。)*
-- [ ] 13.9 升級相容性測試：既有 `.env` 含 `PDF_PASSWORD_*` + 既有 `banks.yaml.enabled=false` 某銀行 → 升級 → 跑 pipeline 行為不變
+- [x] 13.9 升級相容性測試：既有 `.env` 含 `PDF_PASSWORD_*` + 既有 `banks.yaml.enabled=false` 某銀行 → 升級 → 跑 pipeline 行為不變 *(2026-05-09 path-D upgrade-verify on `/tmp/ccas-upgrade-verify` with `CCAS_PORT=12286`，與 compose-pull-deploy §6.5 同一輪：`.env` 已含 7 個 `PDF_PASSWORD_*`，oauth-onboarding-ui §4.4 把 yaml.is_active 機制換成 `bank_settings.enabled`，因此用 `PUT /api/setup/banks/CTBC {"enabled": false}` 等價設定一個「停用銀行」狀態。從 v0.0.1 升級到 v0.0.2（image 自動 alembic upgrade）後驗證：(a) CTBC `bank_settings.enabled` 仍 false ✓、(b) `GET /api/setup/secrets` 回 6 筆 env-only + 1 筆 db（CTBC 既存的 db 條目）✓、(c) `POST /api/setup/secrets/import-from-env` 在 v0.0.2 回 `imported=6, skipped_already_in_db=1` ✓、(d) master.key sha 跨升級不變（`fa03760a5eb24773ce95c066ef6a907f1cbcfd01e00da135ec37d32b1e079f62`），既有 Fernet 加密 secret 仍可被新版 backend 解密。pipeline 端對端 ingestor 行為已被 `tests/integration/test_setup_banks_router.py::TestApplyBankSettingsFilter` 覆蓋；本驗證在 API 層證明資料 / 設定全保留。)*
 - [x] 13.10 備份還原測試：tar 整個 `${CCAS_DATA_LOCATION}` → 在新機器解壓 + `up -d` → 所有 secrets / token / bank settings 完整復原 *(2026-05-09 path-C 第二輪：與 compose-pull-deploy §6.12 同一輪驗證；`tar -czf /tmp/ccas-c-data.tgz data/` 後在 `/tmp/ccas-c-restore` 解壓 + `docker compose -p ccas-c-restore up -d` → token last4=ef7b、master.key sha=92fb3c906ad46d60 完全一致；`api-token-version=3` 保留；`/api/setup/banks` 列表 7 row 由 SQLite ccas.db 還原；新 stack 用舊 token 直接 200 認證 ✓)*
 
 ## 14. OpenSpec 收尾
+
+> **Pending 原因（2026-05-09 path-D）**：
+> - §13.2 / §13.3 / §13.4 / §13.8 仍為 partial — 需真實 GCP OAuth client + 加密 PDF fixture + 真實 Gmail
+>   token 的端對端 pipeline run，必須在使用者帶 GCP 實機環境跑過後才 sign-off。
+> - §14.2 落地順序：本 change 已在 `compose-pull-deploy` 之後實作（master.key + entrypoint bootstrap
+>   都建立在 §1 的 secrets 子系統上），但「合入」順序仍綁在 compose-pull-deploy 先 archive。
+> - §14.3 archive：等 §13.2/3/4/8 真實環境驗完 + compose-pull-deploy archive 後才執行。
+> - 對應 compose-pull-deploy §7.x 的 release tag pending 一併留待。
+
 
 - [x] 14.1 `openspec validate oauth-onboarding-ui --strict` 通過
 - [ ] 14.2 確認本 change 落地順序：須在 `compose-pull-deploy` 已合入後啟動實作（為 master.key 機制需要 entrypoint 結構）
