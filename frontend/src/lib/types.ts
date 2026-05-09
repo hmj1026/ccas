@@ -72,6 +72,26 @@ export interface TransactionItem {
   readonly billing_month: string
 }
 
+/**
+ * 交易詳情（bills-management-and-insights §3 / §9）。
+ * 在 ``TransactionItem`` 上加上使用者編輯欄位。
+ */
+export interface TransactionDetailItem extends TransactionItem {
+  readonly note: string | null
+  readonly manual_category_override: boolean
+  readonly tags: readonly string[]
+  readonly merchant_alias: string
+  readonly updated_at: string
+}
+
+/** ``PUT /api/transactions/{id}`` request body（所有欄位皆可選）。 */
+export interface TransactionUpdateRequest {
+  readonly category_id?: number
+  readonly note?: string
+  readonly tags?: readonly string[]
+  readonly merchant_alias?: string
+}
+
 // -- Analytics --
 
 /** 月消費趨勢資料點，用於折線圖。 */
@@ -250,3 +270,172 @@ export interface PipelineRunSummary {
 
 /** Pipeline 執行紀錄詳情。 */
 export type PipelineRunDetail = PipelineRunSummary
+
+// -- Reminders (bills-management-and-insights §5) --
+
+/** 通知管道。 */
+export type ReminderChannel = 'telegram' | 'ui_banner' | 'both'
+
+/** 單張帳單的提醒設定 + 帳單摘要（給設定頁列表用）。 */
+export interface ReminderSettingItem {
+  readonly bill_id: number
+  readonly bank_code: string
+  readonly bank_name: string | null
+  readonly billing_month: string
+  readonly due_date: string
+  readonly is_paid: boolean
+  readonly enabled: boolean
+  readonly days_before: readonly number[]
+  readonly channel: ReminderChannel
+  readonly has_setting: boolean
+}
+
+/** Update reminder setting request (partial)。 */
+export interface ReminderSettingUpdateRequest {
+  readonly enabled?: boolean
+  readonly days_before?: readonly number[]
+  readonly channel?: ReminderChannel
+}
+
+/** 測試推送結果。 */
+export interface ReminderTestResult {
+  readonly sent: boolean
+  readonly channel: ReminderChannel
+  readonly detail: string
+}
+
+// -- Budgets (bills-management-and-insights §6) --
+
+/** 預算範圍。 */
+export type BudgetScope = 'monthly_total' | 'monthly_category' | 'monthly_bank'
+
+/** 單筆預算設定。 */
+export interface BudgetItem {
+  readonly id: number
+  readonly scope: BudgetScope
+  readonly scope_ref: string | null
+  readonly amount_minor_units: number
+  readonly alert_threshold_percent: number
+  readonly enabled: boolean
+  readonly created_at: string
+  readonly updated_at: string
+}
+
+/** Create budget request。 */
+export interface BudgetCreateRequest {
+  readonly scope: BudgetScope
+  readonly scope_ref?: string | null
+  readonly amount_minor_units: number
+  readonly alert_threshold_percent?: number
+  readonly enabled?: boolean
+}
+
+/** Update budget request (partial)。 */
+export interface BudgetUpdateRequest {
+  readonly scope?: BudgetScope
+  readonly scope_ref?: string | null
+  readonly amount_minor_units?: number
+  readonly alert_threshold_percent?: number
+  readonly enabled?: boolean
+}
+
+/** 當月累計花費 + threshold 狀態。 */
+export interface BudgetCurrentPeriod {
+  readonly budget_id: number
+  readonly period_year_month: string
+  readonly amount_minor_units: number
+  readonly current_amount_minor_units: number
+  readonly percent: number
+  readonly threshold_breached: boolean
+  readonly alert_threshold_percent: number
+}
+
+/** active 預算超支警示（給 banner 用）。 */
+export interface BudgetAlertItem {
+  readonly id: number
+  readonly budget_id: number
+  readonly scope: BudgetScope
+  readonly scope_ref: string | null
+  readonly period_year_month: string
+  readonly threshold_breached_percent: number
+  readonly current_amount_minor_units: number
+  readonly amount_minor_units: number
+  readonly triggered_at: string
+  readonly acknowledged_at: string | null
+}
+
+// -- Insights v2 (bills-management-and-insights §7) --
+
+/** 銀行對比 (`/api/analytics/compare/banks`)。 */
+export interface BankCompareItem {
+  readonly bank_code: string
+  readonly bank_name: string | null
+  readonly total: number
+}
+
+/** 年度對比 (`/api/analytics/compare/years`)。 */
+export interface YearCompareItem {
+  readonly year: number
+  readonly value: number
+}
+
+/** Top merchant 排行 (`/api/analytics/top-merchants`)。 */
+export interface TopMerchantItem {
+  readonly merchant: string
+  readonly total: number
+  readonly count: number
+}
+
+/** Category with month-over-month compare (`compare_with_previous=true`)。 */
+export interface CategoryWithCompareItem {
+  readonly category: string
+  readonly total: number
+  readonly previous_total: number | null
+  readonly change_percent: number | null
+}
+
+export type YearMetric = 'total' | 'count'
+export type TopMerchantPeriod = 'year' | 'month' | 'all'
+export type ExportFormat = 'csv' | 'xlsx'
+
+// -- User classification rules (bills-management-and-insights §4 §10) --
+
+export type PatternType = 'keyword' | 'exact' | 'regex'
+
+export interface ClassificationRuleItem {
+  readonly id: number
+  readonly pattern: string
+  readonly pattern_type: PatternType
+  readonly category_id: number
+  readonly category_name: string
+  readonly priority: number
+  readonly enabled: boolean
+  readonly created_at: string
+  readonly updated_at: string
+}
+
+export interface ClassificationRuleCreateRequest {
+  readonly pattern: string
+  readonly pattern_type: PatternType
+  readonly category_id: number
+  readonly priority?: number
+  readonly enabled?: boolean
+}
+
+export interface ClassificationRuleUpdateRequest {
+  readonly pattern?: string
+  readonly pattern_type?: PatternType
+  readonly category_id?: number
+  readonly priority?: number
+  readonly enabled?: boolean
+}
+
+export interface ClassificationRuleTestRequest {
+  readonly pattern: string
+  readonly pattern_type: PatternType
+  readonly sample_text: string
+}
+
+export interface ClassificationRuleTestResponse {
+  readonly matches: boolean
+}

@@ -208,6 +208,62 @@ class PaymentReminder(Base):
     sent_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
 
 
+class ReminderChannel(StrEnum):
+    """付款提醒通知管道（bills-management-and-insights §5）。
+
+    telegram: 僅推 Telegram（沿用既有 ``send_payment_reminders`` 行為）
+    ui_banner: 僅顯示 UI banner（不推 Telegram，預留 future enhancement）
+    both: Telegram + UI banner 兩者都推
+    """
+
+    TELEGRAM = "telegram"
+    UI_BANNER = "ui_banner"
+    BOTH = "both"
+
+
+class ReminderSetting(Base):
+    """付款提醒設定（bills-management-and-insights §5）。
+
+    keyed by ``bill_id`` (PK FK)；每張帳單最多一筆 row。沒有 row 視同預設
+    （enabled=true、days_before=[3,1]、channel=telegram），與 change 前行為等價。
+
+    **Spec deviation**：design §D9 假設既有 ``PaymentReminder`` 模型已有
+    ``(days_before, channel, enabled)`` 欄位，但實際上 ``payment_reminders``
+    為 sent log（``bill_id`` + ``reminder_type`` + ``sent_at``）。為避免混淆
+    sent log 與設定兩種語意，獨立新表 ``reminder_settings`` 儲存 settings；
+    sent log 表保持原樣不動。
+    """
+
+    __tablename__ = "reminder_settings"
+
+    bill_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("bills.id"), primary_key=True
+    )
+    enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default=text("1")
+    )
+    # JSON list of int days, e.g. [3, 1]; evaluator iterates each value
+    days_before: Mapped[list[int]] = mapped_column(
+        JSON, nullable=False, default=list, server_default=text("'[3, 1]'")
+    )
+    channel: Mapped[ReminderChannel] = mapped_column(
+        String(16),
+        nullable=False,
+        default=ReminderChannel.TELEGRAM,
+        server_default=ReminderChannel.TELEGRAM.value,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=_utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime,
+        default=_utcnow,
+        onupdate=_utcnow,
+        nullable=False,
+        server_default=text("CURRENT_TIMESTAMP"),
+    )
+
+
 class BankSettings(Base):
     """銀行 UI 設定（oauth-onboarding-ui §2.1）。
 

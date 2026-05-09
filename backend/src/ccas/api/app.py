@@ -11,14 +11,19 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from ccas.api.deps import verify_token
 from ccas.api.routers import (
     analytics,
+    analytics_v2,
     auth,
     bills,
+    budgets,
+    exports,
     overview,
     pipeline,
+    reminders_settings,
     rules,
     settings,
     staged_attachments,
     transactions,
+    transactions_edit,
 )
 from ccas.api.routers.setup import admin as setup_admin
 from ccas.api.routers.setup import banks as setup_banks
@@ -83,11 +88,18 @@ def create_app() -> FastAPI:
     api_dependencies = [Depends(verify_token)]
     app.include_router(overview.router, dependencies=api_dependencies)
     app.include_router(transactions.router, dependencies=api_dependencies)
+    # Register exports BEFORE transactions_edit so the static /transactions/export
+    # path resolves before the {transaction_id} dynamic segment in transactions_edit.
+    app.include_router(exports.router, dependencies=api_dependencies)
+    app.include_router(transactions_edit.router, dependencies=api_dependencies)
     app.include_router(analytics.router, dependencies=api_dependencies)
+    app.include_router(analytics_v2.router, dependencies=api_dependencies)
     app.include_router(bills.router, dependencies=api_dependencies)
     app.include_router(settings.router, dependencies=api_dependencies)
     app.include_router(pipeline.router, dependencies=api_dependencies)
     app.include_router(rules.router, dependencies=api_dependencies)
+    app.include_router(reminders_settings.router, dependencies=api_dependencies)
+    app.include_router(budgets.router, dependencies=api_dependencies)
     app.include_router(staged_attachments.router, dependencies=api_dependencies)
     # Setup UX routers（oauth-onboarding-ui）— 共用 verify_token 保護。
     app.include_router(setup_gmail.router, dependencies=api_dependencies)

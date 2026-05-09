@@ -8,11 +8,21 @@ from ccas.api.schemas import (
     ApiResponse,
     BankItem,
     CategoryItem,
+    CategoryWithCompareItem,
     TrendItem,
 )
 from ccas.storage.database import get_db_session
 from ccas.storage.models import Bill, Transaction
 from ccas.storage.queries import fetch_bank_names
+
+
+def _previous_month(month: str) -> str:
+    """``YYYY-MM`` → 前一個月（同樣格式）。"""
+    y, m = (int(p) for p in month.split("-"))
+    if m == 1:
+        return f"{y - 1:04d}-12"
+    return f"{y:04d}-{m - 1:02d}"
+
 
 router = APIRouter(prefix="/api/analytics", tags=["analytics"])
 
@@ -70,7 +80,7 @@ async def get_trend(
     return ApiResponse(data=data)
 
 
-@router.get("/categories", response_model=ApiResponse[list[CategoryItem]])
+@router.get("/categories", response_model=None)
 async def get_categories(
     month: str | None = Query(
         default=None,
@@ -78,23 +88,54 @@ async def get_categories(
         pattern=r"^\d{4}-(0[1-9]|1[0-2])$",
     ),
     year: int | None = Query(default=None, ge=2000, le=2099, description="年度篩選"),
+    compare_with_previous: bool = Query(
+        default=False,
+        description="月對月變化（需搭配 month）；true 時改回 CategoryWithCompareItem",
+    ),
     session: AsyncSession = Depends(get_db_session),
 ):
-    """取得類別分布，可指定月份、年度或彙總全部。"""
-    stmt = (
+    """取得類別分布；compare_with_previous=true 且帶 month 時加月對月變化。
+
+    為保持 backward compatibility，未帶 ``compare_with_previous`` 或 ``month``
+    時維持 legacy ``CategoryItem`` schema；只有帶兩者時才回 v2 schema。
+    """
+    base_stmt = (
         select(
             func.coalesce(Transaction.category, "未分類"),
-            func.sum(Transaction.amount),
+            func.coalesce(func.sum(Transaction.amount), 0),
         )
         .join(Bill, Transaction.bill_id == Bill.id)
         .group_by(func.coalesce(Transaction.category, "未分類"))
         .order_by(func.sum(Transaction.amount).desc())
     )
-    stmt = _apply_month_year_filter(stmt, month, year)
+    stmt = _apply_month_year_filter(base_stmt, month, year)
+    rows = (await session.execute(stmt)).all()
 
-    result = await session.execute(stmt)
-    data = [CategoryItem(category=row[0], total=row[1]) for row in result.all()]
-    return ApiResponse(data=data)
+    if not compare_with_previous or month is None:
+        return ApiResponse(
+            data=[CategoryItem(category=row[0], total=int(row[1])) for row in rows]
+        )
+
+    prev_stmt = _apply_month_year_filter(base_stmt, _previous_month(month), None)
+    prev_rows = (await session.execute(prev_stmt)).all()
+    prev_by_cat = {row[0]: int(row[1]) for row in prev_rows}
+
+    items: list[CategoryWithCompareItem] = []
+    for cat, total in rows:
+        previous = prev_by_cat.get(cat)
+        if previous is None or previous == 0:
+            change_pct: float | None = None
+        else:
+            change_pct = round((int(total) - previous) / previous * 100.0, 2)
+        items.append(
+            CategoryWithCompareItem(
+                category=cat,
+                total=int(total),
+                previous_total=previous,
+                change_percent=change_pct,
+            )
+        )
+    return ApiResponse(data=items)
 
 
 @router.get("/banks", response_model=ApiResponse[list[BankItem]])

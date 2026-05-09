@@ -117,6 +117,36 @@ class TransactionItem(BaseModel):
     billing_month: str
 
 
+class TransactionDetailItem(TransactionItem):
+    """交易詳情（bills-management-and-insights §3 / §9）含使用者編輯欄位。"""
+
+    note: str | None
+    manual_category_override: bool
+    tags: list[str]
+    merchant_alias: str
+    updated_at: datetime
+
+
+class TransactionUpdateRequest(BaseModel):
+    """``PUT /api/transactions/{id}`` request body（所有欄位皆可選）。
+
+    若提供 ``category_id`` 則同步設 ``manual_category_override = true``。
+
+    長度上限為 defense-in-depth，避免 token 洩漏後寫入過大內容打爆 DB／UI。
+    """
+
+    category_id: int | None = Field(default=None, ge=1)
+    note: str | None = Field(default=None, max_length=2000)
+    tags: list[str] | None = Field(default=None, max_length=50)
+    merchant_alias: str | None = Field(default=None, max_length=200)
+
+
+class TransactionNoteRequest(BaseModel):
+    """``POST /api/transactions/{id}/note`` request body。"""
+
+    note: str = Field(default="", max_length=2000)
+
+
 # -- Analytics --
 
 
@@ -446,3 +476,148 @@ class ClassificationRuleTestResponse(BaseModel):
     """``POST /api/rules/test`` response。"""
 
     matches: bool
+
+
+# -- bills-management-and-insights §5: Reminder settings ----------------------
+
+ReminderChannelLiteral = Literal["telegram", "ui_banner", "both"]
+
+
+class ReminderSettingItem(BaseModel):
+    """單張帳單的提醒設定 + 帳單摘要（給設定頁列表用）。"""
+
+    bill_id: int
+    bank_code: str
+    bank_name: str | None = None
+    billing_month: str
+    due_date: date
+    is_paid: bool
+    enabled: bool
+    days_before: list[int]
+    channel: ReminderChannelLiteral
+    has_setting: bool
+
+
+class ReminderSettingUpdateRequest(BaseModel):
+    """``PUT /api/reminders/{bill_id}/settings`` request body（all optional）。"""
+
+    enabled: bool | None = None
+    days_before: list[int] | None = Field(default=None, max_length=10)
+    channel: ReminderChannelLiteral | None = None
+
+
+class ReminderTestResult(BaseModel):
+    """``POST /api/reminders/{bill_id}/test`` response。"""
+
+    sent: bool
+    channel: ReminderChannelLiteral
+    detail: str = ""
+
+
+# -- bills-management-and-insights §6: Budgets --------------------------------
+
+BudgetScopeLiteral = Literal["monthly_total", "monthly_category", "monthly_bank"]
+
+
+class BudgetItem(BaseModel):
+    """單筆預算設定。"""
+
+    id: int
+    scope: BudgetScopeLiteral
+    scope_ref: str | None
+    amount_minor_units: int
+    alert_threshold_percent: int
+    enabled: bool
+    created_at: datetime
+    updated_at: datetime
+
+
+class BudgetCreateRequest(BaseModel):
+    """``POST /api/budgets`` request body。"""
+
+    scope: BudgetScopeLiteral
+    scope_ref: str | None = Field(default=None, max_length=64)
+    amount_minor_units: int = Field(ge=1)
+    alert_threshold_percent: int = Field(default=80, ge=1, le=100)
+    enabled: bool = Field(default=True)
+
+
+class BudgetUpdateRequest(BaseModel):
+    """``PUT /api/budgets/{id}`` request body（all optional）。"""
+
+    scope: BudgetScopeLiteral | None = None
+    scope_ref: str | None = Field(default=None, max_length=64)
+    amount_minor_units: int | None = Field(default=None, ge=1)
+    alert_threshold_percent: int | None = Field(default=None, ge=1, le=100)
+    enabled: bool | None = None
+
+
+class BudgetCurrentPeriod(BaseModel):
+    """``GET /api/budgets/{id}/current-period`` response。"""
+
+    budget_id: int
+    period_year_month: str
+    amount_minor_units: int
+    current_amount_minor_units: int
+    percent: float
+    threshold_breached: bool
+    alert_threshold_percent: int
+
+
+class BudgetAlertItem(BaseModel):
+    """active 預算超支警示（給 banner / dashboard 用）。"""
+
+    id: int
+    budget_id: int
+    scope: BudgetScopeLiteral
+    scope_ref: str | None
+    period_year_month: str
+    threshold_breached_percent: int
+    current_amount_minor_units: int
+    amount_minor_units: int
+    triggered_at: datetime
+    acknowledged_at: datetime | None
+
+
+# -- bills-management-and-insights §7: Insights v2 -----------------------------
+
+
+class BankCompareItem(BaseModel):
+    """``/api/analytics/compare/banks`` 單筆。"""
+
+    bank_code: str
+    bank_name: str | None = None
+    total: int
+
+
+class YearCompareItem(BaseModel):
+    """``/api/analytics/compare/years`` 單筆。"""
+
+    year: int
+    value: int  # total or count, depending on metric
+
+
+class TopMerchantItem(BaseModel):
+    """``/api/analytics/top-merchants`` 單筆。"""
+
+    merchant: str
+    total: int
+    count: int
+
+
+class CategoryWithCompareItem(BaseModel):
+    """``/api/analytics/categories?compare_with_previous=true`` 單筆。"""
+
+    category: str
+    total: int
+    previous_total: int | None = None
+    change_percent: float | None = None
+
+
+YearMetricLiteral = Literal["total", "count"]
+TopMerchantPeriodLiteral = Literal["year", "month", "all"]
+
+
+# -- bills-management-and-insights §8: Exports ---------------------------------
+
+ExportFormatLiteral = Literal["csv", "xlsx"]

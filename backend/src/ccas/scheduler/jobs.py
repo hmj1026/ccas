@@ -50,3 +50,24 @@ def run_payment_reminders_sync() -> dict[str, int]:
         "Payment reminders: sent=%d, skipped=%d", result["sent"], result["skipped"]
     )
     return result
+
+
+def run_budget_evaluator_sync() -> dict[str, int]:
+    """同步執行預算評估（供 APScheduler 呼叫）。"""
+    from ccas.scheduler.budget_evaluator import evaluate_budgets
+    from ccas.storage.database import get_engine, get_session_factory
+
+    async def _run() -> dict[str, int]:
+        session_factory = get_session_factory()
+        async with session_factory() as session:
+            result = await evaluate_budgets(session)
+        await get_engine().dispose()
+        return result
+
+    result = asyncio.run(_run())
+    logger.info(
+        "Budget evaluator: alerts_triggered=%d, skipped=%d",
+        result["alerts_triggered"],
+        result["skipped"],
+    )
+    return result

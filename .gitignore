@@ -26,6 +26,10 @@ logs/
 .env.local
 .env.*.local
 .env.bak*
+.env.prod
+.env.prod.*
+.env.staging
+.env.staging.*
 *.Zone.Identifier
 
 # Backup files (never commit backups — they may contain real PII/secrets)
@@ -38,6 +42,8 @@ backend/data/*.bak*
 __pycache__/
 *.pyc
 *.pyo
+*.so
+*.pyd
 .venv/
 *.egg-info/
 
@@ -62,6 +68,9 @@ backend/data/staging/
 backend/data/credentials.json
 backend/data/token.json
 credentials/
+
+# Secrets (encryption keys, API tokens — never commit)
+backend/data/secrets/
 
 # Node.js
 node_modules/

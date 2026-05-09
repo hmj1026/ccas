@@ -1,11 +1,11 @@
-"""Transactions API：交易查詢、篩選、分頁與 CSV 匯出。"""
+"""Transactions API：交易查詢、篩選、分頁。
 
-import csv
-import io
+CSV / xlsx 匯出由 ``ccas.api.routers.exports`` 提供（see §8）。
+"""
+
 import math
 
 from fastapi import APIRouter, Depends, Query
-from fastapi.responses import StreamingResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -103,66 +103,6 @@ async def list_transactions(
             total=total,
             total_pages=total_pages,
         ),
-    )
-
-
-@router.get("/transactions/export")
-async def export_transactions(
-    month: str | None = Query(
-        default=None,
-        description="月份（YYYY-MM），與 year 互斥，month 優先",
-        pattern=r"^\d{4}-(0[1-9]|1[0-2])$",
-    ),
-    year: int | None = Query(default=None, ge=2000, le=2099, description="年度篩選"),
-    bank_code: str | None = Query(default=None),
-    category: str | None = Query(default=None),
-    q: str | None = Query(default=None),
-    session: AsyncSession = Depends(get_db_session),
-):
-    """匯出交易明細為 CSV（UTF-8）。"""
-    base = _build_filter_stmt(month, year, bank_code, category, q)
-    base = base.order_by(Transaction.trans_date)
-    result = await session.execute(base)
-    items = [_to_item(row) for row in result.all()]
-
-    output = io.StringIO()
-    writer = csv.writer(output)
-    writer.writerow(
-        [
-            "交易日期",
-            "記帳日期",
-            "商家名稱",
-            "金額",
-            "幣別",
-            "分類",
-            "銀行代碼",
-            "帳單月份",
-        ]
-    )
-    for item in items:
-        writer.writerow(
-            [
-                item.trans_date.isoformat(),
-                item.posting_date.isoformat() if item.posting_date else "",
-                item.merchant,
-                item.amount,
-                item.currency,
-                item.category or "",
-                item.bank_code,
-                item.billing_month,
-            ]
-        )
-
-    filename = f"ccas-transactions-{month or 'all'}"
-    if bank_code:
-        filename += f"-{bank_code}"
-    filename += ".csv"
-
-    content = output.getvalue().encode("utf-8")
-    return StreamingResponse(
-        io.BytesIO(content),
-        media_type="text/csv; charset=utf-8",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 

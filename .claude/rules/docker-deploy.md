@@ -120,10 +120,3 @@ Four-layer gate responsibility table (any new check must be added to exactly one
 | `${CCAS_DATA_LOCATION:-./data}/redis` | Redis persistence (bind mount) | `/data` (redis container) |
 | `${CCAS_CONFIG_LOCATION:-./config}` | bank yaml / categories.yaml | `/config` |
 | `${CCAS_LOG_LOCATION:-./logs}` | service log file | `/logs` |
-
-## Conventions
-
-- Do not add `apt-get` or `apk add` packages without strong justification
-- Pin tool versions in Dockerfiles for reproducibility (uv tag, corepack)
-- Use `.dockerignore` to exclude `.git`, `node_modules`, `__pycache__`, `.env`
-- Use BuildKit cache mounts (`--mount=type=cache`) for package managers

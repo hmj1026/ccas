@@ -3,8 +3,8 @@
  * 預設：全部交易，依 trans_date 降序。
  */
 import { useQuery } from '@tanstack/react-query'
-import { Download, ChevronLeft, ChevronRight } from 'lucide-react'
-import { useSearchParams } from 'react-router'
+import { Download, ChevronLeft, ChevronRight, Pencil } from 'lucide-react'
+import { Link, useSearchParams } from 'react-router'
 import { apiGet, apiFetchBlob } from '@/lib/api-client'
 import type { PaginatedResponse, TransactionItem } from '@/lib/types'
 import { formatAmount } from '@/lib/utils'
@@ -129,6 +129,7 @@ function TransactionsPage() {
                   <th className="px-3 py-2">分類</th>
                   <th className="px-3 py-2">銀行</th>
                   <th className="px-3 py-2 text-right">金額</th>
+                  <th className="px-3 py-2 w-12" aria-label="操作"></th>
                 </tr>
               </thead>
               <tbody>
@@ -140,6 +141,15 @@ function TransactionsPage() {
                     <td className="px-3 py-2">{tx.bank_code}</td>
                     <td className="px-3 py-2 text-right whitespace-nowrap">
                       {formatAmount(tx.amount, tx.currency)}
+                    </td>
+                    <td className="px-3 py-2 text-right">
+                      <Link
+                        to={`/transactions/${tx.id}`}
+                        aria-label={`編輯交易 ${tx.merchant}`}
+                        className="inline-flex items-center text-muted-foreground hover:text-foreground"
+                      >
+                        <Pencil className="size-4" />
+                      </Link>
                     </td>
                   </tr>
                 ))}

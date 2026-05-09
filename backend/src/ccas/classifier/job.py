@@ -133,17 +133,20 @@ async def run_classify_job(
 
 
 async def run_reclassify_job(session: AsyncSession) -> ClassifySummary:
-    """對所有交易重跑分類。
+    """對所有交易重跑分類（bills-management-and-insights §2.4 優先序）。
 
-    重新載入最新規則後，逐筆重新計算分類。
-    只更新 category 欄位，不改寫原始交易資料。
+    重新載入最新規則後，逐筆依 ``manual_override → user_rules → engine`` 順序重算。
+    ``manual_category_override = true`` 的交易一律跳過，保留使用者編輯結果
+    （§15.1：「手動改 category → 重跑 pipeline 5 次 → category 不變」）。
 
     Args:
         session: 非同步 DB Session（由呼叫端注入）。
 
     Returns:
-        ClassifySummary 統計摘要。
+        ClassifySummary 統計摘要；``skipped_count`` / ``manual_override_count``
+        會包含被 manual_override 跳過的交易數。
     """
+    user_matcher = await UserRuleMatcher.load(session)
     rule_set = await load_rules(session)
 
     transactions = await fetch_all_transactions(session)
@@ -153,8 +156,19 @@ async def run_reclassify_job(session: AsyncSession) -> ClassifySummary:
 
     classified_count = 0
     skipped_count = 0
+    manual_override_count = 0
     for txn in transactions:
-        new_category = classify(txn.merchant, rule_set)
+        if txn.manual_category_override:
+            manual_override_count += 1
+            skipped_count += 1
+            continue
+
+        user_category = await user_matcher.match(txn.merchant)
+        new_category = (
+            user_category
+            if user_category is not None
+            else classify(txn.merchant, rule_set)
+        )
         if txn.category == new_category:
             skipped_count += 1
             continue
@@ -164,12 +178,14 @@ async def run_reclassify_job(session: AsyncSession) -> ClassifySummary:
     await session.commit()
 
     logger.info(
-        "重跑分類完成：%d 筆更新, %d 筆未變動",
+        "重跑分類完成：%d 筆更新, %d 筆未變動（含 %d 筆 manual_override 跳過）",
         classified_count,
         skipped_count,
+        manual_override_count,
     )
     return ClassifySummary(
         classified_count=classified_count,
         skipped_count=skipped_count,
         total_count=len(transactions),
+        manual_override_count=manual_override_count,
     )

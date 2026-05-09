@@ -175,49 +175,8 @@ async def test_list_transactions_pagination(
     assert body["pagination"]["total_pages"] == 2
 
 
-async def test_export_csv(client: AsyncClient, db_session: AsyncSession):
-    """CSV 匯出為 UTF-8 且包含正確欄位。"""
-    await _seed_transactions(db_session)
-
-    response = await client.get(
-        "/api/transactions/export?month=2026-03",
-        headers=auth_headers(),
-    )
-    assert response.status_code == 200
-    assert "text/csv" in response.headers["content-type"]
-    assert "ccas-transactions-2026-03.csv" in response.headers["content-disposition"]
-
-    content = response.content.decode("utf-8")
-    lines = content.strip().split("\n")
-    # header + 3 data rows
-    assert len(lines) == 4
-    assert "交易日期" in lines[0]
-    assert "商家名稱" in lines[0]
-
-
-async def test_export_csv_with_bank_code(client: AsyncClient, db_session: AsyncSession):
-    """CSV 檔名含 bank_code。"""
-    await _seed_transactions(db_session)
-
-    response = await client.get(
-        "/api/transactions/export?month=2026-03&bank_code=CTBC",
-        headers=auth_headers(),
-    )
-    assert response.status_code == 200
-    assert (
-        "ccas-transactions-2026-03-CTBC.csv" in response.headers["content-disposition"]
-    )
-
-
-async def test_export_csv_no_month_uses_all_filename(
-    client: AsyncClient, db_session: AsyncSession
-):
-    """無月份篩選時 CSV 檔名使用 'all'。"""
-    await _seed_transactions(db_session)
-
-    response = await client.get("/api/transactions/export", headers=auth_headers())
-    assert response.status_code == 200
-    assert "ccas-transactions-all.csv" in response.headers["content-disposition"]
+# Legacy CSV export tests removed; the new endpoint and its coverage live in
+# tests/integration/test_exports_router.py (bills-management-and-insights §8).
 
 
 async def test_list_transactions_filter_by_bank_code(
