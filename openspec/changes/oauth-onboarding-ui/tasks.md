@@ -2,7 +2,7 @@
 
 - [x] 1.1 新增 `backend/src/ccas/storage/secrets.py`：`MasterKeyManager` class（load_or_create、get_fernet、encrypt、decrypt 四個方法）；單元測試覆蓋 (a) 首次產生、(b) 既有讀取、(c) decrypt 錯誤訊息明確
 - [x] 1.2 修改 `scripts/docker-entrypoint.sh`：在 `API_TOKEN` bootstrap 段落之前新增 master.key 自動產生邏輯（`${CCAS_DATA_LOCATION}/secrets/master.key`，權限 0600，stdout INFO log）
-- [x] 1.3 為 entrypoint 段落寫 bats 單元測試：(a) 首次啟動產生 + 權限 0600、(b) 既有 master.key 不覆蓋
+- [x] 1.3 為 entrypoint 段落寫 bash 單元測試（`tests/scripts/test_entrypoint.sh` 之 `bootstrap_master_key` 段落）：(a) 首次啟動產生 + 權限 0600、(b) 既有 master.key 不覆蓋
 - [x] 1.4 backend `Settings` 新增 `master_key_path` 與 lazy `master_key` property，從 file 讀取；測試覆蓋 file 不存在時的 error path
 - [x] 1.5 在 pyproject.toml 顯式宣告 `cryptography>=42` 版本下限（**spec 偏差**：原文寫 `[project.optional-dependencies] api` extra group 不存在；改放主 `[project] dependencies` 因 entrypoint 與 backend service 共用，無法以 extra 條件性安裝。將於本 change archive 前 `/opsx:verify` 對齊 spec 文字）
 

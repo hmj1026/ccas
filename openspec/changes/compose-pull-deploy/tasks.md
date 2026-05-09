@@ -22,10 +22,10 @@
 - [x] 2.4 修改 `scripts/docker-entrypoint.sh`，於 alembic 之前加入 config seed 區塊：偵測 `${CCAS_CONFIG_LOCATION:-/config}/banks.yaml` 不存在時從 image 內建 default template 複製，輸出 WARN
 - [x] 2.5 對 `bank-code-registry.yaml` 與 `categories.yaml` 執行同一邏輯
 - [x] 2.6 加入 fail-fast：目標 config 與 image 內建 template 皆不存在時非零退出
-- [x] 2.7 寫 entrypoint 的 bash unit test（用 bats 或 inline shell test），驗證複製邏輯與冪等性
+- [x] 2.7 寫 entrypoint 的 bash unit test（以 bash 實作於 `tests/scripts/test_entrypoint.sh`，沿用既有 pass/fail helper；不引入 bats 依賴），驗證 `seed_config_file` 複製邏輯與冪等性
 - [x] 2.8 entrypoint / bootstrap 加入 `API_TOKEN` 自動產生邏輯（D11）：(a) `API_TOKEN` 環境變數已設定 → 使用，跳過、(b) `${CCAS_DATA_LOCATION:-/data}/secrets/api-token` 已存在 → 讀取並 export、(c) 兩者皆無 → `openssl rand -hex 32` 產生、寫入該檔（權限 0600，目錄不存在則建立）、export、stdout 印 `[INFO] 已自動產生 API_TOKEN，請至 /data/secrets/api-token 取得（首次啟動）`
 - [x] 2.9 backend / worker / scheduler / bot 四個 service 啟動前皆執行同一 token bootstrap；驗證 worker / scheduler / bot 在 `.env` 未設定 `API_TOKEN` 時可從 secrets 檔載入 `Settings.api_token`
-- [x] 2.10 為 2.8 三條路徑寫 bats 單元測試：(a) env 已設定不覆蓋、(b) secrets 檔已存在優先讀取、(c) 兩者皆無時產生新值且檔案權限為 0600
+- [x] 2.10 為 2.8 三條路徑寫 bash 單元測試（`tests/scripts/test_entrypoint.sh` 之 `bootstrap_api_token` 段落）：(a) env 已設定不覆蓋、(b) secrets 檔已存在優先讀取、(c) 兩者皆無時產生新值且檔案權限為 0600
 
 ## 3. 環境變數收斂與驗證
 
