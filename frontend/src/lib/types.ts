@@ -248,6 +248,8 @@ export interface PipelineStageEntry {
   readonly ok: number
   readonly fail: number
   readonly elapsed_ms: number
+  readonly counts?: Readonly<Record<string, number>>
+  readonly errors?: readonly string[]
 }
 
 /** Pipeline 執行紀錄列表項目。 */

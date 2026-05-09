@@ -52,7 +52,16 @@ CCAS pipeline 由五階段（ingest → decrypt → parse → classify → notif
 class ProgressReporter(Protocol):
     async def stage_started(self, stage: str, total: int) -> None: ...
     async def stage_item_done(self, stage: str, processed: int) -> None: ...
-    async def stage_finished(self, stage: str, ok: int, fail: int, elapsed_ms: int) -> None: ...
+    async def stage_finished(
+        self,
+        stage: str,
+        ok: int,
+        fail: int,
+        elapsed_ms: int,
+        *,
+        counts: Mapping[str, int] | None = None,
+        errors: Sequence[str] | None = None,
+    ) -> None: ...
 ```
 
 `run_pipeline(session, options=..., progress_reporter=None)`，預設 None → 內部包成 `NoopProgressReporter`。CLI / scheduler 路徑不傳 → noop，行為不變。RQ worker 在 enqueue 時傳 `DbProgressReporter(run_id)`。因現有 orchestrator 只在 stage job 完成後收到 summary，若要支援「已處理 / 總數」的即時進度，progress_reporter 必須由 orchestrator 繼續傳入各 stage job，stage job 在自己的 item loop 內呼叫 `stage_item_done`。
@@ -94,6 +103,8 @@ class ProgressReporter(Protocol):
 ### D5：`PipelineRun` 表結構與索引
 
 欄位：`id (UUID PK)`、`job_id (str)`、`status (enum)`、`triggered_by (str)`、`params (JSON)`、`current_stage (str|null)`、`current_stage_processed (int)`、`current_stage_total (int)`、`stage_summary (JSON)`、`error_message (text|null)`、`started_at`、`completed_at`、`created_at`。
+
+`stage_summary` 每筆 SHALL 至少包含 `{stage, ok, fail, elapsed_ms}`，並應保存 orchestrator 原始 `StageSummary` 的 `counts` 與 `errors` 作為完整快照。`ok` / `fail` 保留給列表與摘要 UI，`counts` / `errors` 用於詳情與後續除錯，避免 `PipelineRun` history 只保存 partial summary。
 
 索引：`(created_at DESC)`（list 用）、`(status)`（filter active 用）。
 

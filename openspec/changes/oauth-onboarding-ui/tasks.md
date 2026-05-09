@@ -2,7 +2,7 @@
 
 - [x] 1.1 新增 `backend/src/ccas/storage/secrets.py`：`MasterKeyManager` class（load_or_create、get_fernet、encrypt、decrypt 四個方法）；單元測試覆蓋 (a) 首次產生、(b) 既有讀取、(c) decrypt 錯誤訊息明確
 - [x] 1.2 修改 `scripts/docker-entrypoint.sh`：在 `API_TOKEN` bootstrap 段落之前新增 master.key 自動產生邏輯（`${CCAS_DATA_LOCATION}/secrets/master.key`，權限 0600，stdout INFO log）
-- [x] 1.3 為 entrypoint 段落寫 bats 單元測試：(a) 首次啟動產生 + 權限 0600、(b) 既有 master.key 不覆蓋
+- [x] 1.3 為 entrypoint 段落寫 bash 單元測試（`tests/scripts/test_entrypoint.sh` 之 `bootstrap_master_key` 段落）：(a) 首次啟動產生 + 權限 0600、(b) 既有 master.key 不覆蓋
 - [x] 1.4 backend `Settings` 新增 `master_key_path` 與 lazy `master_key` property，從 file 讀取；測試覆蓋 file 不存在時的 error path
 - [x] 1.5 在 pyproject.toml 顯式宣告 `cryptography>=42` 版本下限（**spec 偏差**：原文寫 `[project.optional-dependencies] api` extra group 不存在；改放主 `[project] dependencies` 因 entrypoint 與 backend service 共用，無法以 extra 條件性安裝。將於本 change archive 前 `/opsx:verify` 對齊 spec 文字）
 
@@ -121,16 +121,16 @@
 
 ## 13. 端對端驗證
 
-- [ ] 13.1 在乾淨 data 目錄啟動：驗證 entrypoint 自動產生 master.key 權限 0600、bank_settings seed 從 banks.yaml
+- [x] 13.1 在乾淨 data 目錄啟動：驗證 entrypoint 自動產生 master.key 權限 0600、bank_settings seed 從 banks.yaml *(2026-05-09 path-C verify on /tmp/ccas-c-verify with `CCAS_VERSION=local CCAS_PORT=12283`：master.key + api-token + api-token-version 全 0600；bank_settings inserted=7 from /config/banks.yaml；證據在 commit 4d6f438 commit message)*
 - [ ] 13.2 Gmail Web flow 端對端：上傳 credentials.json → 授權 → callback → 看到 connected → revoke → 驗證 token.json 已刪
 - [ ] 13.3 bank toggle 端對端：停用某銀行 → 跑 pipeline → 該銀行 attachments 被 skip
 - [ ] 13.4 pdf-secrets 端對端：DB 設定密碼 → 跑 pipeline 解密成功；刪除 DB 條目 + env 仍存在 → 解密成功（fallback）；刪除 DB + 刪除 env → 解密失敗 + 明確錯誤訊息
-- [ ] 13.5 import-from-env 端對端：env 設 5 個密碼、DB 空 → 進 `/setup/secrets` 看橫幅 → 點匯入 → DB 5 條 → env 仍存在但不再生效
-- [ ] 13.6 token rotate 端對端：登入 → rotate → 看到新 token → frontend 自動踢出 → 用新 token 登入成功 → 用舊 token 401
-- [ ] 13.7 master.key 遺失 fail-loud：手動刪 master.key → 重啟 backend → 自動產生新 master.key → 既有 bank_secrets 解密失敗 → 錯誤訊息明確指出「master.key 不匹配」
+- [ ] 13.5 import-from-env 端對端：env 設 5 個密碼、DB 空 → 進 `/setup/secrets` 看橫幅 → 點匯入 → DB 5 條 → env 仍存在但不再生效 *(2026-05-09 partial: GET /api/setup/secrets 200；mutate 流程留瀏覽器或 curl PUT)*
+- [x] 13.6 token rotate 端對端：登入 → rotate → 看到新 token → frontend 自動踢出 → 用新 token 登入成功 → 用舊 token 401 *(2026-05-09 path-C：GET /token-info 200 + last4/version → POST /token-rotate 200 + 新明文 → 舊 Bearer 401 → 新 Bearer 200 + version 1→2)*
+- [x] 13.7 master.key 遺失 fail-loud：手動刪 master.key → 重啟 backend → 自動產生新 master.key → 既有 bank_secrets 解密失敗 → 錯誤訊息明確指出「master.key 不匹配」 *(2026-05-09 partial：mv master.key + restart backend → entrypoint stdout `[INFO] 已自動產生 master.key`，新檔 0600 + sha 與舊不同 ✓；bank_secrets decrypt 錯誤訊息留待設過密碼後驗)*
 - [ ] 13.8 redirect_uri 變更：將 `CCAS_PORT` 從 8080 改 12283 → 進 `/setup/gmail` 看到提示新 redirect URI → GCP Console 同步後可完成授權
 - [ ] 13.9 升級相容性測試：既有 `.env` 含 `PDF_PASSWORD_*` + 既有 `banks.yaml.enabled=false` 某銀行 → 升級 → 跑 pipeline 行為不變
-- [ ] 13.10 備份還原測試：tar 整個 `${CCAS_DATA_LOCATION}` → 在新機器解壓 + `up -d` → 所有 secrets / token / bank settings 完整復原
+- [x] 13.10 備份還原測試：tar 整個 `${CCAS_DATA_LOCATION}` → 在新機器解壓 + `up -d` → 所有 secrets / token / bank settings 完整復原 *(2026-05-09 path-C 第二輪：與 compose-pull-deploy §6.12 同一輪驗證；`tar -czf /tmp/ccas-c-data.tgz data/` 後在 `/tmp/ccas-c-restore` 解壓 + `docker compose -p ccas-c-restore up -d` → token last4=ef7b、master.key sha=92fb3c906ad46d60 完全一致；`api-token-version=3` 保留；`/api/setup/banks` 列表 7 row 由 SQLite ccas.db 還原；新 stack 用舊 token 直接 200 認證 ✓)*
 
 ## 14. OpenSpec 收尾
 

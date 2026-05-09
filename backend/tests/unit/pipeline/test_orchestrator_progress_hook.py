@@ -160,6 +160,8 @@ async def test_stage_finished_ok_fail_split_excludes_failed_bucket(
     # 8 parsed + 1 skipped = 9 ok; 2 failed.
     assert parse_finished[1]["ok"] == 9
     assert parse_finished[1]["fail"] == 2
+    assert parse_finished[1]["counts"] == {"parsed": 8, "skipped": 1, "failed": 2}
+    assert parse_finished[1]["errors"] == ["e1", "e2"]
 
 
 async def test_stage_exception_still_emits_stage_finished(
@@ -184,6 +186,8 @@ async def test_stage_exception_still_emits_stage_finished(
     parse_finished = next(c for c in finished if c["stage"] == "parse")
     assert parse_finished["fail"] == 1
     assert parse_finished["ok"] == 0
+    assert parse_finished["counts"] == {"failed": 1}
+    assert parse_finished["errors"] == ["RuntimeError: parse exploded"]
     # All five stages still ran (orchestrator does not abort).
     assert [c["stage"] for c in finished] == [
         "ingest",

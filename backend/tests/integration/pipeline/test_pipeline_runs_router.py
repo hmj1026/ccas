@@ -29,7 +29,16 @@ def _make_run(
         current_stage="parse",
         current_stage_processed=2,
         current_stage_total=5,
-        stage_summary=[{"stage": "ingest", "ok": 2, "fail": 0, "elapsed_ms": 10}],
+        stage_summary=[
+            {
+                "stage": "ingest",
+                "ok": 2,
+                "fail": 0,
+                "elapsed_ms": 10,
+                "counts": {"staged": 2, "failed": 0},
+                "errors": [],
+            }
+        ],
         error_message="boom" if status == PipelineRunStatus.FAILED else None,
         started_at=created_at,
         completed_at=created_at,
@@ -133,7 +142,14 @@ async def test_pipeline_run_detail_shape(client: AsyncClient, db_session: AsyncS
     assert body["current_stage_processed"] == 2
     assert body["current_stage_total"] == 5
     assert body["stage_summary"] == [
-        {"stage": "ingest", "ok": 2, "fail": 0, "elapsed_ms": 10}
+        {
+            "stage": "ingest",
+            "ok": 2,
+            "fail": 0,
+            "elapsed_ms": 10,
+            "counts": {"staged": 2, "failed": 0},
+            "errors": [],
+        }
     ]
     assert body["error_message"] == "boom"
     assert body["triggered_by"] == "api"

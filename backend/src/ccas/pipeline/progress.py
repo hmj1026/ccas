@@ -26,7 +26,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping, Sequence
 from typing import Protocol
 
 from sqlalchemy import update
@@ -66,8 +66,16 @@ class ProgressReporter(Protocol):
         ok: int,
         fail: int,
         elapsed_ms: int,
+        *,
+        counts: Mapping[str, int] | None = None,
+        errors: Sequence[str] | None = None,
     ) -> None:
-        """通知某階段結束（一律即時 flush，不受節流影響）。"""
+        """通知某階段結束（一律即時 flush，不受節流影響）。
+
+        ``ok`` / ``fail`` 是 UI 列表摘要用的相容欄位；``counts`` /
+        ``errors`` 保留原始 ``StageSummary`` 資訊，讓 PipelineRun history
+        能作為完整快照。
+        """
         ...
 
 
@@ -91,6 +99,9 @@ class NoopProgressReporter:
         ok: int,
         fail: int,
         elapsed_ms: int,
+        *,
+        counts: Mapping[str, int] | None = None,
+        errors: Sequence[str] | None = None,
     ) -> None:
         return None
 
@@ -162,9 +173,12 @@ class DbProgressReporter:
         ok: int,
         fail: int,
         elapsed_ms: int,
+        *,
+        counts: Mapping[str, int] | None = None,
+        errors: Sequence[str] | None = None,
     ) -> None:
         # stage_finished MUST bypass throttle and atomically:
-        #   1. Append {stage, ok, fail, elapsed_ms} to stage_summary JSON
+        #   1. Append stage summary JSON, including rich counts/errors
         #   2. Overwrite current_stage_processed = current_stage_total
         # Read-then-write inside one session; PipelineRun rows are written
         # only by the worker holding this reporter, so race is impossible
@@ -182,6 +196,10 @@ class DbProgressReporter:
                 "ok": int(ok),
                 "fail": int(fail),
                 "elapsed_ms": int(elapsed_ms),
+                "counts": {
+                    str(name): int(count) for name, count in (counts or {}).items()
+                },
+                "errors": [str(error) for error in (errors or [])],
             }
             new_summary = list(row.stage_summary or []) + [entry]
             row.stage_summary = new_summary

@@ -490,15 +490,23 @@ function RunDetailContent({ run }: { readonly run: PipelineRunSummary }) {
             <th className="py-2 pr-3 font-medium">成功</th>
             <th className="py-2 pr-3 font-medium">失敗</th>
             <th className="py-2 pr-3 font-medium">耗時</th>
+            <th className="py-2 pr-3 font-medium">明細</th>
+            <th className="py-2 font-medium">錯誤</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-border">
           {run.stage_summary.map((entry) => (
-            <tr key={entry.stage}>
+            <tr key={entry.stage} className="align-top">
               <td className="py-2 pr-3">{entry.stage}</td>
               <td className="py-2 pr-3">{entry.ok}</td>
               <td className="py-2 pr-3">{entry.fail}</td>
               <td className="py-2 pr-3">{formatDurationMs(entry.elapsed_ms)}</td>
+              <td className="max-w-48 py-2 pr-3 text-xs text-muted-foreground">
+                {formatEntryCounts(entry.counts)}
+              </td>
+              <td className="max-w-56 py-2 text-xs text-destructive">
+                {formatEntryErrors(entry.errors)}
+              </td>
             </tr>
           ))}
         </tbody>
@@ -649,6 +657,18 @@ function formatStageCounts(run: PipelineRunSummary) {
   const ok = run.stage_summary.reduce((sum, entry) => sum + entry.ok, 0)
   const fail = run.stage_summary.reduce((sum, entry) => sum + entry.fail, 0)
   return `${ok} / ${fail}`
+}
+
+function formatEntryCounts(counts: Readonly<Record<string, number>> | undefined) {
+  if (!counts || Object.keys(counts).length === 0) return '-'
+  return Object.entries(counts)
+    .map(([name, value]) => `${name}: ${value}`)
+    .join(', ')
+}
+
+function formatEntryErrors(errors: readonly string[] | undefined) {
+  if (!errors || errors.length === 0) return '-'
+  return errors.join('；')
 }
 
 export default OperationsPage

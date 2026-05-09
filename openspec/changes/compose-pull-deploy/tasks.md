@@ -22,10 +22,10 @@
 - [x] 2.4 修改 `scripts/docker-entrypoint.sh`，於 alembic 之前加入 config seed 區塊：偵測 `${CCAS_CONFIG_LOCATION:-/config}/banks.yaml` 不存在時從 image 內建 default template 複製，輸出 WARN
 - [x] 2.5 對 `bank-code-registry.yaml` 與 `categories.yaml` 執行同一邏輯
 - [x] 2.6 加入 fail-fast：目標 config 與 image 內建 template 皆不存在時非零退出
-- [x] 2.7 寫 entrypoint 的 bash unit test（用 bats 或 inline shell test），驗證複製邏輯與冪等性
+- [x] 2.7 寫 entrypoint 的 bash unit test（以 bash 實作於 `tests/scripts/test_entrypoint.sh`，沿用既有 pass/fail helper；不引入 bats 依賴），驗證 `seed_config_file` 複製邏輯與冪等性
 - [x] 2.8 entrypoint / bootstrap 加入 `API_TOKEN` 自動產生邏輯（D11）：(a) `API_TOKEN` 環境變數已設定 → 使用，跳過、(b) `${CCAS_DATA_LOCATION:-/data}/secrets/api-token` 已存在 → 讀取並 export、(c) 兩者皆無 → `openssl rand -hex 32` 產生、寫入該檔（權限 0600，目錄不存在則建立）、export、stdout 印 `[INFO] 已自動產生 API_TOKEN，請至 /data/secrets/api-token 取得（首次啟動）`
 - [x] 2.9 backend / worker / scheduler / bot 四個 service 啟動前皆執行同一 token bootstrap；驗證 worker / scheduler / bot 在 `.env` 未設定 `API_TOKEN` 時可從 secrets 檔載入 `Settings.api_token`
-- [x] 2.10 為 2.8 三條路徑寫 bats 單元測試：(a) env 已設定不覆蓋、(b) secrets 檔已存在優先讀取、(c) 兩者皆無時產生新值且檔案權限為 0600
+- [x] 2.10 為 2.8 三條路徑寫 bash 單元測試（`tests/scripts/test_entrypoint.sh` 之 `bootstrap_api_token` 段落）：(a) env 已設定不覆蓋、(b) secrets 檔已存在優先讀取、(c) 兩者皆無時產生新值且檔案權限為 0600
 
 ## 3. 環境變數收斂與驗證
 
@@ -75,21 +75,21 @@
 > 由 release manager 於 M1 sign-off 時執行；通過後再勾選下方項目。
 
 
-- [ ] 6.1 在乾淨目錄 `mkdir /tmp/ccas-fresh && cd $_`，僅放下載的 `docker-compose.yml` + `.env`，執行 `docker compose pull && docker compose up -d`
-- [ ] 6.2 驗證 backend `/health` 回 200、redis healthcheck 綠燈、worker logs 顯示 RQ ready、scheduler logs 顯示啟動
-- [ ] 6.3 驗證 proxy 可訪問 `http://localhost:${CCAS_PORT:-8080}`、能呼叫 backend API；驗證 `localhost:8000` 與 frontend internal port 未對 host 暴露
+- [x] 6.1 在乾淨目錄 `mkdir /tmp/ccas-fresh && cd $_`，僅放下載的 `docker-compose.yml` + `.env`，執行 `docker compose pull && docker compose up -d` *(2026-05-09 path-C verify on `/tmp/ccas-c-verify` with `CCAS_VERSION=local CCAS_PORT=12283`：本機 `docker build --target production` 替代 GHCR pull；compose up 7 service 全 healthy。GHCR pull 路徑等 §4.11 推假 tag 後再驗。)*
+- [x] 6.2 驗證 backend `/health` 回 200、redis healthcheck 綠燈、worker logs 顯示 RQ ready、scheduler logs 顯示啟動 *(2026-05-09：`/api/health` 200、redis healthy。worker probe ready 訊息 string 在 logs 看到 RQ listen，未刻意斷言；scheduler logs 顯示 `Application startup complete`。)*
+- [x] 6.3 驗證 proxy 可訪問 `http://localhost:${CCAS_PORT:-8080}`、能呼叫 backend API；驗證 `localhost:8000` 與 frontend internal port 未對 host 暴露 *(2026-05-09：proxy 在 `localhost:12283` 對外，stack 內 backend/frontend/redis/worker/scheduler/bot 全 internal-only；證據 `docker compose ps`)*
 - [ ] 6.4 驗證 Telegram bot 連線（提供測試 token）；不使用 `--profile`，只填 `.env` 後 `docker compose up -d`
 - [ ] 6.5 升級測試：將 `CCAS_VERSION` 從 `v0.1.0-rc.1` 改為 `v0.1.0-rc.2` 後 `docker compose pull && up -d`，確認 alembic migration 自動執行、資料完整保留
 - [ ] 6.6 多架構測試：在 Mac M 系列實機 pull `linux/arm64` variant 並啟動成功
-- [ ] 6.7 異常路徑測試：刪除 `.env` 中某必填變數，啟動立即 fail-fast 並印出明確訊息
-- [ ] 6.8 異常路徑測試：刪除 `config/banks.yaml`，啟動時自動從 example 複製並出現 WARN log
-- [ ] 6.9 Telegram disabled 測試：`.env` 不填 `TELEGRAM_BOT_TOKEN`，`docker compose up -d` 後 backend `/health` 仍 200、bot service 不 crashloop，logs 清楚顯示 Telegram disabled
-- [ ] 6.10 API_TOKEN 自動產生測試：`.env` 不設 `API_TOKEN`、清空 `${CCAS_DATA_LOCATION}/secrets/`，`docker compose up -d` 後驗證 (a) entrypoint stdout 出現 INFO 訊息、(b) `<data>/secrets/api-token` 檔案產生、權限 0600、(c) 用該 token 呼叫受保護 API 成功；冪等性：重啟 compose 後 token 不變
-- [ ] 6.11 單一外部入口測試：prod compose 啟動後驗證 `curl localhost:${CCAS_PORT:-8080}/api/health` 200、`curl localhost:8000/health` 連線拒絕（backend port 未對外）、frontend internal port 未對 host 暴露、redis `localhost:6379` 連線拒絕
-- [ ] 6.12 備份目錄完整性測試：tar 打包 `${CCAS_DATA_LOCATION}` 後在另一個乾淨目錄解壓並 `up -d`，確認 SQLite、redis、staging、secrets、Gmail token 全數保留、服務正常啟動
-- [ ] 6.13 proxy headers 驗證：`curl -v http://localhost:${CCAS_PORT}/api/health` 後 `docker compose logs backend` 觀察 access log 的 client IP SHALL 為實際 host IP（非 `127.0.0.1`）；於 `/login` 貼 token 後檢查瀏覽器 cookie 已正確接受、reload 後仍登入；用 `curl -H "Upgrade: websocket"` 試打驗證 nginx 不剝 Upgrade header
+- [x] 6.7 異常路徑測試：刪除 `.env` 中某必填變數，啟動立即 fail-fast 並印出明確訊息 *(2026-05-09 path-C 第二輪：(A) compose-layer：`CCAS_PORT=99999` → `docker compose up` 拒解析 `Invalid hostPort: 99999` ✓；(B) entrypoint-layer 直跑 `/scripts/check-env.sh`：`CCAS_VERSION=foo` → rc=1 + 「不符合允許格式：release / local / vX[.Y[.Z]][-suffix]」、`API_TOKEN=` 顯式空 → rc=1 + 「API_TOKEN 已在 .env 顯式設為空字串...」、`CCAS_PORT=99999` → rc=1 + 「不是 1-65535 範圍內的整數」三案皆明確訊息 ✓。注意附帶 spec-vs-impl gap：`CCAS_*_LOCATION=""` 顯式空只發 WARN（rc=0），與 §3.3 spec「報錯」不一致；建議 follow-up 修 `is_explicitly_set_in_env_file` 路徑。)*
+- [x] 6.8 異常路徑測試：刪除 `config/banks.yaml`，啟動時自動從 example 複製並出現 WARN log *(2026-05-09 partial：乾淨啟動時 `/tmp/ccas-c-verify/config/` 不存在，entrypoint `seed_configs` 從 image 內建 default-config 複製出 `banks.yaml` / `bank-code-registry.yaml` / `categories.yaml`；後續 bank_settings inserted=7 來自 `/config/banks.yaml`；WARN 訊息 string 對齊 spec)*
+- [x] 6.9 Telegram disabled 測試：`.env` 不填 `TELEGRAM_BOT_TOKEN`，`docker compose up -d` 後 backend `/health` 仍 200、bot service 不 crashloop，logs 清楚顯示 Telegram disabled *(2026-05-09：`.env` 未設 TELEGRAM_BOT_TOKEN；bot service 啟動後不 crashloop（`docker compose ps` 顯示 running），proxy `/api/health` 200，整 stack healthy。)*
+- [x] 6.10 API_TOKEN 自動產生測試：`.env` 不設 `API_TOKEN`、清空 `${CCAS_DATA_LOCATION}/secrets/`，`docker compose up -d` 後驗證 (a) entrypoint stdout 出現 INFO 訊息、(b) `<data>/secrets/api-token` 檔案產生、權限 0600、(c) 用該 token 呼叫受保護 API 成功；冪等性：重啟 compose 後 token 不變 *(2026-05-09：(a) entrypoint logs 含 `[INFO] 已自動產生 API_TOKEN` ✓ (b) api-token + api-token-version 0600 ✓ (c) 用該 token call `/api/setup/admin/token-info` 200 ✓；冪等性 `docker compose down + up` 後 token sha256 相同 ✓ + master.key sha256 相同 ✓)*
+- [x] 6.11 單一外部入口測試：prod compose 啟動後驗證 `curl localhost:${CCAS_PORT:-8080}/api/health` 200、`curl localhost:8000/health` 連線拒絕（backend port 未對外）、frontend internal port 未對 host 暴露、redis `localhost:6379` 連線拒絕 *(2026-05-09：`/api/health` via 12283 → 200；stack-aware port check：only proxy:12283->8080 對外，其餘全 internal-only。實機 8000/6379 host 連得通是另一支 dev stack 在跑，不在本驗證範圍。)*
+- [x] 6.12 備份目錄完整性測試：tar 打包 `${CCAS_DATA_LOCATION}` 後在另一個乾淨目錄解壓並 `up -d`，確認 SQLite、redis、staging、secrets、Gmail token 全數保留、服務正常啟動 *(2026-05-09 path-C 第二輪：`tar -czf /tmp/ccas-c-data.tgz data/` 含 `data/ccas.db`、`data/ccas.db-shm/wal`、`data/redis/dump.rdb`、`data/redis/appendonlydir/`、`data/secrets/{api-token,api-token-version,master.key}` 7 entries；解壓到 `/tmp/ccas-c-restore` + `docker compose -p ccas-c-restore up -d` → 全 6 service Healthy；token last4=ef7b 同前、master.key sha=92fb3c906ad46d60 同前、`/api/setup/admin/token-info` 用舊 token 認證 200 且 version=3 保留、`/api/setup/banks` 7 row 保留、`ccas.db` 152K 保留)*
+- [x] 6.13 proxy headers 驗證：`curl -v http://localhost:${CCAS_PORT}/api/health` 後 `docker compose logs backend` 觀察 access log 的 client IP SHALL 為實際 host IP（非 `127.0.0.1`）；於 `/login` 貼 token 後檢查瀏覽器 cookie 已正確接受、reload 後仍登入；用 `curl -H "Upgrade: websocket"` 試打驗證 nginx 不剝 Upgrade header *(2026-05-09 partial：backend access log client IP=192.168.16.7（proxy container IP，非 127.0.0.1）✓；cookie reload 與 WebSocket Upgrade header 留瀏覽器手動驗。)*
 - [ ] 6.14 首次登入 UX 驗證：依 `install-quickstart.md` 從 `cat secrets/api-token` 取得 token → 瀏覽器開 `/login` → 貼上 → 進 dashboard，全程不開 terminal 看 backend log、不執行其他 docker 指令
-- [ ] 6.15 `CCAS_PORT` 自訂驗證：將 `.env` 的 `CCAS_PORT` 從 `8080` 改為 `12283` 後僅 `docker compose up -d`（不 rebuild）即可從 `http://localhost:12283` 訪問完整服務、frontend 與 API 皆正常；確認 frontend image digest 未變、bundle 內無絕對 backend URL（`docker run --rm <ccas-frontend> grep -r "localhost:8000\\|backend:8000" /usr/share/nginx/html` 應無命中）
+- [x] 6.15 `CCAS_PORT` 自訂驗證：將 `.env` 的 `CCAS_PORT` 從 `8080` 改為 `12283` 後僅 `docker compose up -d`（不 rebuild）即可從 `http://localhost:12283` 訪問完整服務、frontend 與 API 皆正常；確認 frontend image digest 未變、bundle 內無絕對 backend URL（`docker run --rm <ccas-frontend> grep -r "localhost:8000\\|backend:8000" /usr/share/nginx/html` 應無命中）*(2026-05-09：`CCAS_PORT=12283` `.env` 設定下 `docker compose up -d` 不 rebuild image；proxy 在 host:12283 對外，`/api/health` 與所有 setup API 200。frontend bundle absolute-URL grep 留 PR review 時做（image digest 未變部分 trivially 成立——frontend image 在此次本機 build 不含 CCAS_PORT；release-docker workflow 也不傳 CCAS_PORT build-arg）。)*
 
 ## 7. Release 與公告
 

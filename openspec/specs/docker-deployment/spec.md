@@ -1,4 +1,10 @@
-## MODIFIED Requirements
+# docker-deployment Specification
+
+## Purpose
+
+確保 Docker（`STAGING_DIR=/data/staging`）與本機（`STAGING_DIR=./data/staging`）兩種部署環境下，`staged_attachments.staged_path` 都能一致定位檔案。透過 `staged_path` 只儲存相對於 `STAGING_DIR` 的相對路徑、使用時動態組合為完整路徑，並提供 idempotent migration script 將既有絕對路徑記錄轉換為相對路徑，避免跨環境執行時 attachment 找不到。
+
+## Requirements
 
 ### Requirement: Staging 路徑跨環境一致性
 

@@ -159,7 +159,14 @@ async def test_db_reporter_stage_finished_force_flushes(
 
     row = await _fetch_run(session_factory, run_id)
     assert row.stage_summary == [
-        {"stage": "decrypt", "ok": 5, "fail": 0, "elapsed_ms": 2500}
+        {
+            "stage": "decrypt",
+            "ok": 5,
+            "fail": 0,
+            "elapsed_ms": 2500,
+            "counts": {},
+            "errors": [],
+        }
     ]
     # current_stage_processed overwritten to current_stage_total per spec.
     assert row.current_stage_processed == 5
@@ -174,14 +181,41 @@ async def test_db_reporter_stage_finished_appends_multiple_stages(
 
     reporter = DbProgressReporter(run_id, session_factory)
     await reporter.stage_started("ingest", total=2)
-    await reporter.stage_finished("ingest", ok=2, fail=0, elapsed_ms=100)
+    await reporter.stage_finished(
+        "ingest",
+        ok=2,
+        fail=0,
+        elapsed_ms=100,
+        counts={"staged": 2, "failed": 0},
+    )
     await reporter.stage_started("decrypt", total=2)
-    await reporter.stage_finished("decrypt", ok=2, fail=0, elapsed_ms=200)
+    await reporter.stage_finished(
+        "decrypt",
+        ok=1,
+        fail=1,
+        elapsed_ms=200,
+        counts={"decrypted": 1, "failed": 1},
+        errors=["bad password"],
+    )
 
     row = await _fetch_run(session_factory, run_id)
     assert row.stage_summary == [
-        {"stage": "ingest", "ok": 2, "fail": 0, "elapsed_ms": 100},
-        {"stage": "decrypt", "ok": 2, "fail": 0, "elapsed_ms": 200},
+        {
+            "stage": "ingest",
+            "ok": 2,
+            "fail": 0,
+            "elapsed_ms": 100,
+            "counts": {"staged": 2, "failed": 0},
+            "errors": [],
+        },
+        {
+            "stage": "decrypt",
+            "ok": 1,
+            "fail": 1,
+            "elapsed_ms": 200,
+            "counts": {"decrypted": 1, "failed": 1},
+            "errors": ["bad password"],
+        },
     ]
 
 

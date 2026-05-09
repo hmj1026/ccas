@@ -1,4 +1,10 @@
-## MODIFIED Requirements
+# classification-seed Specification
+
+## Purpose
+
+定義 `config/categories.yaml` 作為預設關鍵字→分類映射的 SSOT，並由 dedicated seed CLI 將其載入 `categories` 資料表。涵蓋 YAML 結構、最低類別覆蓋（≥9 類，含保險）與保險類別應收錄的常見保險公司關鍵字。
+
+## Requirements
 
 ### Requirement: Categories YAML 作為預設分類規則 SSOT
 

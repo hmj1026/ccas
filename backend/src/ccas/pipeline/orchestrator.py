@@ -171,7 +171,14 @@ async def _run_stage(
 
     elapsed_ms = int((time.monotonic() - started) * 1000)
     ok, fail = _summary_to_progress(summary)
-    await reporter.stage_finished(stage_name, ok=ok, fail=fail, elapsed_ms=elapsed_ms)
+    await reporter.stage_finished(
+        stage_name,
+        ok=ok,
+        fail=fail,
+        elapsed_ms=elapsed_ms,
+        counts=summary.counts,
+        errors=summary.errors,
+    )
     return summary
 
 

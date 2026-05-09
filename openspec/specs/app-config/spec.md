@@ -86,7 +86,7 @@ TBD - created by archiving change foundation-setup. Update Purpose after archive
 
 ### Requirement: Log persistence configuration fields
 
-Settings 類別新增日誌持久化相關欄位。
+`Settings` 類別 SHALL 新增日誌持久化相關欄位（`log_dir`、`log_file_max_bytes`、`log_file_backup_count`、`log_file_prefix`），讓 `configure_logging()` 能依設定掛載 `RotatingFileHandler`。
 
 #### Scenario: LOG_DIR configures log directory
 - **WHEN** 環境變數 `LOG_DIR` 設為 `/logs`
