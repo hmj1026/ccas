@@ -122,7 +122,7 @@
 ## 13. 端對端驗證
 
 - [x] 13.1 在乾淨 data 目錄啟動：驗證 entrypoint 自動產生 master.key 權限 0600、bank_settings seed 從 banks.yaml *(2026-05-09 path-C verify on /tmp/ccas-c-verify with `CCAS_VERSION=local CCAS_PORT=12283`：master.key + api-token + api-token-version 全 0600；bank_settings inserted=7 from /config/banks.yaml；證據在 commit 4d6f438 commit message)*
-- [ ] 13.2 Gmail Web flow 端對端：上傳 credentials.json → 授權 → callback → 看到 connected → revoke → 驗證 token.json 已刪 *(2026-05-09 partial local verify on `/tmp/ccas-openspec-verify` with `CCAS_PORT=12284`：瀏覽器可上傳 `credentials.json`，UI 顯示 client_id 末 8 字並啟用「授權 Google」；`GET /api/setup/gmail/authorize` 產生含 `redirect_uri=http://localhost:12284/setup/gmail/callback`、`code_challenge_method=S256`、state 的 Google URL。完整 consent / callback / revoke 仍需真實 Google OAuth client 與測試帳號。)*
+- [x] 13.2 Gmail Web flow 端對端：上傳 credentials.json → 授權 → callback → 看到 connected → revoke → 驗證 token.json 已刪 *(2026-05-09 path-D 真實授權 on `/tmp/ccas-openspec-verify` with `CCAS_PORT=8080` + `PUBLIC_BASE_URL=http://localhost:8080`：用真實 GCP `installed` Desktop client（project `ccas-492008`、client_id `157894926323-…`）；redirect_uri `http://localhost:8080/setup/gmail/callback` 走 Google Desktop loopback policy 通過。流程：先在瀏覽器登入 CCAS frontend（避免 `/setup/*` 被 auth guard 踢回 `/login`，state row `-bFEYtAqJMLnTJsp...` 因此第一次未被消化）→ 進 `/setup/gmail` 上傳 credentials.json → 點「授權 Google」生成新 state → Google consent 同意 `gmail.readonly` → backend `GET /api/setup/gmail/callback?code=4%2F0AeoWuM9...&state=oBBu...` 回 `303 See Other` ✓ → `data/token.json` 寫入 670 bytes 權限 0600（含 token / refresh_token / scopes=`["https://www.googleapis.com/auth/gmail.readonly"]` / client_id / client_secret，google-auth Credentials 兼容格式）✓ → `GET /api/setup/gmail/status` 回 `connected=true, granted_scopes=["…/gmail.readonly"]` ✓。Revoke：`POST /api/setup/gmail/revoke` 200 → `data/token.json` 已刪 ✓ → status `connected=false` ✓。**UX finding**：使用者第一次在乾淨瀏覽器直接點外部 OAuth URL，consent 後 Google redirect 到 `/setup/gmail/callback`，因為 SPA 的 `/setup/*` 受保護導致直接被踢回 `/login`，前端 callback 元件沒機會把 `?code/state` 轉發給 backend；正確流程必須先登入 CCAS。已有 `frontend/e2e/setup.spec.ts` 覆蓋 callback 轉發邏輯，但端對端 UX 應在 `docs/install-quickstart.md` 或 `docs/gmail-setup.md` 提示「先登入再點授權」（留作後續文件補強，非 release blocker — 從 UI 觸發授權流程不會踩到此問題）。)*
 - [ ] 13.3 bank toggle 端對端：停用某銀行 → 跑 pipeline → 該銀行 attachments 被 skip *(2026-05-09 partial local verify：live API `PUT /api/setup/banks/CTBC {"enabled": false}` 後 `GET /api/setup/banks` 顯示 false，再 restore true；`backend/tests/integration/test_setup_banks_router.py` 的 `TestApplyBankSettingsFilter` 覆蓋 DB disabled skip / fallback。缺真實 Gmail token + staged attachment pipeline run，暫不勾選。)*
 - [ ] 13.4 pdf-secrets 端對端：DB 設定密碼 → 跑 pipeline 解密成功；刪除 DB 條目 + env 仍存在 → 解密成功（fallback）；刪除 DB + 刪除 env → 解密失敗 + 明確錯誤訊息 *(2026-05-09 partial local verify：focused tests `tests/integration/test_setup_secrets_router.py` + `tests/unit/decryptor/test_password.py` 通過，覆蓋 DB > env > none、DB decrypt failure clear error、import idempotency；repo 無可用加密 PDF fixture + 真實 pipeline input，端對端 pipeline 解密暫不勾選。)*
 - [x] 13.5 import-from-env 端對端：env 設 5 個密碼、DB 空 → 進 `/setup/secrets` 看橫幅 → 點匯入 → DB 5 條 → env 仍存在但不再生效 *(2026-05-09 local verify on `/tmp/ccas-openspec-verify` with 7 env passwords：`/setup/secrets` 顯示「7 筆環境變數密碼尚未匯入 DB」橫幅；點「一鍵匯入 env 密碼」後 toast `已匯入 7 筆，略過 0 筆既有 DB 條目`，列表全部變 `effective_source=db` 且仍標示 `env 仍存在`；SQLite `bank_secrets` 有 7 row，ciphertext 不含 `env-*` 明文。)*
@@ -135,11 +135,13 @@
 ## 14. OpenSpec 收尾
 
 > **Pending 原因（2026-05-09 path-D）**：
-> - §13.2 / §13.3 / §13.4 / §13.8 仍為 partial — 需真實 GCP OAuth client + 加密 PDF fixture + 真實 Gmail
->   token 的端對端 pipeline run，必須在使用者帶 GCP 實機環境跑過後才 sign-off。
+> - §13.2 已於 path-D 第二輪用真實 GCP Desktop client（project `ccas-492008`）走完 authorize → consent
+>   → callback → connected → revoke → token.json 刪除全鏈路驗證，已勾選。
+> - §13.3 / §13.4 / §13.8 仍為 partial — 需真實 Gmail token + staged attachment pipeline run +
+>   加密 PDF fixture + GCP redirect_uri 動態切換驗證，留待真人帶 GCP 實機環境跑過後才 sign-off。
 > - §14.2 落地順序：本 change 已在 `compose-pull-deploy` 之後實作（master.key + entrypoint bootstrap
 >   都建立在 §1 的 secrets 子系統上），但「合入」順序仍綁在 compose-pull-deploy 先 archive。
-> - §14.3 archive：等 §13.2/3/4/8 真實環境驗完 + compose-pull-deploy archive 後才執行。
+> - §14.3 archive：等 §13.3/4/8 真實環境驗完 + compose-pull-deploy archive 後才執行。
 > - 對應 compose-pull-deploy §7.x 的 release tag pending 一併留待。
 
 
