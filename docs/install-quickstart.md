@@ -59,6 +59,15 @@ cp example.env .env
 - `PUBLIC_BASE_URL`：OAuth redirect URI 使用；若改 `CCAS_PORT` 或使用自訂網域，請同步改成實際外部網址
 - `TELEGRAM_BOT_TOKEN`、`TELEGRAM_CHAT_ID`：填妥則 bot 自動啟用，不需 `--profile`
 
+> **自訂 `CCAS_PORT` 與 GCP redirect URI**：CCAS 使用的 redirect URI 為
+> `${PUBLIC_BASE_URL}/setup/gmail/callback`，會隨 `PUBLIC_BASE_URL` / `CCAS_PORT` 動態切換。
+> - 若 GCP OAuth client 是 **Desktop 類型**（`installed` block）：Google 的 loopback policy
+>   接受任意 `localhost:PORT/path`，不需要在 GCP Console 加新 redirect URI。
+> - 若 GCP OAuth client 是 **Web application 類型**（`web` block）：Google 嚴格比對 redirect URI。
+>   切換 `CCAS_PORT` 時必須先在 GCP Console「APIs & Services → Credentials → OAuth 2.0
+>   Client ID → Authorized redirect URIs」加入 `http://localhost:<NEW_PORT>/setup/gmail/callback`
+>   後再啟動，否則授權會回 `Error 400: redirect_uri_mismatch`。
+
 > `API_TOKEN` **可不填**：entrypoint 首啟會自動產生 32-byte token 並落地至
 > `${CCAS_DATA_LOCATION}/secrets/api-token`（檔案權限 0600）。若顯式設為空字串會被驗證腳本擋下。
 
@@ -100,6 +109,12 @@ cat ./data/secrets/api-token   # CCAS_DATA_LOCATION 對應路徑
 
 # 3) 將上一步的 token 貼到輸入框送出
 #    成功後即進入 dashboard
+
+# 4) 如果接下來要進入 /setup/gmail 完成 Gmail 授權：
+#    必須先完成步驟 3 登入，再從 UI 點「授權 Google」按鈕
+#    （不要直接在外部瀏覽器貼 OAuth URL，否則 Google 跳回 /setup/gmail/callback
+#     時 SPA auth guard 會把你踢回 /login，前端 callback 元件來不及把
+#     ?code/state 轉發給 backend，token.json 不會寫入）
 ```
 
 > 之後想換 token？進 `/setup/admin` 使用「產生新 token」。rotate 後舊 token 與舊 cookie
