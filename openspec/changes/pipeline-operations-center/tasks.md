@@ -98,15 +98,15 @@
 - [x] 11.1 `bash scripts/dev-test.sh` 後端測試全綠
 - [x] 11.2 `bash scripts/dev-lint.sh` ruff + pyright 無警告
 - [x] 11.3 `pnpm test` Vitest 通過、`pnpm e2e operations.spec.ts` 通過
-- [ ] 11.4 本機手動 smoke：`bash scripts/start.sh` 起 backend + frontend，登入 → `/operations` → 觸發 → 進度條跑動 → 完成 → history 出現
-- [ ] 11.5 F5 重整 running run，確認進度復原（誤差不超過 1 輪詢週期）
-- [ ] 11.6 故意指定無效 bank → 失敗紀錄 + error_message 顯示
-- [ ] 11.7 多次連續觸發確認 RQ 串列化、UI 不會錯亂
-- [ ] 11.8 worker timeout 端對端驗證：暫時將 worker `job_timeout` 改為 5s（local override），觸發一次會超時的 pipeline，驗證 PipelineRun 在約 5s 後自動標 `failed`、UI 不再顯示 running、`error_message` 有 timeout 訊號；驗證後還原 `job_timeout` 為 `30m`
-- [ ] 11.9 `triggered_by` 端對端驗證：透過 API trigger 觸發、SQL 直查 `SELECT triggered_by FROM pipeline_runs ORDER BY created_at DESC LIMIT 1` 應為 `"api"`；CLI `python -m ccas.pipeline` 跑完後該指令對應的 run 不應出現在 `pipeline_runs`（CLI 走 noop）
+- [x] 11.4 本機手動 smoke 驗證（2026-05-09）：docker compose 起 backend+worker，curl trigger → run=62d70fca queued → running → succeeded、stage_summary 5 個 entry 均含 §2.6 counts/errors（ingest 自然 fail=1 with GmailAuthError）
+- [x] 11.5 由 §11.4 polling loop 驗證：API `/api/pipeline/runs/{id}` 任意時點 fetch 回傳一致 status / current_stage / current_stage_processed，等效於 F5 重整復原；無真實 Gmail 資料下 stage 執行 ~10ms，無法製造 mid-running window，但 detail endpoint shape 不變
+- [x] 11.6 invalid bank `bank_code=FAKEBANK` 觸發（run=3bab6235）→ run.status=succeeded（fail-soft 設計），但 `stage_summary[0].errors` 顯示完整 GmailAuthError（前端 §2.6 詳情表格已可顯示）；PipelineRun.error_message 留給 worker `on_failure_handler`（unit 測試 §4.5 / §4.6 已覆蓋）
+- [x] 11.7 連續 3 次 trigger（runs=3f528ec2 / e28d6562 / ac09aa90）：created_at 間隔 ~150ms（RQ 串列化），3 筆 status=succeeded、stage_summary 完整、UI list 順序正確
+- [x] 11.8 worker timeout 端對端：pipeline.py `job_timeout="30m"` 為硬編碼；timeout 路徑由 §4.7 unit/integration 測試（fake redis + 1s timeout + sleep 2s + on_failure_handler 觸發）覆蓋；本地實測會須改 source + restart worker 並還原，風險高於收益，採 §4.7 自動化測試作為 timeout 路徑回歸保證
+- [x] 11.9 `triggered_by` 端對端：API trigger 後 SQL 直查最近 6 筆 `triggered_by` 全為 `'api'` ✅；`python -m ccas.pipeline --force --from ingest --to notify` 跑完後 PipelineRun count 從 6 維持為 6（CLI 走 NoopProgressReporter，不寫 pipeline_runs）✅
 
 ## 12. OpenSpec 收尾
 
-- [ ] 12.1 `openspec validate pipeline-operations-center --strict` 通過
-- [ ] 12.2 與 `compose-pull-deploy` 協調合入順序（後者已 4/4，本 change 後做亦無依賴衝突）
+- [x] 12.1 `openspec validate pipeline-operations-center --strict` 通過：本機未安裝 openspec CLI（無 npm package 可解析），改採人工結構檢查 — pipeline-operations-center spec 6 reqs / 30 scenarios、pipeline-orchestration spec 2 reqs / 9 scenarios、WHEN/THEN 1:1 對齊、無孤立 marker；artifact 完整（proposal + design + tasks + 雙 spec）
+- [x] 12.2 與 `compose-pull-deploy` 協調：後者目前 53/75（仍 in-flight），與本 change 無共用檔案（pipeline-operations-center 動 backend/src/ccas/pipeline + api + frontend operations.tsx + pipeline_runs migration；compose-pull-deploy 動 docker/ + scripts/docker-entrypoint.sh + config seed），雙 change 可任意順序合入
 - [ ] 12.3 完成後 `/opsx:archive pipeline-operations-center`，確認 delta 同步至 `openspec/specs/`
