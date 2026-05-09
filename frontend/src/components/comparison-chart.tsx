@@ -63,8 +63,12 @@ export function YearComparisonLineChart({
         <XAxis dataKey="year" />
         <YAxis />
         <Tooltip
-          formatter={(v: number | string) =>
-            metricLabel === '金額' ? currencyFormatter(v) : v
+          formatter={(v) =>
+            metricLabel === '金額'
+              ? currencyFormatter(
+                  v as number | string | readonly (number | string)[] | undefined,
+                )
+              : String(v ?? '')
           }
         />
         <Legend />
