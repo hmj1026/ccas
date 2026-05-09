@@ -78,8 +78,16 @@ def create_app() -> FastAPI:
     )
 
     @app.get("/health")
+    @app.get("/api/health")
     async def health():
-        """健康檢查端點，回傳 ``{"status": "ok"}``。"""
+        """健康檢查端點，回傳 ``{"status": "ok"}``。
+
+        Both ``/health`` (proxy & internal docker healthcheck) and ``/api/health``
+        (reverse-proxy passthrough from ``proxy:/api/*`` location block) are
+        registered so external callers behind nginx see a 200 without nginx
+        having to strip the ``/api/`` prefix (which would break ``/api/setup/*``
+        and ``/api/bills``). See compose-pull-deploy §1.11.
+        """
         return {"status": "ok"}
 
     app.include_router(auth.router)

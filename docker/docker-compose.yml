@@ -20,6 +20,15 @@ x-shared-env: &shared-env
   FUBON_MANUAL_STAGING_DIR: "/data/manual-staging/FUBON"
   GMAIL_CREDENTIALS_PATH: "/data/credentials.json"
   GMAIL_TOKEN_PATH: "/data/token.json"
+  # Secrets paths must be absolute under /data so backend Settings (which
+  # default to relative ``./data/...`` and resolve under WORKDIR=/app) align
+  # with what entrypoint writes to the mounted volume. Without these overrides
+  # token rotate / master.key encryption / version bump silently target
+  # ``/app/data/secrets/...`` (no volume) and break (oauth-onboarding-ui §6.3,
+  # compose-pull-deploy §6.10).
+  API_TOKEN_PATH: "/data/secrets/api-token"
+  API_TOKEN_VERSION_PATH: "/data/secrets/api-token-version"
+  MASTER_KEY_PATH: "/data/secrets/master.key"
   REDIS_URL: redis://redis:6379/0
   LOG_DIR: "/logs"
   BANK_CONFIG_DIR: "/config"
