@@ -109,4 +109,4 @@
 
 - [x] 12.1 `openspec validate pipeline-operations-center --strict` 通過：本機未安裝 openspec CLI（無 npm package 可解析），改採人工結構檢查 — pipeline-operations-center spec 6 reqs / 30 scenarios、pipeline-orchestration spec 2 reqs / 9 scenarios、WHEN/THEN 1:1 對齊、無孤立 marker；artifact 完整（proposal + design + tasks + 雙 spec）
 - [x] 12.2 與 `compose-pull-deploy` 協調：後者目前 53/75（仍 in-flight），與本 change 無共用檔案（pipeline-operations-center 動 backend/src/ccas/pipeline + api + frontend operations.tsx + pipeline_runs migration；compose-pull-deploy 動 docker/ + scripts/docker-entrypoint.sh + config seed），雙 change 可任意順序合入
-- [ ] 12.3 完成後 `/opsx:archive pipeline-operations-center`，確認 delta 同步至 `openspec/specs/`
+- [x] 12.3 完成 `/opsx:archive pipeline-operations-center`：delta 同步至 `openspec/specs/pipeline-operations-center/spec.md`（新 capability）+ append 至 `openspec/specs/pipeline-orchestration/spec.md`（既有 capability +2 requirements），change 目錄搬至 `openspec/changes/archive/2026-05-09-pipeline-operations-center/`
