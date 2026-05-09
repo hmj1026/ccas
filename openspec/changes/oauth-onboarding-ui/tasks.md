@@ -130,7 +130,7 @@
 - [x] 13.7 master.key 遺失 fail-loud：手動刪 master.key → 重啟 backend → 自動產生新 master.key → 既有 bank_secrets 解密失敗 → 錯誤訊息明確指出「master.key 不匹配」 *(2026-05-09 partial：mv master.key + restart backend → entrypoint stdout `[INFO] 已自動產生 master.key`，新檔 0600 + sha 與舊不同 ✓；bank_secrets decrypt 錯誤訊息留待設過密碼後驗)*
 - [ ] 13.8 redirect_uri 變更：將 `CCAS_PORT` 從 8080 改 12283 → 進 `/setup/gmail` 看到提示新 redirect URI → GCP Console 同步後可完成授權
 - [ ] 13.9 升級相容性測試：既有 `.env` 含 `PDF_PASSWORD_*` + 既有 `banks.yaml.enabled=false` 某銀行 → 升級 → 跑 pipeline 行為不變
-- [ ] 13.10 備份還原測試：tar 整個 `${CCAS_DATA_LOCATION}` → 在新機器解壓 + `up -d` → 所有 secrets / token / bank settings 完整復原
+- [x] 13.10 備份還原測試：tar 整個 `${CCAS_DATA_LOCATION}` → 在新機器解壓 + `up -d` → 所有 secrets / token / bank settings 完整復原 *(2026-05-09 path-C 第二輪：與 compose-pull-deploy §6.12 同一輪驗證；`tar -czf /tmp/ccas-c-data.tgz data/` 後在 `/tmp/ccas-c-restore` 解壓 + `docker compose -p ccas-c-restore up -d` → token last4=ef7b、master.key sha=92fb3c906ad46d60 完全一致；`api-token-version=3` 保留；`/api/setup/banks` 列表 7 row 由 SQLite ccas.db 還原；新 stack 用舊 token 直接 200 認證 ✓)*
 
 ## 14. OpenSpec 收尾
 
