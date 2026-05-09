@@ -19,8 +19,9 @@ release-docker workflow 推送 `v0.1.0-rc.1` image 至 GHCR 後，**release mana
 - 通過：`/setup/secrets` env-only 橫幅顯示 7 筆，點「一鍵匯入 env 密碼」後 7 筆皆轉為 DB source，env fallback 仍可見，SQLite 中 ciphertext 不含 env 明文
 - 通過：`/setup/gmail` 顯示 `http://localhost:12284/setup/gmail/callback`，上傳 `credentials.json` 後 authorize URL 使用同一 redirect URI 與 PKCE S256
 - 通過：`/tmp/ccas-telegram-verify` 以同一份 `.env` 補入 Telegram 變數、`CCAS_VERSION=local`、`CCAS_PORT=12285`，不使用 `--profile`；bot service `healthy`、Telegram `getMe.ok=true`、`sendMessage.ok=true`，proxy `/api/health` 200（token/chat id 未寫入紀錄）
+- 通過：假 tag `v0.0.2-test-20260509143341` / GitHub Actions run `25594245171` 全綠，三個 GHCR image manifest 均存在，GitHub Release 已上傳 `docker-compose.yml` 與 `example.env` asset。第一次 `v0.0.1-test-20260509142409` 曾驗出 release artifact 403，根因為 `contents: read` 權限不足，已修正為 `contents: write`
 
-仍需 release / 外部服務驗證：GHCR 假 tag workflow、真實 Google OAuth
+仍需 release / 外部服務驗證：真實 Google OAuth
 consent / callback / revoke、`v0.1.0-rc.1` → `v0.1.0-rc.2` 升級、多架構 pull、
 正式 tag 與 archive。
 

@@ -51,7 +51,7 @@
 - [x] 4.8 啟用 `cache-from: type=gha` + `cache-to: type=gha,mode=max`
 - [x] 4.9 加入「tag 已存在」預檢步驟（`docker manifest inspect` 偵測 backend / frontend / proxy 三個 image → fail-fast）
 - [x] 4.10 tag job 結尾加 `softprops/action-gh-release@v2`，把 `docker/docker-compose.yml` + `docker/example.env` 上傳為 release asset
-- [ ] 4.11 在 fork / 測試 branch 推一次假 tag（如 `v0.0.1-test`）驗證 workflow 跑通、三個 image 推到 GHCR、release artifact 出現
+- [x] 4.11 在 fork / 測試 branch 推一次假 tag（如 `v0.0.1-test`）驗證 workflow 跑通、三個 image 推到 GHCR、release artifact 出現 *(2026-05-09：第一次 `v0.0.1-test-20260509142409` 驗出三個 image 已推 GHCR，但 release artifact job 因 `permissions.contents=read` 403；已於 `0322afe` 修正為 `contents: write`。第二次 `v0.0.2-test-20260509143341` / run `25594245171` 全綠：preflight、backend/frontend/proxy multi-arch build-push、release artifact upload 皆 success；三個 GHCR manifest 均 `manifest-ok`；GitHub Release asset 含 `docker-compose.yml` 與 `example.env`。)*
 
 ## 5. 文件
 
