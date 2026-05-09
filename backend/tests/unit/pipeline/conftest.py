@@ -8,6 +8,7 @@ against the exact contract published by ``ccas.pipeline.progress.ProgressReporte
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from typing import Any
 
 
@@ -34,11 +35,21 @@ class FakeReporter:
         ok: int,
         fail: int,
         elapsed_ms: int,
+        *,
+        counts: Mapping[str, int] | None = None,
+        errors: Sequence[str] | None = None,
     ) -> None:
         self.calls.append(
             (
                 "stage_finished",
-                {"stage": stage, "ok": ok, "fail": fail, "elapsed_ms": elapsed_ms},
+                {
+                    "stage": stage,
+                    "ok": ok,
+                    "fail": fail,
+                    "elapsed_ms": elapsed_ms,
+                    "counts": counts or {},
+                    "errors": errors or [],
+                },
             )
         )
 

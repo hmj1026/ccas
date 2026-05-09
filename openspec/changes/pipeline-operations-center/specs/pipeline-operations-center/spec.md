@@ -2,7 +2,7 @@
 
 ### Requirement: Pipeline 執行歷史 DB 模型
 
-系統 SHALL 提供 `pipeline_runs` 資料表作為 pipeline 執行歷史與即時進度的單一真實來源。每筆 pipeline 觸發 SHALL 對應一筆 `PipelineRun` row，欄位至少包含：`id`（UUID PK）、`job_id`（RQ id）、`status`（queued / running / succeeded / failed / cancelled）、`triggered_by`、`params`（JSON：force / bank_code / year / month / from_stage / to_stage）、`current_stage`、`current_stage_processed`、`current_stage_total`、`stage_summary`（JSON 陣列：每階段 ok / fail / elapsed_ms）、`error_message`、`started_at`、`completed_at`、`created_at`、`updated_at`。資料表 SHALL 含 `(created_at DESC)` 與 `(status)` 兩個索引。
+系統 SHALL 提供 `pipeline_runs` 資料表作為 pipeline 執行歷史與即時進度的單一真實來源。每筆 pipeline 觸發 SHALL 對應一筆 `PipelineRun` row，欄位至少包含：`id`（UUID PK）、`job_id`（RQ id）、`status`（queued / running / succeeded / failed / cancelled）、`triggered_by`、`params`（JSON：force / bank_code / year / month / from_stage / to_stage）、`current_stage`、`current_stage_processed`、`current_stage_total`、`stage_summary`（JSON 陣列：每階段 `stage` / `ok` / `fail` / `elapsed_ms` / `counts` / `errors`）、`error_message`、`started_at`、`completed_at`、`created_at`、`updated_at`。資料表 SHALL 含 `(created_at DESC)` 與 `(status)` 兩個索引。
 
 #### Scenario: trigger 立即建立 row
 
@@ -31,7 +31,7 @@
 
 ### Requirement: ProgressReporter 抽象層
 
-系統 SHALL 提供 `ProgressReporter` Protocol 並至少實作兩個版本：`NoopProgressReporter`（CLI / scheduler 路徑用，所有 hook 為空操作）、`DbProgressReporter`（worker 路徑用，將進度寫入 `pipeline_runs` 對應 row）。Protocol 介面 SHALL 包含三個 async 方法：`stage_started(stage, total)`、`stage_item_done(stage, processed)`、`stage_finished(stage, ok, fail, elapsed_ms)`。
+系統 SHALL 提供 `ProgressReporter` Protocol 並至少實作兩個版本：`NoopProgressReporter`（CLI / scheduler 路徑用，所有 hook 為空操作）、`DbProgressReporter`（worker 路徑用，將進度寫入 `pipeline_runs` 對應 row）。Protocol 介面 SHALL 包含三個 async 方法：`stage_started(stage, total)`、`stage_item_done(stage, processed)`、`stage_finished(stage, ok, fail, elapsed_ms, counts=None, errors=None)`。
 
 #### Scenario: NoopProgressReporter 不寫 DB
 
@@ -50,8 +50,8 @@
 
 #### Scenario: stage_finished 即時寫入
 
-- **WHEN** parse 階段結束呼叫 `stage_finished("parse", ok=120, fail=0, elapsed_ms=8200)`
-- **THEN** `DbProgressReporter` SHALL 立即寫入：將 `stage_summary` JSON 陣列追加 `{stage: "parse", ok: 120, fail: 0, elapsed_ms: 8200}`、覆寫 `current_stage_processed = current_stage_total`，不受節流限制
+- **WHEN** parse 階段結束呼叫 `stage_finished("parse", ok=120, fail=0, elapsed_ms=8200, counts={"parsed": 120, "failed": 0}, errors=[])`
+- **THEN** `DbProgressReporter` SHALL 立即寫入：將 `stage_summary` JSON 陣列追加 `{stage: "parse", ok: 120, fail: 0, elapsed_ms: 8200, counts: {"parsed": 120, "failed": 0}, errors: []}`、覆寫 `current_stage_processed = current_stage_total`，不受節流限制
 
 #### Scenario: 每筆寫入使用獨立短事務
 
@@ -85,7 +85,7 @@
 #### Scenario: 詳情含完整 stage_summary
 
 - **WHEN** 前端呼叫 `GET /api/pipeline/runs/{run_id}`，run 已執行完前 3 個階段
-- **THEN** response SHALL 包含 `stage_summary`（已完成 3 階段的 ok / fail / elapsed_ms 陣列）、`current_stage`（第 4 階段）、`current_stage_processed`、`current_stage_total`、`params`、`triggered_by`、所有時間戳
+- **THEN** response SHALL 包含 `stage_summary`（已完成 3 階段的 ok / fail / elapsed_ms / counts / errors 陣列）、`current_stage`（第 4 階段）、`current_stage_processed`、`current_stage_total`、`params`、`triggered_by`、所有時間戳
 
 #### Scenario: trigger 回應含 run_id
 

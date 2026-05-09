@@ -298,6 +298,8 @@ class PipelineStageEntry(BaseModel):
     ok: int
     fail: int
     elapsed_ms: int
+    counts: dict[str, int] = Field(default_factory=dict)
+    errors: list[str] = Field(default_factory=list)
 
 
 class PipelineRunSummary(BaseModel):

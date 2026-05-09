@@ -2,7 +2,7 @@
 
 ### Requirement: run_pipeline 接受 progress_reporter 參數
 
-`run_pipeline()` SHALL 新增可選關鍵字參數 `progress_reporter: ProgressReporter | None = None`。當該參數為 `None` 時，系統 SHALL 內部包成 `NoopProgressReporter`，所有階段 hook 為空操作、不影響既有行為。當該參數為 `ProgressReporter` 實例時，每階段開頭 SHALL 呼叫 `await progress_reporter.stage_started(stage, total)`、每處理完一筆 SHALL 呼叫 `await progress_reporter.stage_item_done(stage, processed)`、階段結束 SHALL 呼叫 `await progress_reporter.stage_finished(stage, ok, fail, elapsed_ms)`。
+`run_pipeline()` SHALL 新增可選關鍵字參數 `progress_reporter: ProgressReporter | None = None`。當該參數為 `None` 時，系統 SHALL 內部包成 `NoopProgressReporter`，所有階段 hook 為空操作、不影響既有行為。當該參數為 `ProgressReporter` 實例時，每階段開頭 SHALL 呼叫 `await progress_reporter.stage_started(stage, total)`、每處理完一筆 SHALL 呼叫 `await progress_reporter.stage_item_done(stage, processed)`、階段結束 SHALL 呼叫 `await progress_reporter.stage_finished(stage, ok, fail, elapsed_ms, counts=counts, errors=errors)`。`ok` / `fail` 為摘要欄位；`counts` / `errors` SHALL 來自該階段的 `StageSummary`，供 `PipelineRun.stage_summary` 保存完整快照。
 
 #### Scenario: CLI 路徑使用 noop
 
@@ -22,7 +22,7 @@
 #### Scenario: hook 呼叫順序正確
 
 - **WHEN** `run_pipeline()` 執行 ingest 階段，處理 5 筆資料
-- **THEN** hook 呼叫順序 SHALL 為：`stage_started("ingest", total=5)` → 5 次 `stage_item_done("ingest", processed=N)` → `stage_finished("ingest", ok, fail, elapsed_ms)`，下一階段開始前 SHALL 已完成本階段所有 hook
+- **THEN** hook 呼叫順序 SHALL 為：`stage_started("ingest", total=5)` → 5 次 `stage_item_done("ingest", processed=N)` → `stage_finished("ingest", ok, fail, elapsed_ms, counts=..., errors=...)`，下一階段開始前 SHALL 已完成本階段所有 hook
 
 #### Scenario: 階段範圍限制下 hook 仍正確
 
@@ -32,7 +32,7 @@
 #### Scenario: 階段內 exception 仍呼叫 stage_finished
 
 - **WHEN** parse 階段在處理第 50 筆時 raise exception
-- **THEN** 系統 SHALL 在標記該 run 失敗或回傳 failed stage summary 前呼叫 `stage_finished("parse", ok=49, fail=1, elapsed_ms=...)`，避免 DB 中 `current_stage` 永久卡住；CLI stdout contract 不得因 GUI progress hook 無意改變
+- **THEN** 系統 SHALL 在標記該 run 失敗或回傳 failed stage summary 前呼叫 `stage_finished("parse", ok=49, fail=1, elapsed_ms=..., counts=..., errors=...)`，避免 DB 中 `current_stage` 永久卡住；CLI stdout contract 不得因 GUI progress hook 無意改變
 
 ### Requirement: stage job item loop 提供真實進度來源
 
@@ -51,4 +51,4 @@
 #### Scenario: 空 stage 仍回報完整狀態
 
 - **WHEN** notify stage 沒有任何待通知帳單
-- **THEN** notify job SHALL 回報 `stage_started("notify", total=0)` 與 `stage_finished("notify", ok=0, fail=0, elapsed_ms=...)`，UI SHALL 顯示該 stage 已完成而非 stuck
+- **THEN** notify job SHALL 回報 `stage_started("notify", total=0)` 與 `stage_finished("notify", ok=0, fail=0, elapsed_ms=..., counts=..., errors=...)`，UI SHALL 顯示該 stage 已完成而非 stuck

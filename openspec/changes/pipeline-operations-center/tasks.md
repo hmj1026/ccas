@@ -13,6 +13,7 @@
 - [x] 2.3 實作 `DbProgressReporter`：每筆寫入用 `async_session_factory()` 開短事務、單一 UPDATE、立即 commit；引入 `AsyncSessionFactory = Callable[[], AsyncSession]` type alias 允許測試注入 instrumented factory
 - [x] 2.4 在 `DbProgressReporter` 加入 250 ms 節流（用 `asyncio.Lock` + `last_flush_at`，stage_started 重置節流視窗、stage_finished 強制 flush 並覆寫 `current_stage_processed = current_stage_total`）
 - [x] 2.5 為 `progress.py` 寫整合測試 `tests/integration/pipeline/test_progress_reporter.py` 9 案：noop、節流、強制 flush、stage_finished 即時寫、獨立短事務、跨 stage 重置節流、concurrent gather lock 序列化、missing run row warning fail-soft、多 stage append 順序
+- [x] 2.6 擴展 `ProgressReporter.stage_finished` 契約，除 `ok` / `fail` 摘要外同步傳入 `counts` / `errors`，並串接到 `PipelineRun.stage_summary`、API schema、前端詳情 UI，避免 history 只保存 partial stage summary
 
 ## 3. Orchestrator 注入點
 
