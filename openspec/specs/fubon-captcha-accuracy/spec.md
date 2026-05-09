@@ -1,4 +1,10 @@
-## ADDED Requirements
+# fubon-captcha-accuracy Specification
+
+## Purpose
+
+提升富邦銀行 captcha 自動辨識的 OCR 準確率與可監控性。涵蓋四個面向：(1) ddddocr 前處理 pipeline（灰階 → 對比增強 → Otsu 二值化 → median filter 降噪）、(2) 評估腳本 `scripts/eval_captcha.py` 統計 accept rate / accuracy 並在低於門檻時 exit 1、(3) ≥30 張真實 fixture 以檔名為 ground truth、(4) 執行時透過 `FUBON_CAPTCHA_ARCHIVE` 旗標自動收集樣本擴充 fixture 集，預設關閉避免儲存不必要資料。
+
+## Requirements
 
 ### Requirement: Captcha 圖片前處理提升 OCR 辨識率
 

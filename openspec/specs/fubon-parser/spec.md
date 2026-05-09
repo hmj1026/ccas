@@ -1,4 +1,10 @@
-## MODIFIED Requirements
+# fubon-parser Specification
+
+## Purpose
+
+定義 `FubonV1Parser.parse()` 從富邦銀行帳單 PDF 提取消費交易明細的契約：每筆交易的必要 / 可選欄位、卡號分組標頭如何傳遞 `card_last4` 給後續交易、merchant 名稱中分期 pattern `(NN/MM期)` 的拆解規則，以及無法解析行的 fail-soft 處理（warning + skip，不中斷整體解析）。
+
+## Requirements
 
 ### Requirement: parse 提取交易明細
 
