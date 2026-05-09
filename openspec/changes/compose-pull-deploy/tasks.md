@@ -101,11 +101,26 @@
 > CCAS_VERSION suffix regex release blocker（develop 已修；尚需先合 master 重 push 一輪
 > release image 才能讓含 `-rc.1` 的 tag 在終端使用者那端通過舊 baked-in regex）。所有 §7.x 留待
 > oauth-onboarding-ui 的 §13.x 真實 OAuth 驗證 + 兩個 change archive 完成後再執行。
+>
+> **§7 release 前置（2026-05-09 path-D 完成）**：
+> - 公告語審查（§7.5 子項）：掃 `README.md` / `docs/install-quickstart.md` / `docs/upgrade-guide.md` 全文，
+>   `一鍵 / 無需設定 / 即裝即用 / zero-config / one-click / out-of-the-box` 在使用者文件僅出現於 UI 功能
+>   描述（如「一鍵測試」「一鍵匯入 env 密碼」「One-click 本地開發」），未出現於安裝/發行措辭。§5.9
+>   已將 README 「快速安裝」段落改為「請先依 [Gmail OAuth 設定](docs/gmail-setup.md) 建立 OAuth client」
+>   作為硬性前置；docs/install-quickstart.md §1 已要求 `RELEASE=v0.1.0` placeholder。**結論**：§7.5
+>   公告語子項 evidence 已滿足，等 §7.5 推 tag 時把 README 範例 `RELEASE=v0.1.0` 由 placeholder
+>   實連到 `releases/download/v0.1.0/...` 即可。
+> - GHCR public 預檢：`curl -sI ghcr.io/v2/hmj1026/ccas-backend/manifests/v0.0.2` 回 401（需要認證），
+>   證實 §7.3 是硬性 blocker — public visibility 在第一次 release tag 推完之前必須手動切換，
+>   否則 §7.4 的 `docker compose pull` 在乾淨機器上會 unauthorized。
+> - `/tmp/ccas-upgrade-verify` 沙盒已 staged：`docker compose config` 解析出
+>   `ghcr.io/hmj1026/ccas-backend|frontend|proxy:v0.0.2`，`REPO_OWNER=hmj1026`、`CCAS_PORT=12286`
+>   設定齊全；當前未啟動，待 §7.4 把 `CCAS_VERSION` 改成 `v0.1.0-rc.1` 後 `pull && up -d` 重跑 §6.x。
 
 
 - [ ] 7.1 合 PR 到 master，於 develop 走完 6.x 驗證
 - [ ] 7.2 推 `v0.1.0-rc.1` 觸發 release-docker workflow，驗證 image 在 GHCR 可被外部 pull
 - [ ] 7.3 切換 GHCR package visibility 為 public（首次手動）
 - [ ] 7.4 完整 6.x 端對端測試於 v0.1.0-rc.1 image
-- [ ] 7.5 推 `v0.1.0` 正式 tag，更新 README「快速安裝」連結指向 release asset URL；**公告語審查**：禁用「一鍵安裝」「無需設定」「即裝即用」等誤導性措辭，必須明示 Gmail OAuth 為使用者前置設定
+- [ ] 7.5 推 `v0.1.0` 正式 tag，更新 README「快速安裝」連結指向 release asset URL；**公告語審查**：禁用「一鍵安裝」「無需設定」「即裝即用」等誤導性措辭，必須明示 Gmail OAuth 為使用者前置設定 *(2026-05-09 path-D 公告語子項 evidence 完成；連結切換留 tag 推完同 commit 一起做，見上方 pending 註記)*
 - [ ] 7.6 archive 本 OpenSpec change：執行 `/opsx:archive compose-pull-deploy`，確認 delta spec 正確同步到 `openspec/specs/`
