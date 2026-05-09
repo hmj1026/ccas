@@ -19,6 +19,7 @@ import pytest
 
 from ccas.bot.job import run_notify_job
 from ccas.classifier.job import run_classify_job
+from ccas.classifier.user_rules import UserRuleMatcher
 from ccas.decryptor.job import run_decryption_job
 from ccas.ingestor.job import run_ingestion_job
 from ccas.parser.job import run_parse_job
@@ -26,6 +27,10 @@ from ccas.parser.job import run_parse_job
 from .conftest import FakeReporter
 from .conftest import items as _items
 from .conftest import started_total as _started_total
+
+# Empty user-rule matcher; bills-management-and-insights §2.4 注入點，
+# 既有 stage progress 測試只在乎 keyword engine 流程，user rules 走 noop。
+_EMPTY_MATCHER = UserRuleMatcher([])
 
 # --- classify ---------------------------------------------------------------
 
@@ -35,12 +40,16 @@ async def test_classify_emits_started_total_and_monotonic_processed() -> None:
     session = AsyncMock()
 
     txns: Sequence[Any] = [
-        MagicMock(id=1, merchant="STARBUCKS"),
-        MagicMock(id=2, merchant="MRT"),
-        MagicMock(id=3, merchant="UBER EATS"),
+        MagicMock(id=1, merchant="STARBUCKS", manual_category_override=False),
+        MagicMock(id=2, merchant="MRT", manual_category_override=False),
+        MagicMock(id=3, merchant="UBER EATS", manual_category_override=False),
     ]
 
     with (
+        patch(
+            "ccas.classifier.job.UserRuleMatcher.load",
+            new=AsyncMock(return_value=_EMPTY_MATCHER),
+        ),
         patch("ccas.classifier.job.load_rules", new=AsyncMock(return_value={})),
         patch(
             "ccas.classifier.job.fetch_unclassified_transactions",
@@ -64,6 +73,10 @@ async def test_classify_empty_emits_started_zero_no_items() -> None:
     session = AsyncMock()
 
     with (
+        patch(
+            "ccas.classifier.job.UserRuleMatcher.load",
+            new=AsyncMock(return_value=_EMPTY_MATCHER),
+        ),
         patch("ccas.classifier.job.load_rules", new=AsyncMock(return_value={})),
         patch(
             "ccas.classifier.job.fetch_unclassified_transactions",
@@ -82,9 +95,9 @@ async def test_classify_item_failure_does_not_stall_processed() -> None:
     session = AsyncMock()
 
     txns = [
-        MagicMock(id=1, merchant="A"),
-        MagicMock(id=2, merchant="B"),
-        MagicMock(id=3, merchant="C"),
+        MagicMock(id=1, merchant="A", manual_category_override=False),
+        MagicMock(id=2, merchant="B", manual_category_override=False),
+        MagicMock(id=3, merchant="C", manual_category_override=False),
     ]
 
     def raising_classify(merchant: str, _rules: Any) -> str:
@@ -93,6 +106,10 @@ async def test_classify_item_failure_does_not_stall_processed() -> None:
         return "OK"
 
     with (  # noqa: SIM117
+        patch(
+            "ccas.classifier.job.UserRuleMatcher.load",
+            new=AsyncMock(return_value=_EMPTY_MATCHER),
+        ),
         patch("ccas.classifier.job.load_rules", new=AsyncMock(return_value={})),
         patch(
             "ccas.classifier.job.fetch_unclassified_transactions",
