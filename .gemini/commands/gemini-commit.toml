@@ -1,0 +1,18 @@
+description = "Smart commit using git-smart-commit skill"
+
+prompt = """
+請使用你的 git-smart-commit 技能，分析當前所有 git 變更，依功能邏輯分群後逐批執行 git add + git commit。
+
+**重要限制：**
+- 你只能執行 git 操作（git add、git commit、git status、git diff、git log）
+- 禁止修改、建立、刪除任何檔案（不可使用 Write、Edit 工具）
+- 禁止「改善」或「更新」任何文件內容
+
+目前變更狀態：
+
+!{git status --short}
+
+變更統計：
+
+!{git diff --stat}
+"""

@@ -1,0 +1,107 @@
+[project]
+name = "ccas"
+version = "0.1.0"
+description = "Credit Card Artifact System - automated bill parsing and reporting"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi[standard]",
+    "uvicorn[standard]",
+    "sqlalchemy[asyncio]",
+    "aiosqlite",
+    "alembic",
+    "pydantic-settings",
+    "pdfplumber",
+    "pikepdf",
+    "tabula-py",
+    "python-telegram-bot",
+    "google-api-python-client",
+    "google-auth-oauthlib",
+    "pyyaml",
+    "rq",
+    "redis",
+    "apscheduler",
+    "python-dotenv>=1.2.2",
+    "pytesseract>=0.3.13",
+    "httpx",
+    "beautifulsoup4",
+    # Fernet 對稱加密：用於 master.key + bank_secrets / Gmail token / token rotate
+    # 流程；oauth-onboarding-ui §1.5 將其顯式宣告為主依賴（既有由
+    # google-auth-oauthlib 傳遞拉入，此處鎖定 >=42 安全下限以避免漂移）。
+    "cryptography>=42",
+    # Captcha-specialized OCR: CNN + ONNX runtime (~76 MB wheel bundles
+    # common.onnx / common_det.onnx). Replaces EasyOCR+torch for the FUBON
+    # captcha solver — see openspec archive/fix-fubon-captcha-solver-accuracy.
+    # Exact pin: single-maintainer package (sml2h3), no org backing — avoid
+    # silent upgrade to a compromised future release. uv.lock captures the
+    # wheel hash for reproducibility.
+    "ddddocr==1.6.1",
+    # Excel export streaming（write_only mode）— bills-management-and-insights §8
+    "openpyxl>=3.1",
+]
+
+[project.optional-dependencies]
+fubon-llm = ["anthropic>=0.40.0"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ccas"]
+
+[tool.hatch.build.targets.editable]
+packages = ["src/ccas"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+# live_fubon: hits real Taipei Fubon SPA API + real Gmail; requires
+# FUBON_NATIONAL_ID / FUBON_ROC_BIRTHDAY / credentials.json / token.json.
+# Excluded from default runs because it is slow, non-deterministic
+# (captcha OCR), and rate-limited by the upstream bank.
+markers = [
+    "live_fubon: live FUBON web-fetch integration test (opt-in)",
+]
+addopts = "-m 'not live_fubon'"
+
+[tool.coverage.run]
+source = ["ccas"]
+omit = [
+    "src/ccas/*/app.py",
+    "src/ccas/*/__main__.py",
+    "src/ccas/scheduler/reminders.py",
+    "src/ccas/api/routers/analytics.py",
+    "src/ccas/api/routers/overview.py",
+    "src/ccas/api/routers/pipeline.py",
+    "src/ccas/api/routers/transactions.py",
+    "src/ccas/api/routers/settings.py",
+]
+
+[tool.coverage.report]
+show_missing = true
+fail_under = 80
+
+[tool.ruff]
+target-version = "py312"
+line-length = 88
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP"]
+
+[tool.pyright]
+venvPath = "."
+venv = ".venv"
+pythonVersion = "3.12"
+
+[dependency-groups]
+dev = [
+    "fpdf2>=2.8.7",
+    "pymupdf>=1.27.2.2",
+    "pyright",
+    "pytest",
+    "pytest-asyncio",
+    "pytest-cov",
+    "pytest-timeout",
+    "respx",
+    "ruff",
+]

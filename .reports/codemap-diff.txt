@@ -1,0 +1,38 @@
+Codemap Diff Report — 2026-04-22
+Previous scan: 2026-04-19 (frontend.md: 2026-04-11)
+========================================
+
+## Files Updated
+
+frontend.md  (was 2026-04-11, 11 days stale — most outdated)
+  + ui/dialog.tsx (158 LOC) added to components list
+  + ui/collapsible.tsx (25 LOC) added — used by bills expandable rows
+  + staged-attachments-warning.tsx (157 LOC) added to components list
+  + shared/filter-bar.tsx (227 LOC) added to components list
+  + bills.tsx: noted expandable transaction detail feature
+  + api-client.ts: apiFetchBlob added to function list
+  + lib/types.ts: full type list with LOC documented
+
+backend.md  (was 2026-04-19)
+  + GET /api/bills/{id}/transactions — bills inline transaction list
+  ~ tools LOC: 736 → 773 (reclassify utility added)
+  ~ ingestor LOC: 2268 → 2337
+
+architecture.md  (was 2026-04-19)
+  ~ tools/: added "reclassify utility" to module description
+
+## Files Unchanged
+
+data.md         (2026-04-19) — no schema or migration changes
+dependencies.md (2026-04-19) — no new external services or packages
+
+## Architecture Changes Since Last Scan
+
+- New feature: bills page expandable row shows inline transactions
+  Route: GET /api/bills/{id}/transactions  |  Component: ui/collapsible.tsx
+- New utility: reclassify tool in tools/ module
+- New UI primitives: ui/dialog.tsx (158 LOC), ui/collapsible.tsx (25 LOC)
+
+## Staleness Warnings
+
+None — all codemaps now current as of 2026-04-22

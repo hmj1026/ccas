@@ -1,0 +1,23 @@
+{
+  "skill_name": "ccas-qa-acceptance",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "我要做一次完整的產品驗收測試，從環境檢查到前端驗證都要跑，最後給我一份問題清單",
+      "expected_output": "執行 10 phase QA 流程（full 模式），產出 .reports/qa-acceptance-YYYY-MM-DD-HHmm.md 驗收報告，包含問題清單與後續行動建議",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "跑一次 smoke test 確認 develop branch 合併前沒有壞掉的東西",
+      "expected_output": "執行 smoke 模式（Phase 0+1+5-unit+6-critical+7-vitest），5-10 分鐘內完成，產出精簡報告",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "上次 QA 發現 FUBON 解析有問題，我已經修完 parser 了，幫我只驗證 FUBON 的 pipeline 和 API 是否正常",
+      "expected_output": "執行 Phase 3（--bank FUBON）+ Phase 6（API 驗證），針對性驗證並產出報告",
+      "files": []
+    }
+  ]
+}

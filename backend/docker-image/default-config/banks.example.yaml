@@ -1,0 +1,42 @@
+# 複製為 config/banks.yaml 後再編輯。
+# bank_code 只能使用 config/bank-code-registry.yaml 裡定義的代碼。
+#
+# gmail_filter: Gmail 搜尋語法，用於篩選該銀行的帳單郵件。
+# active_parser_version: 使用的 parser 版本（CTBC 目前為 v1）。
+# is_active: 是否啟用（false 表示暫時停用）。
+
+banks:
+  - bank_code: CTBC
+    gmail_filter: "from:ebill@estats.ctbcbank.com subject:信用卡電子帳單"
+    active_parser_version: v1
+    is_active: true
+
+  - bank_code: SINOPAC
+    gmail_filter: "from:ebillservice@newebill.banksinopac.com.tw subject:永豐銀行信用卡 subject:電子帳單通知"
+    active_parser_version: v1
+    is_active: true
+
+  - bank_code: ESUN
+    gmail_filter: "from:estatement@esunbank.com subject:玉山銀行 subject:信用卡電子帳單"
+    active_parser_version: v1
+    is_active: true
+
+  - bank_code: TAISHIN
+    gmail_filter: "from:webmaster@bhurecv.taishinbank.com.tw subject:台新信用卡電子帳單"
+    active_parser_version: v1
+    is_active: true
+
+  - bank_code: UBOT
+    gmail_filter: "from:estatement@ebillv2.card.ubot.com.tw subject:聯邦銀行信用卡 subject:電子帳單"
+    active_parser_version: v1
+    is_active: true
+
+  - bank_code: CATHAY
+    gmail_filter: "from:service@pxbillrc01.cathaybk.com.tw subject:國泰世華銀行信用卡 subject:電子帳單"
+    active_parser_version: v1
+    is_active: true
+
+  - bank_code: FUBON
+    gmail_filter: "from:rs@cf.taipeifubon.com.tw subject:台北富邦銀行 subject:信用卡帳單"
+    active_parser_version: v1
+    is_active: true

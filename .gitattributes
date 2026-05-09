@@ -1,0 +1,35 @@
+# Auto-detect text and normalize line endings
+* text=auto
+
+# Force LF for source files
+*.py text eol=lf
+*.ts text eol=lf
+*.tsx text eol=lf
+*.js text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.toml text eol=lf
+*.css text eol=lf
+*.html text eol=lf
+*.sh text eol=lf
+*.sql text eol=lf
+
+# Binary files
+*.pdf binary
+*.db binary
+*.png binary
+*.jpg binary
+*.ico binary
+
+# Linguist overrides (GitHub language stats)
+openspec/** linguist-documentation
+.claude/** linguist-documentation
+.codex/** linguist-documentation
+.gemini/** linguist-documentation
+.agents/** linguist-documentation
+docs/** linguist-documentation
+pnpm-lock.yaml linguist-generated
+uv.lock linguist-generated
+skills-lock.json linguist-generated

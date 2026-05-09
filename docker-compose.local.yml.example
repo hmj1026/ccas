@@ -1,0 +1,42 @@
+# docker-compose.local.yml.example
+#
+# 個人化客製範例。複製為 docker-compose.local.yml 後生效（已加入 .gitignore）。
+# 用途：放只有你個人需要的調整，不該影響團隊其他成員的 dev 體驗。
+#
+# 啟用方式（dev override + 個人 local）：
+#   docker compose -f docker-compose.yaml -f docker-compose.override.yml -f docker-compose.local.yml up
+#
+# 或將以下加入 ~/.zshrc / ~/.bashrc 後直接 `docker compose up`：
+#   export COMPOSE_FILE=docker-compose.yaml:docker-compose.override.yml:docker-compose.local.yml
+#
+# 注意：local.yml 啟用後會關閉 Compose 的 override 自動載入，因此必須手動把 override.yml 也帶上。
+#
+# 需求：Docker Compose v2.24+（!override YAML tag 用於取代 ports 清單）
+
+services:
+  # ---------------------------------------------------------------------------
+  # 範例 1：本機 8000 已被佔用，把 backend 改到 8001
+  # ---------------------------------------------------------------------------
+  # backend:
+  #   ports: !override
+  #     - "127.0.0.1:8001:8000"
+
+  # ---------------------------------------------------------------------------
+  # 範例 2：worker 改用 TRACE log 以便 debug RQ 行為
+  # ---------------------------------------------------------------------------
+  # worker:
+  #   environment:
+  #     LOG_LEVEL: TRACE
+
+  # ---------------------------------------------------------------------------
+  # 範例 3：把 backend container 內的某個目錄額外 bind mount 到 host 方便檢視
+  # ---------------------------------------------------------------------------
+  # backend:
+  #   volumes:
+  #     - ./local-debug-output:/tmp/ccas-debug
+
+  # ---------------------------------------------------------------------------
+  # 範例 4：暫時停掉 frontend（若你只在 backend / pipeline 上工作）
+  # ---------------------------------------------------------------------------
+  # frontend:
+  #   profiles: ["disabled"]

@@ -1,0 +1,86 @@
+# CCAS gitleaks configuration
+#
+# Scans for leaked secrets and PII before commit/push.
+# Extends gitleaks' default rules (OAuth tokens, API keys, private keys, etc.)
+# with CCAS-specific patterns for Taiwanese PII and bank credentials.
+
+title = "CCAS gitleaks config"
+
+[extend]
+useDefault = true
+
+# ---------------------------------------------------------------------------
+# Custom rules — CCAS-specific leak patterns
+# ---------------------------------------------------------------------------
+
+[[rules]]
+id = "taiwan-national-id"
+description = "Taiwanese national ID (1 uppercase letter + 9 digits) near a key"
+regex = '''(?i)(national_id|nid|身分證|PDF_PASSWORD_[A-Z]+)\s*[:=]\s*["']?[A-Z]\d{9}'''
+tags = ["pii", "taiwan", "national-id"]
+
+[[rules]]
+id = "masked-chinese-name-in-greeting"
+description = "Partially masked Chinese name in greeting context (e.g. 親愛的 X*X pattern)"
+regex = '''親愛的[\s　]*\p{Han}[＊Ｏ*]\p{Han}'''
+tags = ["pii", "taiwan", "name"]
+
+[[rules]]
+id = "partial-bank-account"
+description = "Partially masked Taiwanese bank account number (digits + asterisks/X + digits)"
+regex = '''\b\d{3,9}[-]?\d{0,6}(?:\*{2,}|[Xx]{2,})\d{2,}\b'''
+tags = ["pii", "taiwan", "bank-account"]
+
+[[rules]]
+id = "roc-birthday"
+description = "ROC 民國 birthday (7 digits) near a key"
+regex = '''(?i)(roc_birthday|民國生日)\s*[:=]\s*["']?\d{7}\b'''
+tags = ["pii", "taiwan", "birthday"]
+
+[[rules]]
+id = "telegram-bot-token"
+description = "Telegram bot token (digits:AAxxx…)"
+regex = '''\b\d{9,12}:AA[A-Za-z0-9_-]{32,}\b'''
+tags = ["secret", "telegram"]
+
+[[rules]]
+id = "telegram-chat-id-assignment"
+description = "Telegram chat_id literal assignment"
+regex = '''(?i)(TELEGRAM_CHAT_ID|telegram_chat_id)\s*[:=]\s*["']?-?\d{6,}'''
+tags = ["pii", "telegram"]
+
+# ---------------------------------------------------------------------------
+# Allowlist — dummy / placeholder values used in tests and examples
+# ---------------------------------------------------------------------------
+
+[allowlist]
+description = "CCAS placeholders and dummy test data"
+
+# Whitelisted dummy values (never treat as a real leak)
+regexTarget = "match"
+regexes = [
+    '''A123456789''',          # dummy national ID used in tests/docs
+    '''B987654321''',          # dummy national ID (test_log.py)
+    '''0881010''',             # dummy ROC birthday placeholder
+    '''card_last4["'= :]*1234''',  # dummy card last4
+    '''chat_id["'= :]*123456789''',  # dummy chat_id in test_log.py
+    '''sk_live_abc123''',      # documentation placeholder in skill examples
+    '''sk_test_[A-Za-z0-9]+''',  # Stripe-style test-key placeholders
+    '''000-?000000\*{4}00''',  # all-zero dummy bank account in parser fixtures
+    '''000000[Xx]{4}000''',    # all-zero dummy bank account in parser fixtures
+    '''0000-[Xx]{4}-[Xx]{4}-0000''',  # all-zero dummy card number in parser fixtures
+]
+
+# Files that are allowed to contain allowlisted placeholders
+# NOTE: Previously `^backend/tests/.*\.py$` was blanket-allowed which hid real PII
+# in parser fixtures. Now narrowed to specific files that legitimately hold
+# dummy credentials (log redaction tests, config fixtures, etc.).
+paths = [
+    '''^\.env\.example$''',
+    '''^\.gitleaks\.toml$''',
+    '''^openspec/.*\.md$''',   # docs may reference dummy formats
+    '''^docs/.*\.md$''',
+    '''^backend/tests/unit/test_log\.py$''',   # tests redaction patterns
+    '''^backend/tests/unit/config/.*\.py$''',  # config fixtures with dummy env
+    '''^backend/src/ccas/log\.py$''',  # contains regex patterns mentioning field names
+]

@@ -1,0 +1,67 @@
+# docker-compose.override.yml
+# 自動載入於 `docker compose up`，將 base compose 從 production 切換至 dev 模式。
+#
+# 內容：
+#   - 所有 backend 系列服務（backend/worker/scheduler/bot）改 build 至 `dev` target，
+#     並 bind mount 原始碼實現 hot reload
+#   - backend 透過 UVICORN_RELOAD=1 讓 entrypoint 附加 uvicorn --reload
+#   - frontend 改走 Vite dev server（埠 5173），bind mount src + 設定檔
+#   - 全面放寬 LOG_LEVEL 至 DEBUG
+#
+# 生產部署務必明確指定 base compose 以略過本檔：
+#   docker compose -f docker-compose.yaml up -d
+#
+# 需求：Docker Compose v2.24+（使用 !override YAML tag 覆蓋 ports 清單）
+
+services:
+  backend:
+    build:
+      target: dev
+    volumes:
+      - ./backend/src:/app/src
+      - ./backend/alembic:/app/alembic
+    environment:
+      LOG_LEVEL: DEBUG
+      UVICORN_RELOAD: "1"
+
+  worker:
+    build:
+      target: dev
+    volumes:
+      - ./backend/src:/app/src
+      - ./backend/alembic:/app/alembic
+    environment:
+      LOG_LEVEL: DEBUG
+
+  scheduler:
+    build:
+      target: dev
+    volumes:
+      - ./backend/src:/app/src
+      - ./backend/alembic:/app/alembic
+    environment:
+      LOG_LEVEL: DEBUG
+
+  bot:
+    build:
+      target: dev
+    volumes:
+      - ./backend/src:/app/src
+      - ./backend/alembic:/app/alembic
+    environment:
+      LOG_LEVEL: DEBUG
+
+  frontend:
+    build:
+      target: dev
+    ports: !override
+      - "127.0.0.1:5173:5173"
+    environment:
+      VITE_API_PROXY_TARGET: "http://backend:8000"
+    # 整個 frontend 目錄 bind mount + anonymous volume 保護容器內 node_modules
+    # （docker-patterns 推薦模式）。新增 vite/tailwind/postcss 等設定檔不需改 compose。
+    # node_modules 用 anonymous volume 隔離，避免 host 端（macOS/Windows/Linux）
+    # 安裝的不同平台 binary 污染容器內由 pnpm install --frozen-lockfile 安裝的版本。
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules

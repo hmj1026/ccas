@@ -1,0 +1,10 @@
+.git/
+node_modules/
+dist/
+.env
+README.md
+*.local
+coverage/
+.playwright/
+playwright-report/
+*.log

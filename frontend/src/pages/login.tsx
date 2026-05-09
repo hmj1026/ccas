@@ -1,0 +1,101 @@
+/**
+ * Login 頁面 -- 以 API Token 建立瀏覽器 session。
+ * 登入成功後重導至原先欲存取的路徑，或預設至 `/overview`。
+ */
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { type FormEvent, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router'
+import { apiPost } from '@/lib/api-client'
+import type { ApiResponse } from '@/lib/types'
+import { Button } from '@/components/ui/button'
+
+/** React Router location state，記錄登入前的來源路徑以供重導。 */
+type LocationState = {
+  readonly from?: {
+    readonly pathname?: string
+  }
+}
+
+/**
+ * 登入頁面元件。
+ * 使用者輸入 API Token 後送出，成功則設定 session 並重導回來源頁。
+ */
+function LoginPage() {
+  const navigate = useNavigate()
+  const location = useLocation()
+  const queryClient = useQueryClient()
+  const [token, setToken] = useState('')
+  const [errorMessage, setErrorMessage] = useState('')
+
+  const login = useMutation({
+    mutationFn: (value: string) =>
+      apiPost<ApiResponse<null>>('/api/auth/session', { token: value }),
+    onSuccess: async () => {
+      queryClient.setQueryData(['auth', 'session'], true)
+      await queryClient.invalidateQueries({ queryKey: ['auth', 'session'] })
+      const state = location.state as LocationState | null
+      navigate(state?.from?.pathname ?? '/overview', { replace: true })
+    },
+    onError: (error: Error) => {
+      setErrorMessage(error.message)
+    },
+  })
+
+  /**
+   * 表單送出 handler；驗證 token 非空後呼叫登入 mutation。
+   *
+   * @param event - 表單提交事件
+   */
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!token.trim()) {
+      setErrorMessage('請輸入 API Token')
+      return
+    }
+    setErrorMessage('')
+    login.mutate(token.trim())
+  }
+
+  return (
+    <div className="flex min-h-screen items-center justify-center bg-background px-4">
+      <form
+        className="w-full max-w-md space-y-5 rounded-2xl border border-border bg-card p-6 shadow-sm"
+        onSubmit={handleSubmit}
+      >
+        <div className="space-y-2">
+          <h1 className="text-2xl font-bold">登入 CCAS</h1>
+          <p className="text-sm text-muted-foreground">
+            以 API Token 建立瀏覽器 session，Token 不會再嵌入前端 bundle。
+          </p>
+        </div>
+
+        <label className="block space-y-2">
+          <span className="text-sm font-medium">API Token</span>
+          <input
+            type="password"
+            value={token}
+            onChange={(event) => setToken(event.target.value)}
+            className="h-10 w-full rounded-lg border border-input bg-background px-3 text-sm"
+            autoComplete="current-password"
+            aria-label="API Token"
+          />
+        </label>
+
+        {errorMessage ? (
+          <p className="text-sm text-destructive">{errorMessage}</p>
+        ) : null}
+
+        <Button
+          type="submit"
+          className="w-full"
+          disabled={login.isPending}
+          aria-label="登入"
+        >
+          {login.isPending ? '登入中...' : '登入'}
+        </Button>
+      </form>
+    </div>
+  )
+}
+
+export default LoginPage

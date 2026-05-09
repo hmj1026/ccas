@@ -1,0 +1,67 @@
+# Stage: uv — single source for the uv binary (pinned)
+FROM ghcr.io/astral-sh/uv:0.10 AS uv
+
+# Stage: builder — install production dependencies
+FROM python:3.12-slim AS builder
+COPY --from=uv /uv /usr/local/bin/uv
+WORKDIR /app
+COPY pyproject.toml uv.lock ./
+# ``fubon-llm`` extra installs the ``anthropic`` SDK so the documented
+# ``FUBON_CAPTCHA_FALLBACK_LLM=true`` recovery path is actually functional
+# in the stock production image. Without it, enabling the flag would
+# surface ``llm_fallback_unavailable`` at runtime (fail-loud) instead of
+# silently degrading to OCR-only.
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --no-dev --no-editable --extra fubon-llm
+# ddddocr ships its ONNX models inside the wheel (~76 MB), so no remote
+# preload is required at build time — the prior EasyOCR preload step was
+# removed via fix-fubon-captcha-solver-accuracy.
+
+# Stage: dev — hot reload, source bind-mounted at runtime
+FROM python:3.12-slim AS dev
+RUN apt-get update -qq \
+    && apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-chi-tra fonts-wqy-zenhei \
+    && rm -rf /var/lib/apt/lists/*
+COPY --from=uv /uv /usr/local/bin/uv
+WORKDIR /app
+COPY --from=builder /app/.venv ./.venv
+COPY pyproject.toml uv.lock ./
+COPY src/ ./src/
+COPY alembic/ ./alembic/
+COPY alembic.ini ./
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --group dev
+EXPOSE 8000
+# CMD 與 production 對齊：reload 由 docker-compose.override.yml 注入 UVICORN_RELOAD=1
+# 後，於 /scripts/docker-entrypoint.sh 內附加 --reload。dev 模式下 compose 以 entrypoint
+# 接管啟動流程，以下 CMD 通常不會直接執行。
+CMD ["uv", "run", "uvicorn", "ccas.api.app:create_app", "--host", "0.0.0.0", "--port", "8000", "--factory"]
+
+# Stage: production — non-root user, health check, image-internal entrypoint + config templates
+FROM python:3.12-slim AS production
+LABEL org.opencontainers.image.title="ccas-backend" \
+      org.opencontainers.image.description="CCAS Backend API, worker, scheduler, and bot"
+RUN apt-get update -qq \
+    && apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-chi-tra fonts-wqy-zenhei \
+    && rm -rf /var/lib/apt/lists/*
+RUN groupadd -g 1001 appgroup && useradd -u 1001 -g appgroup -s /bin/sh -m appuser
+COPY --from=uv /uv /usr/local/bin/uv
+WORKDIR /app
+COPY --from=builder --chown=appuser:appgroup /app/.venv ./.venv
+COPY --chown=appuser:appgroup pyproject.toml uv.lock ./
+COPY --chown=appuser:appgroup alembic/ ./alembic/
+COPY --chown=appuser:appgroup alembic.ini ./
+COPY --chown=appuser:appgroup src/ ./src/
+# Image-internal entrypoint + env validation + default config templates（D12）
+# 終端使用者只持有 .env 與 volumes，repo `./scripts` 與 `./.env.example` 不再 host-mount。
+COPY --chown=appuser:appgroup --chmod=0755 docker-image/scripts/docker-entrypoint.sh /scripts/docker-entrypoint.sh
+COPY --chown=appuser:appgroup --chmod=0755 docker-image/scripts/check-env.sh /scripts/check-env.sh
+COPY --chown=appuser:appgroup docker-image/.env.example /app/.env.example
+COPY --chown=appuser:appgroup docker-image/default-config/ /app/default-config/
+RUN mkdir -p /data /logs && chown appuser:appgroup /data /logs
+USER appuser
+EXPOSE 8000
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+  CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" || exit 1
+ENTRYPOINT ["/scripts/docker-entrypoint.sh"]
+CMD ["uv", "run", "uvicorn", "ccas.api.app:create_app", "--host", "0.0.0.0", "--port", "8000", "--factory"]

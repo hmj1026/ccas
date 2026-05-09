@@ -1,0 +1,163 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(openspec *)",
+      "Bash(uv sync*)",
+      "Bash(uv add *)",
+      "Bash(uv run pytest*)",
+      "Bash(uv run ruff *)",
+      "Bash(uv run pyright*)",
+      "Bash(uv run alembic *)",
+      "Bash(uv run fastapi dev*)",
+      "Bash(uv run:*)",
+      "Bash(uv pip:*)",
+      "Bash(uv tool:*)",
+      "Bash(uv lock:*)",
+      "Bash(uv --version)",
+      "Bash(python3:*)",
+      "Bash(python -c:*)",
+      "Bash(python -m:*)",
+      "Bash(python:*)",
+      "Bash(pip show:*)",
+      "Bash(pnpm add:*)",
+      "Bash(pnpm test:*)",
+      "Bash(pnpm vitest:*)",
+      "Bash(pnpm run:*)",
+      "Bash(pnpm exec:*)",
+      "Bash(pnpm install:*)",
+      "Bash(pnpm list:*)",
+      "Bash(pnpm build:*)",
+      "Bash(node:*)",
+      "Bash(npx eslint:*)",
+      "Bash(docker build:*)",
+      "Bash(docker run:*)",
+      "Bash(docker rmi:*)",
+      "Bash(docker compose:*)",
+      "Bash(docker exec:*)",
+      "Bash(docker cp:*)",
+      "Bash(docker image:*)",
+      "Bash(docker system:*)",
+      "Bash(docker builder:*)",
+      "Bash(docker --version)",
+      "Bash(git:*)",
+      "Bash(gh:*)",
+      "Bash(bash ./scripts/*)",
+      "Bash(./scripts/*)",
+      "Bash(bash -n scripts/*)",
+      "Bash(bash scripts/*)",
+      "Bash(RUN_FRONTEND=0 ./scripts/pre-push.sh)",
+      "Bash(shellcheck:*)",
+      "Bash(ruff check:*)",
+      "Bash(gitleaks detect:*)",
+      "Bash(chmod +x ./scripts/*)",
+      "Bash(chmod +x .claude/hooks/*)",
+      "Bash(ls:*)",
+      "Bash(wc:*)",
+      "Bash(echo:*)",
+      "Bash(head:*)",
+      "Bash(tail:*)",
+      "Bash(command -v:*)",
+      "Bash(curl -s http://127.0.0.1:*)",
+      "Bash(curl -s http://localhost:*)",
+      "Bash(curl -sf http://127.0.0.1:*)",
+      "Bash(curl -s -o /dev/null:*)",
+      "Bash(curl -sv:*)",
+      "Bash(curl -sI:*)",
+      "Bash(curl -s -H:*)",
+      "Bash(curl -sSL:*)",
+      "Bash(curl -s http://localhost:8000/health)",
+      "Bash(curl -s http://localhost:5173/)",
+      "Bash(sqlite3:*)",
+      "Bash(netstat -tlnp)",
+      "Bash(lsof:*)",
+      "Bash(tesseract --version)",
+      "Bash(shasum:*)",
+      "Bash(dpkg -l)",
+      "Bash(fc-list :lang=zh)",
+      "Bash(BANK_CONFIG_DIR=*)",
+      "Bash(unset BANK_CONFIG_DIR)",
+      "Read(//tmp/**)",
+      "Bash(sqlite3 *)",
+      "Bash(uv run coverage *)",
+      "Bash(uv run mypy *)",
+      "Bash(cx *)",
+      "Bash(/opt/homebrew/bin/cx *)"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'REPO=$(git rev-parse --show-toplevel 2>/dev/null) && bash \"$REPO/.claude/hooks/ccas-python-lint.sh\"'",
+            "timeout": 30,
+            "statusMessage": "Running Python lint & security checks...",
+            "async": true
+          },
+          {
+            "type": "command",
+            "command": "bash -c 'REPO=$(git rev-parse --show-toplevel 2>/dev/null) && bash \"$REPO/.claude/hooks/ccas-sqlalchemy-model-check.sh\"'",
+            "timeout": 5,
+            "statusMessage": "Validating SQLAlchemy model...",
+            "async": true
+          },
+          {
+            "type": "command",
+            "command": "bash -c 'REPO=$(git rev-parse --show-toplevel 2>/dev/null) && bash \"$REPO/.claude/hooks/ccas-tdd-red-check.sh\"'",
+            "timeout": 30,
+            "statusMessage": "Running test to confirm RED state...",
+            "async": true
+          },
+          {
+            "type": "command",
+            "command": "bash -c 'REPO=$(git rev-parse --show-toplevel 2>/dev/null) && bash \"$REPO/.claude/hooks/ccas-frontend-lint.sh\"'",
+            "timeout": 30,
+            "statusMessage": "Running frontend checks...",
+            "async": true
+          },
+          {
+            "type": "command",
+            "command": "bash -c 'REPO=$(git rev-parse --show-toplevel 2>/dev/null) && bash \"$REPO/.claude/hooks/ccas-alembic-migration-check.sh\"'",
+            "timeout": 5,
+            "statusMessage": "Checking Alembic migration safety...",
+            "async": true
+          },
+          {
+            "type": "command",
+            "command": "bash -c 'REPO=$(git rev-parse --show-toplevel 2>/dev/null) && bash \"$REPO/.claude/hooks/ccas-docker-check.sh\"'",
+            "timeout": 5,
+            "statusMessage": "Checking Docker conventions...",
+            "async": true
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'REPO=$(git rev-parse --show-toplevel 2>/dev/null) && bash \"$REPO/.claude/hooks/ccas-pre-push-stop.sh\"'",
+            "timeout": 120,
+            "statusMessage": "Running pre-push checks (session end)..."
+          },
+          {
+            "type": "command",
+            "command": "bash -c 'REPO=$(git rev-parse --show-toplevel 2>/dev/null) && bash \"$REPO/.claude/hooks/ccas-session-retrospective.sh\"'",
+            "timeout": 10,
+            "statusMessage": "Running session retrospective...",
+            "async": true
+          }
+        ]
+      }
+    ]
+  },
+  "enabledPlugins": {
+    "everything-claude-code@everything-claude-code": true,
+    "codex@openai-codex": true,
+    "pyright-lsp@claude-plugins-official": true
+  }
+}
