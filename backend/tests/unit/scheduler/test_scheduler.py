@@ -138,6 +138,54 @@ class TestSchedulerJobRegistration:
         _touch_heartbeat(target)
         assert target.stat().st_mtime > first_mtime - 60
 
+    def test_main_logs_warning_when_initial_heartbeat_touch_fails(self, caplog):
+        """Issue #9: read-only fs / permission-denied 時不應讓 scheduler 直接
+        crash。Eager touch 失敗時記 warning，讓 30s interval job 後續重試；
+        operator 看到 log 才知道要修檔案系統權限。
+        """
+        import logging
+
+        mock_scheduler = MagicMock()
+        mock_scheduler.start.side_effect = KeyboardInterrupt
+
+        with (
+            patch(
+                "ccas.scheduler.__main__.BlockingScheduler", return_value=mock_scheduler
+            ),
+            patch("ccas.scheduler.__main__.signal.signal"),
+            # configure_logging() resets handlers, dropping pytest's caplog
+            # listener. Stub it so caplog can observe the warning record.
+            patch("ccas.scheduler.__main__.configure_logging"),
+            # Single-shot side_effect: only the eager touch fails. The interval
+            # job's ``partial(_touch_heartbeat, ...)`` (registered after) would
+            # wrap the real function in production; the mocked ``add_job`` here
+            # never invokes the partial so this is mostly cosmetic — but it
+            # keeps the patch scoped to what the test actually asserts.
+            patch(
+                "ccas.scheduler.__main__._touch_heartbeat",
+                side_effect=[PermissionError(13, "Permission denied")],
+            ),
+            caplog.at_level(logging.WARNING, logger="ccas.scheduler.__main__"),
+        ):
+            try:
+                main()
+            except (KeyboardInterrupt, SystemExit):
+                pass
+
+        # Scheduler must still start (interval job will retry the touch every 30s)
+        mock_scheduler.start.assert_called_once()
+
+        # Warning must be logged so the operator sees the cause
+        warnings = [
+            rec
+            for rec in caplog.records
+            if rec.levelno == logging.WARNING and "heartbeat" in rec.getMessage()
+        ]
+        assert warnings, (
+            "expected at least one heartbeat-related warning log when "
+            "_touch_heartbeat raises OSError"
+        )
+
     def test_budget_evaluator_runs_at_2am(self):
         """預算評估在每日凌晨 2 點執行（§6.7）。"""
         mock_scheduler = MagicMock()

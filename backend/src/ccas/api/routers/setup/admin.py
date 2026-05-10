@@ -80,7 +80,7 @@ async def get_token_info(
         token = current_api_token()
         version = current_api_token_version()
         created_at: datetime | None = None
-        path = Path(settings.api_token_path)
+        path = settings.api_token_path
         if path.is_file():
             try:
                 created_at = datetime.fromtimestamp(path.stat().st_mtime, tz=UTC)
@@ -103,8 +103,8 @@ async def rotate_token(
     is set explicitly so any reverse proxy or CDN does not cache the body
     (security-reviewer H2).
     """
-    token_path = Path(settings.api_token_path)
-    version_path = Path(settings.api_token_version_path)
+    token_path = settings.api_token_path
+    version_path = settings.api_token_version_path
 
     async with _rotate_lock:
         new_token = stdlib_secrets.token_hex(32)
