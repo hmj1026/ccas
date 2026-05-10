@@ -29,6 +29,9 @@ x-shared-env: &shared-env
   API_TOKEN_PATH: "/data/secrets/api-token"
   API_TOKEN_VERSION_PATH: "/data/secrets/api-token-version"
   MASTER_KEY_PATH: "/data/secrets/master.key"
+  # scheduler heartbeat probed by §1.11 healthcheck (mtime < 60s); aligned with
+  # the absolute /data layout above for the same WORKDIR=/app reason.
+  SCHEDULER_HEARTBEAT_PATH: "/data/scheduler-heartbeat"
   REDIS_URL: redis://redis:6379/0
   LOG_DIR: "/logs"
   BANK_CONFIG_DIR: "/config"
