@@ -371,7 +371,7 @@ ccas/
 
 ## 文件索引
 
-`docs/` 下共 17 份文件：
+`docs/` 下共 16 份文件：
 
 **安裝與部署**
 - [`docs/install-quickstart.md`](docs/install-quickstart.md) — Docker Compose pull-only 安裝流程（給非開發者）
@@ -392,7 +392,8 @@ ccas/
 **AI 協助 / E2E 演示**
 - [`docs/ai-setup-guide.md`](docs/ai-setup-guide.md) — 提供給 AI 助手閱讀的安裝引導文件（搭配 README 「透過 AI 協助安裝」段落使用）
 - [`docs/e2e-user-guide-walkthrough.md`](docs/e2e-user-guide-walkthrough.md) — 端到端使用者旅程演示
-- [`docs/everything-claude-code-guide.md`](docs/everything-claude-code-guide.md) — `everything-claude-code` plugin 完整使用教程
+
+> `everything-claude-code` plugin 用法請見其上游 marketplace 文件；CCAS 不維護該 plugin 的使用教程，避免 drift。
 
 **貢獻與參考**
 - [`docs/CONTRIBUTING.md`](docs/CONTRIBUTING.md) — 分支策略、Conventional Commits、TDD 工作流、80% 覆蓋率要求
