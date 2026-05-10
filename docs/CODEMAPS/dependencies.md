@@ -25,6 +25,7 @@
 ### Telegram Bot API
 - **Module**: `bot/`（10 files, ~932 LOC）
 - **Auth**: Bot token
+- **Mode**: Long polling（`Application.run_polling()`）；不需 webhook / 對外 port，未填 token 時 bot 進入 disabled idle
 - **Commands**: `/status`、`/upcoming`、`/summary`、`/category`、`/paid`
 - **Push**: 新帳單通知、付款提醒（依 `reminder_settings.days_before` 觸發）、預算超標警示
 - **Library**: `python-telegram-bot`
@@ -38,12 +39,13 @@
 ## Docker Compose Services
 
 ```
-backend    port 8000 (127.0.0.1)，volumes: /data /config /logs，alembic + seed bootstrap
+backend    port 8000 (127.0.0.1, dev only)，volumes: /data /config /logs，alembic + seed bootstrap
 worker     RQ worker，volumes: /data /config /logs，SKIP_DB_BOOTSTRAP=1
 scheduler  APScheduler，volumes: /data /config /logs，SCHEDULER_HEARTBEAT_PATH=/data/scheduler-heartbeat
-bot        Telegram bot，volumes: /data /config /logs
-frontend   nginx static，port 8080 (127.0.0.1)，depends: backend
-redis      port 6379 (127.0.0.1)，named volume: ccas-redis
+bot        Telegram bot (long polling)，volumes: /data /config /logs
+frontend   nginx static (dev: 8080)，depends: backend
+proxy      nginx reverse proxy (prod: ${CCAS_PORT:-8080})，/api → backend、/ → frontend
+redis      port 6379 (127.0.0.1)，named volume: ccas-redis (dev) / bind mount (prod)
 ```
 
 **Healthchecks**（compose-pull-deploy 修復）：
@@ -55,6 +57,12 @@ redis      port 6379 (127.0.0.1)，named volume: ccas-redis
 sqlite-web       SQLite browser (read-only), port 8088
 redis-commander  Redis key browser, port 8081
 ```
+
+## Runtime Requirements
+
+- **Python**: 3.12+（`backend/pyproject.toml: requires-python = ">=3.12"`）
+- **Node**: 22+（CI matrix + `.nvmrc`）
+- **pnpm**: 9.15.9+
 
 ## System Dependencies
 

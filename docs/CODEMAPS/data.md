@@ -4,7 +4,7 @@
 
 ## Database
 
-SQLite + aiosqlite, WAL mode, async sessions (`expire_on_commit=False`)
+SQLite + aiosqlite, WAL mode + `PRAGMA busy_timeout=30000`（per-connection on `connect`，避開 scheduler heartbeat / worker / backend GET 的 WAL 寫入競爭），async sessions (`expire_on_commit=False`)
 
 ORM: SQLAlchemy 2.0 (`Mapped[T]` style) in `backend/src/ccas/storage/models.py`
 SQLite triggers 同步維護 `updated_at`（避開 ORM `onupdate=` 在 Core-style bulk UPDATE 不觸發的問題）。
@@ -132,6 +132,8 @@ bill_id (FK), reminder_type, sent_at | **UQ** (bill_id, reminder_type)
 | started_at / completed_at | datetime? | |
 | created_at / updated_at | datetime | trigger 維護 |
 | **IX** | created_at DESC、status | |
+
+> `DbProgressReporter.stage_finished` 對 `database is locked` 自動重試 3 次（0.1 / 0.5 / 2 秒 backoff），保護 `stage_summary` RMW 不被 WAL 寫入競爭中斷（PR #6 / #11）。
 
 ### bank_settings  *(setup wizard — 取代 bank_configs.is_active 的細項)*
 code(PK), enabled, display_name?, notes?, created_at, updated_at（trigger 維護）
