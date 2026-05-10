@@ -130,9 +130,9 @@
 > rc.1 不可 force re-tag（已外發），改推 rc.2 取代；rc.1 release notes 將補 known regression note。
 
 
-- [ ] 7.1 合 PR 到 master，於 develop 走完 6.x 驗證
-- [ ] 7.2 推 `v0.1.0-rc.1` 觸發 release-docker workflow，驗證 image 在 GHCR 可被外部 pull
-- [ ] 7.3 切換 GHCR package visibility 為 public（首次手動）
-- [ ] 7.4 完整 6.x 端對端測試於 v0.1.0-rc.1 image
-- [ ] 7.5 推 `v0.1.0` 正式 tag，更新 README「快速安裝」連結指向 release asset URL；**公告語審查**：禁用「一鍵安裝」「無需設定」「即裝即用」等誤導性措辭，必須明示 Gmail OAuth 為使用者前置設定 *(2026-05-09 path-D 公告語子項 evidence 完成；連結切換留 tag 推完同 commit 一起做，見上方 pending 註記)*
-- [ ] 7.6 archive 本 OpenSpec change：執行 `/opsx:archive compose-pull-deploy`，確認 delta spec 正確同步到 `openspec/specs/`
+- [x] 7.1 合 PR 到 master，於 develop 走完 6.x 驗證 *(2026-05-10 path-D-2 偏離已決議：使用者選擇直接從 develop 推 v0.1.0 GA tag，不走 PR develop→master（414 commits 對 review 是負擔）；事後再以小批次 backport 或一次 fast-forward master→develop。develop 上 §6.x 全套驗證在沙盒 `/tmp/ccas-upgrade-verify` 用 rc.2 image 完成 ✓)*
+- [x] 7.2 推 `v0.1.0-rc.1` 觸發 release-docker workflow，驗證 image 在 GHCR 可被外部 pull *(2026-05-09 23:31:03 推 rc.1 → GHA run `25604712623` 全綠；2026-05-10 02:55 推 rc.2 → GHA run `25618145589` 全綠，三件套 image multi-arch 推 GHCR、release artifact upload。沙盒 `docker compose pull ghcr.io/hmj1026/ccas-{backend,frontend,proxy}:v0.1.0-rc.2` 成功。)*
+- [x] 7.3 切換 GHCR package visibility 為 public（首次手動） *(2026-05-09 path-D 切換：`/tmp/ccas-upgrade-verify` 在 rc.1 / rc.2 / v0.1.0 三輪皆能無認證 pull，反證 public visibility 已生效。)*
+- [x] 7.4 完整 6.x 端對端測試於 v0.1.0-rc.1 image *(2026-05-10 path-D-2 在 rc.2 image 重做：`/tmp/ccas-upgrade-verify` `CCAS_VERSION=v0.1.0-rc.2`，六個 service 全 healthy（scheduler `Starting scheduler with 4 jobs` 含 `Scheduler heartbeat writer`；heartbeat mtime age=13.5s < 60s threshold ✓；worker `rq info --raw -Q` 通過 ✓）；`/api/health` 200。rc.1 healthcheck regression 不適用 — rc.1 image 已外發但會被 rc.2 取代為「終端使用者推薦版」。)*
+- [x] 7.5 推 `v0.1.0` 正式 tag，更新 README「快速安裝」連結指向 release asset URL；**公告語審查**：禁用「一鍵安裝」「無需設定」「即裝即用」等誤導性措辭，必須明示 Gmail OAuth 為使用者前置設定 *(2026-05-10 03:03 推 v0.1.0 GA tag（commit `8d67731`）→ GHA run `25618270447` 全綠：preflight + 三件套 build & push + release artifact upload。`gh release list` 顯示 `v0.1.0 Latest`。README / docs/install-quickstart 在 commit `47f8db1` 已採用 `RELEASE=v0.1.0` + `<owner>` 模板（不需再 commit 替換 placeholder，與 GA tag 對齊）。公告語子項 evidence 已於 path-D 完成（`一鍵 / 無需設定 / 即裝即用 / zero-config / one-click / out-of-the-box` 在使用者文件僅出現於 UI 功能描述）。)*
+- [x] 7.6 archive 本 OpenSpec change：執行 `/opsx:archive compose-pull-deploy`，確認 delta spec 正確同步到 `openspec/specs/`

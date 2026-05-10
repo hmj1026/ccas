@@ -152,4 +152,4 @@
 
 - [x] 14.1 `openspec validate oauth-onboarding-ui --strict` 通過
 - [x] 14.2 確認本 change 落地順序：須在 `compose-pull-deploy` 已合入後啟動實作（為 master.key 機制需要 entrypoint 結構）*(2026-05-09 path-D 收尾確認：本 change §1 master.key 子系統與 entrypoint bootstrap 區段已落地於 develop，建立於 compose-pull-deploy §1 secrets 目錄結構之上 — 落地依賴 ✓ 滿足。「合入」順序綁在 compose-pull-deploy 先 archive：compose §7.x release tag chain 完成後再走 §14.3 archive。)*
-- [ ] 14.3 完成後 `/opsx:archive oauth-onboarding-ui`，確認 delta 同步至 `openspec/specs/`
+- [x] 14.3 完成後 `/opsx:archive oauth-onboarding-ui`，確認 delta 同步至 `openspec/specs/` *(2026-05-10 path-D-2 v0.1.0 GA 後執行；compose-pull-deploy archive 先行於本 change（依 §14.2 落地順序）)*
