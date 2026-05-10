@@ -3,6 +3,7 @@
 5.4: 驗證 pipeline 工作與付款提醒工作均被正確註冊。
 """
 
+import os
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -132,8 +133,6 @@ class TestSchedulerJobRegistration:
         first_mtime = target.stat().st_mtime
 
         # 強制改 mtime 模擬時間流逝
-        import os
-
         os.utime(target, (first_mtime - 60, first_mtime - 60))
 
         _touch_heartbeat(target)
