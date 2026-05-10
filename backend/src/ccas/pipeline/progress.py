@@ -30,6 +30,7 @@ from collections.abc import Callable, Mapping, Sequence
 from typing import Protocol
 
 from sqlalchemy import update
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ccas.storage.models import PipelineRun
@@ -43,6 +44,13 @@ AsyncSessionFactory = Callable[[], AsyncSession]
 logger = logging.getLogger(__name__)
 
 THROTTLE_INTERVAL_SECONDS: float = 0.25
+
+#: ``stage_finished`` retry budget for transient ``database is locked``
+#: contention (issue #6). The PRAGMA ``busy_timeout=30000`` already gives the
+#: kernel-level wait; this loop is a second line of defence for the rare case
+#: where the timeout itself elapses (e.g. a long-running batch on the WAL).
+_STAGE_FINISHED_MAX_RETRIES: int = 3
+_STAGE_FINISHED_BACKOFF_SECONDS: tuple[float, ...] = (0.1, 0.5, 2.0)
 
 
 class ProgressReporter(Protocol):
@@ -177,34 +185,82 @@ class DbProgressReporter:
         counts: Mapping[str, int] | None = None,
         errors: Sequence[str] | None = None,
     ) -> None:
+        """Atomically append a stage summary entry and overwrite progress.
+
+        Issue #6: retries transient ``database is locked`` errors using
+        ``asyncio.sleep`` for backoff — must therefore be invoked from an
+        async context (the worker pipeline already runs each job under
+        ``asyncio.run`` per RQ task; sync callers would deadlock).
+        """
         # stage_finished MUST bypass throttle and atomically:
         #   1. Append stage summary JSON, including rich counts/errors
         #   2. Overwrite current_stage_processed = current_stage_total
         # Read-then-write inside one session; PipelineRun rows are written
         # only by the worker holding this reporter, so race is impossible
-        # for a single run.
-        async with self._session_factory() as session:
-            row = await session.get(PipelineRun, self._run_id)
-            if row is None:
+        # for a single run. Each retry opens a fresh session, so the prior
+        # failed-commit transaction is implicitly rolled back and re-reading
+        # ``stage_summary`` cannot observe a partial append.
+        entry = {
+            "stage": stage,
+            "ok": int(ok),
+            "fail": int(fail),
+            "elapsed_ms": int(elapsed_ms),
+            "counts": {str(name): int(count) for name, count in (counts or {}).items()},
+            "errors": [str(error) for error in (errors or [])],
+        }
+
+        last_exc: OperationalError | None = None
+        for attempt in range(_STAGE_FINISHED_MAX_RETRIES):
+            try:
+                async with self._session_factory() as session:
+                    row = await session.get(PipelineRun, self._run_id)
+                    if row is None:
+                        logger.warning(
+                            "pipeline_runs row %s not found",
+                            self._run_id,
+                            extra={"run_id": self._run_id, "stage": stage},
+                        )
+                        return
+                    new_summary = list(row.stage_summary or []) + [entry]
+                    row.stage_summary = new_summary
+                    row.current_stage_processed = row.current_stage_total
+                    await session.commit()
+                break
+            except OperationalError as exc:
+                # SQLite raises ``sqlite3.OperationalError("database is
+                # locked")`` for SQLITE_BUSY; CPython does not expose a
+                # numeric code, so substring match on ``exc.args[0]`` is the
+                # standard recovery hook (see SQLAlchemy issue #5184).
+                message = exc.args[0] if exc.args else ""
+                if "database is locked" not in str(message):
+                    raise
+                last_exc = exc
+                if attempt + 1 >= _STAGE_FINISHED_MAX_RETRIES:
+                    logger.error(
+                        "stage_finished gave up after retries on database-locked",
+                        extra={
+                            "run_id": self._run_id,
+                            "stage": stage,
+                            "attempts": _STAGE_FINISHED_MAX_RETRIES,
+                        },
+                    )
+                    raise
+                backoff = _STAGE_FINISHED_BACKOFF_SECONDS[attempt]
                 logger.warning(
-                    "DbProgressReporter: pipeline_runs row %s not found",
-                    self._run_id,
+                    "stage_finished hit database-locked; retrying",
+                    extra={
+                        "run_id": self._run_id,
+                        "stage": stage,
+                        "attempt": attempt + 1,
+                        "max_attempts": _STAGE_FINISHED_MAX_RETRIES,
+                        "backoff_s": backoff,
+                    },
                 )
-                return
-            entry = {
-                "stage": stage,
-                "ok": int(ok),
-                "fail": int(fail),
-                "elapsed_ms": int(elapsed_ms),
-                "counts": {
-                    str(name): int(count) for name, count in (counts or {}).items()
-                },
-                "errors": [str(error) for error in (errors or [])],
-            }
-            new_summary = list(row.stage_summary or []) + [entry]
-            row.stage_summary = new_summary
-            row.current_stage_processed = row.current_stage_total
-            await session.commit()
+                await asyncio.sleep(backoff)
+        else:  # pragma: no cover — loop always breaks or raises
+            raise RuntimeError(
+                "stage_finished retry loop exited without break or raise"
+            ) from last_exc
 
         async with self._lock:
             self._last_flush_at = time.monotonic()

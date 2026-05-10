@@ -25,14 +25,21 @@ def _set_sqlite_wal(
     dbapi_connection: DBAPIConnection,
     connection_record: ConnectionPoolEntry,
 ) -> None:
-    """設定 SQLite WAL mode 與 synchronous=NORMAL。
+    """設定 SQLite WAL mode、synchronous=NORMAL 與 busy_timeout=30s。
 
     作為 SQLAlchemy ``connect`` 事件監聽器，在每次建立新的
     DBAPI 連線時自動執行 PRAGMA 設定。
+
+    ``busy_timeout=30000`` (issue #6): aiosqlite 預設 5 s 對長時間
+    pipeline run 不夠 — worker、scheduler heartbeat、backend GET 共用
+    ``data/ccas.db``，``stage_finished`` 的 read-modify-write 會在
+    rolling 廣播 ingest 時撞 ``database is locked``。30 s 等待窗口涵蓋
+    scheduler 30 s heartbeat 週期，且大幅超過正常 commit 延遲。
     """
     cursor = dbapi_connection.cursor()
     cursor.execute("PRAGMA journal_mode=WAL")
     cursor.execute("PRAGMA synchronous=NORMAL")
+    cursor.execute("PRAGMA busy_timeout=30000")
     cursor.close()
 
 
