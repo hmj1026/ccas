@@ -83,7 +83,7 @@ cp .env.example .env
 
 **群組 Chat ID**：將 bot 加入群組，在群組內傳送訊息，再執行腳本即可看到群組 ID（負數，例如 `-1001234567890`）。
 
-> **注意**：若 bot 服務正在執行中（`docker compose up`），webhook 會攔截訊息導致 `getUpdates` 無結果。請先停止 bot 服務（`docker compose stop bot`），再執行腳本。
+> **注意**：若 bot 服務正在執行中（`docker compose up`），它正在以 long polling 模式接收訊息，會與此腳本搶 `getUpdates` 而導致拿不到結果。請先停止 bot 服務（`docker compose stop bot`），再執行腳本。
 
 **替代方式**：在 Telegram 中對 `@userinfobot` 傳送訊息可取得個人 chat ID；對 `@RawDataBot` 傳送或轉發訊息可取得任意 chat ID。
 

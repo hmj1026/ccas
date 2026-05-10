@@ -40,6 +40,15 @@ cp config/banks.example.yaml config/banks.yaml
 
 編輯 `.env`，填入所有必要變數。詳見 [使用者手冊](user-guide.md#2-設定環境變數)。
 
+**self-build prod 必填**（即使本指南面向自建鏡像，部分變數仍由 compose 與 entrypoint 共用）：
+- `REPO_OWNER`：GHCR namespace（即使自建也需設定，避免 image tag 解析失敗）
+- `CCAS_VERSION`：與你 build 的 image tag 對齊
+- `CCAS_PORT`：對外服務 port，預設 8080
+- `PUBLIC_BASE_URL`：OAuth redirect URI 計算基礎；本機驗證可用 `http://localhost:${CCAS_PORT}`
+
+> `API_TOKEN` **可不填**：entrypoint 首啟會自動生成 32-byte token 並落地至
+> `${CCAS_DATA_LOCATION}/secrets/api-token`（檔案權限 0600），即可用該 token 登入 Web UI。
+
 ## 3. Gmail 憑證
 
 Production 模式使用 bind mount `./backend/data:/data` 儲存資料（見 `docker-compose.yaml`）。需將 Google OAuth 憑證放入 host 端的 `./backend/data/` 目錄。
@@ -72,12 +81,14 @@ docker compose -f docker-compose.yaml up -d --build
 ```
 
 此指令僅使用 base `docker-compose.yaml`（不合併 override），以 production 模式啟動：
-- **backend**: uvicorn + tesseract OCR（port 8000）
-- **scheduler**: 排程 pipeline 執行
-- **bot**: Telegram bot 監聽與資料查詢
-- **redis**: 非同步工作佇列
+- **backend**: uvicorn + tesseract OCR（port 8000）+ alembic + seed bootstrap
+- **worker**: RQ 2.x worker，跑 pipeline / classifier / notifier 工作
+- **scheduler**: APScheduler cron + heartbeat writer（`/data/scheduler-heartbeat`）
+- **bot**: Telegram long polling（未填 token 則 disabled idle）
+- **frontend**: nginx static（dev: 8080；prod 由 proxy 統一對外）
+- **redis**: 非同步工作佇列（RQ + APScheduler 共用）
 
-注意：Production 模式不包含 frontend。前端僅供開發階段驗證資料使用，正式環境透過 Telegram bot 存取資料。
+> release pull-only 部署（`docker/docker-compose.yml`）多一個 `proxy`（nginx reverse proxy），統一以 `${CCAS_PORT}` 對外、`/api → backend`、`/ → frontend`。本指南的 self-build 路徑由 `frontend` 直接對外，不掛 proxy。
 
 ### 強烈建議：設定 `COMPOSE_FILE` 鎖定 base compose
 

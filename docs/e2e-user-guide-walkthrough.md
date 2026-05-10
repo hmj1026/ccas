@@ -14,7 +14,7 @@
 - [ ] `.env` 齊全：`./scripts/check-env.sh` 無錯誤
 - [ ] `PDF_PASSWORD_CTBC` / `_SINOPAC` / `_ESUN` / `_UBOT` / `_CATHAY` / `_TAISHIN` / `_FUBON` 全部填好
 - [ ] `credentials.json`、`token.json` 位於 `.env` 指定路徑
-- [ ] `docker compose up -d` 7 個服務（backend / worker / scheduler / bot / frontend / redis / db）全部 healthy
+- [ ] `docker compose up -d` 6 個服務（backend / worker / scheduler / bot / frontend / redis）全部 healthy（SQLite 為 file-based，無獨立 container）
 - [ ] `curl http://localhost:8000/health` → 200
 - [ ] `http://localhost:8080` 能用 `API_TOKEN` 登入
 
