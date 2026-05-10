@@ -4,11 +4,6 @@
       "Bash(openspec *)",
       "Bash(uv sync*)",
       "Bash(uv add *)",
-      "Bash(uv run pytest*)",
-      "Bash(uv run ruff *)",
-      "Bash(uv run pyright*)",
-      "Bash(uv run alembic *)",
-      "Bash(uv run fastapi dev*)",
       "Bash(uv run:*)",
       "Bash(uv pip:*)",
       "Bash(uv tool:*)",
@@ -17,7 +12,6 @@
       "Bash(python3:*)",
       "Bash(python -c:*)",
       "Bash(python -m:*)",
-      "Bash(python:*)",
       "Bash(pip show:*)",
       "Bash(pnpm add:*)",
       "Bash(pnpm test:*)",
@@ -27,10 +21,9 @@
       "Bash(pnpm install:*)",
       "Bash(pnpm list:*)",
       "Bash(pnpm build:*)",
-      "Bash(node:*)",
       "Bash(npx eslint:*)",
       "Bash(docker build:*)",
-      "Bash(docker run:*)",
+      "Bash(docker run --rm:*)",
       "Bash(docker rmi:*)",
       "Bash(docker compose:*)",
       "Bash(docker exec:*)",
@@ -41,21 +34,16 @@
       "Bash(docker --version)",
       "Bash(git:*)",
       "Bash(gh:*)",
-      "Bash(bash ./scripts/*)",
       "Bash(./scripts/*)",
+      "Bash(bash ./scripts/*)",
       "Bash(bash -n scripts/*)",
-      "Bash(bash scripts/*)",
       "Bash(RUN_FRONTEND=0 ./scripts/pre-push.sh)",
       "Bash(shellcheck:*)",
       "Bash(ruff check:*)",
       "Bash(gitleaks detect:*)",
       "Bash(chmod +x ./scripts/*)",
       "Bash(chmod +x .claude/hooks/*)",
-      "Bash(ls:*)",
       "Bash(wc:*)",
-      "Bash(echo:*)",
-      "Bash(head:*)",
-      "Bash(tail:*)",
       "Bash(command -v:*)",
       "Bash(curl -s http://127.0.0.1:*)",
       "Bash(curl -s http://localhost:*)",
@@ -65,8 +53,6 @@
       "Bash(curl -sI:*)",
       "Bash(curl -s -H:*)",
       "Bash(curl -sSL:*)",
-      "Bash(curl -s http://localhost:8000/health)",
-      "Bash(curl -s http://localhost:5173/)",
       "Bash(sqlite3:*)",
       "Bash(netstat -tlnp)",
       "Bash(lsof:*)",
@@ -77,14 +63,28 @@
       "Bash(BANK_CONFIG_DIR=*)",
       "Bash(unset BANK_CONFIG_DIR)",
       "Read(//tmp/**)",
-      "Bash(sqlite3 *)",
-      "Bash(uv run coverage *)",
-      "Bash(uv run mypy *)",
       "Bash(cx *)",
       "Bash(/opt/homebrew/bin/cx *)"
     ]
   },
+  "env": {
+    "BASH_DEFAULT_TIMEOUT_MS": "120000",
+    "BASH_MAX_TIMEOUT_MS": "600000"
+  },
   "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'REPO=$(git rev-parse --show-toplevel 2>/dev/null) && bash \"$REPO/.claude/hooks/ccas-secrets-guard.sh\"'",
+            "timeout": 5,
+            "statusMessage": "Scanning for plaintext secrets..."
+          }
+        ]
+      }
+    ],
     "PostToolUse": [
       {
         "matcher": "Edit|Write",
@@ -141,8 +141,9 @@
           {
             "type": "command",
             "command": "bash -c 'REPO=$(git rev-parse --show-toplevel 2>/dev/null) && bash \"$REPO/.claude/hooks/ccas-pre-push-stop.sh\"'",
-            "timeout": 120,
-            "statusMessage": "Running pre-push checks (session end)..."
+            "timeout": 5,
+            "statusMessage": "Dispatching async pre-push checks...",
+            "async": true
           },
           {
             "type": "command",

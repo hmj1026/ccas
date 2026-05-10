@@ -53,10 +53,7 @@ paths:
 
 ## Scripts
 
-- **Shell scripts**: Must be POSIX-compatible (`#!/bin/bash` or `#!/bin/sh`)
-- **Executable bit**: All scripts in `scripts/` must have `chmod +x`
-- **Error handling**: Use `set -euo pipefail` at the top of every script
-- **Cross-platform**: Use `$(command)` not backticks; use `$HOME` not `~` in scripts
+- All `scripts/*.sh` must `chmod +x` and start with `set -euo pipefail`. POSIX/bash conventions otherwise standard.
 
 ## SSOT Sync (root → backend/docker-image/)
 
@@ -70,6 +67,8 @@ The backend image production stage bakes the following files into the image via 
 | `config/banks.example.yaml` | `backend/docker-image/default-config/banks.example.yaml` |
 | `config/bank-code-registry.example.yaml` | `backend/docker-image/default-config/bank-code-registry.example.yaml` |
 | `config/categories.example.yaml` | `backend/docker-image/default-config/categories.example.yaml` |
+
+**`.env` consumers (single file, three layers)**: backend `ccas.config.Settings` (pydantic-settings), frontend Vite dev proxy (vars must use `VITE_` prefix to be exposed), Docker Compose `x-shared-env` anchor. Adding a new env var means updating `.env.example` + `backend/ccas/config.py`; if browser-visible, also prefix `VITE_`.
 
 **Rules**:
 - After modifying any SSOT source, run `./scripts/sync-docker-image-assets.sh` **in the same commit** and stage the updated mirrors together

@@ -19,9 +19,15 @@ class Bill(Base):
     __tablename__ = "bills"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    amount: Mapped[Decimal] = mapped_column(Numeric(10, 2))
+    total_amount: Mapped[int] = mapped_column(Integer, nullable=False)  # minor units (cents)
     transactions: Mapped[list["Transaction"]] = relationship(back_populates="bill")
 ```
+
+## Money Representation
+
+- **All monetary fields are `Integer` minor units (cents) — never `Float`/`Numeric`**. Naming convention: `amount_minor_units` for new fields; legacy `amount` columns are also int-cents.
+- Parsers multiply by 100 on ingestion; API layer divides by 100 (or formats directly) before responding.
+- Avoid floating-point math anywhere in the parse → store → API path.
 
 ## Alembic Migrations
 

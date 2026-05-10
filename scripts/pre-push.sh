@@ -15,6 +15,16 @@ echo "=== SSOT Sync Checks ==="
 "$REPO_ROOT/scripts/check-env-sync.sh"
 "$REPO_ROOT/scripts/sync-docker-image-assets.sh" --check
 
+echo "=== Repo Hygiene Check ==="
+SUSPECT_RE='(^\.claude/scheduled_tasks\.lock$|/\.DS_Store$|/__pycache__/|/\.pytest_cache/|/\.ruff_cache/|/\.mypy_cache/|\.pyc$|^node_modules/|\.pid$|\.sock$|^backend/data/captcha-archive/|^backend/data/staging/|\.bak(\.[^/]*)?$|^\.env$|^\.env\.(local|prod|staging))'
+SUSPECT=$(git -C "$REPO_ROOT" ls-files | grep -E "$SUSPECT_RE" || true)
+if [ -n "$SUSPECT" ]; then
+    echo "ERROR: 偵測到不應追蹤的 runtime / cache / 機敏類型檔：" >&2
+    echo "$SUSPECT" >&2
+    echo "修法：git rm --cached <file> 並更新 .gitignore" >&2
+    exit 1
+fi
+
 if [ "$RUN_BACKEND" = "1" ]; then
     echo "=== Backend Checks ==="
     cd "$REPO_ROOT/backend"

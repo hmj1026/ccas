@@ -91,6 +91,12 @@ class Settings(BaseSettings):
     # ``master_key_manager`` lazy property 暴露 ``MasterKeyManager``。
     master_key_path: str = "./data/secrets/master.key"
 
+    # scheduler heartbeat 檔；BlockingScheduler 啟動後由 interval job 每 30s
+    # touch 一次，docker-compose §1.11 worker/scheduler healthcheck 用 mtime
+    # 判斷 scheduler 是否仍在跑。Docker 部署時透過 CCAS_DATA_LOCATION 掛在
+    # /data/scheduler-heartbeat。
+    scheduler_heartbeat_path: str = "./data/scheduler-heartbeat"
+
     # 對外可見的 base URL（oauth-onboarding-ui §3.7）；用於組成 Gmail OAuth
     # callback ``redirect_uri``。預設假設透過 nginx proxy 暴露於 8080；
     # 若使用者透過外部 reverse proxy 暴露需更新此值。任何尾端 ``/`` 皆會

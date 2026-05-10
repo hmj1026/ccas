@@ -44,8 +44,7 @@ All code is fully async. Never use sync DB access or sync HTTP calls.
 
 ## Imports
 
-- Absolute imports: `from ccas.storage.models import Bill`
-- Standard library -> third-party -> local (enforced by ruff isort rules)
+- Absolute imports: `from ccas.storage.models import Bill` (ruff isort enforces ordering)
 
 ## Language
 

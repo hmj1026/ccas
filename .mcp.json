@@ -1,0 +1,9 @@
+{
+  "_comment": "Project-level MCP servers. Currently mirrors the global GitNexus entry so CCAS is reproducible on a fresh machine. Removed plugin-provided servers (github/context7/exa/memory/playwright/sequential-thinking) — those come from the everything-claude-code plugin and would duplicate.",
+  "mcpServers": {
+    "gitnexus": {
+      "command": "npx",
+      "args": ["-y", "gitnexus@1.6.3", "mcp"]
+    }
+  }
+}

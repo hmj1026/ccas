@@ -1,38 +1,87 @@
-Codemap Diff Report — 2026-04-22
-Previous scan: 2026-04-19 (frontend.md: 2026-04-11)
+Codemap Diff Report — 2026-05-10
+Previous scan: 2026-04-22 (data.md / dependencies.md: 2026-04-19)
 ========================================
 
 ## Files Updated
 
-frontend.md  (was 2026-04-11, 11 days stale — most outdated)
-  + ui/dialog.tsx (158 LOC) added to components list
-  + ui/collapsible.tsx (25 LOC) added — used by bills expandable rows
-  + staged-attachments-warning.tsx (157 LOC) added to components list
-  + shared/filter-bar.tsx (227 LOC) added to components list
-  + bills.tsx: noted expandable transaction detail feature
-  + api-client.ts: apiFetchBlob added to function list
-  + lib/types.ts: full type list with LOC documented
+architecture.md  (was 2026-04-22, 18 days stale)
+  ~ Data Flow: 加入 ClassificationRule、Budget/BudgetAlert、ReminderSetting 流向
+  ~ Entry Points: 補 RQ Worker（rq 2.x）、scheduler heartbeat path、Frontend
+  + Tech Stack: 列出 RQ 2.x、Anthropic、Playwright e2e
+  + Module Map: 補 setup/ 子目錄、12 routes、PipelineRun
+  + 新增「OpenSpec Changes (2026-04-22 → 2026-05-10)」區塊
+    （bills-management-and-insights / pipeline-operations-center / compose-pull-deploy）
 
-backend.md  (was 2026-04-19)
-  + GET /api/bills/{id}/transactions — bills inline transaction list
-  ~ tools LOC: 736 → 773 (reclassify utility added)
-  ~ ingestor LOC: 2268 → 2337
+backend.md  (was 2026-04-22, 18 days stale)
+  ~ API Routes: 由 8 router 擴充為 16 router；補 paths：
+      + transactions_edit (4 endpoints — detail / update / note / clear-override)
+      + analytics_v2 (compare/banks, compare/years, top-merchants)
+      + pipeline (trigger, runs, runs/{id})
+      + rules (CRUD + /test)
+      + reminders_settings (settings, {id}/settings, {id}/test)
+      + budgets (CRUD + alerts/active + alerts/{id}/acknowledge + {id}/current-period)
+      + staged-attachments (GET)
+      + setup/gmail (credentials, authorize, callback, status, revoke)
+      + setup/banks (GET, PUT)
+      + setup/secrets (GET, PUT, DELETE, import-from-env)
+      + setup/admin (token-info, token-rotate)
+  ~ exports.py 從 transactions.py 拆出，新 prefix `/api/transactions/export`
+  ~ Pipeline Stages: 註明 RQ worker 執行 + progress.stage_finished 寫入 PipelineRun
+  ~ Configuration: 新增 scheduler_heartbeat_path、admin_token_*、gmail_oauth_redirect_uri、bank_secrets-based PDF passwords
+  ~ Module Inventory: api 12→20 檔（含 setup/）；pipeline 7→8、tools/classifier/storage 微增；總 LOC ~12185 → ~14500
 
-architecture.md  (was 2026-04-19)
-  ~ tools/: added "reclassify utility" to module description
+frontend.md  (was 2026-04-22, 18 days stale)
+  ~ Page Tree: 由 6 routes 擴充為 18 routes（含 /setup/* 5 頁、/settings/{rules,budgets,reminders}、/insights、/operations、/transactions/:id；/analytics 改 redirect 至 /insights）
+  + Code Splitting: 由 5 → 15 lazy 頁
+  + Components 新增：budget-alert-banner.tsx (85)、budget-progress-card.tsx (72)、comparison-chart.tsx (85)、export-dialog.tsx (164)、top-merchants-table.tsx (41)
+  ~ State Management: 補 polling 章節（operations 頁對 pipeline runs 短輪詢）
+  ~ API Client: 補 apiPut；確認 apiFetchBlob 涵蓋 PDF/Excel/CSV
+  ~ Types: 大幅擴充（PipelineRunSummary/Detail、ClassificationRuleItem、BudgetItem/AlertItem/CurrentPeriod、ReminderSettingItem、Insights v2 三個 Item、Setup 系列 4 Item）
+
+data.md  (was 2026-04-19, 21 days stale)
+  + transactions: 新欄位 manual_category_override / tags / merchant_alias / updated_at + (category, trans_date) index
+  + 新表 reminder_settings (per-bill override，days_before JSON default `[3,1]`)
+  + 新表 classification_rules + 索引 (priority DESC, enabled)
+  + 新表 budgets + budget_alerts
+  + 新表 pipeline_runs（stage_summary JSON、created_at DESC index、status index）
+  + 新表 bank_settings / bank_secrets / gmail_oauth_state（setup wizard）
+  + Relationships 補 Budget→BudgetAlert、Bill→ReminderSetting、Category→ClassificationRule
+  ~ Migrations 表：依 down_revision 鏈序新增 5 列
+    （2570bbdebf54、0a2c400f1179、a4b8c2d6e0f1、5f9d4a7b3c8e、9b3e2c8a4f10）
+  ~ 補註：SQLite trigger 維護 updated_at（避開 ORM onupdate 對 Core-style bulk UPDATE 不觸發的陷阱）
+
+dependencies.md  (was 2026-04-19, 21 days stale)
+  ~ Gmail API：補 setup wizard 上傳 client secret、gmail_oauth_state 表、redirect URI dynamic switch
+  ~ Telegram Bot：補預算超標警示推播
+  ~ Redis + RQ：標註 rq 2.x、移除舊 `--quiet`、worker healthcheck 改用 `info --raw -Q`
+  ~ Docker Compose：補 SCHEDULER_HEARTBEAT_PATH=/data/scheduler-heartbeat 環境變數、scheduler/worker healthcheck 細節、SKIP_DB_BOOTSTRAP=1
+  + Python deps：openpyxl（XLSX export）、cryptography（bank_secrets）
+  + Frontend deps：recharts（Insights 圖表）
+  + 新增 Release / Deployment 區塊（CCAS_VERSION suffix regex、SSOT sync pairs、release artifact upload 修復）
 
 ## Files Unchanged
 
-data.md         (2026-04-19) — no schema or migration changes
-dependencies.md (2026-04-19) — no new external services or packages
+（none — 五份 codemap 全數刷新）
 
 ## Architecture Changes Since Last Scan
 
-- New feature: bills page expandable row shows inline transactions
-  Route: GET /api/bills/{id}/transactions  |  Component: ui/collapsible.tsx
-- New utility: reclassify tool in tools/ module
-- New UI primitives: ui/dialog.tsx (158 LOC), ui/collapsible.tsx (25 LOC)
+- OpenSpec change `bills-management-and-insights` (D1 + D2) 已歸檔合入 main specs
+  - Backend：analytics_v2、exports、rules、reminders_settings、budgets、transactions_edit
+  - Frontend：insights、settings-rules / settings-budgets / settings-reminders、transaction-detail、export-dialog、budget-alert-banner / progress-card、comparison-chart、top-merchants-table
+  - DB：classification_rules、budgets、budget_alerts、reminder_settings、transactions.user_*
+
+- OpenSpec change `pipeline-operations-center` 已歸檔
+  - Backend：`pipeline.py` router、PipelineRun model、pipeline.progress.stage_finished()
+  - Frontend：operations.tsx 頁（含 run 列表 + stage 即時輪詢）
+  - DB：pipeline_runs（含 created_at DESC 索引、updated_at trigger）
+
+- OpenSpec change `compose-pull-deploy` 在進行中
+  - 修復 release artifact upload（commit 0322afe）
+  - 修復 prod healthcheck 退化：scheduler heartbeat path 改絕對 /data/scheduler-heartbeat、worker rq 2.x 旗標
+  - 引入 path-C / path-D clean-dir verification、CCAS_VERSION suffix regex release blocker
+
+- Setup wizard（在 bills-d2 之前已存在但 codemap 未涵蓋）：四個 setup router + 五個 setup 前端頁，覆寫自助安裝流程
 
 ## Staleness Warnings
 
-None — all codemaps now current as of 2026-04-22
+None — 全部 codemap 更新至 2026-05-10

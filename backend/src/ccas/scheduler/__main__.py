@@ -7,9 +7,12 @@
 import logging
 import signal
 import sys
+from functools import partial
+from pathlib import Path
 
 from apscheduler.schedulers.blocking import BlockingScheduler
 
+from ccas.config import get_settings
 from ccas.log import configure_logging
 from ccas.scheduler.jobs import (
     run_budget_evaluator_sync,
@@ -18,6 +21,12 @@ from ccas.scheduler.jobs import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _touch_heartbeat(path: Path) -> None:
+    """Touch heartbeat file so docker compose healthcheck mtime probe stays green."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.touch(exist_ok=True)
 
 
 def main() -> None:
@@ -63,6 +72,20 @@ def main() -> None:
         replace_existing=True,
     )
 
+    # heartbeat：每 30 秒 touch 檔，docker compose §1.11 worker/scheduler healthcheck
+    # 透過 mtime 判斷 scheduler 是否仍存活；先 touch 一次避免 healthcheck 在
+    # start_period 結束前 mtime 不存在。
+    heartbeat_path = Path(get_settings().scheduler_heartbeat_path)
+    _touch_heartbeat(heartbeat_path)
+    scheduler.add_job(
+        partial(_touch_heartbeat, heartbeat_path),
+        "interval",
+        seconds=30,
+        id="scheduler_heartbeat",
+        name="Scheduler heartbeat writer",
+        replace_existing=True,
+    )
+
     def _shutdown(signum, frame):
         logger.info("Received signal %d, shutting down scheduler", signum)
         scheduler.shutdown(wait=False)
@@ -72,8 +95,8 @@ def main() -> None:
     signal.signal(signal.SIGTERM, _shutdown)
 
     logger.info(
-        "Starting scheduler with 3 jobs: daily_pipeline, "
-        "daily_payment_reminders, daily_budget_evaluator"
+        "Starting scheduler with 4 jobs: daily_pipeline, "
+        "daily_payment_reminders, daily_budget_evaluator, scheduler_heartbeat"
     )
     scheduler.start()
 

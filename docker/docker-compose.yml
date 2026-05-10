@@ -29,6 +29,9 @@ x-shared-env: &shared-env
   API_TOKEN_PATH: "/data/secrets/api-token"
   API_TOKEN_VERSION_PATH: "/data/secrets/api-token-version"
   MASTER_KEY_PATH: "/data/secrets/master.key"
+  # scheduler heartbeat probed by §1.11 healthcheck (mtime < 60s); aligned with
+  # the absolute /data layout above for the same WORKDIR=/app reason.
+  SCHEDULER_HEARTBEAT_PATH: "/data/scheduler-heartbeat"
   REDIS_URL: redis://redis:6379/0
   LOG_DIR: "/logs"
   BANK_CONFIG_DIR: "/config"
@@ -78,8 +81,10 @@ services:
         condition: service_healthy
     command: ["uv", "run", "rq", "worker", "--url", "redis://redis:6379/0"]
     healthcheck:
-      # rq info 連線 redis 列出 queue/worker 狀態；--quiet 抑制輸出，rc=0 表示 redis 可連
-      test: ["CMD-SHELL", "uv run rq info -u $$REDIS_URL --quiet || exit 1"]
+      # rq info -u $REDIS_URL 連線 redis 列出 queue/worker 狀態；rc=0 即 redis
+      # 可達 + rq runtime 正常。`--raw -Q -j 1` 抑制 ANSI bar chart、限縮輸出。
+      # 注意：rq 2.x 已移除舊的 `--quiet` flag，不可再用。
+      test: ["CMD-SHELL", "uv run rq info -u $$REDIS_URL --raw -Q >/dev/null || exit 1"]
       interval: 30s
       timeout: 10s
       start_period: 20s
