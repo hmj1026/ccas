@@ -64,6 +64,11 @@ backend/data/*.db-shm
 # Staging data (user downloads, contains PII)
 backend/data/staging/
 
+# Local data files: SSOT 為 config/，docker-entrypoint.sh 會從 *.example.yaml seed
+backend/data/banks.yaml
+backend/data/bank-code-registry.yaml
+backend/data/categories.yaml
+
 # Credentials (Gmail OAuth tokens)
 backend/data/credentials.json
 backend/data/token.json
@@ -96,6 +101,9 @@ docker-compose.local.yml
 # Claude Code personal overrides (Gmail MCP, macOS shortcuts, etc.)
 # settings.json is team-shared; settings.local.json is per-developer.
 .claude/settings.local.json
+
+# Claude Code runtime state（每次 session 啟動會改寫 sessionId/pid）
+.claude/scheduled_tasks.lock
 
 compact-notes/
 backend/data/captcha-archive/
