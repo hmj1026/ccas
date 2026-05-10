@@ -18,54 +18,23 @@ paths:
 - **Linter**: ESLint (typescript-eslint + react hooks/refresh plugins)
 - **Package Manager**: pnpm
 
-## Component Patterns
+## CCAS-Specific Patterns
 
-- **Functional components only**: No class components
-- **Named exports**: `export function ComponentName()` (not default export)
-- **File naming**: PascalCase for components (`BillsPage.tsx`), camelCase for utilities (`utils.ts`)
-- **Path aliases**: Use `@/` prefix for imports (e.g., `@/components/ui/button`)
+- **Named exports** (no default exports); PascalCase components (`BillsPage.tsx`); `@/` path alias
+- **shadcn/ui**: primitives in `src/components/ui/`, install via `pnpm dlx shadcn@latest add <component>`; never edit ui/ files directly — wrap them
+- **State**: TanStack React Query for server state; no global state library
+- **`cn()` helper** from `@/lib/utils` for conditional class merging
+- **API**: all calls via `src/lib/api.ts`; Vite dev proxies `/api` → `http://127.0.0.1:8000`; no `VITE_API_BASE` in dev
 
-## shadcn/ui
+## Test Runner Scopes (must distinguish)
 
-- UI primitives live in `src/components/ui/`
-- Add new components via `pnpm dlx shadcn@latest add <component>`
-- Do not modify `src/components/ui/` files directly; create wrappers if customization is needed
-- Icon library: `lucide-react`
-
-## State Management
-
-- **Server state**: TanStack React Query (`useQuery`, `useMutation`)
-- **Local state**: `useState` / `useReducer` for component-local state
-- No global state library; lift state or use React Context when needed
-
-## Styling
-
-- **Tailwind CSS**: Use utility classes directly; avoid custom CSS unless necessary
-- **CSS variables**: Defined in `src/index.css` for theming
-- **Responsive**: Mobile-first approach with Tailwind breakpoints
-- **`cn()` helper**: Use `cn()` from `@/lib/utils` for conditional class merging
-
-## Testing
-
-- Test files: `*.test.tsx` / `*.test.ts` colocated with source
-- Use `vitest` (not jest) APIs: `describe`, `it`, `expect`, `vi.fn()`
-- Use `@testing-library/react` for component tests: `render`, `screen`, `userEvent`
-- Avoid testing implementation details; test user-visible behavior
-- `pnpm test` is Vitest-only and must stay scoped to `src/**`
-- Playwright specs live under `frontend/e2e/` and must run via `pnpm e2e` / `pnpm e2e:ui`
-- If you edit `vite.config.ts` / `vitest.config.ts`, preserve `test.include` / `test.exclude` so Vitest does not collect `e2e/**`
-
-## API Integration
-
-- API calls go through `src/lib/api.ts`
-- Backend proxy: Vite dev server proxies `/api` to `http://127.0.0.1:8000`
-- No `VITE_API_BASE` needed for development
-- Use React Query for all data fetching (caching, refetching, error handling)
+- `pnpm test` = Vitest, scoped to `src/**` only (test files colocated as `*.test.tsx`)
+- `pnpm e2e` / `pnpm e2e:ui` = Playwright, scoped to `frontend/e2e/`
+- When editing `vite.config.ts` / `vitest.config.ts`, preserve `test.include` / `test.exclude` so Vitest does not collect `e2e/**`
 
 ## Conventions
 
-- User-facing text in **Traditional Chinese** (正體中文)
-- Code comments and variable names in English
-- Avoid `any` type; use `unknown` and narrow with type guards
-- Prefer `interface` over `type` for object shapes
-- Destructure props in function parameters
+- User-facing text in **Traditional Chinese** (正體中文); code/comments in English
+- Avoid `any`; use `unknown` + type guards. Prefer `interface` for object shapes
+
+> For generic React/Vite patterns, see ECC `frontend-patterns` skill.

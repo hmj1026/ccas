@@ -32,11 +32,7 @@ async def client(app, db_session):
 
 ## TDD Workflow
 
-1. Write test first (RED) -- hook auto-runs on `Write test_*.py`
-2. Confirm it fails
-3. Write minimal implementation (GREEN)
-4. Refactor
-5. Verify coverage: `uv run pytest --cov --cov-report=term-missing`
+`ccas-tdd-red-check.sh` auto-runs `test_*.py` on Write to confirm RED. Coverage gate: `uv run pytest --cov --cov-report=term-missing`. For deeper TDD guidance use ECC `tdd-workflow` skill.
 
 ## Type Safety in Tests
 

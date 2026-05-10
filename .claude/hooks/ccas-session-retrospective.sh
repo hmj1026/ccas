@@ -1,85 +1,49 @@
 #!/bin/bash
-# CCAS Session Retrospective Hook
-# Displays a summary checklist for session closeout
+# CCAS Session Retrospective Hook (Stop)
+# Writes a session summary to the per-project sessions/ directory and emits
+# a one-line stderr pointer so the user can find the file.
+set -o pipefail
 
-echo ""
-echo "================================================================"
-echo "  [CCAS] Session Retrospective Checklist"
-echo "================================================================"
-echo ""
-
-# Dynamically suggest agents based on what changed (vs HEAD)
 PROJECT_ROOT="${PROJECT_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
+ENCODED_PATH=$(echo "$PROJECT_ROOT" | tr '/' '-')
+SESSIONS_DIR="$HOME/.claude/projects/$ENCODED_PATH/sessions"
+mkdir -p "$SESSIONS_DIR"
+
+STAMP=$(date +%Y-%m-%d-%H%M)
+OUT="$SESSIONS_DIR/$STAMP.md"
+
+# Counters
 CHANGED_PY=$(git -C "$PROJECT_ROOT" diff --name-only HEAD 2>/dev/null | grep -c '\.py$' || true)
 CHANGED_TEST=$(git -C "$PROJECT_ROOT" diff --name-only HEAD 2>/dev/null | grep -c 'test_.*\.py$' || true)
 CHANGED_SQL=$(git -C "$PROJECT_ROOT" diff --name-only HEAD 2>/dev/null | grep -cE '(models|alembic)' || true)
 CHANGED_AUTH=$(git -C "$PROJECT_ROOT" diff --name-only HEAD 2>/dev/null | grep -cE '(auth|token|security|verify)' || true)
-
-SUGGESTIONS=0
-echo "[AGENTS] 根據本次修改，建議確認執行的後置步驟："
-if [ "$CHANGED_PY" -gt 0 ]; then
-    echo "  → /python-review  (Python 程式碼有修改)"
-    SUGGESTIONS=$((SUGGESTIONS + 1))
-fi
-if [ "$CHANGED_PY" -gt 0 ] && [ "$CHANGED_TEST" -eq 0 ]; then
-    echo "  → /tdd            (Python 修改但無測試更新)"
-    SUGGESTIONS=$((SUGGESTIONS + 1))
-fi
-if [ "$CHANGED_SQL" -gt 0 ]; then
-    echo "  → database-reviewer  (models/alembic 有修改)"
-    SUGGESTIONS=$((SUGGESTIONS + 1))
-fi
-if [ "$CHANGED_AUTH" -gt 0 ]; then
-    echo "  → security-reviewer  (認證/安全相關有修改)"
-    SUGGESTIONS=$((SUGGESTIONS + 1))
-fi
-if [ "$SUGGESTIONS" -eq 0 ]; then
-    echo "  (無 Python/SQL/Auth 修改，hooks 靜態分析已足夠)"
-fi
-echo ""
-
-# Check MEMORY.md (dynamically resolve Claude project memory path)
-ENCODED_PATH=$(echo "$PROJECT_ROOT" | tr '/' '-')
-MEMORY_FILE="$HOME/.claude/projects/$ENCODED_PATH/memory/MEMORY.md"
-if [ -f "$MEMORY_FILE" ]; then
-    MEMORY_MOD=$(stat -c %Y "$MEMORY_FILE" 2>/dev/null || stat -f %m "$MEMORY_FILE" 2>/dev/null)
-    CURRENT_TIME=$(date +%s)
-    TIME_DIFF=$((CURRENT_TIME - MEMORY_MOD))
-
-    if [ $TIME_DIFF -lt 3600 ]; then
-        echo "[OK] MEMORY.md was updated recently"
-    else
-        echo "[WARN] MEMORY.md has not been updated recently"
-        echo "   -> Did you document any new patterns or lessons learned?"
-    fi
-else
-    echo "[INFO] No MEMORY.md found yet (will be created on first use)"
-fi
-echo ""
-
-# Check git status
-echo "[CHECK] Git status:"
-STAGED=$(git -C "$PROJECT_ROOT" diff --cached --name-only 2>/dev/null | wc -l)
-UNSTAGED=$(git -C "$PROJECT_ROOT" diff --name-only 2>/dev/null | wc -l)
-UNTRACKED=$(git -C "$PROJECT_ROOT" ls-files --others --exclude-standard 2>/dev/null | wc -l)
-
-echo "  Staged:   $STAGED file(s)"
-echo "  Unstaged: $UNSTAGED file(s)"
-echo "  Untracked: $UNTRACKED file(s)"
-
-if [ $STAGED -gt 0 ]; then
-    echo ""
-    echo "[WARN] You have staged changes. Remember to commit:"
-    echo "   git commit -m \"your message\""
-fi
-echo ""
-
-# Check if Alembic migrations were added but not applied
 NEW_MIGRATIONS=$(git -C "$PROJECT_ROOT" diff --name-only HEAD 2>/dev/null | grep -c 'alembic/versions/' || true)
-if [ "$NEW_MIGRATIONS" -gt 0 ]; then
-    echo "[REMIND] New Alembic migration(s) detected"
-    echo "   -> Run: uv run alembic upgrade head"
-    echo ""
-fi
+STAGED=$(git -C "$PROJECT_ROOT" diff --cached --name-only 2>/dev/null | wc -l | tr -d ' ')
+UNSTAGED=$(git -C "$PROJECT_ROOT" diff --name-only 2>/dev/null | wc -l | tr -d ' ')
+UNTRACKED=$(git -C "$PROJECT_ROOT" ls-files --others --exclude-standard 2>/dev/null | wc -l | tr -d ' ')
+BRANCH=$(git -C "$PROJECT_ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "?")
 
-echo "================================================================"
+{
+    echo "# Session Retrospective — $STAMP"
+    echo
+    echo "- **Branch:** \`$BRANCH\`"
+    echo "- **Changed files:** py=$CHANGED_PY (tests=$CHANGED_TEST), sql/migrations=$CHANGED_SQL, auth=$CHANGED_AUTH"
+    echo "- **Git state:** staged=$STAGED, unstaged=$UNSTAGED, untracked=$UNTRACKED"
+    echo
+    echo "## Suggested follow-ups"
+    [ "$CHANGED_PY" -gt 0 ] && echo "- /python-review (Python edits)"
+    [ "$CHANGED_PY" -gt 0 ] && [ "$CHANGED_TEST" -eq 0 ] && echo "- /tdd (Python edits without test updates)"
+    [ "$CHANGED_SQL" -gt 0 ] && echo "- database-reviewer (models/alembic edits)"
+    [ "$CHANGED_AUTH" -gt 0 ] && echo "- security-reviewer (auth/security touched)"
+    [ "$NEW_MIGRATIONS" -gt 0 ] && echo "- Apply: \`uv run alembic upgrade head\` ($NEW_MIGRATIONS new migration file(s))"
+    [ "$STAGED" -gt 0 ] && echo "- $STAGED staged file(s) ready to commit"
+    [ "$CHANGED_PY" -eq 0 ] && [ "$CHANGED_SQL" -eq 0 ] && [ "$CHANGED_AUTH" -eq 0 ] && echo "- No code changes detected; hooks were sufficient"
+    echo
+    echo "## Recent commits (this branch, last 5)"
+    git -C "$PROJECT_ROOT" log --oneline -5 2>/dev/null || echo "  (no log)"
+} > "$OUT"
+
+# Trim sessions older than 30 days to keep dir bounded (best-effort)
+find "$SESSIONS_DIR" -name '*.md' -type f -mtime +30 -delete 2>/dev/null || true
+
+echo "[retrospective] Saved → $OUT" >&2
