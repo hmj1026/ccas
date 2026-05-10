@@ -21,12 +21,20 @@ docker compose -f docker-compose.yaml exec redis redis-cli ping
 
 ### 逐服務檢查
 
+<!-- AUTO-GENERATED: healthchecks — 由 docker/docker-compose.yml 抽出 -->
+
 | 服務 | 檢查指令 | 正常狀態 |
 |------|---------|---------|
 | backend | `curl http://localhost:8000/health` | `{"status":"ok"}` |
-| scheduler | `docker compose logs scheduler --tail=20` | 顯示 scheduled jobs |
+| worker | `docker compose exec worker uv run rq info -u $REDIS_URL --raw -Q` | rc=0、列出 queue（rq 2.x 已無 `--quiet` flag） |
+| scheduler | `docker compose exec scheduler test -f /data/scheduler-heartbeat && find /data/scheduler-heartbeat -mmin -1 \| grep -q .` | rc=0；heartbeat 檔 60s 內須更新 |
 | bot | `docker compose logs bot --tail=20` | 無 ERROR 訊息 |
 | redis | `docker exec ccas-redis-1 redis-cli ping` | `PONG` |
+| frontend | `curl -I http://localhost:8080/` | `200 OK`（nginx 靜態 SPA） |
+
+> Scheduler 主程式週期寫入 `SCHEDULER_HEARTBEAT_PATH=/data/scheduler-heartbeat`；若 healthcheck 反覆失敗，先檢查 scheduler container 的 stdout，再確認 `/data` volume 是否可寫入。
+
+<!-- /AUTO-GENERATED -->
 
 ## 服務監控指標
 
@@ -77,7 +85,7 @@ docker compose exec backend tail -f /logs/ccas.log
 # 確認 worker 是否存活
 docker compose ps worker
 
-# 重啟 worker
+# 重啟 worker（rq 2.x 已不再支援 --quiet，預設 healthcheck 改用 `rq info --raw -Q`）
 docker compose -f docker-compose.yaml restart worker
 
 # 手動觸發 pipeline
@@ -86,6 +94,25 @@ docker compose exec backend uv run python -m ccas.pipeline --bank CTBC
 # 強制重新處理特定月份
 docker compose exec backend uv run python -m ccas.pipeline --force --bank CTBC --year 2026 --month 3
 ```
+
+**從 UI 觸發與追蹤（pipeline-operations-center）：**
+
+```bash
+# 列出最近執行紀錄（status filter 可用 queued / running / succeeded / failed / cancelled）
+curl -s -H "Authorization: Bearer $API_TOKEN" \
+  "http://localhost:8000/api/pipeline/runs?limit=10"
+
+# 查看單一 run 的 stage_summary（含 processed / total / errors）
+curl -s -H "Authorization: Bearer $API_TOKEN" \
+  "http://localhost:8000/api/pipeline/runs/<run_id>"
+
+# 經 API 觸發（等同前端 /operations 頁）
+curl -s -X POST -H "Authorization: Bearer $API_TOKEN" -H "Content-Type: application/json" \
+  -d '{"bank_codes":["CTBC"],"force":true}' \
+  "http://localhost:8000/api/pipeline/trigger"
+```
+
+> `pipeline_runs` 表記錄 stage_summary（JSON），由 `pipeline.progress.stage_finished()` 寫入；前端 `/operations` 頁短輪詢同一資料。
 
 ### Gmail OAuth Token 過期
 
@@ -101,6 +128,15 @@ docker compose exec backend ls /data/credentials.json /data/token.json
 # 將新 token 複製到 volume
 docker cp backend/data/token.json ccas-backend-1:/data/token.json
 ```
+
+**或透過 Setup Wizard（前端 `/setup/gmail`）：**
+
+1. 上傳 Google client secret JSON → `POST /api/setup/gmail/credentials`
+2. 取得授權 URL → `GET /api/setup/gmail/authorize`
+3. 完成授權後由 `GET /api/setup/gmail/callback` 自動寫回 token
+4. 確認狀態 → `GET /api/setup/gmail/status`
+
+`gmail_oauth_state` 表存放 PKCE state，redirect URI 由 `gmail_oauth_redirect_uri` 控制（local / docker / prod 各自的 PUBLIC_BASE_URL）。
 
 ### Redis 連線失敗
 
@@ -253,7 +289,10 @@ CCAS Telegram Bot 傳送的通知類型：
 | 告警類型 | 觸發條件 | 範例訊息 |
 |---------|---------|---------|
 | 帳單摘要 | Pipeline notify 階段完成 | 月結帳單金額、待繳項目 |
-| 繳費提醒 | 距繳費日 ≤ 7 天 | 「CTBC 帳單將於 XX/XX 到期」|
+| 繳費提醒 | 距繳費日符合 `reminder_settings.days_before`（預設 `[3, 1]`） | 「CTBC 帳單將於 XX/XX 到期」|
+| 預算超標 | `BudgetAlert` 觸發（current ≥ `alert_threshold_percent`） | 「Total / 餐飲 月度預算已達 85%」|
+
+> 提醒策略可在前端 `/settings/reminders` 逐張帳單覆寫；預算與門檻在 `/settings/budgets` 維護。Backend dispatch：scheduler 週期性查表 → bot send → 寫入 `payment_reminders` 與 `budget_alerts`。
 
 若需暫停 Telegram 通知（例如維護期間）：
 
