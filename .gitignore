@@ -64,6 +64,9 @@ backend/data/*.db-shm
 # Staging data (user downloads, contains PII)
 backend/data/staging/
 
+# Scheduler runtime heartbeat（容器啟動時生成，內含 timestamp）
+backend/data/scheduler-heartbeat
+
 # Local data files: SSOT 為 config/，docker-entrypoint.sh 會從 *.example.yaml seed
 backend/data/banks.yaml
 backend/data/bank-code-registry.yaml
@@ -79,6 +82,9 @@ backend/data/secrets/
 
 # Node.js
 node_modules/
+
+# Vite cache
+frontend/.vite/
 
 # Build
 dist/
@@ -108,3 +114,10 @@ docker-compose.local.yml
 compact-notes/
 backend/data/captcha-archive/
 .gitnexus
+
+# Local scheduler heartbeat file（compose-pull-deploy §1.11；docker 部署掛在
+# CCAS_DATA_LOCATION，本機 dev 直跑 scheduler 時會寫到 backend/data/）
+backend/data/scheduler-heartbeat
+
+# Vite dev server cache
+frontend/.vite/
