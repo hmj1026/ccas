@@ -116,6 +116,18 @@
 > - `/tmp/ccas-upgrade-verify` 沙盒已 staged：`docker compose config` 解析出
 >   `ghcr.io/hmj1026/ccas-backend|frontend|proxy:v0.0.2`，`REPO_OWNER=hmj1026`、`CCAS_PORT=12286`
 >   設定齊全；當前未啟動，待 §7.4 把 `CCAS_VERSION` 改成 `v0.1.0-rc.1` 後 `pull && up -d` 重跑 §6.x。
+>
+> **path-D-2 rc.1 healthcheck regression（2026-05-10 發現 → 修復）**：rc.1 image 推 GHCR 後
+> `/tmp/ccas-upgrade-verify` 升級驗證觀察到 scheduler / worker 兩個 service 持續 unhealthy，
+> 根因兩條：(1) `docker-compose.yml` §1.11 scheduler healthcheck 用
+> `${CCAS_DATA_LOCATION}/scheduler-heartbeat` mtime probe，但 `backend/src/ccas/scheduler/__main__.py`
+> 從未 touch 該檔；image logs 仍 `Starting scheduler with 3 jobs` 缺 heartbeat job。
+> (2) worker healthcheck `uv run rq info -u $REDIS_URL --quiet`，rq 2.x 已移除 `--quiet`，
+> `docker inspect` healthcheck output 為 `Error: No such option: --quiet`。
+> 修復：scheduler 新增 `_touch_heartbeat` 30s interval job + `Settings.scheduler_heartbeat_path`；
+> worker healthcheck 改 `rq info -u $REDIS_URL --raw -Q >/dev/null`。tests 6 案全綠
+> （含 `test_heartbeat_job_registered` + `test_touch_heartbeat_creates_and_updates`）。
+> rc.1 不可 force re-tag（已外發），改推 rc.2 取代；rc.1 release notes 將補 known regression note。
 
 
 - [ ] 7.1 合 PR 到 master，於 develop 走完 6.x 驗證

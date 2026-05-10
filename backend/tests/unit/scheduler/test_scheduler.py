@@ -3,9 +3,10 @@
 5.4: 驗證 pipeline 工作與付款提醒工作均被正確註冊。
 """
 
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from ccas.scheduler.__main__ import main
+from ccas.scheduler.__main__ import _touch_heartbeat, main
 
 
 class TestSchedulerJobRegistration:
@@ -28,8 +29,8 @@ class TestSchedulerJobRegistration:
             except (KeyboardInterrupt, SystemExit):
                 pass
 
-        # 驗證 add_job 被呼叫了三次（pipeline / reminders / budget evaluator）
-        assert mock_scheduler.add_job.call_count == 3
+        # add_job called four times: pipeline / reminders / budget evaluator / heartbeat
+        assert mock_scheduler.add_job.call_count == 4
 
         # 收集註冊的 job IDs
         job_ids = set()
@@ -93,6 +94,50 @@ class TestSchedulerJobRegistration:
         assert reminders_call is not None
         assert reminders_call.kwargs["hour"] == 9
         assert reminders_call.kwargs["minute"] == 0
+
+    def test_heartbeat_job_registered(self, tmp_path: Path):
+        """heartbeat job 以 30s interval 註冊，docker compose §1.11 healthcheck 依賴
+        scheduler 持續寫入 ${CCAS_DATA_LOCATION}/scheduler-heartbeat 來確認存活。
+        """
+        mock_scheduler = MagicMock()
+        mock_scheduler.start.side_effect = KeyboardInterrupt
+
+        with (
+            patch(
+                "ccas.scheduler.__main__.BlockingScheduler", return_value=mock_scheduler
+            ),
+            patch("ccas.scheduler.__main__.signal.signal"),
+        ):
+            try:
+                main()
+            except (KeyboardInterrupt, SystemExit):
+                pass
+
+        heartbeat_call = None
+        for call in mock_scheduler.add_job.call_args_list:
+            if call.kwargs.get("id") == "scheduler_heartbeat":
+                heartbeat_call = call
+                break
+
+        assert heartbeat_call is not None
+        assert heartbeat_call.args[1] == "interval"
+        assert heartbeat_call.kwargs["seconds"] == 30
+
+    def test_touch_heartbeat_creates_and_updates(self, tmp_path: Path):
+        """_touch_heartbeat 首次建立檔案、二次更新 mtime；目錄不存在時自動 mkdir。"""
+        target = tmp_path / "nested" / "scheduler-heartbeat"
+
+        _touch_heartbeat(target)
+        assert target.is_file()
+        first_mtime = target.stat().st_mtime
+
+        # 強制改 mtime 模擬時間流逝
+        import os
+
+        os.utime(target, (first_mtime - 60, first_mtime - 60))
+
+        _touch_heartbeat(target)
+        assert target.stat().st_mtime > first_mtime - 60
 
     def test_budget_evaluator_runs_at_2am(self):
         """預算評估在每日凌晨 2 點執行（§6.7）。"""
