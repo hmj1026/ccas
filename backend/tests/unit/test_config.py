@@ -205,8 +205,9 @@ class TestMasterKeyManager:
     ) -> None:
         settings = _make_settings(monkeypatch, tmp_path, env_file_arg=None)
 
-        assert settings.master_key_path == str(
-            (_backend_root() / "data/secrets/master.key").resolve()
+        assert (
+            settings.master_key_path
+            == (_backend_root() / "data/secrets/master.key").resolve()
         )
 
     def test_master_key_path_absolute_override_preserved(
@@ -219,7 +220,7 @@ class TestMasterKeyManager:
             env_file_content={"MASTER_KEY_PATH": str(target)},
         )
 
-        assert settings.master_key_path == str(target.resolve())
+        assert settings.master_key_path == target.resolve()
 
     def test_master_key_manager_is_lazy_and_cached(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
@@ -242,3 +243,35 @@ class TestMasterKeyManager:
         ct = mgr1.encrypt("hello")
         assert mgr1.decrypt(ct) == "hello"
         assert target.exists()
+
+
+class TestSettingsPathFieldTypes:
+    """Path-typed Settings fields eliminate ``Path(...)`` boilerplate at every
+    caller (issue #9). The ``_normalize_path_settings`` validator is the single
+    place where the conversion happens — verify each field round-trips to a
+    real ``Path`` instance, not a string.
+    """
+
+    def test_path_fields_return_path_instances(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        settings = _make_settings(monkeypatch, tmp_path, env_file_arg=None)
+
+        # Issue #9 scope: secrets/heartbeat fields only. Peer path fields
+        # (gmail_*, staging_dir, fubon_manual_staging_dir) flow through many
+        # ``str``-typed helper signatures; their conversion is deferred to a
+        # broader pass.
+        assert isinstance(settings.master_key_path, Path)
+        assert isinstance(settings.api_token_path, Path)
+        assert isinstance(settings.api_token_version_path, Path)
+        assert isinstance(settings.scheduler_heartbeat_path, Path)
+
+    def test_scheduler_heartbeat_path_default_resolves_under_backend_root(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        settings = _make_settings(monkeypatch, tmp_path, env_file_arg=None)
+
+        assert (
+            settings.scheduler_heartbeat_path
+            == (_backend_root() / "data/scheduler-heartbeat").resolve()
+        )

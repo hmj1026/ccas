@@ -7,7 +7,6 @@ import re
 import secrets
 from dataclasses import dataclass
 from datetime import date
-from pathlib import Path
 
 from fastapi import Depends, HTTPException, Query, Request, Security
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
@@ -34,7 +33,7 @@ def current_api_token() -> str:
     Docker entrypoint.
     """
     settings = get_settings()
-    path = Path(settings.api_token_path)
+    path = settings.api_token_path
     try:
         if path.is_file():
             value = path.read_text().strip()
@@ -52,7 +51,7 @@ def current_api_token_version() -> int:
     this number, immediately invalidating cookies issued under prior versions.
     """
     settings = get_settings()
-    path = Path(settings.api_token_version_path)
+    path = settings.api_token_version_path
     try:
         if path.is_file():
             raw = path.read_text().strip()
