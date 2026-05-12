@@ -20,22 +20,35 @@ import {
   LogOut,
 } from 'lucide-react'
 import { useState } from 'react'
-import { NavLink, Outlet, useNavigate } from 'react-router'
+import { Outlet, useNavigate } from 'react-router'
 import { apiDelete } from '@/lib/api-client'
 import type { ApiResponse } from '@/lib/types'
 import { Button } from '@/components/ui/button'
+import { PrefetchLink } from '@/components/prefetch-link'
+import {
+  importBills,
+  importInsights,
+  importOperations,
+  importOverview,
+  importSettings,
+  importSettingsBudgets,
+  importSettingsReminders,
+  importSettingsRules,
+  importSetupGmail,
+  importTransactions,
+} from '@/lib/route-imports'
 
 const NAV_ITEMS = [
-  { to: '/overview', label: '總覽', icon: LayoutDashboard },
-  { to: '/transactions', label: '交易', icon: Receipt },
-  { to: '/insights', label: 'Insights', icon: Sparkles },
-  { to: '/bills', label: '帳單', icon: FileText },
-  { to: '/operations', label: '操作中心', icon: Workflow },
-  { to: '/settings', label: '設定', icon: Settings },
-  { to: '/settings/reminders', label: '提醒', icon: Bell },
-  { to: '/settings/budgets', label: '預算', icon: Wallet },
-  { to: '/settings/rules', label: '分類規則', icon: Tags },
-  { to: '/setup/gmail', label: '設定中心', icon: Settings2 },
+  { to: '/overview', label: '總覽', icon: LayoutDashboard, prefetch: importOverview },
+  { to: '/transactions', label: '交易', icon: Receipt, prefetch: importTransactions },
+  { to: '/insights', label: 'Insights', icon: Sparkles, prefetch: importInsights },
+  { to: '/bills', label: '帳單', icon: FileText, prefetch: importBills },
+  { to: '/operations', label: '操作中心', icon: Workflow, prefetch: importOperations },
+  { to: '/settings', label: '設定', icon: Settings, prefetch: importSettings },
+  { to: '/settings/reminders', label: '提醒', icon: Bell, prefetch: importSettingsReminders },
+  { to: '/settings/budgets', label: '預算', icon: Wallet, prefetch: importSettingsBudgets },
+  { to: '/settings/rules', label: '分類規則', icon: Tags, prefetch: importSettingsRules },
+  { to: '/setup/gmail', label: '設定中心', icon: Settings2, prefetch: importSetupGmail },
 ] as const
 
 function Layout() {
@@ -83,10 +96,11 @@ function Layout() {
           </button>
         </div>
         <nav className="flex-1 space-y-1 p-2">
-          {NAV_ITEMS.map(({ to, label, icon: Icon }) => (
-            <NavLink
+          {NAV_ITEMS.map(({ to, label, icon: Icon, prefetch }) => (
+            <PrefetchLink
               key={to}
               to={to}
+              onPrefetch={prefetch}
               onClick={() => setMobileOpen(false)}
               className={({ isActive }) =>
                 `flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
@@ -98,7 +112,7 @@ function Layout() {
             >
               <Icon className="size-4" />
               {label}
-            </NavLink>
+            </PrefetchLink>
           ))}
         </nav>
         <div className="border-t border-border p-3">

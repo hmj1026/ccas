@@ -10,25 +10,41 @@ import AuthGuard from '@/components/auth-guard'
 import Layout from '@/components/layout'
 import { LoadingState } from '@/components/shared/states'
 import LoginPage from '@/pages/login'
+import {
+  importBills,
+  importInsights,
+  importOperations,
+  importOverview,
+  importSettings,
+  importSettingsBudgets,
+  importSettingsReminders,
+  importSettingsRules,
+  importSetupAdmin,
+  importSetupBanks,
+  importSetupGmail,
+  importSetupGmailCallback,
+  importSetupLayout,
+  importSetupSecrets,
+  importTransactionDetail,
+  importTransactions,
+} from '@/lib/route-imports'
 
-const OverviewPage = lazy(() => import('@/pages/overview'))
-const TransactionsPage = lazy(() => import('@/pages/transactions'))
-const TransactionDetailPage = lazy(() => import('@/pages/transaction-detail'))
-const InsightsPage = lazy(() => import('@/pages/insights'))
-const BillsPage = lazy(() => import('@/pages/bills'))
-const OperationsPage = lazy(() => import('@/pages/operations'))
-const SettingsPage = lazy(() => import('@/pages/settings'))
-const SettingsRemindersPage = lazy(() => import('@/pages/settings-reminders'))
-const SettingsBudgetsPage = lazy(() => import('@/pages/settings-budgets'))
-const SettingsRulesPage = lazy(() => import('@/pages/settings-rules'))
-const SetupLayout = lazy(() => import('@/pages/setup/layout'))
-const SetupGmailPage = lazy(() => import('@/pages/setup/gmail'))
-const SetupGmailCallbackPage = lazy(
-  () => import('@/pages/setup/gmail-callback'),
-)
-const SetupBanksPage = lazy(() => import('@/pages/setup/banks'))
-const SetupSecretsPage = lazy(() => import('@/pages/setup/secrets'))
-const SetupAdminPage = lazy(() => import('@/pages/setup/admin'))
+const OverviewPage = lazy(importOverview)
+const TransactionsPage = lazy(importTransactions)
+const TransactionDetailPage = lazy(importTransactionDetail)
+const InsightsPage = lazy(importInsights)
+const BillsPage = lazy(importBills)
+const OperationsPage = lazy(importOperations)
+const SettingsPage = lazy(importSettings)
+const SettingsRemindersPage = lazy(importSettingsReminders)
+const SettingsBudgetsPage = lazy(importSettingsBudgets)
+const SettingsRulesPage = lazy(importSettingsRules)
+const SetupLayout = lazy(importSetupLayout)
+const SetupGmailPage = lazy(importSetupGmail)
+const SetupGmailCallbackPage = lazy(importSetupGmailCallback)
+const SetupBanksPage = lazy(importSetupBanks)
+const SetupSecretsPage = lazy(importSetupSecrets)
+const SetupAdminPage = lazy(importSetupAdmin)
 
 function createQueryClient() {
   return new QueryClient({
