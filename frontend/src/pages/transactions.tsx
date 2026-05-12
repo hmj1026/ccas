@@ -14,6 +14,8 @@ import { LoadingState, ErrorState, EmptyState } from '@/components/shared/states
 import { FilterBar, type FilterBarParams } from '@/components/shared/filter-bar'
 import { useFilterParams } from '@/lib/use-filter-params'
 
+const FILTER_SHOW = ['year', 'month', 'bank', 'category', 'q'] as const
+
 function TransactionsPage() {
   const [searchParams, setSearchParams] = useSearchParams()
 
@@ -91,7 +93,7 @@ function TransactionsPage() {
       </div>
 
       <FilterBar
-        show={['year', 'month', 'bank', 'category', 'q']}
+        show={FILTER_SHOW}
         values={filterValues}
         onChange={handleFilterChange}
       />
@@ -119,7 +121,7 @@ function TransactionsPage() {
               </thead>
               <tbody>
                 {data.data.map((tx) => (
-                  <tr key={tx.id} className="border-t border-border">
+                  <tr key={tx.id} className="tr-list border-t border-border">
                     <td className="px-3 py-2 whitespace-nowrap">{tx.trans_date}</td>
                     <td className="px-3 py-2">{tx.merchant}</td>
                     <td className="px-3 py-2">{tx.category ?? '-'}</td>

@@ -7,7 +7,7 @@
  */
 import { useQuery } from '@tanstack/react-query'
 import { Search } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { memo, useEffect, useRef, useState } from 'react'
 import { apiGet } from '@/lib/api-client'
 import type { ApiResponse, BankConfigItem } from '@/lib/types'
 
@@ -115,12 +115,16 @@ function DebouncedInput({
 /**
  * 可組合的篩選列，透過 `show` prop 控制要顯示哪些篩選維度。
  *
+ * 已用 React.memo 包裹：只要呼叫端把 `show` (module-level const)、
+ * `values` (useMemo)、`onChange` (useFilterParams) 維持 referential stability，
+ * 父頁面 state 變動時即可跳過整個子樹重渲染。
+ *
  * @param show - 要顯示的篩選維度陣列
  * @param values - 目前各維度的篩選值
  * @param onChange - 某維度值變更時的 callback
  * @param extra - 右側附加內容（選填）
  */
-export function FilterBar({ show, values, onChange, extra }: FilterBarProps) {
+export const FilterBar = memo(function FilterBar({ show, values, onChange, extra }: FilterBarProps) {
   const { data: yearsData } = useYears()
   const { data: banksData } = useBanks()
 
@@ -224,4 +228,4 @@ export function FilterBar({ show, values, onChange, extra }: FilterBarProps) {
       {extra && <div className="ml-auto flex items-center gap-2">{extra}</div>}
     </div>
   )
-}
+})

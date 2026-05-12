@@ -17,11 +17,16 @@ import {
   YAxis,
 } from 'recharts'
 import type { BankCompareItem, YearCompareItem } from '@/lib/types'
+import { currencyFormatter } from '@/lib/utils'
 import { EmptyState } from '@/components/shared/states'
 
-const currencyFormatter = (
+// 提升到 module scope，避免每次 render 產生新的 closure，
+// Recharts 內部會因 prop referential equality 改變而觸發子樹重渲染。
+const bankAxisLabel = (d: BankCompareItem) => d.bank_name ?? d.bank_code
+
+const countFormatter = (
   v: number | string | readonly (number | string)[] | undefined,
-) => `$${Number(v).toLocaleString()}`
+): string => String(v ?? '')
 
 export function BankComparisonBarChart({
   data,
@@ -33,7 +38,7 @@ export function BankComparisonBarChart({
     <ResponsiveContainer width="100%" height={300}>
       <BarChart data={data as BankCompareItem[]}>
         <CartesianGrid strokeDasharray="3 3" />
-        <XAxis dataKey={(d: BankCompareItem) => d.bank_name ?? d.bank_code} />
+        <XAxis dataKey={bankAxisLabel} />
         <YAxis />
         <Tooltip formatter={currencyFormatter} />
         <Legend />
@@ -56,21 +61,15 @@ export function YearComparisonLineChart({
   readonly metricLabel: string
 }) {
   if (data.length === 0) return <EmptyState message="尚無年度資料" />
+  const tooltipFormatter =
+    metricLabel === '金額' ? currencyFormatter : countFormatter
   return (
     <ResponsiveContainer width="100%" height={300}>
       <LineChart data={data as YearCompareItem[]}>
         <CartesianGrid strokeDasharray="3 3" />
         <XAxis dataKey="year" />
         <YAxis />
-        <Tooltip
-          formatter={(v) =>
-            metricLabel === '金額'
-              ? currencyFormatter(
-                  v as number | string | readonly (number | string)[] | undefined,
-                )
-              : String(v ?? '')
-          }
-        />
+        <Tooltip formatter={tooltipFormatter} />
         <Legend />
         <Line
           type="monotone"
