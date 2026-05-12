@@ -3,10 +3,27 @@ import path from 'path'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
+import { visualizer } from 'rollup-plugin-visualizer'
+
+// Bundle 觀測：set `ANALYZE=1 pnpm build` 才產出 dist/stats.html，避免 CI prod 多餘輸出。
+const analyzeBundle = process.env.ANALYZE === '1' || process.env.ANALYZE === 'true'
 
 export default defineConfig({
   envDir: '..',
-  plugins: [react(), tailwindcss()],
+  plugins: [
+    react(),
+    tailwindcss(),
+    ...(analyzeBundle
+      ? [
+          visualizer({
+            filename: 'dist/stats.html',
+            gzipSize: true,
+            brotliSize: true,
+            template: 'treemap',
+          }),
+        ]
+      : []),
+  ],
   server: {
     host: true,
     port: 5173,
@@ -20,6 +37,24 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
+    },
+  },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules/recharts') || id.includes('node_modules/d3-')) {
+            return 'charts'
+          }
+          if (
+            id.includes('node_modules/react-dom/') ||
+            id.includes('node_modules/react/') ||
+            id.includes('node_modules/scheduler/')
+          ) {
+            return 'react'
+          }
+        },
+      },
     },
   },
   test: {
