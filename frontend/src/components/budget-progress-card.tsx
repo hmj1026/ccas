@@ -5,15 +5,12 @@
  * scope 標題 + threshold 標記。
  */
 import type { BudgetItem, BudgetCurrentPeriod } from '@/lib/types'
+import { formatAmount } from '@/lib/utils'
 
 const SCOPE_LABELS: Record<BudgetItem['scope'], string> = {
   monthly_total: '整月支出',
   monthly_category: '類別',
   monthly_bank: '銀行',
-}
-
-function formatCurrency(amount: number): string {
-  return `$${amount.toLocaleString('zh-Hant')}`
 }
 
 function colorByPercent(percent: number): {
@@ -60,7 +57,7 @@ export function BudgetProgressCard({
       </div>
       <div className="flex items-center justify-between text-xs text-muted-foreground">
         <span>
-          已花 {formatCurrency(cur)} / {formatCurrency(budget.amount_minor_units)}
+          已花 {formatAmount(cur)} / {formatAmount(budget.amount_minor_units)}
         </span>
         <span>警示閾值 {budget.alert_threshold_percent}%</span>
       </div>

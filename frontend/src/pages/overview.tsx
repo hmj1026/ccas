@@ -14,6 +14,8 @@ import { FilterBar, type FilterBarParams } from '@/components/shared/filter-bar'
 import { BudgetAlertBanner } from '@/components/budget-alert-banner'
 import { useFilterParams } from '@/lib/use-filter-params'
 
+const FILTER_SHOW = ['month'] as const
+
 function OverviewPage() {
   const [searchParams] = useSearchParams()
   const month = searchParams.get('month') ?? ''
@@ -45,7 +47,7 @@ function OverviewPage() {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-2xl font-bold">{overview.month} 總覽</h1>
         <FilterBar
-          show={['month']}
+          show={FILTER_SHOW}
           values={filterValues}
           onChange={handleFilterChange}
         />

@@ -18,6 +18,7 @@ import {
   YAxis,
 } from 'recharts'
 import { apiGet } from '@/lib/api-client'
+import { currencyFormatter } from '@/lib/utils'
 import type {
   ApiResponse,
   BankCompareItem,
@@ -44,10 +45,7 @@ import {
 import { useFilterParams } from '@/lib/use-filter-params'
 
 const TREND_MONTHS_OPTIONS = [6, 12, 24] as const
-
-const currencyFormatter = (
-  v: number | string | readonly (number | string)[] | undefined,
-) => `$${Number(v).toLocaleString()}`
+const FILTER_SHOW = ['year', 'month', 'bank'] as const
 
 function CategoryListWithCompare({
   data,
@@ -183,7 +181,7 @@ function InsightsPage() {
         <h1 className="text-2xl font-bold">Insights</h1>
         <div className="flex items-center gap-2">
           <FilterBar
-            show={['year', 'month', 'bank']}
+            show={FILTER_SHOW}
             values={filterValues}
             onChange={handleFilterChange}
           />

@@ -16,6 +16,8 @@ import { FilterBar, type FilterBarParams } from '@/components/shared/filter-bar'
 import { StagedAttachmentsWarning } from '@/components/staged-attachments-warning'
 import { useFilterParams } from '@/lib/use-filter-params'
 
+const FILTER_SHOW = ['year', 'month', 'bank', 'status'] as const
+
 function BillsPage() {
   const queryClient = useQueryClient()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -82,7 +84,7 @@ function BillsPage() {
       <StagedAttachmentsWarning />
 
       <FilterBar
-        show={['year', 'month', 'bank', 'status']}
+        show={FILTER_SHOW}
         values={filterValues}
         onChange={handleFilterChange}
         extra={
