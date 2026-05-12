@@ -135,12 +135,13 @@ Health:
 | Anthropic | `anthropic_api_key`（SecretStr，僅 captcha LLM fallback 啟用時需要） |
 | Logging | `log_level`, `log_format`, `log_dir`, `log_file_max_bytes`, `log_file_backup_count`, `log_file_prefix` |
 | PDF Passwords | `get_pdf_password(bank_code)` → 讀 `bank_secrets` 表（fallback `PDF_PASSWORD_{BANK_CODE}`） |
+| Database Resilience | `PRAGMA busy_timeout=30000`（per-connection on `connect`）+ `DbProgressReporter.stage_finished` 3-retry backoff（0.1 / 0.5 / 2 秒）on `database is locked` |
 
 ## Module Inventory
 
 | Module | Files | LOC | Purpose |
 |--------|-------|-----|---------|
-| api | 20 | ~3060 | FastAPI routes（16 routers，含 setup/）、schemas、deps、security headers |
+| api | 20 | ~3060 | FastAPI routes（18 routers，含 setup/）、schemas、deps、security headers |
 | parser | 17 | ~4604 | 7 bank parsers + registry + OCR fallback |
 | ingestor | 18 | ~2337 | Gmail download + staging；fetcher（FUBON web-fetch + captcha） |
 | bot | 10 | ~932 | Telegram commands、notifications、reminder dispatch |

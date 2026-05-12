@@ -23,7 +23,7 @@ export function TopMerchantsTable({
         </thead>
         <tbody>
           {data.map((row, idx) => (
-            <tr key={row.merchant} className="border-t border-border">
+            <tr key={row.merchant} className="tr-list border-t border-border">
               <td className="px-3 py-2">{idx + 1}</td>
               <td className="px-3 py-2 font-medium">{row.merchant}</td>
               <td className="px-3 py-2 text-right">

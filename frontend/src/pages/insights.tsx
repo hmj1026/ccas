@@ -6,7 +6,7 @@
  */
 import { useQuery } from '@tanstack/react-query'
 import { Download } from 'lucide-react'
-import { useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router'
 import {
   CartesianGrid,
@@ -18,6 +18,7 @@ import {
   YAxis,
 } from 'recharts'
 import { apiGet } from '@/lib/api-client'
+import { currencyFormatter } from '@/lib/utils'
 import type {
   ApiResponse,
   BankCompareItem,
@@ -28,11 +29,8 @@ import type {
   YearCompareItem,
   YearMetric,
 } from '@/lib/types'
-import {
-  EmptyState,
-  ErrorState,
-  LoadingState,
-} from '@/components/shared/states'
+import { EmptyState } from '@/components/shared/states'
+import { QuerySection } from '@/components/shared/query-section'
 import {
   BankComparisonBarChart,
   YearComparisonLineChart,
@@ -43,14 +41,11 @@ import { Button } from '@/components/ui/button'
 import {
   FilterBar,
   type FilterBarParams,
-  type FilterKey,
 } from '@/components/shared/filter-bar'
+import { useFilterParams } from '@/lib/use-filter-params'
 
 const TREND_MONTHS_OPTIONS = [6, 12, 24] as const
-
-const currencyFormatter = (
-  v: number | string | readonly (number | string)[] | undefined,
-) => `$${Number(v).toLocaleString()}`
+const FILTER_SHOW = ['year', 'month', 'bank'] as const
 
 function CategoryListWithCompare({
   data,
@@ -104,32 +99,30 @@ function InsightsPage() {
 
   const [exportOpen, setExportOpen] = useState(false)
 
-  const filterValues: FilterBarParams = {
-    year,
-    month,
-    bank: bankCode,
-    status: '',
-    category: '',
-    q: '',
-  }
+  const filterValues = useMemo<FilterBarParams>(
+    () => ({
+      year,
+      month,
+      bank: bankCode,
+      status: '',
+      category: '',
+      q: '',
+    }),
+    [year, month, bankCode],
+  )
 
-  function handleFilterChange(key: FilterKey, value: string) {
-    setSearchParams((prev) => {
-      const next = new URLSearchParams(prev)
-      const paramKey = key === 'bank' ? 'bank_code' : key
-      if (value) next.set(paramKey, value)
-      else next.delete(paramKey)
-      return next
-    })
-  }
+  const handleFilterChange = useFilterParams()
 
-  function setSearchParam(key: string, value: string) {
-    setSearchParams((prev) => {
-      const next = new URLSearchParams(prev)
-      next.set(key, value)
-      return next
-    })
-  }
+  const setSearchParam = useCallback(
+    (key: string, value: string) => {
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev)
+        next.set(key, value)
+        return next
+      })
+    },
+    [setSearchParams],
+  )
 
   const trendQuery = useQuery({
     queryKey: ['insights', 'trend', trendMonths],
@@ -182,34 +175,13 @@ function InsightsPage() {
     enabled: !!month, // requires explicit month for compare to work
   })
 
-  const isLoading =
-    trendQuery.isLoading ||
-    banksCompareQuery.isLoading ||
-    yearsCompareQuery.isLoading ||
-    merchantsQuery.isLoading
-
-  const errorMsg =
-    trendQuery.error?.message ??
-    banksCompareQuery.error?.message ??
-    yearsCompareQuery.error?.message ??
-    merchantsQuery.error?.message
-
-  if (isLoading) return <LoadingState />
-  if (errorMsg) return <ErrorState message={errorMsg} />
-
-  const trend = trendQuery.data?.data ?? []
-  const banksCompare = banksCompareQuery.data?.data ?? []
-  const yearsCompare = yearsCompareQuery.data?.data ?? []
-  const merchants = merchantsQuery.data?.data ?? []
-  const categoriesCompare = categoriesCompareQuery.data?.data ?? []
-
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-2xl font-bold">Insights</h1>
         <div className="flex items-center gap-2">
           <FilterBar
-            show={['year', 'month', 'bank']}
+            show={FILTER_SHOW}
             values={filterValues}
             onChange={handleFilterChange}
           />
@@ -236,31 +208,37 @@ function InsightsPage() {
             ))}
           </select>
         </div>
-        {trend.length === 0 ? (
-          <EmptyState message="尚無趨勢資料" />
-        ) : (
-          <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={trend as TrendItem[]}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="month" />
-              <YAxis />
-              <Tooltip formatter={currencyFormatter} />
-              <Line
-                type="monotone"
-                dataKey="total"
-                stroke="var(--chart-2)"
-                strokeWidth={2}
-                name="本月支出"
-              />
-            </LineChart>
-          </ResponsiveContainer>
-        )}
+        <QuerySection query={trendQuery}>
+          {(trend) =>
+            trend.length === 0 ? (
+              <EmptyState message="尚無趨勢資料" />
+            ) : (
+              <ResponsiveContainer width="100%" height={300}>
+                <LineChart data={trend as TrendItem[]}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="month" />
+                  <YAxis />
+                  <Tooltip formatter={currencyFormatter} />
+                  <Line
+                    type="monotone"
+                    dataKey="total"
+                    stroke="var(--chart-2)"
+                    strokeWidth={2}
+                    name="本月支出"
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            )
+          }
+        </QuerySection>
       </section>
 
       <div className="grid gap-6 lg:grid-cols-2">
         <section className="rounded-lg border border-border p-4">
           <h2 className="mb-4 text-lg font-semibold">銀行對比</h2>
-          <BankComparisonBarChart data={banksCompare} />
+          <QuerySection query={banksCompareQuery}>
+            {(data) => <BankComparisonBarChart data={data} />}
+          </QuerySection>
         </section>
 
         <section className="rounded-lg border border-border p-4">
@@ -276,10 +254,14 @@ function InsightsPage() {
               <option value="count">筆數</option>
             </select>
           </div>
-          <YearComparisonLineChart
-            data={yearsCompare}
-            metricLabel={yearMetric === 'total' ? '金額' : '筆數'}
-          />
+          <QuerySection query={yearsCompareQuery}>
+            {(data) => (
+              <YearComparisonLineChart
+                data={data}
+                metricLabel={yearMetric === 'total' ? '金額' : '筆數'}
+              />
+            )}
+          </QuerySection>
         </section>
       </div>
 
@@ -309,7 +291,9 @@ function InsightsPage() {
             </select>
           </div>
         </div>
-        <TopMerchantsTable data={merchants} />
+        <QuerySection query={merchantsQuery}>
+          {(data) => <TopMerchantsTable data={data} />}
+        </QuerySection>
       </section>
 
       {month && (
@@ -320,11 +304,9 @@ function InsightsPage() {
               {month}
             </span>
           </h2>
-          {categoriesCompareQuery.isLoading ? (
-            <LoadingState />
-          ) : (
-            <CategoryListWithCompare data={categoriesCompare} />
-          )}
+          <QuerySection query={categoriesCompareQuery}>
+            {(data) => <CategoryListWithCompare data={data} />}
+          </QuerySection>
         </section>
       )}
 

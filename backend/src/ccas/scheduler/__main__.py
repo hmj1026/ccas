@@ -74,9 +74,20 @@ def main() -> None:
 
     # heartbeat：每 30 秒 touch 檔，docker compose §1.11 worker/scheduler healthcheck
     # 透過 mtime 判斷 scheduler 是否仍存活；先 touch 一次避免 healthcheck 在
-    # start_period 結束前 mtime 不存在。
-    heartbeat_path = Path(get_settings().scheduler_heartbeat_path)
-    _touch_heartbeat(heartbeat_path)
+    # start_period 結束前 mtime 不存在。eager touch 失敗 (read-only fs / 權限不足)
+    # 不應 crash scheduler — 30s interval job 由 APScheduler executor 包，會
+    # 自動 log 後續失敗；operator 看到 warning 才知道要修檔案系統權限。
+    heartbeat_path = get_settings().scheduler_heartbeat_path
+    try:
+        _touch_heartbeat(heartbeat_path)
+    except OSError as exc:
+        logger.warning(
+            "scheduler heartbeat initial touch failed at %s: %s — "
+            "directory may be read-only or permission-denied; "
+            "30s interval job will retry",
+            heartbeat_path,
+            exc,
+        )
     scheduler.add_job(
         partial(_touch_heartbeat, heartbeat_path),
         "interval",

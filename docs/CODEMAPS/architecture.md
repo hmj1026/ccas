@@ -57,7 +57,7 @@ Pipeline 由 `/api/pipeline/trigger` 推入 RQ queue；`PipelineRun` 紀錄 stag
 
 ```
 backend/src/ccas/
-├── api/          FastAPI app + 16 routers（含 setup/ 子目錄 4 routers）+ schemas
+├── api/          FastAPI app + 18 routers（含 setup/ 子目錄 4 routers）+ schemas
 ├── bot/          Telegram bot commands & notifications
 ├── classifier/   Transaction categorization（user rules 優先，keyword fallback）
 ├── decryptor/    PDF password decryption
@@ -86,3 +86,5 @@ frontend/src/
 | `bills-management-and-insights` (D1+D2) | analytics_v2、exports、insights、reminders、budgets、rules、transaction edit |
 | `pipeline-operations-center` | pipeline router、PipelineRun、operations 頁、stage_finished propagation |
 | `compose-pull-deploy` | release artifact upload、scheduler heartbeat、worker rq 2.x flag、SSOT clean-dir verify |
+| `sqlite-busy-timeout-retry`（PR #6 / #11） | `PRAGMA busy_timeout=30000`（per-connection）+ `stage_finished` 3-retry backoff（0.1 / 0.5 / 2 秒）on `database is locked` |
+| `scheduler-heartbeat-polish`（PR #9 / #10） | Path-typed Settings + tolerant OSError init；`SCHEDULER_HEARTBEAT_PATH` 由 30 秒 interval job 自動補寫 |

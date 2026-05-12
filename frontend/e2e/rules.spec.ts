@@ -150,7 +150,8 @@ test.describe('Classification rules settings page', () => {
     await page.getByRole('button', { name: '新增規則' }).click()
 
     await expect(page.getByRole('dialog')).toBeVisible()
-    await page.getByLabel('pattern').fill('蝦皮')
+    // 用 textbox role 精準鎖定 pattern 輸入框，避開同樣 aria-label 前綴的 pattern_type select。
+    await page.getByRole('textbox', { name: 'pattern' }).fill('蝦皮')
     await page.getByLabel('category').selectOption('12')
 
     // 即時測試
@@ -171,7 +172,7 @@ test.describe('Classification rules settings page', () => {
 
     await page.getByRole('button', { name: '新增規則' }).click()
     await page.getByLabel('pattern_type').selectOption('regex')
-    await page.getByLabel('pattern').fill('(a+)+')
+    await page.getByRole('textbox', { name: 'pattern' }).fill('(a+)+')
 
     await expect(page.getByText(/nested quantifier/i)).toBeVisible()
   })

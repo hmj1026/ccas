@@ -4,39 +4,28 @@
  */
 import { useQuery } from '@tanstack/react-query'
 import { CalendarClock, CreditCard, CheckCircle, AlertCircle } from 'lucide-react'
+import { useMemo } from 'react'
 import { useSearchParams } from 'react-router'
 import { apiGet } from '@/lib/api-client'
 import type { ApiResponse, OverviewData } from '@/lib/types'
 import { formatAmount } from '@/lib/utils'
 import { LoadingState, ErrorState, EmptyState } from '@/components/shared/states'
-import { FilterBar, type FilterBarParams, type FilterKey } from '@/components/shared/filter-bar'
+import { FilterBar, type FilterBarParams } from '@/components/shared/filter-bar'
 import { BudgetAlertBanner } from '@/components/budget-alert-banner'
+import { useFilterParams } from '@/lib/use-filter-params'
+
+const FILTER_SHOW = ['month'] as const
 
 function OverviewPage() {
-  const [searchParams, setSearchParams] = useSearchParams()
+  const [searchParams] = useSearchParams()
   const month = searchParams.get('month') ?? ''
 
-  const filterValues: FilterBarParams = {
-    year: '', month, bank: '', status: '', category: '', q: '',
-  }
+  const filterValues = useMemo<FilterBarParams>(
+    () => ({ year: '', month, bank: '', status: '', category: '', q: '' }),
+    [month],
+  )
 
-  /**
-   * 篩選列變更 callback；將指定維度寫入 URL search params。
-   *
-   * @param key - 變更的篩選維度
-   * @param value - 新的篩選值，空字串時刪除該參數
-   */
-  function handleFilterChange(key: FilterKey, value: string) {
-    setSearchParams((prev) => {
-      const next = new URLSearchParams(prev)
-      if (value) {
-        next.set(key === 'bank' ? 'bank_code' : key, value)
-      } else {
-        next.delete(key === 'bank' ? 'bank_code' : key)
-      }
-      return next
-    })
-  }
+  const handleFilterChange = useFilterParams()
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['overview', month],
@@ -58,7 +47,7 @@ function OverviewPage() {
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h1 className="text-2xl font-bold">{overview.month} 總覽</h1>
         <FilterBar
-          show={['month']}
+          show={FILTER_SHOW}
           values={filterValues}
           onChange={handleFilterChange}
         />

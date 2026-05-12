@@ -14,7 +14,12 @@ curl -fsSL -o docker-compose.yml \
 curl -fsSL -o example.env \
   "https://github.com/<owner>/ccas/releases/download/${RELEASE}/example.env"
 cp example.env .env
-# 編輯 .env：填入 REPO_OWNER、CCAS_VERSION；PDF 密碼可稍後在 /setup/secrets 設定
+# 編輯 .env 必要欄位：
+#   REPO_OWNER         GHCR namespace（如 hmj1026），prod compose 必填
+#   CCAS_VERSION       同上 RELEASE，建議釘選 vX.Y.Z 而非 release
+#   CCAS_PORT          對外 host port（預設 8080，proxy 服務即 Web UI 入口）
+#   PUBLIC_BASE_URL    OAuth redirect URI 來源；自訂 port / 網域時同步調整
+# Telegram 與 PDF 密碼皆為選填，可稍後在 /setup/secrets 設定
 docker compose -f docker-compose.yml pull
 docker compose -f docker-compose.yml up -d
 ```
@@ -75,7 +80,7 @@ staged --> decrypted --> parsed       (success path)
 | 層級 | 技術 |
 |------|------|
 | Backend | Python 3.12, FastAPI, SQLAlchemy, Alembic |
-| Database | SQLite (WAL mode) |
+| Database | SQLite (WAL + busy_timeout 30s + retry) |
 | Frontend | React, Vite, TypeScript, Tailwind CSS |
 | Package Manager | uv (backend), pnpm (frontend) |
 | Testing | pytest + pytest-cov, httpx (ASGI test client) |
@@ -122,7 +127,7 @@ staged --> decrypted --> parsed       (success path)
 
 - Python 3.12+
 - [uv](https://docs.astral.sh/uv/) (Python package manager)
-- Node.js 20+ / pnpm
+- Node.js 22+ / pnpm
 - Docker + Docker Compose (optional, for容器化部署)
 
 ### 設定環境變數
@@ -136,29 +141,39 @@ cp .env.example .env
 <!-- AUTO-GENERATED from .env.example -->
 | 變數 | 必填 | 說明 | 預設值 |
 |------|------|------|--------|
+| **Docker / 部署**（僅 prod compose `docker/docker-compose.yml` 使用） | | | |
+| `CCAS_VERSION` | 否 | GHCR image tag；production 建議釘選 `vX.Y.Z` | `release` |
+| `REPO_OWNER` | 是† | GHCR namespace（如 `hmj1026`）；prod compose 必填，dev compose 不用 | — |
+| `CCAS_PORT` | 否 | proxy 對外 host port（即 Web UI 入口） | `8080` |
+| `PUBLIC_BASE_URL` | 否 | OAuth redirect URI 來源；自訂 port / 網域時同步調整 | `http://localhost:8080` |
+| `CCAS_DATA_LOCATION` | 否 | 持久化資料目錄（SQLite / staging / secrets / redis dump）| `./data` |
+| `CCAS_CONFIG_LOCATION` | 否 | banks.yaml / categories.yaml / bank-code-registry.yaml 目錄 | `./config` |
+| `CCAS_LOG_LOCATION` | 否 | 各 service log 檔目錄 | `./logs` |
 | **資料庫** | | | |
-| `DATABASE_URL` | 否 | SQLite 連線字串 | `sqlite+aiosqlite:///./data/ccas.db` |
-| **Telegram** | | | |
-| `TELEGRAM_BOT_TOKEN` | 是* | Bot API token（從 @BotFather 取得）| — |
-| `TELEGRAM_CHAT_ID` | 是* | 通知目標 chat ID | — |
-| `TELEGRAM_ALLOWED_CHAT_IDS` | 是* | Bot 指令白名單（逗號分隔）| — |
+| `DATABASE_URL` | 否 | SQLite 連線字串（WAL + busy_timeout 30s + retry）| `sqlite+aiosqlite:///./data/ccas.db` |
+| **Telegram**（皆為選填；未填則 bot 進入 disabled idle，notify 階段跳過）| | | |
+| `TELEGRAM_BOT_TOKEN` | 否 | Bot API token（從 @BotFather 取得）| — |
+| `TELEGRAM_CHAT_ID` | 否 | 通知目標 chat ID | — |
+| `TELEGRAM_ALLOWED_CHAT_IDS` | 否 | Bot 指令白名單（逗號分隔）| — |
 | **Gmail** | | | |
 | `GMAIL_CREDENTIALS_PATH` | 否 | OAuth credentials.json 路徑 | `./data/credentials.json` |
 | `GMAIL_TOKEN_PATH` | 否 | OAuth token.json 路徑 | `./data/token.json` |
 | `STAGING_DIR` | 否 | PDF staging 目錄 | `./data/staging` |
 | **API** | | | |
-| `API_TOKEN` | **是** | Bearer token（登入用）| — |
+| `API_TOKEN` | 否 | Bearer token；未設定時 entrypoint 自動產生 32-byte hex 並寫入 `${CCAS_DATA_LOCATION}/secrets/api-token` | 自動產生 |
 | `API_HOST` | 否 | 監聽 host | `0.0.0.0` |
 | `API_PORT` | 否 | 監聽 port | `8000` |
-| `FRONTEND_ORIGINS` | 否 | CORS allowed origins | `http://127.0.0.1:5173,...` |
+| `FRONTEND_ORIGINS` | 否 | CORS allowed origins（prod 同源可留空） | `http://127.0.0.1:5173,...` |
 | **Session** | | | |
 | `API_SESSION_COOKIE_NAME` | 否 | Session cookie 名稱 | `ccas_session` |
 | `API_SESSION_MAX_AGE` | 否 | Session 有效秒數 | `43200` |
 | `API_COOKIE_SECURE` | 否 | 僅允許 HTTPS 傳送 cookie | `False` |
-| **Redis** | | | |
-| `REDIS_URL` | 否 | Redis 連線字串（prod 需修改）| `redis://localhost:6379/0` |
+| **Redis**（Docker prod 自動指向 `redis://redis:6379/0`） | | | |
+| `REDIS_URL` | 否 | Redis 連線字串 | `redis://localhost:6379/0` |
+| `REDIS_MAXMEMORY` | 否 | 容器內 redis 記憶體上限（僅 Docker） | `256mb` |
+| `REDIS_MAXMEMORY_POLICY` | 否 | eviction 策略 | `allkeys-lru` |
 | **排程器** | | | |
-| `SCHEDULER_API_BASE_URL` | 否 | 排程器呼叫 API 的 base URL | `http://127.0.0.1:{API_PORT}` |
+| `SCHEDULER_API_BASE_URL` | 否 | 排程器呼叫 API 的 base URL；Docker 預設指向 `http://backend:8000` | `http://127.0.0.1:{API_PORT}` |
 | **日誌** | | | |
 | `LOG_LEVEL` | 否 | 日誌等級 | `INFO` |
 | `LOG_FORMAT` | 否 | 輸出格式（`json` / `text`）| `json` |
@@ -166,11 +181,11 @@ cp .env.example .env
 | `LOG_FILE_MAX_BYTES` | 否 | 單檔上限（bytes）| `10485760` |
 | `LOG_FILE_BACKUP_COUNT` | 否 | 保留備份數 | `5` |
 | `LOG_FILE_PREFIX` | 否 | 日誌檔名前綴（`{prefix}.log`）| `ccas` |
-| **帳單 PDF 密碼** | | | |
-| `PDF_PASSWORD_<BANK_CODE>` | 是* | 各銀行 PDF 解密密碼 | — |
-| **富邦 web-fetch** | | | |
-| `FUBON_NATIONAL_ID` | 是* | 身分證字號（富邦網銀登入用）| — |
-| `FUBON_ROC_BIRTHDAY` | 是* | 民國年月日 7 碼（例：`0881010`）| — |
+| **帳單 PDF 密碼**（pattern：`PDF_PASSWORD_<BANK_CODE>`，未填則該銀行解密階段失敗）| | | |
+| `PDF_PASSWORD_CTBC` / `_ESUN` / `_TAISHIN` / `_UBOT` / `_CATHAY` / `_SINOPAC` / `_FUBON` | 否 | 對應銀行 PDF 密碼；TAISHIN 另支援 `_LEGACY_1` / `_LEGACY_2` fallback | — |
+| **富邦 web-fetch**（選填；未設定即停用富邦自動下載）| | | |
+| `FUBON_NATIONAL_ID` | 否 | 身分證字號（富邦網銀登入用）| — |
+| `FUBON_ROC_BIRTHDAY` | 否 | 民國年月日 7 碼（例：`0881010`）| — |
 | `FUBON_CAPTCHA_MAX_RETRIES` | 否 | OCR + doLogin 迴圈最大重試次數（1-20）| `7` |
 | `FUBON_CAPTCHA_FALLBACK_LLM` | 否 | OCR 失敗後是否 fallback 至 Claude Vision | `false` |
 | `FUBON_CAPTCHA_ARCHIVE_DIR` | 否 | 成功驗證的 captcha JPEG 存檔目錄（eval 資料集擴充用）| — |
@@ -181,6 +196,7 @@ cp .env.example .env
 | `VITE_API_BASE` | 否 | 後端 API base URL；dev 留空走 Vite proxy，production 或自架後端時才填 | — |
 | `VITE_API_PROXY_TARGET` | 否 | Vite dev server 的 `/api` proxy 目標（僅 dev 生效）| `http://127.0.0.1:8000` |
 
+† prod compose（pull-only release）必填；本機 dev `docker compose up` 不使用。
 *依實際需求填入；留空時對應功能停用。
 <!-- AUTO-GENERATED END -->
 
@@ -201,19 +217,33 @@ pnpm install
 pnpm dev                      # http://localhost:5173
 ```
 
-### Docker Compose（production build）
+### Docker Compose
+
+兩種啟動模式：
 
 ```bash
-docker compose up --build
+# 本機 dev（root docker-compose.yaml + override，含 build）
+docker compose up -d
+
+# Production pull-only（拉 GHCR release image，僅 proxy 對外開 port）
+docker compose -f docker/docker-compose.yml pull
+docker compose -f docker/docker-compose.yml up -d
 ```
 
-一次啟動 `backend`／`worker`／`scheduler`／`bot`／`frontend`（nginx）／`redis`。backend 容器會透過 `scripts/docker-entrypoint.sh` 自動跑 `check-env` → `alembic upgrade head` → `uvicorn`。
+兩種模式都會啟動 7 個服務：`backend`／`worker`／`scheduler`／`bot`／`frontend`／`proxy`（nginx）／`redis`。`backend`／`worker`／`scheduler`／`bot` 共用同一 `ccas-backend` image，僅 `command:` 不同。backend 容器透過 `scripts/docker-entrypoint.sh` 自動跑 `check-env` → `alembic upgrade head` → `uvicorn`。
 
-| 對外連接埠 | 服務 |
-|---|---|
-| `127.0.0.1:8000` | FastAPI |
-| `127.0.0.1:8080` | Frontend（nginx） |
-| `127.0.0.1:6379` | Redis |
+| 對外連接埠 | 服務 | 模式 |
+|---|---|---|
+| `127.0.0.1:${CCAS_PORT:-8080}` | proxy（nginx，Web UI + `/api/*` 反代）| dev / prod 都對外 |
+| `127.0.0.1:8000` | FastAPI（backend，直連） | 僅 dev override 暴露 |
+| `127.0.0.1:5173` | Vite dev server（frontend） | 僅 dev override 暴露 |
+| `127.0.0.1:6379` | Redis | 僅 dev override 暴露 |
+
+**服務說明**：
+- `proxy`：prod 模式下唯一對 host 開 port 的服務；同時做 SPA 與 `/api/*` 反代
+- `scheduler`：APScheduler BlockingScheduler，每 30s 寫 `/data/scheduler-heartbeat`（healthcheck 檢查 mtime < 60s）
+- `bot`：Telegram polling 模式；未設 `TELEGRAM_BOT_TOKEN` 時進入 disabled idle，不 crashloop
+- `worker`：RQ worker 從 Redis queue 消費 pipeline 背景任務
 
 Dev-tools profile（`sqlite-web`、`redis-commander`）需額外加 `--profile dev-tools`。部署細節見 [deployment-guide](docs/deployment-guide.md)。
 
@@ -297,6 +327,10 @@ ccas/
 │   │   ├── components/        # shared & UI components
 │   │   └── lib/               # utilities
 │   └── package.json
+├── docker/                    # prod compose & nginx proxy（pull-only release）
+│   ├── docker-compose.yml     # production compose（拉 GHCR image，僅 proxy 對外）
+│   ├── example.env            # 對外發布的 minimal env 範本
+│   └── proxy/                 # nginx Dockerfile + 設定（ccas-proxy image source）
 ├── openspec/                  # OpenSpec workflow artifacts
 │   ├── config.yaml            # schema configuration
 │   ├── changes/               # active & archived changes
@@ -305,8 +339,9 @@ ccas/
 ├── .claude/                   # Claude Code skills & commands
 ├── .codex/                    # Codex skills
 ├── .gemini/                   # Gemini skills & commands
-├── .env.example               # environment variable template
-├── docker-compose.yaml        # container orchestration
+├── .env.example               # environment variable template (SSOT)
+├── docker-compose.yaml        # dev compose（root；含 build：，搭配 override 啟動）
+├── docker-compose.override.yml # dev 覆寫：bind-mount source、Vite dev server、UVICORN_RELOAD
 ├── CLAUDE.md                  # project context (SSOT)
 ├── AGENTS.md                  # Codex-specific config
 └── GEMINI.md                  # Gemini-specific config
@@ -314,44 +349,61 @@ ccas/
 
 ## 腳本參考
 
-`scripts/` 下共 12 支腳本，全部可從 repo 根目錄呼叫：
+`scripts/` 下共 15 支腳本，全部可從 repo 根目錄呼叫：
 
 | 腳本 | 用途 | 觸發 |
 |---|---|---|
 | `setup.sh` | 一次性初始化：驗證 `.env`、安裝後端／前端相依、Gmail OAuth、`alembic upgrade head`、同步 `bank-code-registry.yaml` | 手動（首次） |
 | `start.sh` | One-click 本地開發：同時啟動 backend（uvicorn :8000）與 frontend（vite :5173），Ctrl+C 一起收 | 手動 |
 | `check-env.sh` | 比對 `.env` 與 `.env.example`：空值欄位視為必填，缺少就 `exit 1`；可用 `ENV_FILE=.env.test` 覆寫 | 手動 / CI |
+| `check-env-sync.sh` | 驗證 `docker/example.env` 是 `.env.example` 的有效子集且共用 key 預設值一致（SSOT 同步檢查） | 手動 / pre-push / CI |
+| `sync-docker-image-assets.sh` | 將 SSOT（`scripts/docker-entrypoint.sh`、`scripts/check-env.sh`、`.env.example`、`config/*.example.yaml`）同步到 `backend/docker-image/` 鏡像位置；`--check` 模式僅檢查漂移 | 手動 / pre-push / CI |
+| `verify-claude-plugins.sh` | 比對 `.claude/plugin-pins.json` 與本機已安裝的 Claude plugin 版本，避免漂移 | pre-push / CI |
 | `dev-lint.sh` | `cd backend && ruff check + ruff format --check + pyright` | 手動 |
 | `dev-test.sh` | `cd backend && pytest "$@"`；in-memory SQLite，不需 Docker／tesseract／Redis | 手動 |
 | `test.sh` | 與 `dev-test.sh` 等價的 pytest wrapper（CI 亦呼叫同一支） | 手動 / CI |
 | `pipeline.sh` | `docker compose exec backend uv run python -m ccas.pipeline "$@"`；在執行中的 backend 容器內跑 pipeline | 手動 |
 | `get-telegram-chat-id.sh` | 以 Bot Token 呼叫 `getUpdates` 列出最近聊天室 ID；可帶參數或讀 `.env` 的 `TELEGRAM_BOT_TOKEN` | 手動 |
 | `setup-hooks.sh` | 將 `pre-commit.sh` / `pre-push.sh` symlink 到 `.git/hooks/`；非 Claude 工作流使用；偵測 gitleaks 是否安裝並提醒 | 手動（首次，非必要）|
-| `pre-commit.sh` | git hook：`gitleaks protect --staged` 掃描 staged diff，偵測秘密即中止 commit | `git commit` |
-| `pre-push.sh` | CI 模擬：backend `ruff`＋`pyright`＋`pytest --cov`（門檻 70%），frontend `lint`＋`build`＋`test` | Claude Code Stop hook（自動）/ `git push`（需安裝）|
+| `pre-commit.sh` | git hook：gitleaks 掃描 + staged Python `ruff check --fix` / `ruff format` / `pyright` + staged TS `eslint` | `git commit` |
+| `pre-push.sh` | CI 模擬：plugin/env-sync 檢查 + backend `ruff`＋`pyright`＋`pytest --cov`（門檻 70%）+ frontend `eslint`＋`build`＋`test` | Claude Code Stop hook（自動）/ `git push`（需安裝）|
 | `docker-entrypoint.sh` | Backend 容器 entrypoint：驗證環境變數 → 檢查 tesseract → `alembic upgrade head` → `exec uvicorn` | Docker Compose 自動 |
 
 ## 文件索引
 
-`docs/` 下共 13 份文件：
+`docs/` 下共 16 份文件：
 
-**使用與部署**
+**安裝與部署**
+- [`docs/install-quickstart.md`](docs/install-quickstart.md) — Docker Compose pull-only 安裝流程（給非開發者）
+- [`docs/install-quickstart-verification.md`](docs/install-quickstart-verification.md) — 安裝後驗證：登入 token、dashboard、設定中心 onboarding
 - [`docs/user-guide.md`](docs/user-guide.md) — 非開發者操作手冊（Docker Compose 啟動、Gmail／Telegram 設定、銀行篩選）
 - [`docs/developer-guide.md`](docs/developer-guide.md) — 本地開發環境設定（uv／pnpm、alembic、seed、pipeline CLI）
-- [`docs/deployment-guide.md`](docs/deployment-guide.md) — 正式環境部署流程（Docker Compose、OAuth 憑證、Telegram）
+- [`docs/deployment-guide.md`](docs/deployment-guide.md) — 正式環境部署流程（prod compose、OAuth 憑證、Telegram）
+- [`docs/upgrade-guide.md`](docs/upgrade-guide.md) — 版本升級流程
 - [`docs/RUNBOOK.md`](docs/RUNBOOK.md) — 營運手冊（健康檢查、RQ worker、log 篩選、migration 回滾、備份）
 - [`docs/qa-testing-guide.md`](docs/qa-testing-guide.md) — 獨立部署 QA 測試流程與完整 pipeline 驗證
 
+**設定指南**
+- [`docs/gmail-setup.md`](docs/gmail-setup.md) — Gmail OAuth credentials.json 建立步驟
+- [`docs/secrets-management.md`](docs/secrets-management.md) — PDF 密碼與 API token 管理
+- [`docs/personal-rules-and-budgets.md`](docs/personal-rules-and-budgets.md) — 分類規則、付款提醒、預算告警操作
+- [`docs/bank-codes.md`](docs/bank-codes.md) — 銀行代號對照表（已實作 parser + 不支援清單）
+
+**AI 協助 / E2E 演示**
+- [`docs/ai-setup-guide.md`](docs/ai-setup-guide.md) — 提供給 AI 助手閱讀的安裝引導文件（搭配 README 「透過 AI 協助安裝」段落使用）
+- [`docs/e2e-user-guide-walkthrough.md`](docs/e2e-user-guide-walkthrough.md) — 端到端使用者旅程演示
+
+> `everything-claude-code` plugin 用法請見其上游 marketplace 文件；CCAS 不維護該 plugin 的使用教程，避免 drift。
+
 **貢獻與參考**
 - [`docs/CONTRIBUTING.md`](docs/CONTRIBUTING.md) — 分支策略、Conventional Commits、TDD 工作流、80% 覆蓋率要求
-- [`docs/bank-codes.md`](docs/bank-codes.md) — 銀行代號對照表（7 支已實作 parser + 不支援清單）
 - [`docs/notion.md`](docs/notion.md) — 產品方向 SSOT（願景、roadmap、目前實作狀態）
 
 **CODEMAPS 架構地圖**
 - [`docs/CODEMAPS/architecture.md`](docs/CODEMAPS/architecture.md) — 系統總覽、資料流、進入點、技術棧分層
 - [`docs/CODEMAPS/backend.md`](docs/CODEMAPS/backend.md) — FastAPI 路由、pipeline 5 階段、模組分層、parser 清單
-- [`docs/CODEMAPS/frontend.md`](docs/CODEMAPS/frontend.md) — React 19 + Vite 8 結構、頁面樹、TanStack Query、lazy load
-- [`docs/CODEMAPS/data.md`](docs/CODEMAPS/data.md) — SQLite schema、SQLAlchemy models、6 次 migration 歷程
+- [`docs/CODEMAPS/frontend.md`](docs/CODEMAPS/frontend.md) — React 19 + Vite 結構、頁面樹、TanStack Query、lazy load
+- [`docs/CODEMAPS/data.md`](docs/CODEMAPS/data.md) — SQLite schema、SQLAlchemy models、migration 歷程
 - [`docs/CODEMAPS/dependencies.md`](docs/CODEMAPS/dependencies.md) — 外部整合（Gmail／Telegram／Redis／tesseract／Docker 服務）
 
 ## CI/CD

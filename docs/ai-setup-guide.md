@@ -171,7 +171,9 @@ TELEGRAM_CHAT_ID=
 TELEGRAM_ALLOWED_CHAT_IDS=
 ```
 
-目前先留空，Phase 5 完成後再填入。若不設定，這三個變數保持空值，bot 服務啟動時會自動略過，不影響其他服務。
+目前先留空，Phase 5 完成後再填入。若不設定，這三個變數保持空值，bot 服務會進入 disabled idle（不發送任何通知，但容器仍存活），不影響其他服務。
+
+> **OAuth redirect URI 提示**：Gmail OAuth callback 由 `PUBLIC_BASE_URL` 動態決定。本機 dev 預設用 `http://localhost:${CCAS_PORT:-8080}`，無需手動設定；若改用自訂網域或 port，請同步在 `.env` 加上 `PUBLIC_BASE_URL=...` 並在 GCP Console 加入對應的 redirect URI。
 
 ### 驗證環境變數
 
@@ -250,6 +252,8 @@ docker compose run --rm backend uv run python -m ccas.tools.gmail_auth
 ```
 
 這個指令會輸出一個 URL，請用戶複製後貼入瀏覽器，以 Gmail 帳號登入並授權，授權完成後瀏覽器會顯示「This site can't be reached」或空白頁，這是正常行為（本機應用程式流程）。
+
+> **替代方案（推薦給偏好 GUI 的用戶）**：先依 Phase 6 啟動所有服務後，開啟 `http://localhost:5173/setup/gmail`（dev）或 `http://localhost:${CCAS_PORT:-8080}/setup/gmail`（prod），上傳 `credentials.json` 並走 Web 流程完成授權。setup wizard 會把 token 自動寫入 `/data/`，免進容器跑 CLI。
 
 若出現需要輸入驗證碼的提示，請用戶將瀏覽器網址列的完整 URL 複製回終端機貼上。
 
@@ -562,7 +566,7 @@ docker compose up -d --build backend worker scheduler bot
 
 | 變數 | 必填 | 說明 |
 |------|------|------|
-| `API_TOKEN` | 是 | 登入前端儀表板的密碼，自訂任意字串 |
+| `API_TOKEN` | 否 | 不填則 entrypoint 首啟自動生成 32-byte token 並落地至 `${CCAS_DATA_LOCATION}/secrets/api-token`（檔案權限 0600）；該 token 同時是 Web UI 登入憑證與 Bearer 認證 |
 | `GMAIL_CREDENTIALS_PATH` | 否 | credentials.json 路徑，Docker 自動掛載至 `/data/credentials.json` |
 | `GMAIL_TOKEN_PATH` | 否 | token.json 路徑，Docker 自動掛載至 `/data/token.json` |
 | `PDF_PASSWORD_CTBC` | 依需求 | 中信 PDF 密碼 |

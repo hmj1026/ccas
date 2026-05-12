@@ -114,6 +114,29 @@ curl -s -X POST -H "Authorization: Bearer $API_TOKEN" -H "Content-Type: applicat
 
 > `pipeline_runs` 表記錄 stage_summary（JSON），由 `pipeline.progress.stage_finished()` 寫入；前端 `/operations` 頁短輪詢同一資料。
 
+### SQLite database is locked / busy timeout
+
+**症狀：** logs 出現 `sqlite3.OperationalError: database is locked` 或 pipeline stage 進度卡住但無明顯錯誤
+
+**內建保護**（PR #6 / #11，2026-05-10 後）：
+- 每個 SQLAlchemy connection 開啟時自動設 `PRAGMA busy_timeout=30000`（30 秒），避免 scheduler heartbeat / worker / backend GET 多寫者瞬間衝突
+- `DbProgressReporter.stage_finished()` 對 `database is locked` 自動重試 3 次，backoff 0.1 / 0.5 / 2 秒（`pipeline/progress.py:_STAGE_FINISHED_*`）
+
+**若仍頻繁出現**：
+```bash
+# 確認沒有外部 sqlite3 / sqlite-web 持鎖
+docker compose ps sqlite-web        # dev-tools profile
+docker compose exec backend lsof /data/ccas.db | head
+
+# 確認 WAL 模式仍生效（應看到 -wal / -shm 檔）
+docker compose exec backend ls -la /data/ccas.db*
+
+# 切回 single-writer 重啟（暫時性紓困，會丟掉 in-flight RQ jobs）
+docker compose -f docker-compose.yaml restart worker scheduler bot
+```
+
+如果是 schema migration 期間，請先 `docker compose stop worker scheduler bot` 讓 backend 獨佔 alembic upgrade，完成後再 start 其他服務。
+
 ### Gmail OAuth Token 過期
 
 **症狀：** ingest 階段失敗，logs 顯示 `invalid_grant` 或 `Token has been expired`
@@ -167,6 +190,31 @@ docker compose exec backend uv run alembic upgrade head
 # 查看 migration 狀態
 docker compose exec backend uv run alembic current
 ```
+
+### API_TOKEN 找不到 / Web UI 無法登入
+
+**症狀：** 不知道 API token 是什麼，或 `${CCAS_DATA_LOCATION}/secrets/api-token` 不存在
+
+**內建行為**：entrypoint 在 backend 首啟時會自動生成 32-byte token 並落地至 `${CCAS_DATA_LOCATION}/secrets/api-token`（檔案權限 0600）。`.env` 不需設 `API_TOKEN`；若顯式設為空字串會被驗證腳本擋下。
+
+```bash
+# 1) 直接讀取自動生成的 token
+docker compose exec backend cat /data/secrets/api-token
+
+# 2) 從 host 端讀（CCAS_DATA_LOCATION 對應路徑）
+cat "${CCAS_DATA_LOCATION:-./data}/secrets/api-token"
+
+# 3) 不見時：確認 secrets 目錄寫入權限正常
+docker compose exec backend ls -la /data/secrets/
+docker compose exec backend stat /data/secrets/
+
+# 4) 強制重新生成：刪除檔案後重啟 backend
+docker compose exec backend rm /data/secrets/api-token
+docker compose -f docker-compose.yaml restart backend
+docker compose exec backend cat /data/secrets/api-token
+```
+
+> token 同時是 Web UI 登入憑證與 Bearer 認證；revoke 後請更新所有外部腳本與 reverse proxy。
 
 ### OCR 功能缺失
 

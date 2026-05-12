@@ -82,6 +82,9 @@ backend/data/secrets/
 
 # Node.js
 node_modules/
+# pnpm content-addressable store（當 pnpm 無法寫入 global store 時會落在 cwd，
+# 如 `docker compose run pnpm install` 從 /app 起 → 經 bind mount 進入 frontend/）
+.pnpm-store/
 
 # Vite cache
 frontend/.vite/
@@ -114,10 +117,3 @@ docker-compose.local.yml
 compact-notes/
 backend/data/captcha-archive/
 .gitnexus
-
-# Local scheduler heartbeat file（compose-pull-deploy §1.11；docker 部署掛在
-# CCAS_DATA_LOCATION，本機 dev 直跑 scheduler 時會寫到 backend/data/）
-backend/data/scheduler-heartbeat
-
-# Vite dev server cache
-frontend/.vite/

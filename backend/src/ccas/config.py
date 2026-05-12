@@ -67,8 +67,8 @@ class Settings(BaseSettings):
     # 由 entrypoint 寫入的 token / version 檔；rotate API 直接讀寫此處避免
     # 受 lru_cache 鎖住。檔案缺席時 fallback 為 ``api_token`` 與 version=1，
     # 不破壞 dev/test 的純 env 設定路徑（oauth-onboarding-ui §6）。
-    api_token_path: str = "./data/secrets/api-token"
-    api_token_version_path: str = "./data/secrets/api-token-version"
+    api_token_path: Path = Path("./data/secrets/api-token")
+    api_token_version_path: Path = Path("./data/secrets/api-token-version")
     frontend_origins: str = "http://127.0.0.1:5173,http://localhost:5173"
     api_session_cookie_name: str = "ccas_session"
     api_session_max_age: int = 43200
@@ -89,13 +89,13 @@ class Settings(BaseSettings):
     # master.key 路徑（Fernet 對稱加密；oauth-onboarding-ui §1.4）。entrypoint
     # 在啟動時自動產生此檔（首次）；本欄位僅指向位置，並透過
     # ``master_key_manager`` lazy property 暴露 ``MasterKeyManager``。
-    master_key_path: str = "./data/secrets/master.key"
+    master_key_path: Path = Path("./data/secrets/master.key")
 
     # scheduler heartbeat 檔；BlockingScheduler 啟動後由 interval job 每 30s
     # touch 一次，docker-compose §1.11 worker/scheduler healthcheck 用 mtime
     # 判斷 scheduler 是否仍在跑。Docker 部署時透過 CCAS_DATA_LOCATION 掛在
     # /data/scheduler-heartbeat。
-    scheduler_heartbeat_path: str = "./data/scheduler-heartbeat"
+    scheduler_heartbeat_path: Path = Path("./data/scheduler-heartbeat")
 
     # 對外可見的 base URL（oauth-onboarding-ui §3.7）；用於組成 Gmail OAuth
     # callback ``redirect_uri``。預設假設透過 nginx proxy 暴露於 8080；
@@ -128,14 +128,24 @@ class Settings(BaseSettings):
         "gmail_token_path",
         "staging_dir",
         "fubon_manual_staging_dir",
-        "master_key_path",
-        "api_token_path",
-        "api_token_version_path",
         mode="after",
     )
     @classmethod
     def _normalize_path_settings(cls, value: str) -> str:
         return str(_resolve_path_value(value))
+
+    @field_validator(
+        "master_key_path",
+        "api_token_path",
+        "api_token_version_path",
+        "scheduler_heartbeat_path",
+        mode="after",
+    )
+    @classmethod
+    def _normalize_path_object_settings(cls, value: Path) -> Path:
+        # Path-typed fields skip the str() round-trip so callers can use the
+        # Path directly without wrapping in ``Path(...)`` (issue #9 follow-up).
+        return _resolve_path_value(value)
 
     @field_validator("database_url", mode="after")
     @classmethod
@@ -224,7 +234,7 @@ class Settings(BaseSettings):
             # config also defines errors-adjacent settings).
             from ccas.storage.secrets import MasterKeyManager
 
-            self._master_key_manager = MasterKeyManager(Path(self.master_key_path))
+            self._master_key_manager = MasterKeyManager(self.master_key_path)
         return self._master_key_manager
 
 
