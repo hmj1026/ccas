@@ -96,13 +96,12 @@ describe('InsightsPage', () => {
   it('renders all insight sections with default state', async () => {
     defaultMockResponses()
     renderPage()
-    await waitFor(() => {
-      expect(screen.getByRole('heading', { name: 'Insights' })).toBeInTheDocument()
-    })
+    expect(screen.getByRole('heading', { name: 'Insights' })).toBeInTheDocument()
     expect(screen.getByText('銀行對比')).toBeInTheDocument()
     expect(screen.getByText('年度對比')).toBeInTheDocument()
     expect(screen.getByText('商家排行')).toBeInTheDocument()
-    expect(screen.getByText('STARBUCKS')).toBeInTheDocument()
+    // Data renders progressively per section; wait for merchant row to appear.
+    expect(await screen.findByText('STARBUCKS')).toBeInTheDocument()
   })
 
   it('switches year metric via select', async () => {
@@ -124,10 +123,9 @@ describe('InsightsPage', () => {
   it('shows month-over-month compare section when month set', async () => {
     defaultMockResponses()
     renderPage('/insights?month=2026-05')
-    await waitFor(() => {
-      expect(screen.getByText('類別 vs 上月')).toBeInTheDocument()
-    })
-    expect(screen.getByText('餐飲')).toBeInTheDocument()
+    expect(screen.getByText('類別 vs 上月')).toBeInTheDocument()
+    // Categories data loads asynchronously; wait for the row to appear.
+    expect(await screen.findByText('餐飲')).toBeInTheDocument()
     expect(screen.getByText('▲50.0%')).toBeInTheDocument()
   })
 
