@@ -3,26 +3,26 @@ import path from 'path'
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
-import { visualizer } from 'rollup-plugin-visualizer'
 
 // Bundle 觀測：set `ANALYZE=1 pnpm build` 才產出 dist/stats.html，避免 CI prod 多餘輸出。
+// visualizer 為 build-only 工具，改成 dynamic import 避免 dev / 普通 build 強制
+// 解析這個套件——任何 env drift（image 過舊、缺裝 dep）都不應該打掛 dev server。
 const analyzeBundle = process.env.ANALYZE === '1' || process.env.ANALYZE === 'true'
+const visualizerPlugin = analyzeBundle
+  ? (await import('rollup-plugin-visualizer')).visualizer({
+      filename: 'dist/stats.html',
+      gzipSize: true,
+      brotliSize: true,
+      template: 'treemap',
+    })
+  : null
 
 export default defineConfig({
   envDir: '..',
   plugins: [
     react(),
     tailwindcss(),
-    ...(analyzeBundle
-      ? [
-          visualizer({
-            filename: 'dist/stats.html',
-            gzipSize: true,
-            brotliSize: true,
-            template: 'treemap',
-          }),
-        ]
-      : []),
+    ...(visualizerPlugin ? [visualizerPlugin] : []),
   ],
   server: {
     host: true,
