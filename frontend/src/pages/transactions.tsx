@@ -4,13 +4,15 @@
  */
 import { useQuery } from '@tanstack/react-query'
 import { Download, ChevronLeft, ChevronRight, Pencil } from 'lucide-react'
+import { useMemo } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import { apiGet, apiFetchBlob } from '@/lib/api-client'
 import type { PaginatedResponse, TransactionItem } from '@/lib/types'
 import { formatAmount } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { LoadingState, ErrorState, EmptyState } from '@/components/shared/states'
-import { FilterBar, type FilterBarParams, type FilterKey } from '@/components/shared/filter-bar'
+import { FilterBar, type FilterBarParams } from '@/components/shared/filter-bar'
+import { useFilterParams } from '@/lib/use-filter-params'
 
 function TransactionsPage() {
   const [searchParams, setSearchParams] = useSearchParams()
@@ -23,29 +25,12 @@ function TransactionsPage() {
   const page = Number(searchParams.get('page') ?? '1')
   const pageSize = 20
 
-  const filterValues: FilterBarParams = {
-    year, month, bank: bankCode, status: '', category, q,
-  }
+  const filterValues = useMemo<FilterBarParams>(
+    () => ({ year, month, bank: bankCode, status: '', category, q }),
+    [year, month, bankCode, category, q],
+  )
 
-  /**
-   * 篩選列變更 callback；將指定維度寫入 URL search params 並重置分頁至第 1 頁。
-   *
-   * @param key - 變更的篩選維度
-   * @param value - 新的篩選值，空字串時刪除該參數
-   */
-  function handleFilterChange(key: FilterKey, value: string) {
-    setSearchParams((prev) => {
-      const next = new URLSearchParams(prev)
-      const paramKey = key === 'bank' ? 'bank_code' : key
-      if (value) {
-        next.set(paramKey, value)
-      } else {
-        next.delete(paramKey)
-      }
-      next.delete('page')
-      return next
-    })
-  }
+  const handleFilterChange = useFilterParams(true)
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['transactions', year, month, bankCode, category, q, page],

@@ -2,7 +2,7 @@
  * Bills 頁面 -- 帳單列表、付款狀態切換、PDF 連結與手風琴展開明細。
  * 預設：全部帳單，依 billing_month 降序。
  */
-import { useState } from 'react'
+import { memo, useCallback, useMemo, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { ExternalLink, Check, Clock, ChevronLeft, ChevronRight, ChevronDown, ChevronUp } from 'lucide-react'
 import { useSearchParams } from 'react-router'
@@ -12,8 +12,9 @@ import { cn, formatAmount } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Collapsible, CollapsibleTrigger, CollapsiblePanel } from '@/components/ui/collapsible'
 import { LoadingState, ErrorState, EmptyState } from '@/components/shared/states'
-import { FilterBar, type FilterBarParams, type FilterKey } from '@/components/shared/filter-bar'
+import { FilterBar, type FilterBarParams } from '@/components/shared/filter-bar'
 import { StagedAttachmentsWarning } from '@/components/staged-attachments-warning'
+import { useFilterParams } from '@/lib/use-filter-params'
 
 function BillsPage() {
   const queryClient = useQueryClient()
@@ -25,23 +26,12 @@ function BillsPage() {
   const status = searchParams.get('status') ?? ''
   const page = Number(searchParams.get('page') ?? '1')
 
-  const filterValues: FilterBarParams = {
-    year, month, bank: bankCode, status, category: '', q: '',
-  }
+  const filterValues = useMemo<FilterBarParams>(
+    () => ({ year, month, bank: bankCode, status, category: '', q: '' }),
+    [year, month, bankCode, status],
+  )
 
-  function handleFilterChange(key: FilterKey, value: string) {
-    setSearchParams((prev) => {
-      const next = new URLSearchParams(prev)
-      const paramKey = key === 'bank' ? 'bank_code' : key
-      if (value) {
-        next.set(paramKey, value)
-      } else {
-        next.delete(paramKey)
-      }
-      next.delete('page')
-      return next
-    })
-  }
+  const handleFilterChange = useFilterParams(true)
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['bills', year, month, bankCode, status, page],
@@ -64,6 +54,15 @@ function BillsPage() {
       queryClient.invalidateQueries({ queryKey: ['overview'] })
     },
   })
+
+  // mutate is referentially stable per TanStack Query v5; destructuring lets
+  // useCallback below produce a stable handler so memo(BillRow) is effective.
+  const { mutate: toggleMutate } = togglePaid
+  const handleTogglePaid = useCallback(
+    (id: number, isPaid: boolean) => toggleMutate({ id, is_paid: isPaid }),
+    [toggleMutate],
+  )
+  const pendingBillId = togglePaid.isPending ? togglePaid.variables?.id : undefined
 
   function setPage(p: number) {
     setSearchParams((prev) => {
@@ -105,8 +104,8 @@ function BillsPage() {
             <BillRow
               key={bill.id}
               bill={bill}
-              onTogglePaid={(id, isPaid) => togglePaid.mutate({ id, is_paid: isPaid })}
-              isPending={togglePaid.isPending}
+              onTogglePaid={handleTogglePaid}
+              isPending={pendingBillId === bill.id}
             />
           ))}
         </div>
@@ -142,12 +141,12 @@ function BillsPage() {
 }
 
 interface BillRowProps {
-  bill: BillItem
-  onTogglePaid: (id: number, isPaid: boolean) => void
-  isPending: boolean
+  readonly bill: BillItem
+  readonly onTogglePaid: (id: number, isPaid: boolean) => void
+  readonly isPending: boolean
 }
 
-function BillRow({ bill, onTogglePaid, isPending }: BillRowProps) {
+const BillRow = memo(function BillRow({ bill, onTogglePaid, isPending }: BillRowProps) {
   const [isOpen, setIsOpen] = useState(false)
   const name = bill.bank_name ?? bill.bank_code
 
@@ -276,6 +275,6 @@ function BillRow({ bill, onTogglePaid, isPending }: BillRowProps) {
       </div>
     </Collapsible>
   )
-}
+})
 
 export default BillsPage
