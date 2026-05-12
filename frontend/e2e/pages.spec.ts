@@ -29,9 +29,10 @@ test.describe('Authenticated pages', () => {
   })
 
   test('analytics page loads with charts', async ({ page }) => {
+    // /analytics 為 legacy 路由，App.tsx 用 <Navigate replace> 轉向 /insights
     await page.goto('/analytics')
-    await expect(page).toHaveURL(/\/analytics/)
-    await expect(page.getByText('消費分析')).toBeVisible({ timeout: 8000 })
+    await expect(page).toHaveURL(/\/insights/)
+    await expect(page.getByRole('heading', { name: 'Insights' })).toBeVisible({ timeout: 8000 })
     await expect(page.getByText('月消費趨勢')).toBeVisible()
   })
 
