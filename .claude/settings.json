@@ -1,4 +1,99 @@
 {
+  "enableAllProjectMcpServers": true,
+  "enabledPlugins": {
+    "codex@openai-codex": true,
+    "everything-claude-code@everything-claude-code": true,
+    "pyright-lsp@claude-plugins-official": true
+  },
+  "env": {
+    "BASH_DEFAULT_TIMEOUT_MS": "120000",
+    "BASH_MAX_TIMEOUT_MS": "600000"
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "async": true,
+            "command": "bash -c 'REPO=$(git rev-parse --show-toplevel 2>/dev/null) && bash \"$REPO/.claude/hooks/ccas-python-lint.sh\"'",
+            "statusMessage": "Running Python lint & security checks...",
+            "timeout": 30,
+            "type": "command"
+          },
+          {
+            "async": true,
+            "command": "bash -c 'REPO=$(git rev-parse --show-toplevel 2>/dev/null) && bash \"$REPO/.claude/hooks/ccas-sqlalchemy-model-check.sh\"'",
+            "statusMessage": "Validating SQLAlchemy model...",
+            "timeout": 5,
+            "type": "command"
+          },
+          {
+            "async": true,
+            "command": "bash -c 'REPO=$(git rev-parse --show-toplevel 2>/dev/null) && bash \"$REPO/.claude/hooks/ccas-tdd-red-check.sh\"'",
+            "statusMessage": "Running test to confirm RED state...",
+            "timeout": 30,
+            "type": "command"
+          },
+          {
+            "async": true,
+            "command": "bash -c 'REPO=$(git rev-parse --show-toplevel 2>/dev/null) && bash \"$REPO/.claude/hooks/ccas-frontend-lint.sh\"'",
+            "statusMessage": "Running frontend checks...",
+            "timeout": 30,
+            "type": "command"
+          },
+          {
+            "async": true,
+            "command": "bash -c 'REPO=$(git rev-parse --show-toplevel 2>/dev/null) && bash \"$REPO/.claude/hooks/ccas-alembic-migration-check.sh\"'",
+            "statusMessage": "Checking Alembic migration safety...",
+            "timeout": 5,
+            "type": "command"
+          },
+          {
+            "async": true,
+            "command": "bash -c 'REPO=$(git rev-parse --show-toplevel 2>/dev/null) && bash \"$REPO/.claude/hooks/ccas-docker-check.sh\"'",
+            "statusMessage": "Checking Docker conventions...",
+            "timeout": 5,
+            "type": "command"
+          }
+        ],
+        "matcher": "Edit|Write"
+      }
+    ],
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "command": "bash -c 'REPO=$(git rev-parse --show-toplevel 2>/dev/null) && bash \"$REPO/.claude/hooks/ccas-secrets-guard.sh\"'",
+            "statusMessage": "Scanning for plaintext secrets...",
+            "timeout": 5,
+            "type": "command"
+          }
+        ],
+        "matcher": "Edit|Write|MultiEdit"
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "async": true,
+            "command": "bash -c 'REPO=$(git rev-parse --show-toplevel 2>/dev/null) && bash \"$REPO/.claude/hooks/ccas-pre-push-stop.sh\"'",
+            "statusMessage": "Dispatching async pre-push checks...",
+            "timeout": 5,
+            "type": "command"
+          },
+          {
+            "async": true,
+            "command": "bash -c 'REPO=$(git rev-parse --show-toplevel 2>/dev/null) && bash \"$REPO/.claude/hooks/ccas-session-retrospective.sh\"'",
+            "statusMessage": "Running session retrospective...",
+            "timeout": 10,
+            "type": "command"
+          }
+        ],
+        "matcher": ""
+      }
+    ]
+  },
   "permissions": {
     "allow": [
       "Bash(openspec *)",
@@ -66,99 +161,5 @@
       "Bash(cx *)",
       "Bash(/opt/homebrew/bin/cx *)"
     ]
-  },
-  "env": {
-    "BASH_DEFAULT_TIMEOUT_MS": "120000",
-    "BASH_MAX_TIMEOUT_MS": "600000"
-  },
-  "hooks": {
-    "PreToolUse": [
-      {
-        "matcher": "Edit|Write|MultiEdit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash -c 'REPO=$(git rev-parse --show-toplevel 2>/dev/null) && bash \"$REPO/.claude/hooks/ccas-secrets-guard.sh\"'",
-            "timeout": 5,
-            "statusMessage": "Scanning for plaintext secrets..."
-          }
-        ]
-      }
-    ],
-    "PostToolUse": [
-      {
-        "matcher": "Edit|Write",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash -c 'REPO=$(git rev-parse --show-toplevel 2>/dev/null) && bash \"$REPO/.claude/hooks/ccas-python-lint.sh\"'",
-            "timeout": 30,
-            "statusMessage": "Running Python lint & security checks...",
-            "async": true
-          },
-          {
-            "type": "command",
-            "command": "bash -c 'REPO=$(git rev-parse --show-toplevel 2>/dev/null) && bash \"$REPO/.claude/hooks/ccas-sqlalchemy-model-check.sh\"'",
-            "timeout": 5,
-            "statusMessage": "Validating SQLAlchemy model...",
-            "async": true
-          },
-          {
-            "type": "command",
-            "command": "bash -c 'REPO=$(git rev-parse --show-toplevel 2>/dev/null) && bash \"$REPO/.claude/hooks/ccas-tdd-red-check.sh\"'",
-            "timeout": 30,
-            "statusMessage": "Running test to confirm RED state...",
-            "async": true
-          },
-          {
-            "type": "command",
-            "command": "bash -c 'REPO=$(git rev-parse --show-toplevel 2>/dev/null) && bash \"$REPO/.claude/hooks/ccas-frontend-lint.sh\"'",
-            "timeout": 30,
-            "statusMessage": "Running frontend checks...",
-            "async": true
-          },
-          {
-            "type": "command",
-            "command": "bash -c 'REPO=$(git rev-parse --show-toplevel 2>/dev/null) && bash \"$REPO/.claude/hooks/ccas-alembic-migration-check.sh\"'",
-            "timeout": 5,
-            "statusMessage": "Checking Alembic migration safety...",
-            "async": true
-          },
-          {
-            "type": "command",
-            "command": "bash -c 'REPO=$(git rev-parse --show-toplevel 2>/dev/null) && bash \"$REPO/.claude/hooks/ccas-docker-check.sh\"'",
-            "timeout": 5,
-            "statusMessage": "Checking Docker conventions...",
-            "async": true
-          }
-        ]
-      }
-    ],
-    "Stop": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash -c 'REPO=$(git rev-parse --show-toplevel 2>/dev/null) && bash \"$REPO/.claude/hooks/ccas-pre-push-stop.sh\"'",
-            "timeout": 5,
-            "statusMessage": "Dispatching async pre-push checks...",
-            "async": true
-          },
-          {
-            "type": "command",
-            "command": "bash -c 'REPO=$(git rev-parse --show-toplevel 2>/dev/null) && bash \"$REPO/.claude/hooks/ccas-session-retrospective.sh\"'",
-            "timeout": 10,
-            "statusMessage": "Running session retrospective...",
-            "async": true
-          }
-        ]
-      }
-    ]
-  },
-  "enabledPlugins": {
-    "everything-claude-code@everything-claude-code": true,
-    "codex@openai-codex": true,
-    "pyright-lsp@claude-plugins-official": true
   }
 }

@@ -13,10 +13,13 @@ Gmail PDF → decrypt → parse → classify → REST API / Telegram notificatio
 | Bug root-cause investigation | `bug-investigation` |
 | Architecture decisions, module boundaries | `software-architecture` |
 | Full product acceptance, QA, smoke test | `ccas-qa-acceptance` |
+| Free-text task routing (feature/bug/maintenance) | `/dhpk:do` |
+| Feature development workflow | `/dhpk:feature-dev` |
+| Harness audit & optimization | `/dhpk:harness-audit` |
 
 ## Rules (`.claude/rules/`)
 
-- `execution-policy.md` — task classification, ECC agent roster, process gates, anti-loop
+- `execution-policy.md` — task classification, agent roster (dhpk-preferred), process gates, anti-loop
 - `skill-policy.md` — skill selection priority when multiple match
 - `tool-decision.md` — GitNexus / cx / file tool cost hierarchy, impact exemptions, memory thresholds
 - `python.md` / `python-api.md` / `python-db.md` / `python-testing.md` — backend conventions
