@@ -1,6 +1,7 @@
 # CCAS — Credit Card Automation System
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/hmj1026/ccas?label=release&color=blue)](https://github.com/hmj1026/ccas/releases/latest)
 
 **English** | [繁體中文](README.zh-TW.md)
 

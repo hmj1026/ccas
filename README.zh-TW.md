@@ -1,6 +1,7 @@
 # CCAS — 信用卡帳單自動化系統
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/hmj1026/ccas?label=release&color=blue)](https://github.com/hmj1026/ccas/releases/latest)
 
 [English](README.md) | **繁體中文**
 
