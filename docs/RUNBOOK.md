@@ -108,7 +108,7 @@ curl -s -H "Authorization: Bearer $API_TOKEN" \
 
 # 經 API 觸發（等同前端 /operations 頁）
 curl -s -X POST -H "Authorization: Bearer $API_TOKEN" -H "Content-Type: application/json" \
-  -d '{"bank_codes":["CTBC"],"force":true}' \
+  -d '{"bank_code":"CTBC","force":true}' \
   "http://localhost:8000/api/pipeline/trigger"
 ```
 

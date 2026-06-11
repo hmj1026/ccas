@@ -136,7 +136,7 @@ curl -fsS -X DELETE -H "Authorization: Bearer $TOKEN" \
 | `monthly_category` | `categories.category` 字串 | 單類別上限（例：「餐飲」） |
 | `monthly_bank` | `bank_configs.bank_code` | 單銀行上限（例：「CTBC」） |
 
-`amount_minor_units` 以「分」為單位儲存（10000 = NT$100）；UI 自動換算。
+`amount_ntd` 以 NTD 整數「元」儲存（10000 = NT$10,000）；全系統不做單位換算，UI 顯示值即儲存值。
 
 ### Threshold ladder
 
@@ -160,7 +160,7 @@ curl -fsS -X POST -H "Authorization: Bearer $TOKEN" \
   -d '{
     "scope": "monthly_category",
     "scope_ref": "餐飲",
-    "amount_minor_units": 500000,
+    "amount_ntd": 5000,
     "alert_threshold_percent": 80,
     "enabled": true
   }' "$BASE/api/budgets"

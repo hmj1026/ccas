@@ -99,7 +99,7 @@ bill_id (FK), reminder_type, sent_at | **UQ** (bill_id, reminder_type)
 | id | int PK | |
 | scope | str | `total` / `bank` / `category` |
 | scope_ref | str? | bank_code 或 category 名；scope=`total` 時 NULL |
-| amount_minor_units | int | TWD（整數元） |
+| amount_ntd | int | NTD 整數元（不乘 100，無單位換算） |
 | alert_threshold_percent | int | default 80 |
 | enabled | bool | default 1 |
 | created_at / updated_at | datetime | trigger 維護 |
@@ -112,7 +112,7 @@ bill_id (FK), reminder_type, sent_at | **UQ** (bill_id, reminder_type)
 | budget_id | int FK(budgets) | |
 | period_year_month | str(7) | `YYYY-MM` |
 | threshold_breached_percent | int | |
-| current_amount_minor_units | int | |
+| current_amount_ntd | int | NTD 整數元 |
 | triggered_at | datetime | |
 | acknowledged_at | datetime? | UI ack 後寫入 |
 

@@ -17,7 +17,7 @@ paths:
 
 - `ParseResult` (`parser/result.py`): `bank_code`, `billing_month` ("YYYY-MM"), `total_amount` (integer, NTD), `due_date`, `transactions` (tuple of `TransactionItem`)
 - `TransactionItem`: `trans_date`, `merchant`, `amount` (integer, NTD), optional `posting_date`, `currency`, `original_amount`, `card_last4`, `installment_current/total`
-- Amounts are integers in NTD (not cents); orchestrator converts during persistence
+- 全系統金額以 NTD 整數元儲存，不乘 100：amounts are integer NTD 元 end-to-end; the orchestrator persists them as-is (no unit conversion)
 
 ## Adding a Parser
 

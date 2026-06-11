@@ -19,14 +19,14 @@ class Bill(Base):
     __tablename__ = "bills"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    total_amount: Mapped[int] = mapped_column(Integer, nullable=False)  # minor units (cents)
+    total_amount: Mapped[int] = mapped_column(Integer, nullable=False)  # NTD whole dollars (元)
     transactions: Mapped[list["Transaction"]] = relationship(back_populates="bill")
 ```
 
 ## Money Representation
 
-- **All monetary fields are `Integer` minor units (cents) — never `Float`/`Numeric`**. Naming convention: `amount_minor_units` for new fields; legacy `amount` columns are also int-cents.
-- Parsers multiply by 100 on ingestion; API layer divides by 100 (or formats directly) before responding.
+- **全系統金額以 NTD 整數元儲存，不乘 100** — all monetary fields are `Integer` whole NTD dollars (元), never `Float`/`Numeric`. Naming convention: `amount_ntd` for new fields; legacy `amount` / `total_amount` columns are also integer NTD 元.
+- Parsers emit integer NTD 元 and the pipeline persists them as-is; the API returns the same integers — **no unit conversion (×100 / ÷100) anywhere**.
 - Avoid floating-point math anywhere in the parse → store → API path.
 
 ## Alembic Migrations
