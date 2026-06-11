@@ -631,7 +631,7 @@ class TopMerchantItem(BaseModel):
 
 
 class CategoryWithCompareItem(BaseModel):
-    """``/api/analytics/categories?compare_with_previous=true`` 單筆。"""
+    """``/api/analytics/categories/compare`` 月對月比較單筆。"""
 
     category: str
     total: int
