@@ -20,8 +20,8 @@ function describeAlert(alert: BudgetAlertItem): string {
   const scope = alert.scope_ref
     ? `${SCOPE_LABEL[alert.scope]}「${alert.scope_ref}」`
     : SCOPE_LABEL[alert.scope]
-  const cur = alert.current_amount_minor_units.toLocaleString('zh-Hant')
-  const cap = alert.amount_minor_units.toLocaleString('zh-Hant')
+  const cur = alert.current_amount_ntd.toLocaleString('zh-Hant')
+  const cap = alert.amount_ntd.toLocaleString('zh-Hant')
   return `${scope}：$${cur} / $${cap}（${alert.threshold_breached_percent}% 已達）`
 }
 

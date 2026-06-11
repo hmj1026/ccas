@@ -41,9 +41,14 @@ describe('App', () => {
       expect(screen.getByText('總覽')).toBeInTheDocument()
     })
     expect(screen.getByText('交易')).toBeInTheDocument()
-    expect(screen.getByText('Insights')).toBeInTheDocument()
+    expect(screen.getByText('消費分析')).toBeInTheDocument()
     expect(screen.getByText('帳單')).toBeInTheDocument()
-    expect(screen.getByText('設定')).toBeInTheDocument()
+    expect(screen.getByText('操作中心')).toBeInTheDocument()
+    expect(screen.getByText('分類關鍵字')).toBeInTheDocument()
+    expect(screen.getByText('設定中心')).toBeInTheDocument()
+    // Three nav groups are rendered with separators between them.
+    expect(screen.getByText('主要功能')).toBeInTheDocument()
+    expect(screen.getAllByRole('separator')).toHaveLength(2)
   })
 
   it('renders a login form when the session is missing', async () => {

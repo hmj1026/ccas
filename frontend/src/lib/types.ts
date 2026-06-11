@@ -136,19 +136,23 @@ export interface BillUpdateRequest {
 // -- Staged Attachments --
 
 /**
- * Staged 附件狀態值。
+ * Staged 附件狀態值（對應後端 StagedAttachmentStatus enum）。
  * - staged / decrypted / parsed：pipeline 進行中或已完成
+ * - decrypt_failed：解密失敗（密碼錯誤 / 檔案異常）
  * - parse_skipped：零結帳單，預期不解析
  * - parse_failed：解析失敗（需人工介入）
+ * - manual_review_needed：pipeline 偵測到需人工介入
  * - failed：下載 / ingest 失敗（可重試）
  * - fetch_expired：下載連結已一次性使用過期（不可自動重試）
  */
 export type StagedAttachmentStatus =
   | 'staged'
   | 'decrypted'
+  | 'decrypt_failed'
   | 'parsed'
   | 'parse_skipped'
   | 'parse_failed'
+  | 'manual_review_needed'
   | 'failed'
   | 'fetch_expired'
 
@@ -316,7 +320,7 @@ export interface BudgetItem {
   readonly id: number
   readonly scope: BudgetScope
   readonly scope_ref: string | null
-  readonly amount_minor_units: number
+  readonly amount_ntd: number
   readonly alert_threshold_percent: number
   readonly enabled: boolean
   readonly created_at: string
@@ -327,7 +331,7 @@ export interface BudgetItem {
 export interface BudgetCreateRequest {
   readonly scope: BudgetScope
   readonly scope_ref?: string | null
-  readonly amount_minor_units: number
+  readonly amount_ntd: number
   readonly alert_threshold_percent?: number
   readonly enabled?: boolean
 }
@@ -336,7 +340,7 @@ export interface BudgetCreateRequest {
 export interface BudgetUpdateRequest {
   readonly scope?: BudgetScope
   readonly scope_ref?: string | null
-  readonly amount_minor_units?: number
+  readonly amount_ntd?: number
   readonly alert_threshold_percent?: number
   readonly enabled?: boolean
 }
@@ -345,8 +349,8 @@ export interface BudgetUpdateRequest {
 export interface BudgetCurrentPeriod {
   readonly budget_id: number
   readonly period_year_month: string
-  readonly amount_minor_units: number
-  readonly current_amount_minor_units: number
+  readonly amount_ntd: number
+  readonly current_amount_ntd: number
   readonly percent: number
   readonly threshold_breached: boolean
   readonly alert_threshold_percent: number
@@ -360,8 +364,8 @@ export interface BudgetAlertItem {
   readonly scope_ref: string | null
   readonly period_year_month: string
   readonly threshold_breached_percent: number
-  readonly current_amount_minor_units: number
-  readonly amount_minor_units: number
+  readonly current_amount_ntd: number
+  readonly amount_ntd: number
   readonly triggered_at: string
   readonly acknowledged_at: string | null
 }

@@ -130,6 +130,7 @@ function InsightsPage() {
       apiGet<ApiResponse<readonly TrendItem[]>>('/api/analytics/trend', {
         months: trendMonths,
       }),
+    staleTime: 5 * 60 * 1000,
   })
 
   const banksCompareQuery = useQuery({
@@ -142,6 +143,7 @@ function InsightsPage() {
           year: year ? Number(year) : undefined,
         },
       ),
+    staleTime: 2 * 60 * 1000,
   })
 
   const yearsCompareQuery = useQuery({
@@ -151,6 +153,7 @@ function InsightsPage() {
         '/api/analytics/compare/years',
         { metric: yearMetric },
       ),
+    staleTime: 5 * 60 * 1000,
   })
 
   const merchantsQuery = useQuery({
@@ -160,17 +163,15 @@ function InsightsPage() {
         '/api/analytics/top-merchants',
         { limit: merchantLimit, period: merchantPeriod },
       ),
+    staleTime: 2 * 60 * 1000,
   })
 
   const categoriesCompareQuery = useQuery({
     queryKey: ['insights', 'categories-compare', month],
     queryFn: () =>
       apiGet<ApiResponse<readonly CategoryWithCompareItem[]>>(
-        '/api/analytics/categories',
-        {
-          month: month || undefined,
-          compare_with_previous: month ? true : undefined,
-        },
+        '/api/analytics/categories/compare',
+        { month },
       ),
     enabled: !!month, // requires explicit month for compare to work
   })
@@ -178,7 +179,7 @@ function InsightsPage() {
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h1 className="text-2xl font-bold">Insights</h1>
+        <h1 className="text-2xl font-bold">消費分析</h1>
         <div className="flex items-center gap-2">
           <FilterBar
             show={FILTER_SHOW}
@@ -213,21 +214,23 @@ function InsightsPage() {
             trend.length === 0 ? (
               <EmptyState message="尚無趨勢資料" />
             ) : (
-              <ResponsiveContainer width="100%" height={300}>
-                <LineChart data={trend as TrendItem[]}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="month" />
-                  <YAxis />
-                  <Tooltip formatter={currencyFormatter} />
-                  <Line
-                    type="monotone"
-                    dataKey="total"
-                    stroke="var(--chart-2)"
-                    strokeWidth={2}
-                    name="本月支出"
-                  />
-                </LineChart>
-              </ResponsiveContainer>
+              <div role="img" aria-label={`近 ${trendMonths} 個月消費趨勢圖`}>
+                <ResponsiveContainer width="100%" height={300}>
+                  <LineChart data={trend as TrendItem[]} accessibilityLayer>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="month" />
+                    <YAxis />
+                    <Tooltip formatter={currencyFormatter} />
+                    <Line
+                      type="monotone"
+                      dataKey="total"
+                      stroke="var(--chart-2)"
+                      strokeWidth={2}
+                      name="本月支出"
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
             )
           }
         </QuerySection>

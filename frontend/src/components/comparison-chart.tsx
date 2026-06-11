@@ -35,21 +35,23 @@ export function BankComparisonBarChart({
 }) {
   if (data.length === 0) return <EmptyState message="尚無銀行資料" />
   return (
-    <ResponsiveContainer width="100%" height={300}>
-      <BarChart data={data as BankCompareItem[]}>
-        <CartesianGrid strokeDasharray="3 3" />
-        <XAxis dataKey={bankAxisLabel} />
-        <YAxis />
-        <Tooltip formatter={currencyFormatter} />
-        <Legend />
-        <Bar
-          dataKey="total"
-          fill="var(--chart-3)"
-          radius={[4, 4, 0, 0]}
-          name="金額"
-        />
-      </BarChart>
-    </ResponsiveContainer>
+    <div role="img" aria-label="各銀行消費金額對比圖">
+      <ResponsiveContainer width="100%" height={300}>
+        <BarChart data={data as BankCompareItem[]} accessibilityLayer>
+          <CartesianGrid strokeDasharray="3 3" />
+          <XAxis dataKey={bankAxisLabel} />
+          <YAxis />
+          <Tooltip formatter={currencyFormatter} />
+          <Legend />
+          <Bar
+            dataKey="total"
+            fill="var(--chart-3)"
+            radius={[4, 4, 0, 0]}
+            name="金額"
+          />
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
   )
 }
 
@@ -64,21 +66,23 @@ export function YearComparisonLineChart({
   const tooltipFormatter =
     metricLabel === '金額' ? currencyFormatter : countFormatter
   return (
-    <ResponsiveContainer width="100%" height={300}>
-      <LineChart data={data as YearCompareItem[]}>
-        <CartesianGrid strokeDasharray="3 3" />
-        <XAxis dataKey="year" />
-        <YAxis />
-        <Tooltip formatter={tooltipFormatter} />
-        <Legend />
-        <Line
-          type="monotone"
-          dataKey="value"
-          stroke="var(--chart-2)"
-          strokeWidth={2}
-          name={metricLabel}
-        />
-      </LineChart>
-    </ResponsiveContainer>
+    <div role="img" aria-label={`年度${metricLabel}對比圖`}>
+      <ResponsiveContainer width="100%" height={300}>
+        <LineChart data={data as YearCompareItem[]} accessibilityLayer>
+          <CartesianGrid strokeDasharray="3 3" />
+          <XAxis dataKey="year" />
+          <YAxis />
+          <Tooltip formatter={tooltipFormatter} />
+          <Legend />
+          <Line
+            type="monotone"
+            dataKey="value"
+            stroke="var(--chart-2)"
+            strokeWidth={2}
+            name={metricLabel}
+          />
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
   )
 }

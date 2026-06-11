@@ -56,6 +56,19 @@ const STAGE_LABELS: Record<PipelineStage, string> = {
   notify: '通知',
 }
 
+/**
+ * Polling backoff: fast at first, then slow down for long-running runs.
+ * <1min → baseMs, 1-5min → 5s, >5min → 15s.
+ */
+function pollInterval(startedAt: string | null, baseMs: number) {
+  const elapsedMs = startedAt
+    ? Date.now() - new Date(startedAt).getTime()
+    : 0
+  if (elapsedMs < 60_000) return baseMs
+  if (elapsedMs < 5 * 60_000) return 5_000
+  return 15_000
+}
+
 function OperationsPage() {
   const activeRunRef = useRef<HTMLElement>(null)
   const [submitError, setSubmitError] = useState('')
@@ -73,10 +86,13 @@ function OperationsPage() {
     queryFn: () =>
       apiGet<ApiResponse<readonly PipelineRunSummary[]>>('/api/pipeline/runs'),
     staleTime: 30_000,
-    refetchInterval: (query) =>
-      query.state.data?.data.some((run) => isActiveStatus(run.status))
-        ? 2000
-        : false,
+    refetchInterval: (query) => {
+      const active = query.state.data?.data.find((run) =>
+        isActiveStatus(run.status),
+      )
+      return active ? pollInterval(active.started_at, 3_000) : false
+    },
+    refetchIntervalInBackground: false,
   })
 
   const activeRunId = runsQuery.data?.data.find((run) =>
@@ -90,10 +106,13 @@ function OperationsPage() {
       apiGet<ApiResponse<PipelineRunDetail>>(
         `/api/pipeline/runs/${activeRunId}`,
       ),
-    refetchInterval: (query) =>
-      query.state.data && isActiveStatus(query.state.data.data.status)
-        ? 1000
-        : false,
+    refetchInterval: (query) => {
+      const run = query.state.data?.data
+      return run && isActiveStatus(run.status)
+        ? pollInterval(run.started_at, 1_000)
+        : false
+    },
+    refetchIntervalInBackground: false,
   })
 
   const triggerMutation = useMutation({
@@ -567,7 +586,7 @@ function StageSelect({
       >
         {STAGES.map((stage) => (
           <option key={stage} value={stage}>
-            {stage}
+            {STAGE_LABELS[stage]}
           </option>
         ))}
       </select>

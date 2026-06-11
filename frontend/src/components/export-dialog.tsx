@@ -4,11 +4,18 @@
  * 收集 format / start / end / bank / category / include_user_fields，
  * 觸發 GET /api/transactions/export 並讓瀏覽器下載 blob。
  */
-import { Download, X } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
+import { Download } from 'lucide-react'
 import { useState } from 'react'
-import { apiFetchBlob } from '@/lib/api-client'
-import type { ExportFormat } from '@/lib/types'
+import { apiFetchBlob, apiGet } from '@/lib/api-client'
+import type { ApiResponse, BankConfigItem, ExportFormat } from '@/lib/types'
 import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 
 function downloadBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob)
@@ -37,11 +44,22 @@ export function ExportDialog({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  if (!isOpen) return null
+  // Shares the React Query cache entry with FilterBar's bank dropdown.
+  const banksQuery = useQuery({
+    queryKey: ['settings', 'banks'],
+    queryFn: () =>
+      apiGet<ApiResponse<readonly BankConfigItem[]>>('/api/settings/banks'),
+    staleTime: 5 * 60 * 1000,
+  })
+  const banks = banksQuery.data?.data ?? []
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
+    if (start && end && end < start) {
+      setError('結束日期不能早於起始日期')
+      return
+    }
     setBusy(true)
     try {
       const params = {
@@ -65,28 +83,12 @@ export function ExportDialog({
   }
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-      role="dialog"
-      aria-modal="true"
-    >
-      <form
-        onSubmit={handleSubmit}
-        className="w-full max-w-md space-y-3 rounded-lg border border-border bg-background p-4"
-      >
-        <div className="flex items-center justify-between">
-          <h3 className="text-base font-semibold">匯出交易</h3>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={onClose}
-            aria-label="close"
-          >
-            <X className="size-4" />
-          </Button>
-        </div>
-
+    <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>匯出交易</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-3">
         <label className="flex flex-col text-sm">
           <span className="text-muted-foreground">格式</span>
           <select
@@ -115,6 +117,7 @@ export function ExportDialog({
               type="date"
               className="rounded border border-input bg-background px-2 py-1"
               value={end}
+              min={start || undefined}
               onChange={(e) => setEnd(e.target.value)}
             />
           </label>
@@ -122,14 +125,31 @@ export function ExportDialog({
 
         <div className="grid grid-cols-2 gap-3">
           <label className="flex flex-col text-sm">
-            <span className="text-muted-foreground">銀行代碼</span>
-            <input
-              type="text"
-              className="rounded border border-input bg-background px-2 py-1"
-              value={bank}
-              onChange={(e) => setBank(e.target.value)}
-              placeholder="例：CTBC"
-            />
+            <span className="text-muted-foreground">銀行</span>
+            {banksQuery.isError ? (
+              // Fallback: keep export usable with manual bank code input.
+              <input
+                type="text"
+                className="rounded border border-input bg-background px-2 py-1"
+                value={bank}
+                onChange={(e) => setBank(e.target.value)}
+                placeholder="例：CTBC"
+                aria-label="銀行代碼（清單載入失敗，請手動輸入）"
+              />
+            ) : (
+              <select
+                className="rounded border border-input bg-background px-2 py-1"
+                value={bank}
+                onChange={(e) => setBank(e.target.value)}
+              >
+                <option value="">全部銀行</option>
+                {banks.map((b) => (
+                  <option key={b.bank_code} value={b.bank_code}>
+                    {b.bank_name}（{b.bank_code}）
+                  </option>
+                ))}
+              </select>
+            )}
           </label>
           <label className="flex flex-col text-sm">
             <span className="text-muted-foreground">類別</span>
@@ -158,7 +178,8 @@ export function ExportDialog({
           <Download className="size-4" data-icon="inline-start" />
           {busy ? '匯出中…' : '下載'}
         </Button>
-      </form>
-    </div>
+        </form>
+      </DialogContent>
+    </Dialog>
   )
 }

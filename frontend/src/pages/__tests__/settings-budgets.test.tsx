@@ -26,7 +26,7 @@ const sampleBudget: BudgetItem = {
   id: 1,
   scope: 'monthly_total',
   scope_ref: null,
-  amount_minor_units: 30000,
+  amount_ntd: 30000,
   alert_threshold_percent: 80,
   enabled: true,
   created_at: '2026-05-01T00:00:00Z',
@@ -79,8 +79,8 @@ describe('SettingsBudgetsPage', () => {
           data: {
             budget_id: 1,
             period_year_month: '2026-05',
-            amount_minor_units: 30000,
-            current_amount_minor_units: 24000,
+            amount_ntd: 30000,
+            current_amount_ntd: 24000,
             percent: 80.0,
             threshold_breached: true,
             alert_threshold_percent: 80,
@@ -126,7 +126,7 @@ describe('SettingsBudgetsPage', () => {
         expect.objectContaining({
           scope: 'monthly_total',
           scope_ref: null,
-          amount_minor_units: 30000,
+          amount_ntd: 30000,
           alert_threshold_percent: 80,
           enabled: true,
         }),
@@ -152,7 +152,7 @@ describe('SettingsBudgetsPage', () => {
     expect(mockedPost).not.toHaveBeenCalled()
   })
 
-  it('deletes a budget', async () => {
+  it('deletes a budget after confirming in the dialog', async () => {
     mockedGet.mockImplementation((path: string) => {
       if (path === '/api/budgets') {
         return Promise.resolve({
@@ -170,11 +170,99 @@ describe('SettingsBudgetsPage', () => {
     })
 
     renderPage()
-    const deleteBtn = await screen.findByRole('button', { name: /刪除/ })
+    const deleteBtn = await screen.findByRole('button', { name: '刪除' })
     await userEvent.click(deleteBtn)
+
+    // Confirmation dialog opens; no DELETE before confirming.
+    expect(mockedDelete).not.toHaveBeenCalled()
+    const dialog = await screen.findByRole('dialog')
+    expect(dialog).toHaveTextContent('超支警示將停止觸發')
+
+    await userEvent.click(screen.getByRole('button', { name: '確認刪除' }))
     await waitFor(() => {
       expect(mockedDelete).toHaveBeenCalledWith('/api/budgets/1')
     })
+  })
+
+  it('does not delete when the confirmation dialog is cancelled', async () => {
+    mockedGet.mockImplementation((path: string) => {
+      if (path === '/api/budgets') {
+        return Promise.resolve({
+          success: true,
+          data: [sampleBudget],
+          message: '',
+        })
+      }
+      return Promise.resolve({ success: true, data: null, message: '' })
+    })
+
+    renderPage()
+    const deleteBtn = await screen.findByRole('button', { name: '刪除' })
+    await userEvent.click(deleteBtn)
+    await screen.findByRole('dialog')
+    await userEvent.click(screen.getByRole('button', { name: '取消' }))
+
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    })
+    expect(mockedDelete).not.toHaveBeenCalled()
+  })
+
+  it('shows error banner when deletion fails, clears after success', async () => {
+    mockedGet.mockImplementation((path: string) => {
+      if (path === '/api/budgets') {
+        return Promise.resolve({
+          success: true,
+          data: [sampleBudget],
+          message: '',
+        })
+      }
+      return Promise.resolve({ success: true, data: null, message: '' })
+    })
+    mockedDelete.mockRejectedValueOnce(new Error('刪除預算失敗'))
+
+    renderPage()
+    const deleteBtn = await screen.findByRole('button', { name: '刪除' })
+    await userEvent.click(deleteBtn)
+    await screen.findByRole('dialog')
+    await userEvent.click(screen.getByRole('button', { name: '確認刪除' }))
+
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('刪除預算失敗')
+
+    // Retry succeeds → banner clears.
+    mockedDelete.mockResolvedValueOnce({
+      success: true,
+      data: { deleted_id: 1 },
+      message: '',
+    })
+    await userEvent.click(screen.getByRole('button', { name: '刪除' }))
+    await screen.findByRole('dialog')
+    await userEvent.click(screen.getByRole('button', { name: '確認刪除' }))
+    await waitFor(() => {
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    })
+  })
+
+  it('shows error banner when enabled toggle fails', async () => {
+    mockedGet.mockImplementation((path: string) => {
+      if (path === '/api/budgets') {
+        return Promise.resolve({
+          success: true,
+          data: [sampleBudget],
+          message: '',
+        })
+      }
+      return Promise.resolve({ success: true, data: null, message: '' })
+    })
+    mockedPut.mockRejectedValue(new Error('更新預算失敗'))
+
+    renderPage()
+    const checkbox = await screen.findByLabelText('啟用')
+    await userEvent.click(checkbox)
+
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('更新預算失敗')
   })
 
   it('toggles enabled flag', async () => {

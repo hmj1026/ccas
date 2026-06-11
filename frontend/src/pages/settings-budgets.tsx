@@ -16,6 +16,15 @@ import { apiDelete, apiGet, apiPost, apiPut } from '@/lib/api-client'
 import { BudgetProgressCard } from '@/components/budget-progress-card'
 import { Button } from '@/components/ui/button'
 import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import {
   EmptyState,
   ErrorState,
   LoadingState,
@@ -69,7 +78,7 @@ function CreateBudgetDialog({
     onCreate({
       scope,
       scope_ref: scope === 'monthly_total' ? null : scopeRef.trim(),
-      amount_minor_units: amountNum,
+      amount_ntd: amountNum,
       alert_threshold_percent: thresholdNum,
       enabled: true,
     })
@@ -170,13 +179,13 @@ function BudgetCard({
   budget,
   current,
   onUpdate,
-  onDelete,
+  onDeleteRequest,
   isPending,
 }: {
   readonly budget: BudgetItem
   readonly current: BudgetCurrentPeriod | null
   readonly onUpdate: (body: BudgetUpdateRequest) => void
-  readonly onDelete: () => void
+  readonly onDeleteRequest: () => void
   readonly isPending: boolean
 }) {
   return (
@@ -195,7 +204,7 @@ function BudgetCard({
         <Button
           variant="ghost"
           size="sm"
-          onClick={onDelete}
+          onClick={onDeleteRequest}
           disabled={isPending}
         >
           <Trash2 className="size-4" data-icon="inline-start" />
@@ -208,6 +217,8 @@ function BudgetCard({
 
 function SettingsBudgetsPage() {
   const queryClient = useQueryClient()
+  const [mutationError, setMutationError] = useState<string | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<BudgetItem | null>(null)
   const { data, isLoading, error } = useQuery({
     queryKey: ['budgets', 'list'],
     queryFn: () =>
@@ -238,16 +249,20 @@ function SettingsBudgetsPage() {
     mutationFn: ({ id, body }: { id: number; body: BudgetUpdateRequest }) =>
       apiPut<ApiResponse<BudgetItem>>(`/api/budgets/${id}`, body),
     onSuccess: () => {
+      setMutationError(null)
       queryClient.invalidateQueries({ queryKey: ['budgets'] })
     },
+    onError: (err: Error) => setMutationError(err.message),
   })
 
   const deleteMutation = useMutation({
     mutationFn: (id: number) =>
       apiDelete<ApiResponse<{ deleted_id: number }>>(`/api/budgets/${id}`),
     onSuccess: () => {
+      setMutationError(null)
       queryClient.invalidateQueries({ queryKey: ['budgets'] })
     },
+    onError: (err: Error) => setMutationError(err.message),
   })
 
   if (isLoading) return <LoadingState />
@@ -272,6 +287,14 @@ function SettingsBudgetsPage() {
           設定每月支出上限與警示閾值；超過閾值會推 Telegram + dashboard banner。
         </p>
       </div>
+      {mutationError ? (
+        <p
+          role="alert"
+          className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+        >
+          {mutationError}
+        </p>
+      ) : null}
       <CreateBudgetDialog
         onCreate={(body) => createMutation.mutate(body)}
         isPending={createMutation.isPending}
@@ -288,12 +311,42 @@ function SettingsBudgetsPage() {
               onUpdate={(body) =>
                 updateMutation.mutate({ id: b.id, body })
               }
-              onDelete={() => deleteMutation.mutate(b.id)}
+              onDeleteRequest={() => setDeleteTarget(b)}
               isPending={isPending}
             />
           ))}
         </div>
       )}
+
+      {/* Delete confirmation dialog */}
+      <Dialog
+        open={deleteTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null)
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>刪除預算</DialogTitle>
+            <DialogDescription>
+              刪除預算後已記錄的交易分類不變，但超支警示將停止觸發。
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <DialogClose render={<Button variant="outline" />}>取消</DialogClose>
+            <Button
+              variant="destructive"
+              disabled={deleteMutation.isPending}
+              onClick={() => {
+                if (deleteTarget) deleteMutation.mutate(deleteTarget.id)
+                setDeleteTarget(null)
+              }}
+            >
+              確認刪除
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

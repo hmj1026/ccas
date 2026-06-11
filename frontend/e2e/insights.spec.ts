@@ -117,12 +117,12 @@ test.describe('Insights page', () => {
     await setupRoutes(page)
     await page.goto('/overview')
 
-    // NAV Insights link
-    await page.getByRole('link', { name: 'Insights' }).first().click()
+    // NAV Insights link (labelled 消費分析)
+    await page.getByRole('link', { name: '消費分析' }).first().click()
     await expect(page).toHaveURL(/\/insights/)
 
     await expect(
-      page.getByRole('heading', { name: 'Insights' }),
+      page.getByRole('heading', { name: '消費分析' }),
     ).toBeVisible()
     await expect(
       page.getByRole('heading', { name: '月消費趨勢' }),

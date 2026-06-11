@@ -38,17 +38,32 @@ import {
   importTransactions,
 } from '@/lib/route-imports'
 
-const NAV_ITEMS = [
-  { to: '/overview', label: '總覽', icon: LayoutDashboard, prefetch: importOverview },
-  { to: '/transactions', label: '交易', icon: Receipt, prefetch: importTransactions },
-  { to: '/insights', label: 'Insights', icon: Sparkles, prefetch: importInsights },
-  { to: '/bills', label: '帳單', icon: FileText, prefetch: importBills },
-  { to: '/operations', label: '操作中心', icon: Workflow, prefetch: importOperations },
-  { to: '/settings', label: '設定', icon: Settings, prefetch: importSettings },
-  { to: '/settings/reminders', label: '提醒', icon: Bell, prefetch: importSettingsReminders },
-  { to: '/settings/budgets', label: '預算', icon: Wallet, prefetch: importSettingsBudgets },
-  { to: '/settings/rules', label: '分類規則', icon: Tags, prefetch: importSettingsRules },
-  { to: '/setup/gmail', label: '設定中心', icon: Settings2, prefetch: importSetupGmail },
+const NAV_GROUPS = [
+  {
+    group: '主要功能',
+    items: [
+      { to: '/overview', label: '總覽', icon: LayoutDashboard, prefetch: importOverview },
+      { to: '/transactions', label: '交易', icon: Receipt, prefetch: importTransactions },
+      { to: '/insights', label: '消費分析', icon: Sparkles, prefetch: importInsights },
+      { to: '/bills', label: '帳單', icon: FileText, prefetch: importBills },
+    ],
+  },
+  {
+    group: '操作',
+    items: [
+      { to: '/operations', label: '操作中心', icon: Workflow, prefetch: importOperations },
+    ],
+  },
+  {
+    group: '設定',
+    items: [
+      { to: '/settings/reminders', label: '提醒', icon: Bell, prefetch: importSettingsReminders },
+      { to: '/settings/budgets', label: '預算', icon: Wallet, prefetch: importSettingsBudgets },
+      { to: '/settings/rules', label: '分類規則', icon: Tags, prefetch: importSettingsRules },
+      { to: '/settings', label: '分類關鍵字', icon: Settings, prefetch: importSettings },
+      { to: '/setup/gmail', label: '設定中心', icon: Settings2, prefetch: importSetupGmail },
+    ],
+  },
 ] as const
 
 function Layout() {
@@ -95,24 +110,39 @@ function Layout() {
             <X className="size-5" />
           </button>
         </div>
-        <nav className="flex-1 space-y-1 p-2">
-          {NAV_ITEMS.map(({ to, label, icon: Icon, prefetch }) => (
-            <PrefetchLink
-              key={to}
-              to={to}
-              onPrefetch={prefetch}
-              onClick={() => setMobileOpen(false)}
-              className={({ isActive }) =>
-                `flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
-                  isActive
-                    ? 'bg-sidebar-accent text-sidebar-accent-foreground'
-                    : 'text-sidebar-foreground hover:bg-sidebar-accent/50'
-                }`
-              }
-            >
-              <Icon className="size-4" />
-              {label}
-            </PrefetchLink>
+        <nav className="flex-1 space-y-3 overflow-y-auto p-2">
+          {NAV_GROUPS.map(({ group, items }, groupIndex) => (
+            <div key={group}>
+              {groupIndex > 0 && (
+                <div
+                  role="separator"
+                  className="mb-3 border-t border-border"
+                />
+              )}
+              <p className="px-3 pb-1 text-xs font-medium text-muted-foreground">
+                {group}
+              </p>
+              <div className="space-y-1">
+                {items.map(({ to, label, icon: Icon, prefetch }) => (
+                  <PrefetchLink
+                    key={to}
+                    to={to}
+                    onPrefetch={prefetch}
+                    onClick={() => setMobileOpen(false)}
+                    className={({ isActive }) =>
+                      `flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+                        isActive
+                          ? 'bg-sidebar-accent text-sidebar-accent-foreground'
+                          : 'text-sidebar-foreground hover:bg-sidebar-accent/50'
+                      }`
+                    }
+                  >
+                    <Icon className="size-4" />
+                    {label}
+                  </PrefetchLink>
+                ))}
+              </div>
+            </div>
           ))}
         </nav>
         <div className="border-t border-border p-3">

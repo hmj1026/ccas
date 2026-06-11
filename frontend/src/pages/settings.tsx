@@ -14,6 +14,15 @@ import type {
   CategoryKeywordCreateRequest,
 } from '@/lib/types'
 import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { LoadingState, ErrorState, EmptyState } from '@/components/shared/states'
 
 // -- Bank Config Section --
@@ -109,6 +118,9 @@ function CategoryKeywordSection() {
   const queryClient = useQueryClient()
   const [newKeyword, setNewKeyword] = useState('')
   const [newCategory, setNewCategory] = useState('')
+  const [mutationError, setMutationError] = useState<string | null>(null)
+  const [pendingDelete, setPendingDelete] =
+    useState<CategoryKeywordItem | null>(null)
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['settings', 'categories'],
@@ -130,10 +142,14 @@ function CategoryKeywordSection() {
 
   const deleteCategory = useMutation({
     mutationFn: (id: number) =>
-      apiDelete<ApiResponse<null>>(`/api/settings/categories/${id}`),
+      apiDelete<ApiResponse<{ deleted_id: number }>>(
+        `/api/settings/categories/${id}`,
+      ),
     onSuccess: () => {
+      setMutationError(null)
       queryClient.invalidateQueries({ queryKey: ['settings', 'categories'] })
     },
+    onError: (err: Error) => setMutationError(err.message),
   })
 
   /**
@@ -153,6 +169,14 @@ function CategoryKeywordSection() {
 
   return (
     <div className="space-y-3">
+      {mutationError ? (
+        <p
+          role="alert"
+          className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+        >
+          {mutationError}
+        </p>
+      ) : null}
       {/* Add form */}
       <div className="flex gap-2">
         <input
@@ -200,7 +224,7 @@ function CategoryKeywordSection() {
               <Button
                 variant="ghost"
                 size="icon-xs"
-                onClick={() => deleteCategory.mutate(item.id)}
+                onClick={() => setPendingDelete(item)}
                 disabled={deleteCategory.isPending}
                 aria-label={`刪除 ${item.keyword}`}
               >
@@ -210,6 +234,36 @@ function CategoryKeywordSection() {
           ))}
         </div>
       )}
+
+      {/* Delete confirmation dialog */}
+      <Dialog
+        open={pendingDelete !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingDelete(null)
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>刪除分類關鍵字</DialogTitle>
+            <DialogDescription>
+              確定要刪除「{pendingDelete?.keyword}」？刪除後可重新新增，不影響歷史交易分類。
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <DialogClose render={<Button variant="outline" />}>取消</DialogClose>
+            <Button
+              variant="destructive"
+              disabled={deleteCategory.isPending}
+              onClick={() => {
+                if (pendingDelete) deleteCategory.mutate(pendingDelete.id)
+                setPendingDelete(null)
+              }}
+            >
+              確認刪除
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

@@ -30,7 +30,7 @@ export function BudgetProgressCard({
   readonly current: BudgetCurrentPeriod | null
 }) {
   const percent = current?.percent ?? 0
-  const cur = current?.current_amount_minor_units ?? 0
+  const cur = current?.current_amount_ntd ?? 0
   const colors = colorByPercent(percent)
   const scopeTitle = budget.scope_ref
     ? `${SCOPE_LABELS[budget.scope]}：${budget.scope_ref}`
@@ -57,7 +57,7 @@ export function BudgetProgressCard({
       </div>
       <div className="flex items-center justify-between text-xs text-muted-foreground">
         <span>
-          已花 {formatAmount(cur)} / {formatAmount(budget.amount_minor_units)}
+          已花 {formatAmount(cur)} / {formatAmount(budget.amount_ntd)}
         </span>
         <span>警示閾值 {budget.alert_threshold_percent}%</span>
       </div>

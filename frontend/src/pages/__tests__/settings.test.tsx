@@ -107,7 +107,7 @@ describe('SettingsPage', () => {
     })
   })
 
-  it('deletes a category keyword', async () => {
+  it('deletes a category keyword after confirming in the dialog', async () => {
     const user = userEvent.setup()
     mockApiDelete.mockResolvedValue({ success: true, data: null, message: '' })
 
@@ -119,7 +119,52 @@ describe('SettingsPage', () => {
 
     await user.click(screen.getByLabelText('刪除 starbucks'))
 
+    // Confirmation dialog opens; no DELETE before confirming.
+    expect(mockApiDelete).not.toHaveBeenCalled()
+    const dialog = await screen.findByRole('dialog')
+    expect(dialog).toHaveTextContent('不影響歷史交易分類')
+
+    await user.click(screen.getByRole('button', { name: '確認刪除' }))
+
     expect(mockApiDelete).toHaveBeenCalledWith('/api/settings/categories/1')
+  })
+
+  it('does not delete when the confirmation dialog is cancelled', async () => {
+    const user = userEvent.setup()
+    mockApiDelete.mockResolvedValue({ success: true, data: null, message: '' })
+
+    renderWithProviders(<SettingsPage />)
+
+    await waitFor(() => {
+      expect(screen.getByText('starbucks')).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByLabelText('刪除 starbucks'))
+    await screen.findByRole('dialog')
+    await user.click(screen.getByRole('button', { name: '取消' }))
+
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    })
+    expect(mockApiDelete).not.toHaveBeenCalled()
+  })
+
+  it('shows error banner when category deletion fails', async () => {
+    const user = userEvent.setup()
+    mockApiDelete.mockRejectedValue(new Error('刪除分類失敗'))
+
+    renderWithProviders(<SettingsPage />)
+
+    await waitFor(() => {
+      expect(screen.getByText('starbucks')).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByLabelText('刪除 starbucks'))
+    await screen.findByRole('dialog')
+    await user.click(screen.getByRole('button', { name: '確認刪除' }))
+
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('刪除分類失敗')
   })
 
   it('shows empty state when no categories', async () => {

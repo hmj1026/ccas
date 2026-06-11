@@ -70,7 +70,7 @@ function defaultMockResponses() {
         ],
       })
     }
-    if (path === '/api/analytics/categories') {
+    if (path === '/api/analytics/categories/compare') {
       return Promise.resolve({
         success: true,
         message: '',
@@ -96,7 +96,7 @@ describe('InsightsPage', () => {
   it('renders all insight sections with default state', async () => {
     defaultMockResponses()
     renderPage()
-    expect(screen.getByRole('heading', { name: 'Insights' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: '消費分析' })).toBeInTheDocument()
     expect(screen.getByText('銀行對比')).toBeInTheDocument()
     expect(screen.getByText('年度對比')).toBeInTheDocument()
     expect(screen.getByText('商家排行')).toBeInTheDocument()
@@ -161,6 +161,21 @@ describe('InsightsPage', () => {
         '/api/transactions/export',
         expect.objectContaining({ format: 'csv', include_user_fields: false }),
       )
+    })
+  })
+
+  it('closes export dialog on Escape', async () => {
+    defaultMockResponses()
+    renderPage()
+
+    await userEvent.click(await screen.findByRole('button', { name: /匯出/ }))
+    await waitFor(() => {
+      expect(screen.getByRole('dialog')).toBeInTheDocument()
+    })
+
+    await userEvent.keyboard('{Escape}')
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     })
   })
 })

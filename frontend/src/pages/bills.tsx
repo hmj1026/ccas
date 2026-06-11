@@ -22,6 +22,8 @@ function BillsPage() {
   const queryClient = useQueryClient()
   const [searchParams, setSearchParams] = useSearchParams()
 
+  const [mutationError, setMutationError] = useState<string | null>(null)
+
   const year = searchParams.get('year') ?? ''
   const month = searchParams.get('month') ?? ''
   const bankCode = searchParams.get('bank_code') ?? ''
@@ -52,9 +54,11 @@ function BillsPage() {
     mutationFn: ({ id, is_paid }: { id: number; is_paid: boolean }) =>
       apiPatch<ApiResponse<BillItem>>(`/api/bills/${id}`, { is_paid }),
     onSuccess: () => {
+      setMutationError(null)
       queryClient.invalidateQueries({ queryKey: ['bills'] })
       queryClient.invalidateQueries({ queryKey: ['overview'] })
     },
+    onError: (err: Error) => setMutationError(err.message),
   })
 
   // mutate is referentially stable per TanStack Query v5; destructuring lets
@@ -102,6 +106,14 @@ function BillsPage() {
         <EmptyState message="沒有符合條件的帳單" />
       ) : (
         <div className="space-y-3">
+          {mutationError ? (
+            <p
+              role="alert"
+              className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+            >
+              {mutationError}
+            </p>
+          ) : null}
           {data.data.map((bill) => (
             <BillRow
               key={bill.id}

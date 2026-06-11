@@ -162,7 +162,7 @@ describe('SettingsRulesPage', () => {
     })
   })
 
-  it('deleting calls DELETE after confirm', async () => {
+  it('deleting calls DELETE after confirming in the dialog', async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
     setupRoutes([RULE_A])
     mockedDelete.mockResolvedValue({
@@ -170,15 +170,65 @@ describe('SettingsRulesPage', () => {
       data: { deleted_id: 1 },
       message: '',
     })
-    vi.spyOn(window, 'confirm').mockReturnValue(true)
     renderPage()
 
     const delBtn = await screen.findByLabelText('delete 星巴克')
     await user.click(delBtn)
 
+    // Confirmation dialog opens; no DELETE before confirming.
+    expect(mockedDelete).not.toHaveBeenCalled()
+    const dialog = await screen.findByRole('dialog')
+    expect(dialog).toHaveTextContent('確定要刪除規則「星巴克」？')
+
+    await user.click(screen.getByRole('button', { name: '確認刪除' }))
+
     await waitFor(() => {
       expect(mockedDelete).toHaveBeenCalledWith('/api/rules/1')
     })
+  })
+
+  it('cancelling the delete dialog does not call DELETE', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    setupRoutes([RULE_A])
+    renderPage()
+
+    const delBtn = await screen.findByLabelText('delete 星巴克')
+    await user.click(delBtn)
+    await screen.findByRole('dialog')
+    await user.click(screen.getByRole('button', { name: '取消' }))
+
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    })
+    expect(mockedDelete).not.toHaveBeenCalled()
+  })
+
+  it('shows error banner when toggle PUT fails', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    setupRoutes([RULE_A])
+    mockedPut.mockRejectedValue(new Error('更新規則失敗'))
+    renderPage()
+
+    const toggle = await screen.findByLabelText('toggle 星巴克')
+    await user.click(toggle)
+
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('更新規則失敗')
+  })
+
+  it('shows error banner when DELETE fails', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    setupRoutes([RULE_A])
+    mockedDelete.mockRejectedValue(new Error('刪除規則失敗'))
+    renderPage()
+
+    const delBtn = await screen.findByLabelText('delete 星巴克')
+    await user.click(delBtn)
+    await screen.findByRole('dialog')
+    await user.click(screen.getByRole('button', { name: '確認刪除' }))
+
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('刪除規則失敗')
   })
 
   it('shows nested-quantifier warning in regex dialog', async () => {
