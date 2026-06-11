@@ -234,6 +234,58 @@ class TestRedactingFilter:
         assert "[REDACTED]" in record.msg
         assert "SflKxwRJSM" not in record.msg
 
+    def test_redacts_session_cookie_in_cookie_header(
+        self, filt: RedactingFilter
+    ) -> None:
+        record = self._make_record(
+            "request headers: Cookie: ccas_session=1.1781102450.deadbeefcafe"
+        )
+        filt.filter(record)
+        assert "[REDACTED]" in record.msg
+        assert "deadbeefcafe" not in record.msg
+        assert "ccas_session=" in record.msg  # cookie name kept, value redacted
+
+    def test_redacts_session_cookie_in_set_cookie_header(
+        self, filt: RedactingFilter
+    ) -> None:
+        record = self._make_record(
+            "Set-Cookie: ccas_session=1.1781102450.deadbeefcafe;"
+            " HttpOnly; Path=/; SameSite=lax"
+        )
+        filt.filter(record)
+        assert "[REDACTED]" in record.msg
+        assert "deadbeefcafe" not in record.msg
+        # Attributes after ";" stay readable for debugging.
+        assert "HttpOnly" in record.msg
+        assert "SameSite=lax" in record.msg
+
+    def test_redacts_session_token_with_custom_cookie_name(
+        self, filt: RedactingFilter
+    ) -> None:
+        """結構式 fallback：cookie 名稱被覆寫時，token 值仍須被遮罩。"""
+        token = "3.1781102450." + "a1" * 32
+        record = self._make_record(f"Cookie: my_custom_session={token}")
+        filt.filter(record)
+        assert "[REDACTED]" in record.msg
+        assert token not in record.msg
+
+    def test_redacts_pdf_password_env_assignment(self, filt: RedactingFilter) -> None:
+        """Bank-suffixed env names (PDF_PASSWORD_CTBC=...) lack ":"/"="
+        right after "password", so the generic rule misses them."""
+        record = self._make_record("env dump: PDF_PASSWORD_CTBC=secret-pass-123")
+        filt.filter(record)
+        assert "[REDACTED]" in record.msg
+        assert "secret-pass-123" not in record.msg
+        assert "PDF_PASSWORD_CTBC" in record.msg  # key kept, value redacted
+
+    def test_redacts_pdf_password_with_spaces_and_case(
+        self, filt: RedactingFilter
+    ) -> None:
+        record = self._make_record("pdf_password_esun = TopSecret!9")
+        filt.filter(record)
+        assert "[REDACTED]" in record.msg
+        assert "TopSecret!9" not in record.msg
+
     def test_pii_field_in_dict_args(self, filt: RedactingFilter) -> None:
         record = self._make_record("%(key)s")
         record.args = {"key": "national_id=A123456789"}

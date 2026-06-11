@@ -64,6 +64,18 @@ _REDACT_PATTERNS: list[re.Pattern[str]] = [
     # usual ``api_key=`` keyword is absent. Defence-in-depth in addition
     # to ``Settings.anthropic_api_key`` being a ``SecretStr``.
     re.compile(r"(sk-ant-api\d{2}-)[A-Za-z0-9_-]+"),
+    # Session cookie value in Cookie / Set-Cookie header dumps. Keyed on
+    # the cookie name so attributes after ``;`` (HttpOnly, Max-Age…) stay
+    # readable. The name mirrors ``Settings.api_session_cookie_name``'s
+    # default; log.py must not import ccas.config at module level (circular
+    # import), so the literal is duplicated here intentionally.
+    re.compile(r"(\bccas_session=)[^;\s\"']+", re.IGNORECASE),
+    # Fallback for the session token *structure* (version.timestamp.hmac-hex),
+    # so the value stays masked even if API_SESSION_COOKIE_NAME is overridden
+    # and no longer matches the name-keyed pattern above. {9,13} also covers a
+    # future millisecond timestamp; the hex part must stay lowercase (matches
+    # hexdigest() output — revisit if the encoder ever upper-cases it).
+    re.compile(r"()\b\d+\.\d{9,13}\.[0-9a-f]{64}\b"),
     # Raw JWT values keyed by ``jwt`` / ``authorization``. Covers
     # FUBON's raw ``Authorization`` header (no Bearer prefix) and
     # ``"jwt": "..."`` fields in logged JSON bodies. The 4-char segment
@@ -73,6 +85,10 @@ _REDACT_PATTERNS: list[re.Pattern[str]] = [
         r"[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]{4,}",
         re.IGNORECASE,
     ),
+    # PDF password env-style assignments (PDF_PASSWORD_CTBC=secret). The
+    # generic password rule above requires ":" or "=" right after the word
+    # "password", so bank-suffixed env names slip through without this.
+    re.compile(r"(PDF_PASSWORD_[A-Z0-9_]+\s*=\s*)\S+", re.IGNORECASE),
 ]
 
 _REDACT_REPLACEMENT = r"\g<1>[REDACTED]"

@@ -10,8 +10,17 @@ from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ccas.api.routers import pipeline as pipeline_module
 from ccas.storage.models import PipelineRun, PipelineRunStatus
 from tests.integration.conftest import auth_headers
+
+
+@pytest.fixture(autouse=True)
+def _reset_redis_singleton():
+    """Reset the module-level Redis singleton so each test re-resolves it."""
+    pipeline_module._redis_pool = None
+    yield
+    pipeline_module._redis_pool = None
 
 
 def _make_run(
@@ -164,13 +173,25 @@ async def test_pipeline_run_detail_not_found(client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_pipeline_runs_list_limit_is_capped(
+async def test_pipeline_runs_list_limit_over_max_returns_422(client: AsyncClient):
+    """limit 超出上限不再靜默截斷，直接回 422（統一信封格式）。"""
+    response = await client.get("/api/pipeline/runs?limit=500", headers=auth_headers())
+
+    assert response.status_code == 422
+    body = response.json()
+    assert body["success"] is False
+    assert "limit" in body["message"]
+    assert body["data"] is None
+
+
+@pytest.mark.asyncio
+async def test_pipeline_runs_list_limit_max_100_allowed(
     client: AsyncClient, db_session: AsyncSession
 ):
     db_session.add_all([_make_run(str(i)) for i in range(105)])
     await db_session.commit()
 
-    response = await client.get("/api/pipeline/runs?limit=500", headers=auth_headers())
+    response = await client.get("/api/pipeline/runs?limit=100", headers=auth_headers())
 
     assert response.status_code == 200
     assert len(response.json()["data"]) == 100

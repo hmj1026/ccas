@@ -1,10 +1,11 @@
 """API 共用依賴：認證、共用查詢參數。"""
 
-import base64
-import json
+import hashlib
+import hmac
 import logging
 import re
 import secrets
+import time
 from dataclasses import dataclass
 from datetime import date
 
@@ -69,41 +70,88 @@ def is_valid_api_token(token: str | None) -> bool:
     return secrets.compare_digest(token, current_api_token())
 
 
-def encode_session_cookie(token: str, version: int) -> str:
-    """Pack (token, version) into a single opaque cookie value.
+# Fixed derivation context: the session-signing key is HMAC(master.key,
+# context), so it stays independent from the Fernet usage of the same key
+# material and needs no extra env var (session-cookie-hmac).
+_SESSION_SECRET_CONTEXT = b"ccas-session-v1"
 
-    Format: urlsafe base64 of JSON ``{"t": <token>, "v": <int>}``. The cookie
-    is HttpOnly so the client never inspects it; the encoding only serves to
-    pin the cookie to a token version that the server can later validate.
+
+# (path, mtime_ns, derived secret) — self-invalidating: repointing
+# MASTER_KEY_PATH (tests) or replacing the key file (rotation) changes the
+# cache key, so no explicit reset hook is needed. Nanosecond mtime keeps the
+# same-second rotation window negligible on modern filesystems.
+_session_secret_cache: tuple[str, int, bytes] | None = None
+
+
+def _session_secret() -> bytes:
+    """Derive the session-cookie signing key from master.key.
+
+    Cached per (path, mtime): authenticated requests verify the cookie on
+    every call, so re-reading the key file plus an HMAC derivation each time
+    is wasted work. A stat() validates freshness; ``load_or_create``
+    auto-generates the key in dev runs that skip the Docker entrypoint.
     """
-    payload = json.dumps({"t": token, "v": version}, separators=(",", ":"))
-    return base64.urlsafe_b64encode(payload.encode("utf-8")).decode("ascii")
+    global _session_secret_cache
+    settings = get_settings()
+    key_path = settings.master_key_manager.master_key_path
+    try:
+        mtime = key_path.stat().st_mtime_ns
+    except OSError:
+        mtime = -1
+    cached = _session_secret_cache
+    if cached is not None and cached[0] == str(key_path) and cached[1] == mtime:
+        return cached[2]
+    master_key = settings.master_key_manager.load_or_create()
+    secret = hmac.new(master_key, _SESSION_SECRET_CONTEXT, hashlib.sha256).digest()
+    _session_secret_cache = (str(key_path), mtime, secret)
+    return secret
+
+
+def _session_signature(version: int, issued_at: int, token: str) -> str:
+    """HMAC-SHA256 hex digest over ``version:timestamp:api_token``."""
+    msg = f"{version}:{issued_at}:{token}".encode()
+    return hmac.new(_session_secret(), msg, hashlib.sha256).hexdigest()
+
+
+def encode_session_cookie(
+    token: str, version: int, issued_at: int | None = None
+) -> str:
+    """Build the opaque session cookie: ``{version}.{timestamp}.{hmac}``.
+
+    The HMAC covers ``version:timestamp:api_token`` keyed with a secret
+    derived from master.key, so the plaintext API token never appears in the
+    cookie. The embedded version lets a token rotate (version bump)
+    invalidate every active cookie atomically; the timestamp bounds cookie
+    lifetime server-side to ``api_session_max_age``.
+
+    Args:
+        issued_at: epoch seconds; injectable for expiry tests. Defaults to now.
+    """
+    ts = int(time.time()) if issued_at is None else issued_at
+    return f"{version}.{ts}.{_session_signature(version, ts, token)}"
 
 
 _MAX_COOKIE_LEN = 1024
 
 
-def decode_session_cookie(value: str | None) -> tuple[str, int] | None:
-    """Reverse of ``encode_session_cookie``; returns ``None`` on any failure.
+def decode_session_cookie(value: str | None) -> tuple[int, int, str] | None:
+    """Parse ``{version}.{timestamp}.{hmac}`` without verifying anything.
 
-    Legacy cookies issued before this scheme are plain token strings and will
-    fail to decode, forcing a re-login (acceptable: cookies expire in 12h).
-    Cookie values longer than ``_MAX_COOKIE_LEN`` are rejected upfront to
-    avoid attacker-controlled allocation amplification through base64+JSON
-    decoding (security-reviewer M1).
+    Returns ``(version, issued_at, hmac_hex)`` or ``None`` on malformed
+    input. Legacy base64(JSON) cookies fail the numeric parse and force a
+    re-login (acceptable: cookies expire in 12h). Cookie values longer than
+    ``_MAX_COOKIE_LEN`` are rejected upfront to avoid attacker-controlled
+    allocation amplification (security-reviewer M1).
     """
     if not value or len(value) > _MAX_COOKIE_LEN:
         return None
-    try:
-        raw = base64.urlsafe_b64decode(value.encode("ascii"))
-        data = json.loads(raw.decode("utf-8"))
-    except (ValueError, UnicodeDecodeError, json.JSONDecodeError):
+    parts = value.split(".")
+    if len(parts) != 3:
         return None
-    token = data.get("t")
-    version = data.get("v")
-    if not isinstance(token, str) or not isinstance(version, int):
+    version_raw, ts_raw, mac = parts
+    if not version_raw.isdigit() or not ts_raw.isdigit() or not mac:
         return None
-    return token, version
+    return int(version_raw), int(ts_raw), mac
 
 
 def get_session_cookie_token(request: Request) -> str | None:
@@ -113,21 +161,28 @@ def get_session_cookie_token(request: Request) -> str | None:
 
 
 def is_valid_session_cookie(cookie_value: str | None) -> bool:
-    """Cookie 是否同時通過 token 比對與 version 比對。
+    """Cookie 是否同時通過 HMAC、version 與有效期三重檢查。
 
-    ``compare_digest`` is invoked **before** the version equality check so the
-    timing of a "valid token, stale version" path matches a "valid token,
-    valid version" path. This keeps an attacker who can observe per-request
-    timing from learning whether their guess of the token is correct via the
-    integer version comparison short-circuit (security-reviewer M3).
+    The HMAC is recomputed over the cookie's own (version, timestamp) with
+    the **current** API token, so a tampered field, a stale token, or a
+    forged signature all fail the ``compare_digest``. ``compare_digest`` is
+    invoked **before** the version/expiry equality checks so the timing of a
+    "valid signature, stale version" path matches a fully valid path,
+    keeping the boolean short-circuits from leaking signature correctness
+    via per-request timing (security-reviewer M3).
     """
     decoded = decode_session_cookie(cookie_value)
     if decoded is None:
         return False
-    cookie_token, cookie_version = decoded
-    token_ok = secrets.compare_digest(cookie_token, current_api_token())
-    version_ok = cookie_version == current_api_token_version()
-    return token_ok and version_ok
+    version, issued_at, mac = decoded
+    expected = _session_signature(version, issued_at, current_api_token())
+    mac_ok = secrets.compare_digest(mac, expected)
+    version_ok = version == current_api_token_version()
+    age = int(time.time()) - issued_at
+    # Negative age = future-dated timestamp; reject (no clock-skew allowance
+    # needed — issuer and verifier are the same server).
+    age_ok = 0 <= age <= get_settings().api_session_max_age
+    return mac_ok and version_ok and age_ok
 
 
 def verify_token(

@@ -80,26 +80,9 @@ async def get_trend(
     return ApiResponse(data=data)
 
 
-@router.get("/categories", response_model=None)
-async def get_categories(
-    month: str | None = Query(
-        default=None,
-        description="月份（YYYY-MM），與 year 互斥，month 優先",
-        pattern=r"^\d{4}-(0[1-9]|1[0-2])$",
-    ),
-    year: int | None = Query(default=None, ge=2000, le=2099, description="年度篩選"),
-    compare_with_previous: bool = Query(
-        default=False,
-        description="月對月變化（需搭配 month）；true 時改回 CategoryWithCompareItem",
-    ),
-    session: AsyncSession = Depends(get_db_session),
-):
-    """取得類別分布；compare_with_previous=true 且帶 month 時加月對月變化。
-
-    為保持 backward compatibility，未帶 ``compare_with_previous`` 或 ``month``
-    時維持 legacy ``CategoryItem`` schema；只有帶兩者時才回 v2 schema。
-    """
-    base_stmt = (
+def _category_totals_stmt():
+    """Aggregate transaction totals grouped by category (uncategorized fallback)."""
+    return (
         select(
             func.coalesce(Transaction.category, "未分類"),
             func.coalesce(func.sum(Transaction.amount), 0),
@@ -108,13 +91,41 @@ async def get_categories(
         .group_by(func.coalesce(Transaction.category, "未分類"))
         .order_by(func.sum(Transaction.amount).desc())
     )
-    stmt = _apply_month_year_filter(base_stmt, month, year)
-    rows = (await session.execute(stmt)).all()
 
-    if not compare_with_previous or month is None:
-        return ApiResponse(
-            data=[CategoryItem(category=row[0], total=int(row[1])) for row in rows]
-        )
+
+@router.get("/categories", response_model=ApiResponse[list[CategoryItem]])
+async def get_categories(
+    month: str | None = Query(
+        default=None,
+        description="月份（YYYY-MM），與 year 互斥，month 優先",
+        pattern=r"^\d{4}-(0[1-9]|1[0-2])$",
+    ),
+    year: int | None = Query(default=None, ge=2000, le=2099, description="年度篩選"),
+    session: AsyncSession = Depends(get_db_session),
+):
+    """取得類別分布；月對月比較請改用 ``/categories/compare``。"""
+    stmt = _apply_month_year_filter(_category_totals_stmt(), month, year)
+    rows = (await session.execute(stmt)).all()
+    return ApiResponse(
+        data=[CategoryItem(category=row[0], total=int(row[1])) for row in rows]
+    )
+
+
+@router.get(
+    "/categories/compare",
+    response_model=ApiResponse[list[CategoryWithCompareItem]],
+)
+async def get_categories_compare(
+    month: str = Query(
+        description="月份（YYYY-MM），必填",
+        pattern=r"^\d{4}-(0[1-9]|1[0-2])$",
+    ),
+    session: AsyncSession = Depends(get_db_session),
+):
+    """取得指定月份類別分布，附前一個月的金額與變化百分比。"""
+    base_stmt = _category_totals_stmt()
+    stmt = _apply_month_year_filter(base_stmt, month, None)
+    rows = (await session.execute(stmt)).all()
 
     prev_stmt = _apply_month_year_filter(base_stmt, _previous_month(month), None)
     prev_rows = (await session.execute(prev_stmt)).all()

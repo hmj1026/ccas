@@ -7,14 +7,20 @@
 from datetime import date, datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
+# NOTE: 下列 Literal 的 SSOT 為 ccas.storage.models 的對應 StrEnum
+# （StagedAttachmentStatus / PipelineRunStatus / PatternType / ReminderChannel /
+# BudgetScope）。pyright 不接受動態 Literal，故保留顯式宣告；
+# tests/unit/api/test_schema_enum_sync.py 保證兩者同步。
 StagedAttachmentStatusLiteral = Literal[
     "staged",
     "decrypted",
+    "decrypt_failed",
     "parsed",
     "parse_skipped",
     "parse_failed",
+    "manual_review_needed",
     "failed",
     "fetch_expired",
 ]
@@ -22,6 +28,17 @@ PipelineRunStatusLiteral = Literal[
     "queued", "running", "succeeded", "failed", "cancelled"
 ]
 PipelineStageLiteral = Literal["ingest", "decrypt", "parse", "classify", "notify"]
+
+# 交易列表合法排序值（欄位 x 方向的笛卡兒積）；非法值由 FastAPI 直接回 422，
+# 取代過去 _parse_sort 的靜默 fallback。
+SortLiteral = Literal[
+    "trans_date_asc",
+    "trans_date_desc",
+    "amount_asc",
+    "amount_desc",
+    "merchant_asc",
+    "merchant_desc",
+]
 
 # -- 共用信封 --
 
@@ -274,7 +291,13 @@ class CategoryKeywordUpdateRequest(BaseModel):
 
 
 class PipelineTriggerRequest(BaseModel):
-    """Pipeline 觸發請求參數。"""
+    """Pipeline 觸發請求參數。
+
+    ``extra="forbid"``：拒絕未知欄位（422），避免打錯欄位名
+    （如 ``bank_codes``）被靜默忽略而誤觸發全銀行 pipeline。
+    """
+
+    model_config = ConfigDict(extra="forbid")
 
     force: bool = False
     bank_code: str | None = None
@@ -527,7 +550,7 @@ class BudgetItem(BaseModel):
     id: int
     scope: BudgetScopeLiteral
     scope_ref: str | None
-    amount_minor_units: int
+    amount_ntd: int
     alert_threshold_percent: int
     enabled: bool
     created_at: datetime
@@ -539,7 +562,7 @@ class BudgetCreateRequest(BaseModel):
 
     scope: BudgetScopeLiteral
     scope_ref: str | None = Field(default=None, max_length=64)
-    amount_minor_units: int = Field(ge=1)
+    amount_ntd: int = Field(ge=1)
     alert_threshold_percent: int = Field(default=80, ge=1, le=100)
     enabled: bool = Field(default=True)
 
@@ -549,7 +572,7 @@ class BudgetUpdateRequest(BaseModel):
 
     scope: BudgetScopeLiteral | None = None
     scope_ref: str | None = Field(default=None, max_length=64)
-    amount_minor_units: int | None = Field(default=None, ge=1)
+    amount_ntd: int | None = Field(default=None, ge=1)
     alert_threshold_percent: int | None = Field(default=None, ge=1, le=100)
     enabled: bool | None = None
 
@@ -559,8 +582,8 @@ class BudgetCurrentPeriod(BaseModel):
 
     budget_id: int
     period_year_month: str
-    amount_minor_units: int
-    current_amount_minor_units: int
+    amount_ntd: int
+    current_amount_ntd: int
     percent: float
     threshold_breached: bool
     alert_threshold_percent: int
@@ -575,8 +598,8 @@ class BudgetAlertItem(BaseModel):
     scope_ref: str | None
     period_year_month: str
     threshold_breached_percent: int
-    current_amount_minor_units: int
-    amount_minor_units: int
+    current_amount_ntd: int
+    amount_ntd: int
     triggered_at: datetime
     acknowledged_at: datetime | None
 

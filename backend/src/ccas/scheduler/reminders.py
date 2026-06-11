@@ -11,9 +11,8 @@ from sqlalchemy import select
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ccas.bot.client import send_message
-from ccas.bot.notifications import render_due_reminder
 from ccas.config import get_settings
+from ccas.messaging import render_due_reminder, send_message
 from ccas.storage.models import Bill, PaymentReminder
 from ccas.storage.queries import fetch_bank_names
 

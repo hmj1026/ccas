@@ -28,14 +28,14 @@ async def _seed_budget(
     *,
     scope: BudgetScope = BudgetScope.MONTHLY_TOTAL,
     scope_ref: str | None = None,
-    amount: int = 10000,
+    amount: int = 10000,  # NTD 元 (whole dollars)
     threshold: int = 80,
     enabled: bool = True,
 ) -> Budget:
     b = Budget(
         scope=scope,
         scope_ref=scope_ref,
-        amount_minor_units=amount,
+        amount_ntd=amount,
         alert_threshold_percent=threshold,
         enabled=enabled,
     )
@@ -113,7 +113,7 @@ class TestCreateBudget:
             "/api/budgets",
             json={
                 "scope": "monthly_total",
-                "amount_minor_units": 30000,
+                "amount_ntd": 30000,
                 "alert_threshold_percent": 80,
             },
             headers=auth_headers(),
@@ -122,7 +122,7 @@ class TestCreateBudget:
         data = resp.json()["data"]
         assert data["scope"] == "monthly_total"
         assert data["scope_ref"] is None
-        assert data["amount_minor_units"] == 30000
+        assert data["amount_ntd"] == 30000
 
     async def test_rejects_monthly_total_with_scope_ref(
         self, client: AsyncClient
@@ -132,7 +132,7 @@ class TestCreateBudget:
             json={
                 "scope": "monthly_total",
                 "scope_ref": "should-not-be-here",
-                "amount_minor_units": 30000,
+                "amount_ntd": 30000,
             },
             headers=auth_headers(),
         )
@@ -145,7 +145,7 @@ class TestCreateBudget:
             "/api/budgets",
             json={
                 "scope": "monthly_category",
-                "amount_minor_units": 5000,
+                "amount_ntd": 5000,
             },
             headers=auth_headers(),
         )
@@ -157,7 +157,7 @@ class TestCreateBudget:
             json={
                 "scope": "monthly_category",
                 "scope_ref": "不存在的類別",
-                "amount_minor_units": 5000,
+                "amount_ntd": 5000,
             },
             headers=auth_headers(),
         )
@@ -174,7 +174,7 @@ class TestCreateBudget:
             json={
                 "scope": "monthly_category",
                 "scope_ref": "餐飲",
-                "amount_minor_units": 5000,
+                "amount_ntd": 5000,
             },
             headers=auth_headers(),
         )
@@ -186,7 +186,7 @@ class TestCreateBudget:
             json={
                 "scope": "monthly_bank",
                 "scope_ref": "UNKNOWN",
-                "amount_minor_units": 5000,
+                "amount_ntd": 5000,
             },
             headers=auth_headers(),
         )
@@ -207,7 +207,7 @@ class TestUpdateDeleteBudget:
         data = resp.json()["data"]
         assert data["alert_threshold_percent"] == 50
         assert data["enabled"] is False
-        assert data["amount_minor_units"] == 10000
+        assert data["amount_ntd"] == 10000
 
     async def test_update_404(self, client: AsyncClient) -> None:
         resp = await client.put(
@@ -247,8 +247,8 @@ class TestCurrentPeriod:
         )
         assert resp.status_code == 200, resp.text
         data = resp.json()["data"]
-        assert data["current_amount_minor_units"] == 8000
-        assert data["amount_minor_units"] == 10000
+        assert data["current_amount_ntd"] == 8000
+        assert data["amount_ntd"] == 10000
         assert data["percent"] == 80.0
         assert data["threshold_breached"] is True
 
@@ -272,7 +272,7 @@ class TestCurrentPeriod:
             f"/api/budgets/{b.id}/current-period", headers=auth_headers()
         )
         data = resp.json()["data"]
-        assert data["current_amount_minor_units"] == 2000
+        assert data["current_amount_ntd"] == 2000
         assert data["threshold_breached"] is False
 
     async def test_404_when_missing(self, client: AsyncClient) -> None:
@@ -294,7 +294,7 @@ class TestActiveAlerts:
                 budget_id=b.id,
                 period_year_month=ym,
                 threshold_breached_percent=80,
-                current_amount_minor_units=8500,
+                current_amount_ntd=8500,
                 triggered_at=datetime.now(UTC),
             )
         )
@@ -317,7 +317,7 @@ class TestActiveAlerts:
             budget_id=b.id,
             period_year_month=ym,
             threshold_breached_percent=80,
-            current_amount_minor_units=8500,
+            current_amount_ntd=8500,
             triggered_at=datetime.now(UTC),
         )
         db_session.add(alert)

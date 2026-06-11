@@ -84,3 +84,37 @@ class TestOptionalFieldsEmpty:
         monkeypatch.delenv("TELEGRAM_ALLOWED_CHAT_IDS", raising=False)
         s = Settings(_env_file=None)
         assert s.telegram_allowed_chat_ids == ""
+
+
+class TestTelegramChatIdValidator:
+    """TELEGRAM_CHAT_ID 非空時必須可解析為 int（負數群組 ID 合法）。"""
+
+    def test_numeric_chat_id_accepted(self, monkeypatch):
+        monkeypatch.setenv("API_TOKEN", "test-token")
+        monkeypatch.setenv("TELEGRAM_CHAT_ID", "12345")
+        s = Settings(_env_file=None)
+        assert s.telegram_chat_id == "12345"
+
+    def test_negative_group_chat_id_accepted(self, monkeypatch):
+        monkeypatch.setenv("API_TOKEN", "test-token")
+        monkeypatch.setenv("TELEGRAM_CHAT_ID", "-12345")
+        s = Settings(_env_file=None)
+        assert s.telegram_chat_id == "-12345"
+
+    def test_whitespace_is_stripped(self, monkeypatch):
+        monkeypatch.setenv("API_TOKEN", "test-token")
+        monkeypatch.setenv("TELEGRAM_CHAT_ID", "  12345  ")
+        s = Settings(_env_file=None)
+        assert s.telegram_chat_id == "12345"
+
+    def test_whitespace_only_normalizes_to_empty(self, monkeypatch):
+        monkeypatch.setenv("API_TOKEN", "test-token")
+        monkeypatch.setenv("TELEGRAM_CHAT_ID", "   ")
+        s = Settings(_env_file=None)
+        assert s.telegram_chat_id == ""
+
+    def test_non_numeric_chat_id_rejected(self, monkeypatch):
+        monkeypatch.setenv("API_TOKEN", "test-token")
+        monkeypatch.setenv("TELEGRAM_CHAT_ID", "not-a-chat-id")
+        with pytest.raises(ValidationError, match="TELEGRAM_CHAT_ID"):
+            Settings(_env_file=None)

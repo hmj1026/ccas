@@ -115,7 +115,7 @@ class TestPipelineStageOrder:
             patch(
                 "ccas.pipeline.orchestrator.run_classify_job", side_effect=mock_classify
             ),
-            patch("ccas.pipeline.orchestrator.run_notify_job", side_effect=mock_notify),
+            patch("ccas.bot.job.run_notify_job", side_effect=mock_notify),
         ):
             await run_pipeline(mock_session)
 
@@ -141,7 +141,7 @@ class TestPipelineStageOrder:
                 return_value=_make_classify_summary(),
             ),
             patch(
-                "ccas.pipeline.orchestrator.run_notify_job",
+                "ccas.bot.job.run_notify_job",
                 return_value=_make_notify_summary(),
             ),
         ):
@@ -149,6 +149,46 @@ class TestPipelineStageOrder:
 
         stage_names = [s.stage for s in summary.stages]
         assert stage_names == ["ingest", "decrypt", "parse", "classify", "notify"]
+
+
+class TestNotifyJobInjection:
+    """notify stage 可注入：orchestrator 不綁死 ccas.bot.job.run_notify_job。"""
+
+    @pytest.mark.asyncio
+    async def test_custom_notify_job_is_used(self, mock_session):
+        called = {"custom": 0}
+
+        async def custom_notify(session, *, reporter=None, **kwargs):
+            called["custom"] += 1
+            return _make_notify_summary(sent_count=7)
+
+        with (
+            patch(
+                "ccas.pipeline.orchestrator.run_ingestion_job",
+                return_value=_make_ingest_summary(),
+            ),
+            patch(
+                "ccas.pipeline.orchestrator.run_decryption_job",
+                return_value=_make_decrypt_summary(),
+            ),
+            patch(
+                "ccas.pipeline.orchestrator.run_parse_job",
+                return_value=_make_parse_summary(),
+            ),
+            patch(
+                "ccas.pipeline.orchestrator.run_classify_job",
+                return_value=_make_classify_summary(),
+            ),
+            # Default notify job must NOT be touched when one is injected.
+            patch(
+                "ccas.bot.job.run_notify_job",
+                side_effect=AssertionError("default notify job must not be called"),
+            ),
+        ):
+            summary = await run_pipeline(mock_session, notify_job=custom_notify)
+
+        assert called["custom"] == 1
+        assert summary.stages[4].counts == {"sent": 7, "failed": 0}
 
 
 class TestFaultTolerance:
@@ -193,7 +233,7 @@ class TestFaultTolerance:
             patch(
                 "ccas.pipeline.orchestrator.run_classify_job", side_effect=mock_classify
             ),
-            patch("ccas.pipeline.orchestrator.run_notify_job", side_effect=mock_notify),
+            patch("ccas.bot.job.run_notify_job", side_effect=mock_notify),
         ):
             summary = await run_pipeline(mock_session)
 
@@ -226,7 +266,7 @@ class TestFaultTolerance:
                 return_value=_make_classify_summary(classified_count=0, total_count=0),
             ),
             patch(
-                "ccas.pipeline.orchestrator.run_notify_job",
+                "ccas.bot.job.run_notify_job",
                 return_value=_make_notify_summary(),
             ),
         ):
@@ -277,7 +317,7 @@ class TestFaultTolerance:
             patch(
                 "ccas.pipeline.orchestrator.run_classify_job", side_effect=mock_classify
             ),
-            patch("ccas.pipeline.orchestrator.run_notify_job", side_effect=mock_notify),
+            patch("ccas.bot.job.run_notify_job", side_effect=mock_notify),
         ):
             summary = await run_pipeline(mock_session)
 
@@ -314,7 +354,7 @@ class TestSummaryAggregation:
                 return_value=_make_classify_summary(classified_count=15),
             ),
             patch(
-                "ccas.pipeline.orchestrator.run_notify_job",
+                "ccas.bot.job.run_notify_job",
                 return_value=_make_notify_summary(
                     sent_count=2, failed_count=1, errors=["notify err"]
                 ),
@@ -352,7 +392,7 @@ class TestSummaryAggregation:
                 return_value=_make_classify_summary(),
             ),
             patch(
-                "ccas.pipeline.orchestrator.run_notify_job",
+                "ccas.bot.job.run_notify_job",
                 return_value=_make_notify_summary(),
             ),
         ):
@@ -380,7 +420,7 @@ class TestSummaryAggregation:
                 return_value=_make_classify_summary(),
             ),
             patch(
-                "ccas.pipeline.orchestrator.run_notify_job",
+                "ccas.bot.job.run_notify_job",
                 return_value=_make_notify_summary(errors=["notify err"]),
             ),
         ):
@@ -411,7 +451,7 @@ class TestSummaryAggregation:
                 return_value=_make_classify_summary(classified_count=0, total_count=0),
             ),
             patch(
-                "ccas.pipeline.orchestrator.run_notify_job",
+                "ccas.bot.job.run_notify_job",
                 return_value=_make_notify_summary(),
             ),
         ):

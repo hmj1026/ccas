@@ -6,13 +6,14 @@ CSV / xlsx 匯出由 ``ccas.api.routers.exports`` 提供（see §8）。
 import math
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import func, select
+from sqlalchemy import asc, desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ccas.api.deps import PaginationParams
 from ccas.api.schemas import (
     PaginatedResponse,
     PaginationMeta,
+    SortLiteral,
     TransactionItem,
 )
 from ccas.storage.database import get_db_session
@@ -75,7 +76,7 @@ async def list_transactions(
     bank_code: str | None = Query(default=None),
     category: str | None = Query(default=None),
     q: str | None = Query(default=None, description="商家名稱搜尋"),
-    sort: str = Query(default="trans_date_desc", description="排序"),
+    sort: SortLiteral = Query(default="trans_date_desc", description="排序"),
     session: AsyncSession = Depends(get_db_session),
 ):
     """查詢交易明細，支援月份、年度、銀行、分類篩選與分頁。"""
@@ -106,31 +107,18 @@ async def list_transactions(
     )
 
 
-def _parse_sort(sort: str):
-    """解析排序參數，回傳 (column, direction_func)。"""
-    from sqlalchemy import asc, desc
+def _parse_sort(sort: SortLiteral):
+    """解析排序參數，回傳 (column, direction_func)。
 
+    合法值由 ``SortLiteral`` 在 FastAPI 層保證（非法值回 422），
+    此處不再做靜默 fallback；意外值直接 KeyError fail-fast。
+    """
     sort_map = {
         "trans_date": Transaction.trans_date,
         "amount": Transaction.amount,
         "merchant": Transaction.merchant,
     }
-    parts = sort.rsplit("_", 1)
-    if len(parts) == 2 and parts[1] in ("asc", "desc"):
-        col_name, direction = parts
-    else:
-        col_name, direction = sort, "desc"
-
-    # 處理 trans_date_desc 等複合名稱
-    if col_name not in sort_map:
-        # 嘗試去掉最後的方向再找一次
-        col_name2 = sort.rsplit("_", 2)
-        if len(col_name2) >= 2:
-            candidate = "_".join(col_name2[:-1])
-            if candidate in sort_map:
-                col_name = candidate
-                direction = col_name2[-1]
-
-    column = sort_map.get(col_name, Transaction.trans_date)
+    col_name, direction = sort.rsplit("_", 1)
+    column = sort_map[col_name]
     dir_func = desc if direction == "desc" else asc
     return column, dir_func

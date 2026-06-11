@@ -17,7 +17,7 @@ from ccas.ingestor.job import IngestionSummary, _process_web_fetch
 from ccas.storage.models import Base, StagedAttachment
 
 os.environ.setdefault("TELEGRAM_BOT_TOKEN", "test")
-os.environ.setdefault("TELEGRAM_CHAT_ID", "test")
+os.environ.setdefault("TELEGRAM_CHAT_ID", "12345")
 os.environ.setdefault("API_TOKEN", "test")
 
 _FAKE_PDF = b"%PDF-1.4 fake content"

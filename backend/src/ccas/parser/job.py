@@ -314,7 +314,18 @@ async def run_parse_job(
             await _process_attachment(attachment, session, summary, force=force)
         finally:
             processed += 1
-            await reporter.stage_item_done("parse", processed=processed)
+            # Progress reporting is pure UI and non-business-critical: a
+            # reporter failure must not abort the loop or roll back the
+            # flushed-but-uncommitted batch. Swallow-with-log is deliberate
+            # here (logged, so not a silent failure).
+            try:
+                await reporter.stage_item_done("parse", processed=processed)
+            except Exception:
+                logger.warning(
+                    "parse progress reporting failed (processed=%d); continuing",
+                    processed,
+                    exc_info=True,
+                )
 
     await session.commit()
 

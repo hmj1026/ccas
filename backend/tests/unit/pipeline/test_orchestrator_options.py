@@ -47,7 +47,7 @@ def _patch_all_stages():
             ),
         ),
         patch(
-            "ccas.pipeline.orchestrator.run_notify_job",
+            "ccas.bot.job.run_notify_job",
             new_callable=AsyncMock,
             return_value=NotifySummary(),
         ),

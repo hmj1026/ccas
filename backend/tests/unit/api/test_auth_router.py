@@ -1,5 +1,8 @@
 """Session auth router 單元測試。"""
 
+from pathlib import Path
+
+import pytest
 from fastapi import Response
 from starlette.requests import Request
 
@@ -7,10 +10,18 @@ from ccas.api.deps import (
     current_api_token_version,
     decode_session_cookie,
     encode_session_cookie,
+    is_valid_session_cookie,
 )
 from ccas.api.routers.auth import create_session, delete_session, get_session_status
 from ccas.api.schemas import SessionLoginRequest
 from ccas.config import get_settings
+
+
+@pytest.fixture(autouse=True)
+def _master_key_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Point master.key at tmp_path so cookie signing never touches repo data."""
+    monkeypatch.setenv("MASTER_KEY_PATH", str(tmp_path / "master.key"))
+    get_settings.cache_clear()
 
 
 def _make_request(cookie_header: str | None = None) -> Request:
@@ -47,12 +58,18 @@ class TestAuthRouter:
         await create_session(request, SessionLoginRequest(token="test-token"), response)
 
         set_cookie = response.headers["set-cookie"]
-        # Cookie value is opaque (token + version packed); decode to verify.
+        # Cookie value is opaque ({version}.{timestamp}.{hmac}); the
+        # plaintext API token must never appear in the Set-Cookie header.
+        assert "test-token" not in set_cookie
         prefix = "ccas_session="
         start = set_cookie.index(prefix) + len(prefix)
         end = set_cookie.index(";", start)
-        decoded = decode_session_cookie(set_cookie[start:end])
-        assert decoded == ("test-token", current_api_token_version())
+        cookie_value = set_cookie[start:end]
+        decoded = decode_session_cookie(cookie_value)
+        assert decoded is not None
+        version, _issued_at, _mac = decoded
+        assert version == current_api_token_version()
+        assert is_valid_session_cookie(cookie_value)
         assert "HttpOnly" in set_cookie
         assert "SameSite=lax" in set_cookie
 

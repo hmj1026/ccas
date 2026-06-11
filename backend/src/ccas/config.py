@@ -63,6 +63,9 @@ class Settings(BaseSettings):
     log_file_prefix: str = "ccas"
     api_host: str = "0.0.0.0"
     api_port: int = 8000
+    # Swagger UI / ReDoc / openapi.json are disabled by default; opt-in via
+    # ENABLE_API_DOCS=true for development or internal debugging only.
+    enable_api_docs: bool = False
     api_token: str
     # 由 entrypoint 寫入的 token / version 檔；rotate API 直接讀寫此處避免
     # 受 lru_cache 鎖住。檔案缺席時 fallback 為 ``api_token`` 與 version=1，
@@ -151,6 +154,27 @@ class Settings(BaseSettings):
     @classmethod
     def _normalize_database_url(cls, value: str) -> str:
         return _normalize_sqlite_url(value)
+
+    @field_validator("telegram_chat_id", mode="after")
+    @classmethod
+    def _validate_telegram_chat_id(cls, value: str) -> str:
+        """Validate TELEGRAM_CHAT_ID is numeric when set.
+
+        Empty string passes through (Telegram notify disabled). Non-empty
+        values must parse as int — negative group chat ids are legal.
+        Fail fast at startup instead of silently failing at notify time.
+        """
+        stripped = value.strip()
+        if not stripped:
+            return ""
+        try:
+            int(stripped)
+        except ValueError:
+            raise ValueError(
+                "TELEGRAM_CHAT_ID must be an integer chat id "
+                f"(got {stripped!r}); leave empty to disable Telegram notify"
+            ) from None
+        return stripped
 
     def get_pdf_password(self, bank_code: str) -> str | None:
         """取得指定銀行的 PDF 解密密碼。

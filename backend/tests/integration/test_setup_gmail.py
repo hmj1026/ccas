@@ -96,6 +96,28 @@ class TestUploadCredentials:
         )
         assert resp.status_code == 422
 
+    async def test_upload_rejects_oversized_file(
+        self,
+        client: AsyncClient,
+        gmail_paths: tuple[Path, Path],
+    ) -> None:
+        """Bodies above 1 MB are rejected with 413 before JSON parsing."""
+        files = {
+            "file": (
+                "credentials.json",
+                b"x" * 1_000_001,
+                "application/json",
+            )
+        }
+        resp = await client.post(
+            "/api/setup/gmail/credentials",
+            files=files,
+            headers=auth_headers(),
+        )
+        assert resp.status_code == 413
+        # HTTPException keeps FastAPI's default {"detail": ...} shape.
+        assert "1 MB" in resp.json()["detail"]
+
     async def test_upload_rejects_missing_client_secret(
         self,
         client: AsyncClient,

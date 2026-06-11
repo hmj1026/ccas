@@ -19,7 +19,7 @@ from ccas.errors import DecryptError
 from ccas.ingestor.staging import resolve_staged_path
 from ccas.pipeline.options import PipelineOptions
 from ccas.pipeline.progress import NoopProgressReporter, ProgressReporter
-from ccas.storage.models import StagedAttachment
+from ccas.storage.models import StagedAttachment, StagedAttachmentStatus
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +61,10 @@ async def _process_attachment(
         summary.errors.append(error_msg)
         logger.error(error_msg)
         await update_attachment_status(
-            session, attachment, status="decrypt_failed", error_reason=str(exc)
+            session,
+            attachment,
+            status=StagedAttachmentStatus.DECRYPT_FAILED,
+            error_reason=str(exc),
         )
         return
     raw_path = attachment.staged_path
@@ -77,7 +80,7 @@ async def _process_attachment(
         await update_attachment_status(
             session,
             attachment,
-            status="decrypt_failed",
+            status=StagedAttachmentStatus.DECRYPT_FAILED,
             error_reason=error_msg,
         )
         return
@@ -95,7 +98,7 @@ async def _process_attachment(
         await update_attachment_status(
             session,
             attachment,
-            status="decrypt_failed",
+            status=StagedAttachmentStatus.DECRYPT_FAILED,
             error_reason=error_msg,
         )
         return
@@ -114,7 +117,10 @@ async def _process_attachment(
         summary.errors.append(error_msg)
         logger.error(error_msg)
         await update_attachment_status(
-            session, attachment, status="decrypt_failed", error_reason=str(exc)
+            session,
+            attachment,
+            status=StagedAttachmentStatus.DECRYPT_FAILED,
+            error_reason=str(exc),
         )
         return
     except Exception as exc:
@@ -125,7 +131,10 @@ async def _process_attachment(
         summary.errors.append(error_msg)
         logger.error(error_msg)
         await update_attachment_status(
-            session, attachment, status="decrypt_failed", error_reason=str(exc)
+            session,
+            attachment,
+            status=StagedAttachmentStatus.DECRYPT_FAILED,
+            error_reason=str(exc),
         )
         return
 
@@ -144,7 +153,9 @@ async def _process_attachment(
             attachment.original_filename,
         )
 
-    await update_attachment_status(session, attachment, status="decrypted")
+    await update_attachment_status(
+        session, attachment, status=StagedAttachmentStatus.DECRYPTED
+    )
 
 
 async def run_decryption_job(

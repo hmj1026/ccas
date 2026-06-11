@@ -135,15 +135,16 @@ async def update_category(
     return ApiResponse(data=_to_category_item(cat))
 
 
-@router.delete("/categories/{category_id}", status_code=204)
+@router.delete("/categories/{category_id}", response_model=ApiResponse[dict[str, int]])
 async def delete_category(
     category_id: int,
     session: AsyncSession = Depends(get_db_session),
 ):
-    """刪除分類關鍵字。"""
+    """刪除分類關鍵字，回傳統一信封格式。"""
     cat = await _get_category_or_404(session, category_id)
     await session.delete(cat)
     await session.commit()
+    return ApiResponse(data={"deleted_id": category_id})
 
 
 # -- Helpers --

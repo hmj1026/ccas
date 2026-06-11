@@ -144,11 +144,15 @@ async def test_delete_category(client: AsyncClient, db_session: AsyncSession):
     cat = Category(keyword="星巴克", category="餐飲")
     db_session.add(cat)
     await db_session.commit()
+    cat_id = cat.id
 
     response = await client.delete(
-        f"/api/settings/categories/{cat.id}", headers=auth_headers()
+        f"/api/settings/categories/{cat_id}", headers=auth_headers()
     )
-    assert response.status_code == 204
+    assert response.status_code == 200
+    body = response.json()
+    assert body["success"] is True
+    assert body["data"] == {"deleted_id": cat_id}
 
     # 確認已刪除
     response = await client.get("/api/settings/categories", headers=auth_headers())

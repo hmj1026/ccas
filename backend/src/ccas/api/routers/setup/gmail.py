@@ -131,6 +131,10 @@ async def upload_credentials(
 ) -> ApiResponse[GmailCredentialsUploadResult]:
     """Upload Google OAuth ``credentials.json`` and persist with 0600 perms."""
     raw = await file.read()
+    if len(raw) > 1_000_000:
+        raise HTTPException(
+            status_code=413, detail="檔案過大，credentials.json 應小於 1 MB"
+        )
     try:
         payload = json.loads(raw)
     except json.JSONDecodeError as exc:

@@ -32,7 +32,8 @@ from ccas.storage.models import (
 @pytest.fixture(autouse=True)
 def _set_telegram(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "test-token")
-    monkeypatch.setenv("TELEGRAM_CHAT_ID", "test-chat")
+    # Must be an integer string: Settings rejects non-numeric chat ids.
+    monkeypatch.setenv("TELEGRAM_CHAT_ID", "987654321")
     from ccas.config import get_settings
 
     get_settings.cache_clear()  # type: ignore[attr-defined]
@@ -45,6 +46,7 @@ async def _seed_bank_bill(
     period_ym: str | None = None,
     txns: list[tuple[int, str, str | None]] | None = None,
 ) -> Bill:
+    """Seed a bank + bill + txns. txns: (amount in NTD 元, merchant, category)."""
     if period_ym is None:
         today = date.today()
         period_ym = f"{today.year:04d}-{today.month:02d}"
@@ -83,7 +85,7 @@ async def test_triggers_at_80_percent(db_session: AsyncSession) -> None:
     b = Budget(
         scope=BudgetScope.MONTHLY_TOTAL,
         scope_ref=None,
-        amount_minor_units=10000,
+        amount_ntd=10000,
         alert_threshold_percent=80,
         enabled=True,
     )
@@ -101,7 +103,7 @@ async def test_triggers_at_80_percent(db_session: AsyncSession) -> None:
     alerts = (await db_session.execute(select(BudgetAlert))).scalars().all()
     assert len(alerts) == 1
     assert alerts[0].threshold_breached_percent == 80
-    assert alerts[0].current_amount_minor_units == 8500
+    assert alerts[0].current_amount_ntd == 8500
     assert mock_send.await_count == 1
 
 
@@ -110,7 +112,7 @@ async def test_does_not_double_trigger_same_month_same_threshold(
 ) -> None:
     b = Budget(
         scope=BudgetScope.MONTHLY_TOTAL,
-        amount_minor_units=10000,
+        amount_ntd=10000,
         alert_threshold_percent=80,
         enabled=True,
     )
@@ -133,7 +135,7 @@ async def test_does_not_double_trigger_same_month_same_threshold(
 async def test_disabled_budget_skipped(db_session: AsyncSession) -> None:
     b = Budget(
         scope=BudgetScope.MONTHLY_TOTAL,
-        amount_minor_units=10000,
+        amount_ntd=10000,
         alert_threshold_percent=80,
         enabled=False,
     )
@@ -162,7 +164,7 @@ async def test_telegram_disabled_does_not_raise(
 
     b = Budget(
         scope=BudgetScope.MONTHLY_TOTAL,
-        amount_minor_units=10000,
+        amount_ntd=10000,
         alert_threshold_percent=80,
         enabled=True,
     )
@@ -184,14 +186,14 @@ async def test_aggregates_multiple_alerts_into_single_message(
         [
             Budget(
                 scope=BudgetScope.MONTHLY_TOTAL,
-                amount_minor_units=10000,
+                amount_ntd=10000,
                 alert_threshold_percent=80,
                 enabled=True,
             ),
             Budget(
                 scope=BudgetScope.MONTHLY_BANK,
                 scope_ref="CTBC",
-                amount_minor_units=5000,
+                amount_ntd=5000,
                 alert_threshold_percent=80,
                 enabled=True,
             ),
@@ -220,7 +222,7 @@ async def test_higher_threshold_triggers_after_lower(
     """80% 觸發後，當花費再上升超過 100% 時應再觸發 100% threshold."""
     b = Budget(
         scope=BudgetScope.MONTHLY_TOTAL,
-        amount_minor_units=10000,
+        amount_ntd=10000,
         alert_threshold_percent=80,
         enabled=True,
     )

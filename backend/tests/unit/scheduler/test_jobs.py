@@ -1,131 +1,131 @@
-"""trigger_pipeline_via_api() 測試。
+"""trigger_pipeline_via_rq() 測試。
 
-驗證 URL 建構、認證 header、以及錯誤傳播行為。
+驗證 PipelineRun row 建立、RQ enqueue 參數與 API trigger 路徑語意一致。
 """
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
-import httpx
-import pytest
+from rq import Retry
 
-from ccas.scheduler.jobs import trigger_pipeline_via_api
-
-
-class TestTriggerPipelineUrl:
-    """URL 建構邏輯的測試案例。"""
-
-    @patch("ccas.scheduler.jobs.httpx.post")
-    @patch("ccas.scheduler.jobs.get_settings")
-    def test_uses_scheduler_api_base_url_when_set(self, mock_settings, mock_post):
-        """scheduler_api_base_url 有值時，使用該值建構 URL。"""
-        settings = MagicMock()
-        settings.scheduler_api_base_url = "http://backend:8000"
-        settings.api_token = "test-token"
-        mock_settings.return_value = settings
-
-        mock_response = MagicMock()
-        mock_response.json.return_value = {"status": "ok"}
-        mock_post.return_value = mock_response
-
-        trigger_pipeline_via_api()
-
-        mock_post.assert_called_once()
-        call_url = mock_post.call_args[0][0]
-        assert call_url == "http://backend:8000/api/pipeline/trigger"
-
-    @patch("ccas.scheduler.jobs.httpx.post")
-    @patch("ccas.scheduler.jobs.get_settings")
-    def test_fallback_uses_loopback_not_bind_address(self, mock_settings, mock_post):
-        """scheduler_api_base_url 為空時，fallback 到 127.0.0.1:api_port。"""
-        settings = MagicMock()
-        settings.scheduler_api_base_url = ""
-        settings.api_host = "0.0.0.0"
-        settings.api_port = 8000
-        settings.api_token = "test-token"
-        mock_settings.return_value = settings
-
-        mock_response = MagicMock()
-        mock_response.json.return_value = {"status": "ok"}
-        mock_post.return_value = mock_response
-
-        trigger_pipeline_via_api()
-
-        mock_post.assert_called_once()
-        call_url = mock_post.call_args[0][0]
-        assert call_url == "http://127.0.0.1:8000/api/pipeline/trigger"
-
-    @patch("ccas.scheduler.jobs.httpx.post")
-    @patch("ccas.scheduler.jobs.get_settings")
-    def test_strips_trailing_slash_from_base_url(self, mock_settings, mock_post):
-        """base_url 尾端的斜線應被移除，避免雙斜線。"""
-        settings = MagicMock()
-        settings.scheduler_api_base_url = "http://backend:8000/"
-        settings.api_token = "test-token"
-        mock_settings.return_value = settings
-
-        mock_response = MagicMock()
-        mock_response.json.return_value = {"status": "ok"}
-        mock_post.return_value = mock_response
-
-        trigger_pipeline_via_api()
-
-        call_url = mock_post.call_args[0][0]
-        assert call_url == "http://backend:8000/api/pipeline/trigger"
+from ccas.pipeline.worker import on_failure_handler, run_pipeline_sync
+from ccas.scheduler.jobs import trigger_pipeline_via_rq
+from ccas.storage.models import PipelineRun, PipelineRunStatus
 
 
-class TestTriggerPipelineErrorHandling:
-    """錯誤傳播與認證 header 的測試案例。"""
+def _make_db_mocks(run_obj: object | None = None):
+    """建立 async session factory / engine mocks。"""
+    session = MagicMock()
+    session.commit = AsyncMock()
+    session.get = AsyncMock(return_value=run_obj)
+    ctx = MagicMock()
+    ctx.__aenter__ = AsyncMock(return_value=session)
+    ctx.__aexit__ = AsyncMock(return_value=False)
+    factory = MagicMock(return_value=ctx)
+    engine = MagicMock()
+    engine.dispose = AsyncMock()
+    return factory, engine, session
 
-    @patch("ccas.scheduler.jobs.httpx.post")
-    @patch("ccas.scheduler.jobs.get_settings")
-    def test_trigger_failure_propagates(self, mock_settings, mock_post):
-        """API 呼叫失敗時，例外應傳播給呼叫端。"""
-        settings = MagicMock()
-        settings.scheduler_api_base_url = "http://backend:8000"
-        settings.api_token = "test-token"
-        mock_settings.return_value = settings
 
-        mock_post.side_effect = httpx.ConnectError("connection refused")
+def _run_with_mocks(opts: dict | None = None, run_obj: object | None = None):
+    """以完整 mock 環境執行 trigger_pipeline_via_rq，回傳觀測點。"""
+    factory, engine, session = _make_db_mocks(run_obj)
+    queue = MagicMock()
+    queue.enqueue.return_value = MagicMock(id="rq-job-123")
+    settings = MagicMock()
+    settings.redis_url = "redis://test:6379/0"
 
-        with pytest.raises(httpx.ConnectError):
-            trigger_pipeline_via_api()
+    with (
+        patch("ccas.scheduler.jobs.get_settings", return_value=settings),
+        patch("ccas.scheduler.jobs.Redis") as mock_redis,
+        patch("ccas.scheduler.jobs.Queue", return_value=queue) as mock_queue_cls,
+        patch("ccas.storage.database.get_session_factory", return_value=factory),
+        patch("ccas.storage.database.get_engine", return_value=engine),
+    ):
+        result = trigger_pipeline_via_rq(opts)
 
-    @patch("ccas.scheduler.jobs.httpx.post")
-    @patch("ccas.scheduler.jobs.get_settings")
-    def test_trigger_sends_auth_header(self, mock_settings, mock_post):
-        """應以 Bearer token 送出 Authorization header。"""
-        settings = MagicMock()
-        settings.scheduler_api_base_url = "http://backend:8000"
-        settings.api_token = "my-secret-token"
-        mock_settings.return_value = settings
+    return {
+        "result": result,
+        "session": session,
+        "engine": engine,
+        "queue": queue,
+        "mock_redis": mock_redis,
+        "mock_queue_cls": mock_queue_cls,
+    }
 
-        mock_response = MagicMock()
-        mock_response.json.return_value = {"status": "ok"}
-        mock_post.return_value = mock_response
 
-        trigger_pipeline_via_api()
+class TestPipelineRunCreation:
+    """PipelineRun row 建立語意（與 API trigger 端點一致）。"""
 
-        call_kwargs = mock_post.call_args
-        assert call_kwargs[1]["headers"] == {
-            "Authorization": "Bearer my-secret-token",
-        }
+    def test_creates_queued_run_with_scheduler_trigger(self):
+        """row 應為 QUEUED、triggered_by=scheduler、stage_summary=[]。"""
+        env = _run_with_mocks()
 
-    @patch("ccas.scheduler.jobs.httpx.post")
-    @patch("ccas.scheduler.jobs.get_settings")
-    def test_http_error_propagates(self, mock_settings, mock_post):
-        """HTTP 4xx/5xx 錯誤應傳播。"""
-        settings = MagicMock()
-        settings.scheduler_api_base_url = "http://backend:8000"
-        settings.api_token = "test-token"
-        mock_settings.return_value = settings
+        env["session"].add.assert_called_once()
+        run = env["session"].add.call_args[0][0]
+        assert isinstance(run, PipelineRun)
+        assert run.status == PipelineRunStatus.QUEUED
+        assert run.triggered_by == "scheduler"
+        assert run.params == {}
+        assert run.stage_summary == []
+        # id/job_id pattern: initially both equal run_id
+        assert run.id == run.job_id
 
-        mock_response = MagicMock()
-        mock_response.raise_for_status.side_effect = httpx.HTTPStatusError(
-            "Server Error",
-            request=MagicMock(),
-            response=MagicMock(status_code=500),
+    def test_params_default_to_empty_dict_when_opts_none(self):
+        """opts=None 時 params 應為 {}（非 None）。"""
+        env = _run_with_mocks(opts=None)
+        run = env["session"].add.call_args[0][0]
+        assert run.params == {}
+
+    def test_params_pass_through(self):
+        """opts dict 應原樣寫入 params。"""
+        opts = {"force": True, "bank_code": "CTBC"}
+        env = _run_with_mocks(opts=opts)
+        run = env["session"].add.call_args[0][0]
+        assert run.params == opts
+
+    def test_job_id_updated_after_enqueue(self):
+        """enqueue 後應把 RQ job.id 寫回 PipelineRun.job_id。"""
+        run_obj = MagicMock()
+        env = _run_with_mocks(run_obj=run_obj)
+
+        assert run_obj.job_id == "rq-job-123"
+        # two commits: row creation + job_id update
+        assert env["session"].commit.await_count == 2
+
+    def test_engine_disposed_after_run(self):
+        """asyncio.run 結束前應 dispose engine（避免殘留連線）。"""
+        env = _run_with_mocks()
+        env["engine"].dispose.assert_awaited_once()
+
+
+class TestRqEnqueueSemantics:
+    """RQ enqueue 參數須與 API trigger 路徑完全一致。"""
+
+    def test_enqueue_args_match_api_path(self):
+        """opts 為第一個位置參數（on_failure_handler 讀 job.args[0]）。"""
+        opts = {"force": False, "bank_code": "ESUN"}
+        env = _run_with_mocks(opts=opts)
+
+        env["queue"].enqueue.assert_called_once()
+        call = env["queue"].enqueue.call_args
+        assert call.args[0] is run_pipeline_sync
+        assert call.args[1] == opts
+        assert call.kwargs["on_failure"] is on_failure_handler
+        assert call.kwargs["job_timeout"] == "30m"
+        assert isinstance(call.kwargs["retry"], Retry)
+
+        run = env["session"].add.call_args[0][0]
+        assert call.kwargs["run_id"] == run.id
+
+    def test_returns_rq_job_id(self):
+        """回傳值應為 RQ job id。"""
+        env = _run_with_mocks()
+        assert env["result"] == "rq-job-123"
+
+    def test_uses_redis_url_from_settings(self):
+        """Redis 連線應使用 settings.redis_url。"""
+        env = _run_with_mocks()
+        env["mock_redis"].from_url.assert_called_once_with("redis://test:6379/0")
+        env["mock_queue_cls"].assert_called_once_with(
+            connection=env["mock_redis"].from_url.return_value
         )
-        mock_post.return_value = mock_response
-
-        with pytest.raises(httpx.HTTPStatusError):
-            trigger_pipeline_via_api()

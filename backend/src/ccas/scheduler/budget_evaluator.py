@@ -25,8 +25,8 @@ from datetime import UTC, date, datetime
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ccas.bot.client import send_message
 from ccas.config import get_settings
+from ccas.messaging import send_message
 from ccas.storage.models import (
     Bill,
     Budget,
@@ -78,8 +78,8 @@ def _format_aggregated_message(
     lines = [f"預算超支警示（{period}）", ""]
     for budget, alert in alerts:
         pct = alert.threshold_breached_percent
-        cur = alert.current_amount_minor_units
-        amt = budget.amount_minor_units
+        cur = alert.current_amount_ntd
+        amt = budget.amount_ntd
         lines.append(f"- {_scope_label(budget)}：${cur:,} / ${amt:,}（{pct}% 已達）")
     return "\n".join(lines)
 
@@ -113,7 +113,7 @@ async def evaluate_budgets(
     skipped = 0
 
     for budget in budgets:
-        if budget.amount_minor_units <= 0:
+        if budget.amount_ntd <= 0:
             skipped += 1
             continue
 
@@ -125,14 +125,14 @@ async def evaluate_budgets(
         for tier in thresholds:
             if tier in existing:
                 continue
-            tier_amount = budget.amount_minor_units * tier // 100
+            tier_amount = budget.amount_ntd * tier // 100
             if current < tier_amount:
                 continue
             alert = BudgetAlert(
                 budget_id=budget.id,
                 period_year_month=period,
                 threshold_breached_percent=tier,
-                current_amount_minor_units=current,
+                current_amount_ntd=current,
                 triggered_at=datetime.now(UTC),
             )
             session.add(alert)
