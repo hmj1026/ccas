@@ -8,6 +8,7 @@ import asyncio
 import json
 import sys
 
+from ccas.log import configure_logging
 from ccas.pipeline.options import PipelineOptions
 from ccas.pipeline.orchestrator import STAGE_ORDER, run_pipeline
 from ccas.pipeline.summary import PipelineSummary
@@ -102,6 +103,7 @@ async def _main(options: PipelineOptions) -> PipelineSummary:
 
 def main() -> None:
     """CLI 入口：同步執行 pipeline 並輸出 JSON 摘要。"""
+    configure_logging()
     options = _parse_args()
     summary = asyncio.run(_main(options))
     print(json.dumps(_summary_to_dict(summary), ensure_ascii=False, indent=2))

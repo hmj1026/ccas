@@ -19,6 +19,7 @@ scope_ref 驗證規則：
 from __future__ import annotations
 
 from datetime import UTC, date, datetime
+from typing import cast, get_args
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
@@ -48,10 +49,15 @@ router = APIRouter(prefix="/api/budgets", tags=["budgets"])
 
 
 def _scope_str(scope: BudgetScope | str) -> BudgetScopeLiteral:
+    """Normalise enum / DB string to API literal; fail fast on unknown values."""
     val = scope.value if isinstance(scope, BudgetScope) else str(scope)
-    if val not in ("monthly_total", "monthly_category", "monthly_bank"):
-        return "monthly_total"
-    return val  # type: ignore[return-value]
+    if val not in get_args(BudgetScopeLiteral):
+        # HTTPException (not ValueError): an unknown DB value must surface as
+        # a clean 500 through FastAPI, not an unhandled exception traceback.
+        raise HTTPException(
+            status_code=500, detail=f"DB contains unknown budget scope: {val!r}"
+        )
+    return cast(BudgetScopeLiteral, val)
 
 
 def _to_item(b: Budget) -> BudgetItem:
@@ -59,7 +65,7 @@ def _to_item(b: Budget) -> BudgetItem:
         id=b.id,
         scope=_scope_str(b.scope),
         scope_ref=b.scope_ref,
-        amount_minor_units=b.amount_minor_units,
+        amount_ntd=b.amount_ntd,
         alert_threshold_percent=b.alert_threshold_percent,
         enabled=b.enabled,
         created_at=b.created_at,
@@ -126,7 +132,7 @@ async def create_budget(
     b = Budget(
         scope=BudgetScope(body.scope),
         scope_ref=body.scope_ref,
-        amount_minor_units=body.amount_minor_units,
+        amount_ntd=body.amount_ntd,
         alert_threshold_percent=body.alert_threshold_percent,
         enabled=body.enabled,
     )
@@ -156,8 +162,8 @@ async def update_budget(
         if body.scope_ref is not None:
             b.scope_ref = body.scope_ref
 
-    if body.amount_minor_units is not None:
-        b.amount_minor_units = body.amount_minor_units
+    if body.amount_ntd is not None:
+        b.amount_ntd = body.amount_ntd
     if body.alert_threshold_percent is not None:
         b.alert_threshold_percent = body.alert_threshold_percent
     if body.enabled is not None:
@@ -192,7 +198,7 @@ async def _aggregate_current_period(
     budget: Budget,
     period_ym: str,
 ) -> int:
-    """計算指定 budget 在 period_ym 的累計花費（minor units, 本幣）。"""
+    """計算指定 budget 在 period_ym 的累計花費（NTD 整數元）。"""
     stmt = (
         select(func.coalesce(func.sum(Transaction.amount), 0))
         .join(Bill, Transaction.bill_id == Bill.id)
@@ -233,8 +239,8 @@ async def list_active_alerts(
             scope_ref=b.scope_ref,
             period_year_month=a.period_year_month,
             threshold_breached_percent=a.threshold_breached_percent,
-            current_amount_minor_units=a.current_amount_minor_units,
-            amount_minor_units=b.amount_minor_units,
+            current_amount_ntd=a.current_amount_ntd,
+            amount_ntd=b.amount_ntd,
             triggered_at=a.triggered_at,
             acknowledged_at=a.acknowledged_at,
         )
@@ -275,15 +281,13 @@ async def get_current_period(
 
     period = _current_year_month()
     current = await _aggregate_current_period(session, b, period)
-    percent = (
-        (current / b.amount_minor_units * 100.0) if b.amount_minor_units > 0 else 0.0
-    )
+    percent = (current / b.amount_ntd * 100.0) if b.amount_ntd > 0 else 0.0
     return ApiResponse(
         data=BudgetCurrentPeriod(
             budget_id=b.id,
             period_year_month=period,
-            amount_minor_units=b.amount_minor_units,
-            current_amount_minor_units=current,
+            amount_ntd=b.amount_ntd,
+            current_amount_ntd=current,
             percent=round(percent, 2),
             threshold_breached=percent >= b.alert_threshold_percent,
             alert_threshold_percent=b.alert_threshold_percent,

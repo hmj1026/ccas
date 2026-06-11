@@ -70,6 +70,11 @@ bootstrap_api_token() {
   # (a) env 已設定 → 直接使用，不寫檔
   if [[ -n "${API_TOKEN:-}" ]]; then
     printf '[INFO] 使用 .env / environment 提供的 API_TOKEN\n'
+    # 弱 token 警告（不阻擋啟動）：自動產生路徑為 64 hex chars，env 提供時建議至少 32 字元
+    if (( ${#API_TOKEN} < 32 )); then
+      printf '[WARN] API_TOKEN 長度僅 %d 字元（< 32），易被暴力猜測；建議改用 `openssl rand -hex 32` 產生的強 token\n' \
+        "${#API_TOKEN}" >&2
+    fi
     return 0
   fi
 

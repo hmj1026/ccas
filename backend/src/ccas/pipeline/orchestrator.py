@@ -8,10 +8,11 @@ from __future__ import annotations
 
 import logging
 import time
+from collections.abc import Awaitable, Callable
+from typing import TYPE_CHECKING
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ccas.bot.job import NotifySummary, run_notify_job
 from ccas.classifier.job import ClassifySummary, run_classify_job
 from ccas.decryptor.job import DecryptionSummary, run_decryption_job
 from ccas.ingestor.job import IngestionSummary, run_ingestion_job
@@ -20,9 +21,17 @@ from ccas.pipeline.options import PipelineOptions
 from ccas.pipeline.progress import NoopProgressReporter, ProgressReporter
 from ccas.pipeline.summary import FailedItem, PipelineSummary, StageSummary
 
+if TYPE_CHECKING:
+    from ccas.bot.job import NotifySummary
+
 logger = logging.getLogger(__name__)
 
 STAGE_ORDER: tuple[str, ...] = ("ingest", "decrypt", "parse", "classify", "notify")
+
+# Interface of the notify stage: orchestrator only depends on this callable
+# shape; the concrete run_notify_job binding is assembled by the caller
+# (pipeline/worker.py) or lazily imported in the default path.
+NotifyJob = Callable[..., Awaitable["NotifySummary"]]
 
 
 def _summary_to_progress(stage_summary: StageSummary) -> tuple[int, int]:
@@ -147,6 +156,7 @@ async def _run_stage(
     stage_num: int,
     total_stages: int,
     reporter: ProgressReporter,
+    notify_job: NotifyJob,
 ) -> StageSummary:
     """Execute a single pipeline stage and return its summary.
 
@@ -160,7 +170,9 @@ async def _run_stage(
 
     started = time.monotonic()
     try:
-        summary = await _dispatch_stage(stage_name, session, options, reporter)
+        summary = await _dispatch_stage(
+            stage_name, session, options, reporter, notify_job
+        )
     except Exception as exc:
         logger.error("Pipeline stage %s crashed: %s", stage_name, exc, exc_info=True)
         summary = StageSummary(
@@ -187,6 +199,7 @@ async def _dispatch_stage(
     session: AsyncSession,
     options: PipelineOptions | None,
     reporter: ProgressReporter,
+    notify_job: NotifyJob,
 ) -> StageSummary:
     """Dispatch to the appropriate stage handler.
 
@@ -207,7 +220,7 @@ async def _dispatch_stage(
         result = await run_classify_job(session, reporter=reporter)
         return _classify_stage_summary(result)
     # notify
-    result = await run_notify_job(session, reporter=reporter)
+    result = await notify_job(session, reporter=reporter)
     return _notify_stage_summary(result)
 
 
@@ -215,6 +228,7 @@ async def run_pipeline(
     session: AsyncSession,
     options: PipelineOptions | None = None,
     progress_reporter: ProgressReporter | None = None,
+    notify_job: NotifyJob | None = None,
 ) -> PipelineSummary:
     """執行 pipeline 並回傳結構化摘要。
 
@@ -228,11 +242,20 @@ async def run_pipeline(
         progress_reporter: 進度回報實作。``None`` 預設包成
             :class:`NoopProgressReporter`，CLI / scheduler 路徑 stdout
             summary 行為完全不變（pipeline-operations-center §3.6 / D10）。
+        notify_job: 通知階段實作（:data:`NotifyJob` 介面）。``None`` 時
+            lazy import 預設的 :func:`ccas.bot.job.run_notify_job`；
+            正式組裝點在 pipeline/worker.py。
 
     Returns:
         PipelineSummary 包含各階段統計與總耗時。
     """
     reporter: ProgressReporter = progress_reporter or NoopProgressReporter()
+
+    if notify_job is None:
+        # Lazy default keeps the orchestrator decoupled from the bot layer.
+        from ccas.bot.job import run_notify_job
+
+        notify_job = run_notify_job
 
     from_stage = options.from_stage if options else None
     to_stage = options.to_stage if options else None
@@ -243,7 +266,7 @@ async def run_pipeline(
     stage_summaries: list[StageSummary] = []
     for i, stage_name in enumerate(stages_to_run, 1):
         ss = await _run_stage(
-            stage_name, session, options, i, len(stages_to_run), reporter
+            stage_name, session, options, i, len(stages_to_run), reporter, notify_job
         )
         stage_summaries.append(ss)
 

@@ -32,7 +32,9 @@ x-shared-env: &shared-env
   # scheduler heartbeat probed by §1.11 healthcheck (mtime < 60s); aligned with
   # the absolute /data layout above for the same WORKDIR=/app reason.
   SCHEDULER_HEARTBEAT_PATH: "/data/scheduler-heartbeat"
-  REDIS_URL: redis://redis:6379/0
+  # Interpolated from host .env so REDIS_PASSWORD setups can point at
+  # redis://:password@redis:6379/0; defaults to the in-network redis service.
+  REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
   LOG_DIR: "/logs"
   BANK_CONFIG_DIR: "/config"
 
@@ -53,9 +55,11 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      # /health/ready 實際探測 DB + Redis（/health 僅 liveness）；timeout 放寬
+      # 到 10s 涵蓋依賴探測延遲。
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/ready', timeout=8)"]
       interval: 30s
-      timeout: 5s
+      timeout: 10s
       start_period: 15s
       retries: 3
     stop_grace_period: 15s
@@ -79,7 +83,7 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    command: ["uv", "run", "rq", "worker", "--url", "redis://redis:6379/0"]
+    command: ["uv", "run", "rq", "worker", "--url", "${REDIS_URL:-redis://redis:6379/0}"]
     healthcheck:
       # rq info -u $REDIS_URL 連線 redis 列出 queue/worker 狀態；rc=0 即 redis
       # 可達 + rq runtime 正常。`--raw -Q -j 1` 抑制 ANSI bar chart、限縮輸出。
@@ -102,7 +106,6 @@ services:
       - ./.env
     environment:
       <<: *shared-env
-      SCHEDULER_API_BASE_URL: "http://backend:8000"
       LOG_FILE_PREFIX: "ccas-scheduler"
       SKIP_DB_BOOTSTRAP: "1"
     depends_on:
@@ -193,8 +196,12 @@ services:
         --maxmemory ${REDIS_MAXMEMORY:-256mb}
         --maxmemory-policy ${REDIS_MAXMEMORY_POLICY:-allkeys-lru}
         --appendonly yes
+        --requirepass "${REDIS_PASSWORD:-}"
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      # Empty password ⇒ requirepass "" disables auth; redis-cli -a "" still
+      # returns PONG (rc=0) in that mode, so one probe covers both setups.
+      # grep guards the authed mode: NOAUTH error replies must fail the check.
+      test: ["CMD-SHELL", 'redis-cli -a "${REDIS_PASSWORD:-}" --no-auth-warning ping | grep -q PONG']
       interval: 5s
       timeout: 3s
       retries: 5

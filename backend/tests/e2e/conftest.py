@@ -19,7 +19,7 @@ from sqlalchemy.ext.asyncio import (
 from ccas.storage.models import BankConfig, Base, StagedAttachment
 
 os.environ.setdefault("TELEGRAM_BOT_TOKEN", "test-bot-token")
-os.environ.setdefault("TELEGRAM_CHAT_ID", "test-chat-id")
+os.environ.setdefault("TELEGRAM_CHAT_ID", "12345")
 os.environ.setdefault("API_TOKEN", "test-token")
 
 

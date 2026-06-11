@@ -31,6 +31,18 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/pipeline", tags=["pipeline"])
 
+# Process-wide Redis connection (lazy singleton)；避免每次 trigger 都新建
+# TCP 連線。RQ enqueue 為 sync 操作，沿用 sync client。
+_redis_pool: Redis | None = None
+
+
+def get_redis_client() -> Redis:
+    """回傳 process 級 Redis 連線單例（首次呼叫時建立）。"""
+    global _redis_pool
+    if _redis_pool is None:
+        _redis_pool = Redis.from_url(get_settings().redis_url)
+    return _redis_pool
+
 
 @router.post("/trigger", response_model=ApiResponse[PipelineTriggerData])
 async def trigger_pipeline(
@@ -42,9 +54,7 @@ async def trigger_pipeline(
     Args:
         body: 可選的 pipeline 參數（force, bank_code, year, month）。
     """
-    settings = get_settings()
-    redis_conn = Redis.from_url(settings.redis_url)
-    queue = Queue(connection=redis_conn)
+    queue = Queue(connection=get_redis_client())
 
     request = body or PipelineTriggerRequest()
     opts = request.model_dump()
@@ -109,15 +119,14 @@ def _run_summary(row: PipelineRun) -> PipelineRunSummary:
 @router.get("/runs", response_model=ApiResponse[list[PipelineRunSummary]])
 async def list_pipeline_runs(
     status: PipelineRunStatus | None = None,
-    limit: int = Query(default=20, ge=1),
+    limit: int = Query(default=20, ge=1, le=100),
     session: AsyncSession = Depends(get_db_session),
 ) -> ApiResponse[list[PipelineRunSummary]]:
-    """列出最近的 pipeline 執行紀錄。"""
-    capped_limit = min(limit, 100)
+    """列出最近的 pipeline 執行紀錄。limit 超出 1-100 回 422。"""
     stmt = select(PipelineRun)
     if status is not None:
         stmt = stmt.where(PipelineRun.status == status)
-    stmt = stmt.order_by(PipelineRun.created_at.desc()).limit(capped_limit)
+    stmt = stmt.order_by(PipelineRun.created_at.desc()).limit(limit)
 
     rows = (await session.execute(stmt)).scalars().all()
     return ApiResponse(data=[_run_summary(row) for row in rows])

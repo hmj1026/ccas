@@ -9,7 +9,7 @@
  * - regex 複雜度警示（nested quantifier 偵測）
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertTriangle, Plus, Trash2, X } from 'lucide-react'
+import { AlertTriangle, Plus, Trash2 } from 'lucide-react'
 import { useMemo, useRef, useState } from 'react'
 import { apiDelete, apiGet, apiPost, apiPut } from '@/lib/api-client'
 import type {
@@ -23,6 +23,15 @@ import type {
   PatternType,
 } from '@/lib/types'
 import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import {
   EmptyState,
   ErrorState,
@@ -117,28 +126,12 @@ function RuleDialog({
   }
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
-      role="dialog"
-      aria-modal="true"
-    >
-      <form
-        onSubmit={handleSubmit}
-        className="w-full max-w-lg space-y-3 rounded-lg border border-border bg-background p-4"
-      >
-        <div className="flex items-center justify-between">
-          <h3 className="text-base font-semibold">新增規則</h3>
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={onClose}
-            aria-label="close"
-          >
-            <X className="size-4" />
-          </Button>
-        </div>
-
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>新增規則</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-3">
         <label className="flex flex-col text-sm">
           <span className="text-muted-foreground">類型</span>
           <select
@@ -261,8 +254,9 @@ function RuleDialog({
         <Button type="submit" disabled={!canSubmit || createMutation.isPending}>
           {createMutation.isPending ? '建立中…' : '建立規則'}
         </Button>
-      </form>
-    </div>
+        </form>
+      </DialogContent>
+    </Dialog>
   )
 }
 
@@ -353,6 +347,11 @@ function RuleRow({
 function SettingsRulesPage() {
   const queryClient = useQueryClient()
   const [dialogOpen, setDialogOpen] = useState(false)
+  const [mutationError, setMutationError] = useState<string | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<{
+    id: number
+    pattern: string
+  } | null>(null)
 
   const rulesQuery = useQuery({
     queryKey: ['rules'],
@@ -377,13 +376,21 @@ function SettingsRulesPage() {
       body: ClassificationRuleUpdateRequest
     }) =>
       apiPut<ApiResponse<ClassificationRuleItem>>(`/api/rules/${id}`, body),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['rules'] }),
+    onSuccess: () => {
+      setMutationError(null)
+      queryClient.invalidateQueries({ queryKey: ['rules'] })
+    },
+    onError: (err: Error) => setMutationError(err.message),
   })
 
   const deleteMutation = useMutation({
     mutationFn: (id: number) =>
       apiDelete<ApiResponse<{ deleted_id: number }>>(`/api/rules/${id}`),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['rules'] }),
+    onSuccess: () => {
+      setMutationError(null)
+      queryClient.invalidateQueries({ queryKey: ['rules'] })
+    },
+    onError: (err: Error) => setMutationError(err.message),
   })
 
   const uniqueCategories = useMemo(() => {
@@ -396,14 +403,6 @@ function SettingsRulesPage() {
     return <ErrorState message={rulesQuery.error.message} />
 
   const rules = rulesQuery.data?.data ?? []
-
-  function handleDelete(id: number, pattern: string) {
-    if (
-      !window.confirm(`確定要刪除規則「${pattern}」？此動作無法復原。`)
-    )
-      return
-    deleteMutation.mutate(id)
-  }
 
   return (
     <div className="space-y-4">
@@ -419,6 +418,15 @@ function SettingsRulesPage() {
           新增規則
         </Button>
       </div>
+
+      {mutationError ? (
+        <p
+          role="alert"
+          className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+        >
+          {mutationError}
+        </p>
+      ) : null}
 
       {rules.length === 0 ? (
         <EmptyState message="尚未建立規則。點右上「新增規則」開始。" />
@@ -444,7 +452,9 @@ function SettingsRulesPage() {
                   onUpdate={(body) =>
                     updateMutation.mutate({ id: rule.id, body })
                   }
-                  onDelete={() => handleDelete(rule.id, rule.pattern)}
+                  onDelete={() =>
+                    setDeleteTarget({ id: rule.id, pattern: rule.pattern })
+                  }
                 />
               ))}
             </tbody>
@@ -459,6 +469,36 @@ function SettingsRulesPage() {
           onCreated={() => queryClient.invalidateQueries({ queryKey: ['rules'] })}
         />
       )}
+
+      {/* Delete confirmation dialog */}
+      <Dialog
+        open={deleteTarget !== null}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null)
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>刪除規則</DialogTitle>
+            <DialogDescription>
+              確定要刪除規則「{deleteTarget?.pattern}」？此動作無法復原。
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <DialogClose render={<Button variant="outline" />}>取消</DialogClose>
+            <Button
+              variant="destructive"
+              disabled={deleteMutation.isPending}
+              onClick={() => {
+                if (deleteTarget) deleteMutation.mutate(deleteTarget.id)
+                setDeleteTarget(null)
+              }}
+            >
+              確認刪除
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

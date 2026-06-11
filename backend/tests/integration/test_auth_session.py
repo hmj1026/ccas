@@ -74,8 +74,10 @@ async def test_api_response_includes_baseline_security_headers(client: AsyncClie
     assert resp.headers.get("referrer-policy") == "strict-origin-when-cross-origin"
 
 
-async def test_openapi_schema_skips_csp_header(client: AsyncClient):
-    """/openapi.json（及 /docs、/redoc）不應被 CSP 套住，否則 Swagger UI 壞掉。"""
+async def test_openapi_schema_disabled_by_default(client: AsyncClient):
+    """/openapi.json 預設停用（ENABLE_API_DOCS=false → 404）。
+
+    開啟模式（含 docs 路徑的 CSP 豁免）由 test_api_docs_toggle.py 覆蓋。
+    """
     resp = await client.get("/openapi.json")
-    assert resp.status_code == 200
-    assert "content-security-policy" not in {k.lower() for k in resp.headers.keys()}
+    assert resp.status_code == 404

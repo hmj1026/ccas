@@ -5,7 +5,7 @@
 """
 
 import os
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Generator
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -16,12 +16,24 @@ from sqlalchemy.ext.asyncio import (
 )
 
 from ccas.storage.models import BankConfig, Base
+from ccas.storage.queries import invalidate_bank_names_cache
 
 os.environ.setdefault("TELEGRAM_BOT_TOKEN", "test")
-os.environ.setdefault("TELEGRAM_CHAT_ID", "test")
+# Must be an integer string: Settings._validate_telegram_chat_id rejects
+# non-numeric values (P1 hardening).
+os.environ.setdefault("TELEGRAM_CHAT_ID", "123456789")
 os.environ.setdefault("API_TOKEN", "test-token")
 
 TEST_TOKEN = "test-token"
+
+
+@pytest.fixture(autouse=True)
+def _reset_bank_names_cache() -> Generator[None, None, None]:
+    """Each test seeds its own in-memory DB; the module-level bank name
+    cache in ccas.storage.queries must not leak entries across tests."""
+    invalidate_bank_names_cache()
+    yield
+    invalidate_bank_names_cache()
 
 
 @pytest.fixture

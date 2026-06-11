@@ -32,7 +32,7 @@ test.describe('Authenticated pages', () => {
     // /analytics 為 legacy 路由，App.tsx 用 <Navigate replace> 轉向 /insights
     await page.goto('/analytics')
     await expect(page).toHaveURL(/\/insights/)
-    await expect(page.getByRole('heading', { name: 'Insights' })).toBeVisible({ timeout: 8000 })
+    await expect(page.getByRole('heading', { name: '消費分析' })).toBeVisible({ timeout: 8000 })
     await expect(page.getByText('月消費趨勢')).toBeVisible()
   })
 

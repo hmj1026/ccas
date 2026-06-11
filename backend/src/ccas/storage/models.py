@@ -50,6 +50,17 @@ class Bill(Base):
     __tablename__ = "bills"
     __table_args__ = (
         UniqueConstraint("bank_code", "billing_month", name="uq_bill_bank_month"),
+        Index("ix_bills_billing_month", "billing_month"),
+        Index(
+            "ix_bills_is_notified_false",
+            "is_notified",
+            sqlite_where=text("is_notified = 0"),
+        ),
+        Index(
+            "ix_bills_is_paid_false",
+            "is_paid",
+            sqlite_where=text("is_paid = 0"),
+        ),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -75,6 +86,7 @@ class Transaction(Base):
     """
 
     __tablename__ = "transactions"
+    __table_args__ = (Index("ix_transactions_bill_id", "bill_id"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     bill_id: Mapped[int] = mapped_column(
@@ -153,6 +165,35 @@ class BankConfig(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
 
+class StagedAttachmentStatus(StrEnum):
+    """Staged attachment 處理狀態 SSOT（全部九個合法值）。
+
+    staged: ingest 落地完成，等待 decrypt
+    decrypted: 解密完成（或未加密透通），等待 parse
+    decrypt_failed: 解密失敗（密碼解析失敗 / staged_path 異常 / 解密例外）
+    parsed: 解析完成
+    parse_skipped: 解析略過（無對應 parser 等）
+    parse_failed: 解析失敗
+    manual_review_needed: pipeline 偵測到需人工介入（worker bulk update）
+    failed: ingest 階段失敗
+    fetch_expired: 來源下載連結過期（如 FUBON record_not_found）
+
+    DB 欄位維持 ``Mapped[str]``（Text），不做 enum migration；
+    API Literal（``schemas.StagedAttachmentStatusLiteral``）須與本 enum
+    同步，由 unit test 保證。
+    """
+
+    STAGED = "staged"
+    DECRYPTED = "decrypted"
+    DECRYPT_FAILED = "decrypt_failed"
+    PARSED = "parsed"
+    PARSE_SKIPPED = "parse_skipped"
+    PARSE_FAILED = "parse_failed"
+    MANUAL_REVIEW_NEEDED = "manual_review_needed"
+    FAILED = "failed"
+    FETCH_EXPIRED = "fetch_expired"
+
+
 class StagedAttachment(Base):
     """Gmail 附件 staging 記錄。
 
@@ -170,6 +211,7 @@ class StagedAttachment(Base):
             "gmail_part_id",
             name="uq_staged_gmail_message_part",
         ),
+        Index("ix_staged_attachments_status", "status"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -198,6 +240,7 @@ class PaymentReminder(Base):
     __tablename__ = "payment_reminders"
     __table_args__ = (
         UniqueConstraint("bill_id", "reminder_type", name="uq_reminder_bill_type"),
+        Index("ix_payment_reminders_bill_id", "bill_id"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -502,7 +545,8 @@ class Budget(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     scope: Mapped[BudgetScope] = mapped_column(String(32), nullable=False)
     scope_ref: Mapped[str | None] = mapped_column(Text, nullable=True)
-    amount_minor_units: Mapped[int] = mapped_column(Integer, nullable=False)
+    # Whole NTD dollars (元); the whole system stores integer NTD, never cents
+    amount_ntd: Mapped[int] = mapped_column(Integer, nullable=False)
     alert_threshold_percent: Mapped[int] = mapped_column(
         Integer, nullable=False, default=80, server_default="80"
     )
@@ -543,7 +587,8 @@ class BudgetAlert(Base):
     )
     period_year_month: Mapped[str] = mapped_column(String(7), nullable=False)
     threshold_breached_percent: Mapped[int] = mapped_column(Integer, nullable=False)
-    current_amount_minor_units: Mapped[int] = mapped_column(Integer, nullable=False)
+    # Whole NTD dollars (元) accumulated at trigger time
+    current_amount_ntd: Mapped[int] = mapped_column(Integer, nullable=False)
     triggered_at: Mapped[datetime] = mapped_column(
         DateTime, default=_utcnow, nullable=False
     )

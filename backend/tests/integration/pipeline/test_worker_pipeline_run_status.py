@@ -11,8 +11,18 @@ from rq.job import Job
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from ccas.pipeline.summary import PipelineSummary, StageSummary
-from ccas.pipeline.worker import on_failure_handler, run_pipeline_sync
-from ccas.storage.models import Base, PipelineRun, PipelineRunStatus
+from ccas.pipeline.worker import (
+    mark_manual_review,
+    on_failure_handler,
+    run_pipeline_sync,
+)
+from ccas.storage.models import (
+    Base,
+    PipelineRun,
+    PipelineRunStatus,
+    StagedAttachment,
+    StagedAttachmentStatus,
+)
 
 
 @pytest.fixture
@@ -70,7 +80,9 @@ class TestRunPipelineSyncPipelineRunStatus:
         asyncio.run(_insert_run(worker_db))
         seen = {}
 
-        async def fake_run_pipeline(session, options, progress_reporter=None):
+        async def fake_run_pipeline(
+            session, options, progress_reporter=None, notify_job=None
+        ):
             assert progress_reporter is not None
             seen["progress_reporter"] = progress_reporter
             await progress_reporter.stage_started("ingest", 1)
@@ -99,6 +111,101 @@ class TestRunPipelineSyncPipelineRunStatus:
         assert run.current_stage == "ingest"
         assert run.current_stage_total == 1
         assert seen["progress_reporter"].__class__.__name__ == "DbProgressReporter"
+
+
+async def _insert_staged(
+    session_factory,
+    *,
+    bank_code: str,
+    status: str = StagedAttachmentStatus.STAGED,
+    message_id: str,
+) -> None:
+    from datetime import UTC, datetime
+
+    async with session_factory() as session:
+        session.add(
+            StagedAttachment(
+                bank_code=bank_code,
+                gmail_message_id=message_id,
+                gmail_attachment_id=f"att-{message_id}",
+                gmail_part_id="1",
+                message_date=datetime.now(UTC),
+                original_filename=f"{message_id}.pdf",
+                status=status,
+            )
+        )
+        await session.commit()
+
+
+async def _get_staged_statuses(session_factory) -> dict[str, str]:
+    from sqlalchemy import select
+
+    async with session_factory() as session:
+        rows = (await session.execute(select(StagedAttachment))).scalars().all()
+        return {row.gmail_message_id: row.status for row in rows}
+
+
+class TestRunPipelineSyncFailurePath:
+    def test_marks_run_failed_when_run_pipeline_raises(
+        self,
+        worker_db,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        """run_pipeline 拋例外時 PipelineRun 必須是 FAILED 而非 RUNNING。"""
+        asyncio.run(_insert_run(worker_db))
+
+        async def boom(session, options, progress_reporter=None, notify_job=None):
+            raise RuntimeError("pipeline exploded")
+
+        monkeypatch.setattr("ccas.pipeline.orchestrator.run_pipeline", boom)
+
+        with pytest.raises(RuntimeError, match="pipeline exploded"):
+            run_pipeline_sync({}, run_id="run-1")
+
+        run = asyncio.run(_get_run(worker_db))
+        assert run.status == PipelineRunStatus.FAILED
+        assert run.error_message is not None
+        assert "RuntimeError" in run.error_message
+
+
+class TestMarkManualReviewScope:
+    def test_bank_code_scopes_update(self, worker_db):
+        asyncio.run(_insert_staged(worker_db, bank_code="CTBC", message_id="msg-ctbc"))
+        asyncio.run(_insert_staged(worker_db, bank_code="ESUN", message_id="msg-esun"))
+
+        async def _mark() -> int:
+            async with worker_db() as session:
+                return await mark_manual_review(session, bank_code="CTBC")
+
+        count = asyncio.run(_mark())
+
+        statuses = asyncio.run(_get_staged_statuses(worker_db))
+        assert count == 1
+        assert statuses["msg-ctbc"] == StagedAttachmentStatus.MANUAL_REVIEW_NEEDED
+        assert statuses["msg-esun"] == StagedAttachmentStatus.STAGED
+
+    def test_no_bank_code_updates_all(self, worker_db):
+        asyncio.run(_insert_staged(worker_db, bank_code="CTBC", message_id="msg-ctbc"))
+        asyncio.run(
+            _insert_staged(
+                worker_db,
+                bank_code="ESUN",
+                status=StagedAttachmentStatus.DECRYPTED,
+                message_id="msg-esun",
+            )
+        )
+
+        async def _mark() -> int:
+            async with worker_db() as session:
+                return await mark_manual_review(session)
+
+        count = asyncio.run(_mark())
+
+        statuses = asyncio.run(_get_staged_statuses(worker_db))
+        assert count == 2
+        assert all(
+            s == StagedAttachmentStatus.MANUAL_REVIEW_NEEDED for s in statuses.values()
+        )
 
 
 class TestOnFailureHandlerPipelineRunStatus:
@@ -130,3 +237,49 @@ class TestOnFailureHandlerPipelineRunStatus:
         assert run.completed_at is not None
         assert run.error_message is not None
         assert "timeout" in run.error_message.lower()
+
+    def test_passes_bank_code_from_job_args_to_mark_manual_review(
+        self,
+        worker_db,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        """opts 以第一個位置參數 enqueue，bank_code 必須傳入 mark_manual_review。"""
+        asyncio.run(_insert_run(worker_db))
+        mark_mock = AsyncMock(return_value=0)
+        monkeypatch.setattr("ccas.pipeline.worker.mark_manual_review", mark_mock)
+        job = MagicMock(spec=Job)
+        job.id = "job-1"
+        job.retries_left = 0
+        job.args = ({"bank_code": "CTBC", "force": False},)
+        job.kwargs = {"run_id": "run-1"}
+
+        on_failure_handler(job, MagicMock(), RuntimeError, RuntimeError("boom"), None)
+
+        mark_mock.assert_awaited_once()
+        assert mark_mock.await_args is not None
+        assert mark_mock.await_args.kwargs.get("bank_code") == "CTBC"
+
+    def test_run_still_marked_failed_when_manual_review_marking_raises(
+        self,
+        worker_db,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        """步驟隔離：mark_manual_review 失敗不得阻斷 mark_pipeline_run_failed。"""
+        asyncio.run(_insert_run(worker_db))
+        monkeypatch.setattr(
+            "ccas.pipeline.worker.mark_manual_review",
+            AsyncMock(side_effect=RuntimeError("db locked")),
+        )
+        job = MagicMock(spec=Job)
+        job.id = "job-1"
+        job.retries_left = 0
+        job.args = ()
+        job.kwargs = {"run_id": "run-1"}
+
+        on_failure_handler(
+            job, MagicMock(), TimeoutError, TimeoutError("job timeout"), None
+        )
+
+        run = asyncio.run(_get_run(worker_db))
+        assert run.status == PipelineRunStatus.FAILED
+        assert run.error_message is not None

@@ -73,6 +73,28 @@ async def _seed_attachments(session: AsyncSession) -> None:
                 error_reason="ParseError: unexpected format",
                 source_type="attachment",
             ),
+            StagedAttachment(
+                bank_code="FUBON",
+                gmail_message_id="m-fubon-decryptfail",
+                gmail_attachment_id="a-5",
+                message_date=datetime(2026, 4, 10),
+                original_filename="fubon-2026-04b.pdf",
+                staged_path="/data/staging/FUBON/locked.pdf",
+                status="decrypt_failed",
+                error_reason="DecryptError: no password matched",
+                source_type="attachment",
+            ),
+            StagedAttachment(
+                bank_code="FUBON",
+                gmail_message_id="m-fubon-manual",
+                gmail_attachment_id="a-6",
+                message_date=datetime(2026, 4, 15),
+                original_filename="fubon-2026-04c.pdf",
+                staged_path="/data/staging/FUBON/manual.pdf",
+                status="manual_review_needed",
+                error_reason="stuck in decrypted over retention window",
+                source_type="attachment",
+            ),
         ]
     )
     await session.commit()
@@ -92,7 +114,7 @@ async def test_list_all_sorted_by_date_desc(
     assert resp.status_code == 200
     payload = resp.json()
     data = payload["data"]
-    assert payload["pagination"]["total"] == 4
+    assert payload["pagination"]["total"] == 6
     # 最新 message_date 在前
     dates = [item["message_date"] for item in data]
     assert dates == sorted(dates, reverse=True)
@@ -123,6 +145,22 @@ async def test_status_filter_single(client: AsyncClient, db_session: AsyncSessio
     assert data[0]["status"] == "fetch_expired"
     assert data[0]["bank_code"] == "FUBON"
     assert data[0]["bank_name"] == "富邦"
+
+
+async def test_status_filter_decrypt_failed_and_manual_review(
+    client: AsyncClient, db_session: AsyncSession
+):
+    """先前缺漏的兩個 status（decrypt_failed / manual_review_needed）應可過濾。"""
+    await _seed_attachments(db_session)
+    resp = await client.get(
+        "/api/staged-attachments?status=decrypt_failed,manual_review_needed",
+        headers=auth_headers(),
+    )
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert payload["pagination"]["total"] == 2
+    statuses = {item["status"] for item in payload["data"]}
+    assert statuses == {"decrypt_failed", "manual_review_needed"}
 
 
 async def test_bank_code_filter(client: AsyncClient, db_session: AsyncSession):
@@ -167,4 +205,4 @@ async def test_invalid_status_silently_ignored(
     )
     assert resp.status_code == 200
     # 全部狀態皆非 not_a_real_status，實際條件為空 → 回傳全部
-    assert resp.json()["pagination"]["total"] == 4
+    assert resp.json()["pagination"]["total"] == 6

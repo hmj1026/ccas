@@ -4,7 +4,11 @@ x-shared-env: &shared-env
   FUBON_MANUAL_STAGING_DIR: "/data/manual-staging/FUBON"
   GMAIL_CREDENTIALS_PATH: "/data/credentials.json"
   GMAIL_TOKEN_PATH: "/data/token.json"
-  REDIS_URL: redis://redis:6379/0
+  # Interpolated from host .env so REDIS_PASSWORD setups can point at
+  # redis://:password@redis:6379/0; defaults to the in-network redis service.
+  # Keep host .env REDIS_URL unset (or container-reachable) for docker dev —
+  # redis://localhost only works for non-docker local runs.
+  REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
   LOG_DIR: "/logs"
   BANK_CONFIG_DIR: "/config"
 
@@ -60,7 +64,7 @@ services:
         condition: service_healthy
     stop_grace_period: 30s
     restart: unless-stopped
-    command: ["uv", "run", "rq", "worker", "--url", "redis://redis:6379/0"]
+    command: ["uv", "run", "rq", "worker", "--url", "${REDIS_URL:-redis://redis:6379/0}"]
     healthcheck:
       disable: true
 
@@ -76,7 +80,6 @@ services:
       - ./.env
     environment:
       <<: *shared-env
-      SCHEDULER_API_BASE_URL: "http://backend:8000"
       LOG_FILE_PREFIX: "ccas-scheduler"
     depends_on:
       redis:
@@ -133,8 +136,12 @@ services:
         --maxmemory ${REDIS_MAXMEMORY:-256mb}
         --maxmemory-policy ${REDIS_MAXMEMORY_POLICY:-allkeys-lru}
         --appendonly yes
+        --requirepass "${REDIS_PASSWORD:-}"
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      # Empty password ⇒ requirepass "" disables auth; redis-cli -a "" still
+      # returns PONG (rc=0) in that mode, so one probe covers both setups.
+      # grep guards the authed mode: NOAUTH error replies must fail the check.
+      test: ["CMD-SHELL", 'redis-cli -a "${REDIS_PASSWORD:-}" --no-auth-warning ping | grep -q PONG']
       interval: 5s
       timeout: 3s
       retries: 5
@@ -162,6 +169,7 @@ services:
       - "127.0.0.1:8081:8081"
     environment:
       REDIS_HOSTS: local:redis:6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-}
     depends_on:
       redis:
         condition: service_healthy

@@ -1,6 +1,7 @@
 # CCAS — Credit Card Automation System
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/hmj1026/ccas?label=release&color=blue)](https://github.com/hmj1026/ccas/releases/latest)
 
 **English** | [繁體中文](README.zh-TW.md)
 
@@ -17,6 +18,7 @@ CCAS pulls encrypted PDF statements from Gmail, decrypts them with bank-specific
 - **Budgets & reminders** — monthly / per-category / per-bank budgets with 80% & 100% Telegram alerts; per-bill payment reminders
 - **Insights** — monthly trends, bank comparisons, year-over-year, top merchants, category deltas
 - **Export** — streaming CSV / XLSX with date / bank / category filters
+- **Hardened by default** — HMAC-signed session cookies, POST-only login rate limiting, secret-redacting JSON logs, OpenAPI docs disabled in production
 
 ## Architecture
 
@@ -50,7 +52,7 @@ Requires Docker + Docker Compose. First create a Google Cloud OAuth client — s
 
 ```bash
 mkdir ~/ccas && cd ~/ccas
-RELEASE=v0.1.0   # pin a released version
+RELEASE=v0.2.0   # pin a released version
 curl -fsSL -o docker-compose.yml \
   "https://github.com/<owner>/ccas/releases/download/${RELEASE}/docker-compose.yml"
 curl -fsSL -o example.env \

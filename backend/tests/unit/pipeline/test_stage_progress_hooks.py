@@ -55,10 +55,6 @@ async def test_classify_emits_started_total_and_monotonic_processed() -> None:
             "ccas.classifier.job.fetch_unclassified_transactions",
             new=AsyncMock(return_value=txns),
         ),
-        patch(
-            "ccas.classifier.job.update_transaction_category",
-            new=AsyncMock(return_value=None),
-        ),
         patch("ccas.classifier.job.classify", new=lambda m, r: "其他"),
     ):
         result = await run_classify_job(session, reporter=reporter)
@@ -114,10 +110,6 @@ async def test_classify_item_failure_does_not_stall_processed() -> None:
         patch(
             "ccas.classifier.job.fetch_unclassified_transactions",
             new=AsyncMock(return_value=txns),
-        ),
-        patch(
-            "ccas.classifier.job.update_transaction_category",
-            new=AsyncMock(return_value=None),
         ),
         patch("ccas.classifier.job.classify", new=raising_classify),
     ):

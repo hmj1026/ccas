@@ -1,7 +1,7 @@
 /**
  * Operations page tests -- pipeline trigger, active run, and history states.
  */
-import { screen, waitFor } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import OperationsPage from '../operations'
@@ -122,6 +122,28 @@ describe('OperationsPage', () => {
     expect(Element.prototype.scrollIntoView).toHaveBeenCalled()
   })
 
+  it('renders stage options with Chinese labels but English values', async () => {
+    setupMocks()
+
+    renderWithProviders(<OperationsPage />)
+
+    await waitFor(() => {
+      expect(screen.getByText('中國信託')).toBeInTheDocument()
+    })
+
+    const fromStage = screen.getByLabelText('起始階段')
+    expect(within(fromStage).getByRole('option', { name: '擷取' })).toHaveValue(
+      'ingest',
+    )
+    expect(within(fromStage).getByRole('option', { name: '解析' })).toHaveValue(
+      'parse',
+    )
+    const toStage = screen.getByLabelText('結束階段')
+    expect(within(toStage).getByRole('option', { name: '通知' })).toHaveValue(
+      'notify',
+    )
+  })
+
   it('blocks submit when from_stage is after to_stage', async () => {
     const user = userEvent.setup()
     setupMocks()
@@ -149,7 +171,8 @@ describe('OperationsPage', () => {
     await waitFor(() => {
       expect(screen.getByText('parse 47 / 120 (39%)')).toBeInTheDocument()
     })
-    expect(screen.getByText('擷取')).toBeInTheDocument()
+    // Stage labels also appear in the stage select options now.
+    expect(screen.getAllByText('擷取').length).toBeGreaterThan(0)
     expect(screen.getAllByText('解析').length).toBeGreaterThan(0)
   })
 

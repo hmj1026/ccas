@@ -13,6 +13,7 @@ channel=telegram``，與 change 前 ``send_payment_reminders`` 邏輯等價。
 from __future__ import annotations
 
 import logging
+from typing import cast, get_args
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import field_validator
@@ -26,9 +27,8 @@ from ccas.api.schemas import (
     ReminderSettingUpdateRequest,
     ReminderTestResult,
 )
-from ccas.bot.client import send_message
-from ccas.bot.notifications import render_due_reminder
 from ccas.config import get_settings
+from ccas.messaging import render_due_reminder, send_message
 from ccas.storage.database import get_db_session
 from ccas.storage.models import (
     Bill,
@@ -58,11 +58,15 @@ class _ValidatedUpdate(ReminderSettingUpdateRequest):
 
 
 def _channel_str(channel: ReminderChannel | str) -> ReminderChannelLiteral:
-    """Normalise enum / DB string back to API literal."""
+    """Normalise enum / DB string back to API literal; fail fast on unknown."""
     val = channel.value if isinstance(channel, ReminderChannel) else str(channel)
-    if val not in ("telegram", "ui_banner", "both"):
-        return "telegram"
-    return val  # type: ignore[return-value]
+    if val not in get_args(ReminderChannelLiteral):
+        # HTTPException (not ValueError): an unknown DB value must surface as
+        # a clean 500 through FastAPI, not an unhandled exception traceback.
+        raise HTTPException(
+            status_code=500, detail=f"DB contains unknown reminder channel: {val!r}"
+        )
+    return cast(ReminderChannelLiteral, val)
 
 
 @router.get("/settings", response_model=ApiResponse[list[ReminderSettingItem]])

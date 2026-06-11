@@ -5,7 +5,7 @@ TBD - created by archiving change bills-management-and-insights. Update Purpose 
 ## Requirements
 ### Requirement: budgets 與 budget_alerts 表結構
 
-系統 SHALL 新增 `budgets` 與 `budget_alerts` 兩張資料表。`budgets` 欄位 SHALL 含：`id` UUID PK、`scope` enum (`monthly_total` / `monthly_category` / `monthly_bank`)、`scope_ref` text nullable（依 scope 為 category_id / bank_code）、`amount_minor_units` int（金額以分儲存）、`alert_threshold_percent` int default 80、`enabled` bool default false、`created_at`、`updated_at`。`budget_alerts` 欄位 SHALL 含：`id` UUID PK、`budget_id` FK、`period_year_month` str（如 "2026-05"）、`threshold_breached_percent` int (80 或 100)、`current_amount_minor_units` int、`triggered_at`、`acknowledged_at` nullable。索引：`budgets(scope, scope_ref)`、`budget_alerts(triggered_at DESC)`、`budget_alerts(budget_id, period_year_month)`。
+系統 SHALL 新增 `budgets` 與 `budget_alerts` 兩張資料表。`budgets` 欄位 SHALL 含：`id` UUID PK、`scope` enum (`monthly_total` / `monthly_category` / `monthly_bank`)、`scope_ref` text nullable（依 scope 為 category_id / bank_code）、`amount_ntd` int（金額以 NTD 整數元儲存，全系統不做單位換算）、`alert_threshold_percent` int default 80、`enabled` bool default false、`created_at`、`updated_at`。`budget_alerts` 欄位 SHALL 含：`id` UUID PK、`budget_id` FK、`period_year_month` str（如 "2026-05"）、`threshold_breached_percent` int (80 或 100)、`current_amount_ntd` int、`triggered_at`、`acknowledged_at` nullable。索引：`budgets(scope, scope_ref)`、`budget_alerts(triggered_at DESC)`、`budget_alerts(budget_id, period_year_month)`。
 
 #### Scenario: scope_ref 與 scope 對應
 
@@ -18,10 +18,10 @@ TBD - created by archiving change bills-management-and-insights. Update Purpose 
 - **WHEN** 建立 `monthly_bank` budget
 - **THEN** scope_ref SHALL 為有效 bank_code（與 banks.yaml 對應）
 
-#### Scenario: amount_minor_units 以分儲存
+#### Scenario: amount_ntd 以 NTD 整數元儲存
 
 - **WHEN** 使用者設預算 NT$ 8,000
-- **THEN** DB SHALL 存 `amount_minor_units = 800000`（NT$ 1 = 100 分），與既有 transaction.amount_minor_units 慣例一致
+- **THEN** DB SHALL 存 `amount_ntd = 8000`（NTD 整數元，不乘 100），與既有 `transactions.amount` 全系統「整數元」慣例一致
 
 ### Requirement: GET/POST/PUT/DELETE /api/budgets CRUD
 
@@ -29,7 +29,7 @@ TBD - created by archiving change bills-management-and-insights. Update Purpose 
 
 #### Scenario: 建立 budget 後立即出現在列表
 
-- **WHEN** `POST /api/budgets` body `{scope: "monthly_total", amount_minor_units: 800000, enabled: true}`
+- **WHEN** `POST /api/budgets` body `{scope: "monthly_total", amount_ntd: 8000, enabled: true}`
 - **THEN** 系統 SHALL INSERT row、回 201、隨後 `GET /api/budgets` 列表 SHALL 含此 row
 
 #### Scenario: scope_ref 驗證
@@ -44,12 +44,12 @@ TBD - created by archiving change bills-management-and-insights. Update Purpose 
 
 ### Requirement: GET /api/budgets/{id}/current-period 當期狀態
 
-系統 SHALL 提供 `GET /api/budgets/{id}/current-period` 端點，回應當月對應 scope 的累計金額與 threshold 狀態。Response 結構 SHALL 為 `{budget_id, period_year_month, amount_used_minor_units, percent_used, threshold_breached: bool, latest_alert?: {...}}`。
+系統 SHALL 提供 `GET /api/budgets/{id}/current-period` 端點，回應當月對應 scope 的累計金額與 threshold 狀態。Response 結構 SHALL 為 `{budget_id, period_year_month, amount_ntd, current_amount_ntd, percent, threshold_breached: bool, alert_threshold_percent}`，金額欄位以 NTD 整數元為單位。
 
 #### Scenario: 當月累計依 scope 計算
 
 - **WHEN** budget.scope="monthly_total"、本月已有 transactions 累計 NT$ 6,500
-- **THEN** response SHALL 含 `amount_used_minor_units: 650000, percent_used: 81.25, threshold_breached: true`（threshold=80%）
+- **THEN** response SHALL 含 `current_amount_ntd: 6500, percent: 81.25, threshold_breached: true`（threshold=80%）
 
 #### Scenario: scope=monthly_category 僅計該類別
 
@@ -67,8 +67,8 @@ TBD - created by archiving change bills-management-and-insights. Update Purpose 
 
 #### Scenario: 80% threshold 觸發 alert
 
-- **WHEN** budget threshold=80, amount=10000、當月累計 8500（85%）、`budget_alerts` 該 budget 該月尚無 80 紀錄
-- **THEN** evaluator SHALL INSERT `budget_alerts(threshold_breached_percent=80, current_amount_minor_units=850000)`、推 Telegram「[預算警示] 已使用 85%（NT$ 8,500 / NT$ 10,000）」
+- **WHEN** budget threshold=80, amount_ntd=10000、當月累計 8500（85%）、`budget_alerts` 該 budget 該月尚無 80 紀錄
+- **THEN** evaluator SHALL INSERT `budget_alerts(threshold_breached_percent=80, current_amount_ntd=8500)`、推 Telegram「[預算警示] 已使用 85%（NT$ 8,500 / NT$ 10,000）」
 
 #### Scenario: 100% threshold 觸發第二次 alert
 

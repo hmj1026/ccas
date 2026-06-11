@@ -7,7 +7,30 @@ import os
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from ccas.scheduler.__main__ import _touch_heartbeat, main
+from apscheduler.events import EVENT_JOB_MISSED
+
+from ccas.scheduler.__main__ import _on_job_missed, _touch_heartbeat, main
+from ccas.scheduler.jobs import trigger_pipeline_via_rq
+
+
+def _run_main_with_mock_scheduler() -> MagicMock:
+    """以 mock BlockingScheduler 執行 main()，回傳 scheduler class mock。"""
+    mock_scheduler = MagicMock()
+    mock_scheduler.start.side_effect = KeyboardInterrupt
+
+    with (
+        patch(
+            "ccas.scheduler.__main__.BlockingScheduler", return_value=mock_scheduler
+        ) as mock_cls,
+        patch("ccas.scheduler.__main__.signal.signal"),
+    ):
+        try:
+            main()
+        except (KeyboardInterrupt, SystemExit):
+            pass
+
+    mock_cls.scheduler_instance = mock_scheduler
+    return mock_cls
 
 
 class TestSchedulerJobRegistration:
@@ -212,3 +235,71 @@ class TestSchedulerJobRegistration:
         assert evaluator_call.args[1] == "cron"
         assert evaluator_call.kwargs["hour"] == 2
         assert evaluator_call.kwargs["minute"] == 0
+
+    def test_pipeline_job_targets_rq_trigger(self):
+        """pipeline 工作直接 enqueue RQ（不再經 HTTP API）。"""
+        mock_cls = _run_main_with_mock_scheduler()
+        scheduler = mock_cls.scheduler_instance
+
+        pipeline_call = None
+        for call in scheduler.add_job.call_args_list:
+            if call.kwargs.get("id") == "daily_pipeline":
+                pipeline_call = call
+                break
+
+        assert pipeline_call is not None
+        assert pipeline_call.args[0] is trigger_pipeline_via_rq
+
+
+class TestSchedulerMisfirePolicy:
+    """misfire 防護：job_defaults、heartbeat 覆寫與 missed listener。"""
+
+    def test_scheduler_job_defaults(self):
+        """BlockingScheduler 應設定 misfire_grace_time=3600、max_instances=1。"""
+        mock_cls = _run_main_with_mock_scheduler()
+
+        mock_cls.assert_called_once()
+        job_defaults = mock_cls.call_args.kwargs["job_defaults"]
+        assert job_defaults["misfire_grace_time"] == 3600
+        assert job_defaults["max_instances"] == 1
+
+    def test_heartbeat_overrides_misfire_grace_time(self):
+        """heartbeat job 的 misfire_grace_time 應短於全域 1h 預設。"""
+        mock_cls = _run_main_with_mock_scheduler()
+        scheduler = mock_cls.scheduler_instance
+
+        heartbeat_call = None
+        for call in scheduler.add_job.call_args_list:
+            if call.kwargs.get("id") == "scheduler_heartbeat":
+                heartbeat_call = call
+                break
+
+        assert heartbeat_call is not None
+        assert heartbeat_call.kwargs["misfire_grace_time"] < 3600
+
+    def test_missed_job_listener_registered_before_start(self):
+        """main() 應在 start() 前註冊 EVENT_JOB_MISSED listener。"""
+        mock_cls = _run_main_with_mock_scheduler()
+        scheduler = mock_cls.scheduler_instance
+
+        scheduler.add_listener.assert_called_once_with(_on_job_missed, EVENT_JOB_MISSED)
+        # registered before the (blocking) start() call
+        method_order = [name for name, *_ in scheduler.mock_calls]
+        assert method_order.index("add_listener") < method_order.index("start")
+
+    def test_on_job_missed_logs_warning(self, caplog):
+        """_on_job_missed 應以 warning 記錄 job_id 與 scheduled_run_time。"""
+        import logging
+
+        event = MagicMock()
+        event.job_id = "daily_pipeline"
+        event.scheduled_run_time = "2026-06-11 00:00:00+00:00"
+
+        with caplog.at_level(logging.WARNING, logger="ccas.scheduler.__main__"):
+            _on_job_missed(event)
+
+        warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
+        assert warnings
+        message = warnings[0].getMessage()
+        assert "daily_pipeline" in message
+        assert "2026-06-11 00:00:00+00:00" in message

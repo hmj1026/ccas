@@ -5,21 +5,49 @@
 """
 
 import logging
+from collections import defaultdict
 from dataclasses import dataclass
 
+from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm.attributes import set_committed_value
 
 from ccas.classifier.engine import DEFAULT_CATEGORY, classify
 from ccas.classifier.rules import load_rules
 from ccas.classifier.staging import (
     fetch_all_transactions,
     fetch_unclassified_transactions,
-    update_transaction_category,
 )
 from ccas.classifier.user_rules import UserRuleMatcher
 from ccas.pipeline.progress import NoopProgressReporter, ProgressReporter
+from ccas.storage.models import Transaction
 
 logger = logging.getLogger(__name__)
+
+
+async def _flush_category_updates(
+    session: AsyncSession,
+    pending: dict[str, list[Transaction]],
+) -> None:
+    """Apply accumulated category assignments as one UPDATE per category.
+
+    Batching turns N per-row UPDATEs into K statements (K = distinct
+    categories). ``synchronize_session=False`` skips identity-map
+    synchronization, so the loaded instances are patched manually via
+    ``set_committed_value`` — it updates the loaded value without marking
+    the instance dirty (no per-row UPDATE re-emitted at flush) — keeping
+    same-session reads of ``txn.category`` consistent with the DB.
+    """
+    for category, txns in pending.items():
+        stmt = (
+            update(Transaction)
+            .where(Transaction.id.in_([txn.id for txn in txns]))
+            .values(category=category)
+            .execution_options(synchronize_session=False)
+        )
+        await session.execute(stmt)
+        for txn in txns:
+            set_committed_value(txn, "category", category)
 
 
 @dataclass(frozen=True)
@@ -84,6 +112,10 @@ async def run_classify_job(
     unclassified = 0
     processed = 0
 
+    # Accumulate {category: [transactions]} so writes collapse into one UPDATE
+    # per distinct category instead of one per row.
+    pending_updates: defaultdict[str, list[Transaction]] = defaultdict(list)
+
     for txn in transactions:
         try:
             # bills-management-and-insights §2.4 優先序：
@@ -94,12 +126,12 @@ async def run_classify_job(
 
             user_category = await user_matcher.match(txn.merchant)
             if user_category is not None:
-                await update_transaction_category(session, txn.id, user_category)
+                pending_updates[user_category].append(txn)
                 user_rule_hits += 1
                 continue
 
             category = classify(txn.merchant, rule_set)
-            await update_transaction_category(session, txn.id, category)
+            pending_updates[category].append(txn)
             if category == DEFAULT_CATEGORY:
                 unclassified += 1
             else:
@@ -108,6 +140,7 @@ async def run_classify_job(
             processed += 1
             await reporter.stage_item_done("classify", processed=processed)
 
+    await _flush_category_updates(session, pending_updates)
     await session.commit()
 
     # 與既有契約相容：classified_count 含所有寫入 category 的 row（即使是
@@ -157,6 +190,9 @@ async def run_reclassify_job(session: AsyncSession) -> ClassifySummary:
     classified_count = 0
     skipped_count = 0
     manual_override_count = 0
+    # Accumulate {category: [transactions]} so writes collapse into one UPDATE
+    # per distinct category instead of one per row.
+    pending_updates: defaultdict[str, list[Transaction]] = defaultdict(list)
     for txn in transactions:
         if txn.manual_category_override:
             manual_override_count += 1
@@ -172,9 +208,10 @@ async def run_reclassify_job(session: AsyncSession) -> ClassifySummary:
         if txn.category == new_category:
             skipped_count += 1
             continue
-        await update_transaction_category(session, txn.id, new_category)
+        pending_updates[new_category].append(txn)
         classified_count += 1
 
+    await _flush_category_updates(session, pending_updates)
     await session.commit()
 
     logger.info(

@@ -4,7 +4,7 @@
 - compare/banks
 - compare/years (total / count)
 - top-merchants (limit, period)
-- categories?compare_with_previous=true
+- categories/compare
 """
 
 from __future__ import annotations
@@ -206,7 +206,7 @@ class TestCategoriesCompareWithPrevious:
         )
 
         resp = await client.get(
-            "/api/analytics/categories?month=2026-05&compare_with_previous=true",
+            "/api/analytics/categories/compare?month=2026-05",
             headers=auth_headers(),
         )
         assert resp.status_code == 200, resp.text
@@ -220,10 +220,18 @@ class TestCategoriesCompareWithPrevious:
         assert data["交通"]["previous_total"] == 500
         assert data["交通"]["change_percent"] == -60.0
 
+    async def test_compare_requires_month(self, client: AsyncClient) -> None:
+        """categories/compare 未帶 month 應回 422。"""
+        resp = await client.get(
+            "/api/analytics/categories/compare",
+            headers=auth_headers(),
+        )
+        assert resp.status_code == 422
+
     async def test_legacy_categories_without_compare(
         self, client: AsyncClient, db_session: AsyncSession
     ) -> None:
-        """compare_with_previous=false (預設) 應維持 legacy CategoryItem schema。"""
+        """基礎 /categories 端點應維持 CategoryItem schema（不含比較欄位）。"""
         await _seed_bank(db_session, "CTBC", "中國信託")
         await db_session.commit()
         await _seed_bill_with_txns(

@@ -61,7 +61,7 @@ class TestScopeLabel:
         b = Budget(
             scope=BudgetScope.MONTHLY_TOTAL,
             scope_ref=None,
-            amount_minor_units=1000,
+            amount_ntd=1000,
             alert_threshold_percent=80,
             enabled=True,
         )
@@ -71,7 +71,7 @@ class TestScopeLabel:
         b = Budget(
             scope=BudgetScope.MONTHLY_CATEGORY,
             scope_ref="餐飲",
-            amount_minor_units=1000,
+            amount_ntd=1000,
             alert_threshold_percent=80,
             enabled=True,
         )
@@ -81,7 +81,7 @@ class TestScopeLabel:
         b = Budget(
             scope=BudgetScope.MONTHLY_BANK,
             scope_ref="CTBC",
-            amount_minor_units=1000,
+            amount_ntd=1000,
             alert_threshold_percent=80,
             enabled=True,
         )
@@ -93,14 +93,14 @@ class TestFormatAggregatedMessage:
         b1 = Budget(
             scope=BudgetScope.MONTHLY_TOTAL,
             scope_ref=None,
-            amount_minor_units=10000,
+            amount_ntd=10000,
             alert_threshold_percent=80,
             enabled=True,
         )
         b2 = Budget(
             scope=BudgetScope.MONTHLY_CATEGORY,
             scope_ref="交通",
-            amount_minor_units=5000,
+            amount_ntd=5000,
             alert_threshold_percent=80,
             enabled=True,
         )
@@ -108,14 +108,14 @@ class TestFormatAggregatedMessage:
             budget_id=1,
             period_year_month="2026-05",
             threshold_breached_percent=80,
-            current_amount_minor_units=8500,
+            current_amount_ntd=8500,
             triggered_at=datetime.now(UTC),
         )
         a2 = BudgetAlert(
             budget_id=2,
             period_year_month="2026-05",
             threshold_breached_percent=100,
-            current_amount_minor_units=5200,
+            current_amount_ntd=5200,
             triggered_at=datetime.now(UTC),
         )
         msg = _format_aggregated_message("2026-05", [(b1, a1), (b2, a2)])
@@ -155,7 +155,7 @@ async def _seed_bill_with_txns(
     bank_code: str = "CTBC",
     txns: list[tuple[int, str | None]] | None = None,
 ) -> Bill:
-    """Seed a bill + txns for the given period. txns: (amount, category)."""
+    """Seed a bill + txns for the given period. txns: (amount in NTD 元, category)."""
     session.add(
         BankConfig(
             bank_code=bank_code,
@@ -197,7 +197,7 @@ async def test_triggers_alert_at_80_percent(mock_send, session: AsyncSession):
         Budget(
             scope=BudgetScope.MONTHLY_TOTAL,
             scope_ref=None,
-            amount_minor_units=10000,
+            amount_ntd=10000,
             alert_threshold_percent=80,
             enabled=True,
         )
@@ -226,7 +226,7 @@ async def test_does_not_duplicate_alert_for_same_threshold(
         Budget(
             scope=BudgetScope.MONTHLY_TOTAL,
             scope_ref=None,
-            amount_minor_units=10000,
+            amount_ntd=10000,
             alert_threshold_percent=80,
             enabled=True,
         )
@@ -251,7 +251,7 @@ async def test_triggers_higher_tier_after_breaching_100_percent(
         Budget(
             scope=BudgetScope.MONTHLY_TOTAL,
             scope_ref=None,
-            amount_minor_units=10000,
+            amount_ntd=10000,
             alert_threshold_percent=80,
             enabled=True,
         )
@@ -292,14 +292,14 @@ async def test_skips_disabled_budgets_and_zero_amount(mock_send, session: AsyncS
             Budget(
                 scope=BudgetScope.MONTHLY_TOTAL,
                 scope_ref=None,
-                amount_minor_units=10000,
+                amount_ntd=10000,
                 alert_threshold_percent=80,
                 enabled=False,
             ),
             Budget(
                 scope=BudgetScope.MONTHLY_TOTAL,
                 scope_ref=None,
-                amount_minor_units=0,
+                amount_ntd=0,
                 alert_threshold_percent=80,
                 enabled=True,
             ),
@@ -325,7 +325,7 @@ async def test_does_not_raise_when_telegram_disabled(
         Budget(
             scope=BudgetScope.MONTHLY_CATEGORY,
             scope_ref="餐飲",
-            amount_minor_units=10000,
+            amount_ntd=10000,
             alert_threshold_percent=80,
             enabled=True,
         )
@@ -356,7 +356,7 @@ async def test_swallows_telegram_send_errors(mock_send, session: AsyncSession):
         Budget(
             scope=BudgetScope.MONTHLY_TOTAL,
             scope_ref=None,
-            amount_minor_units=10000,
+            amount_ntd=10000,
             alert_threshold_percent=80,
             enabled=True,
         )
@@ -386,14 +386,14 @@ async def test_aggregates_alerts_from_multiple_budgets_into_one_message(
             Budget(
                 scope=BudgetScope.MONTHLY_TOTAL,
                 scope_ref=None,
-                amount_minor_units=10000,
+                amount_ntd=10000,
                 alert_threshold_percent=80,
                 enabled=True,
             ),
             Budget(
                 scope=BudgetScope.MONTHLY_CATEGORY,
                 scope_ref="交通",
-                amount_minor_units=5000,
+                amount_ntd=5000,
                 alert_threshold_percent=80,
                 enabled=True,
             ),

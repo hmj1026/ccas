@@ -1,89 +1,24 @@
-"""主動通知 rendering 與發送。
+"""主動通知發送流程。
 
-提供新帳單解析完成、到期提醒、解析失敗的訊息格式與發送流程。
-排程觸發由 pipeline-scheduler 負責，此模組只負責內容格式與發送。
+提供新帳單解析完成、到期提醒、解析失敗的發送流程。
+排程觸發由 pipeline-scheduler 負責，此模組只負責發送組合；
+訊息格式（render_*）與 Telegram API 封裝（send_message）
+已抽至共用模組 :mod:`ccas.messaging`。
 """
 
 import logging
 from collections.abc import Sequence
 from datetime import date
 
-from ccas.bot.client import send_message
+from ccas.messaging import (
+    render_due_reminder,
+    render_new_bill_notification,
+    render_parse_failure_notification,
+    send_message,
+)
 from ccas.storage.models import Bill
 
 logger = logging.getLogger(__name__)
-
-
-def render_new_bill_notification(
-    bill: Bill,
-    bank_name: str,
-) -> str:
-    """格式化新帳單解析完成通知。
-
-    Args:
-        bill: 已解析的帳單。
-        bank_name: 銀行名稱。
-
-    Returns:
-        通知訊息文字。
-    """
-    return (
-        f"新帳單已解析\n\n"
-        f"銀行：{bank_name}\n"
-        f"帳單月份：{bill.billing_month}\n"
-        f"應繳金額：${bill.total_amount:,}\n"
-        f"到期日：{bill.due_date}"
-    )
-
-
-def render_due_reminder(
-    bill: Bill,
-    bank_name: str,
-    days_until_due: int,
-) -> str:
-    """格式化到期提醒訊息。
-
-    Args:
-        bill: 未繳帳單。
-        bank_name: 銀行名稱。
-        days_until_due: 距離到期的天數。
-
-    Returns:
-        提醒訊息文字。
-    """
-    urgency = "明天到期" if days_until_due <= 1 else f"{days_until_due} 天後到期"
-    return (
-        f"繳費提醒\n\n"
-        f"銀行：{bank_name}\n"
-        f"應繳金額：${bill.total_amount:,}\n"
-        f"到期日：{bill.due_date}（{urgency}）\n\n"
-        f"使用 /paid {bill.id} 標記已繳"
-    )
-
-
-def render_parse_failure_notification(
-    bank_name: str,
-    filename: str,
-    error_reason: str | None,
-) -> str:
-    """格式化解析失敗通知。
-
-    Args:
-        bank_name: 銀行名稱。
-        filename: 原始檔案名稱。
-        error_reason: 失敗原因（可為 None）。
-
-    Returns:
-        異常通知訊息文字。
-    """
-    reason = error_reason or "未知錯誤"
-    return (
-        f"帳單解析失敗\n\n"
-        f"銀行：{bank_name}\n"
-        f"檔案：{filename}\n"
-        f"原因：{reason}\n\n"
-        f"請人工確認並重新處理。"
-    )
 
 
 async def notify_new_bill(
@@ -93,7 +28,9 @@ async def notify_new_bill(
     bank_name: str,
 ) -> None:
     """發送新帳單解析完成通知。"""
-    text = render_new_bill_notification(bill, bank_name)
+    text = render_new_bill_notification(
+        bank_name, bill.billing_month, bill.total_amount, bill.due_date
+    )
     await send_message(bot_token, chat_id, text)
     logger.info("Sent new bill notification for bill #%d", bill.id)
 

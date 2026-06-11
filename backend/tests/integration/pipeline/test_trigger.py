@@ -8,7 +8,16 @@ from unittest.mock import MagicMock, patch
 import pytest
 from httpx import AsyncClient
 
+from ccas.api.routers import pipeline as pipeline_module
 from tests.integration.conftest import auth_headers
+
+
+@pytest.fixture(autouse=True)
+def _reset_redis_singleton():
+    """Reset the module-level Redis singleton so each test re-resolves it."""
+    pipeline_module._redis_pool = None
+    yield
+    pipeline_module._redis_pool = None
 
 
 class TestPipelineTriggerEndpoint:
@@ -124,3 +133,21 @@ class TestPipelineTriggerEndpoint:
             )
 
         assert response.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_trigger_unknown_field_returns_422(self, client: AsyncClient):
+        """打錯欄位名（如 bank_codes）應回 422，而非靜默觸發全銀行 pipeline。"""
+        mock_queue = MagicMock()
+
+        with (
+            patch("ccas.api.routers.pipeline.Redis"),
+            patch("ccas.api.routers.pipeline.Queue", return_value=mock_queue),
+        ):
+            response = await client.post(
+                "/api/pipeline/trigger",
+                headers=auth_headers(),
+                json={"bank_codes": ["CTBC"], "force": True},
+            )
+
+        assert response.status_code == 422
+        mock_queue.enqueue.assert_not_called()

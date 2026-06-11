@@ -233,3 +233,15 @@ async def test_invalid_month_format(client: AsyncClient, db_session: AsyncSessio
         "/api/transactions?month=2026-13", headers=auth_headers()
     )
     assert response.status_code == 422
+
+
+async def test_invalid_sort_returns_422(client: AsyncClient, db_session: AsyncSession):
+    """非法 sort 值不再靜默 fallback，回 422 統一信封格式。"""
+    response = await client.get(
+        "/api/transactions?sort=not_a_sort", headers=auth_headers()
+    )
+    assert response.status_code == 422
+    body = response.json()
+    assert body["success"] is False
+    assert "sort" in body["message"]
+    assert body["data"] is None

@@ -10,6 +10,7 @@ import sys
 from functools import partial
 from pathlib import Path
 
+from apscheduler.events import EVENT_JOB_MISSED, JobExecutionEvent
 from apscheduler.schedulers.blocking import BlockingScheduler
 
 from ccas.config import get_settings
@@ -17,7 +18,7 @@ from ccas.log import configure_logging
 from ccas.scheduler.jobs import (
     run_budget_evaluator_sync,
     run_payment_reminders_sync,
-    trigger_pipeline_via_api,
+    trigger_pipeline_via_rq,
 )
 
 logger = logging.getLogger(__name__)
@@ -29,19 +30,33 @@ def _touch_heartbeat(path: Path) -> None:
     path.touch(exist_ok=True)
 
 
+def _on_job_missed(event: JobExecutionEvent) -> None:
+    """Log missed jobs (misfire beyond grace time) so operators can see them."""
+    logger.warning(
+        "Scheduler job missed: job_id=%s scheduled_run_time=%s",
+        event.job_id,
+        event.scheduled_run_time,
+    )
+
+
 def main() -> None:
-    configure_logging()
     """啟動 APScheduler 排程器。
 
     註冊的工作：
     - pipeline 觸發：每日午夜執行
     - 付款提醒：每日早上 9 點執行
     """
-    scheduler = BlockingScheduler()
+    configure_logging()
+    # misfire_grace_time: daily jobs may miss their slot when the host sleeps
+    # or the container restarts; allow up to 1h late execution instead of
+    # silently dropping the run. max_instances=1 prevents overlapping runs.
+    scheduler = BlockingScheduler(
+        job_defaults={"misfire_grace_time": 3600, "max_instances": 1}
+    )
 
-    # 每日午夜觸發 pipeline
+    # 每日午夜觸發 pipeline（直接 enqueue RQ，不經 API）
     scheduler.add_job(
-        trigger_pipeline_via_api,
+        trigger_pipeline_via_rq,
         "cron",
         hour=0,
         minute=0,
@@ -95,6 +110,9 @@ def main() -> None:
         id="scheduler_heartbeat",
         name="Scheduler heartbeat writer",
         replace_existing=True,
+        # A late heartbeat touch is useless (next tick is 30s away); override
+        # the 1h default so missed ticks are dropped (and logged) instead.
+        misfire_grace_time=15,
     )
 
     def _shutdown(signum, frame):
@@ -104,6 +122,9 @@ def main() -> None:
 
     signal.signal(signal.SIGINT, _shutdown)
     signal.signal(signal.SIGTERM, _shutdown)
+
+    # Surface dropped runs (misfire beyond grace time) in logs at warning level.
+    scheduler.add_listener(_on_job_missed, EVENT_JOB_MISSED)
 
     logger.info(
         "Starting scheduler with 4 jobs: daily_pipeline, "

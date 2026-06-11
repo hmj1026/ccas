@@ -5,7 +5,7 @@ TBD - created by archiving change bills-management-and-insights. Update Purpose 
 ## Requirements
 ### Requirement: GET /api/analytics/compare/banks 銀行對比
 
-系統 SHALL 提供 `GET /api/analytics/compare/banks?year=&month=` 端點，回傳指定年月各銀行的金額與筆數（GROUP BY bank_code）。Response SHALL 為陣列：`[{bank_code, display_name, amount_minor_units, count}, ...]`，按 amount DESC 排序。
+系統 SHALL 提供 `GET /api/analytics/compare/banks?year=&month=` 端點，回傳指定年月各銀行的金額與筆數（GROUP BY bank_code）。Response SHALL 為陣列：`[{bank_code, bank_name, total}, ...]`（`total` 為 NTD 整數元，不乘 100），按 total DESC 排序。
 
 #### Scenario: 月度銀行對比
 
@@ -38,7 +38,7 @@ TBD - created by archiving change bills-management-and-insights. Update Purpose 
 
 ### Requirement: GET /api/analytics/top-merchants 商家排行
 
-系統 SHALL 提供 `GET /api/analytics/top-merchants?limit=&period=year|month&offset_months=` 端點，回傳指定 period 內金額最高的商家排行（GROUP BY description）。預設 limit=10、period=month、offset_months=0（當月）。Response 為 `[{description, total_amount_minor_units, count, latest_date}, ...]`。
+系統 SHALL 提供 `GET /api/analytics/top-merchants?limit=&period=year|month&offset_months=` 端點，回傳指定 period 內金額最高的商家排行（GROUP BY description）。預設 limit=10、period=month、offset_months=0（當月）。Response 為 `[{merchant, total, count}, ...]`（`total` 為 NTD 整數元，不乘 100）。
 
 #### Scenario: 預設取當月 top 10
 
@@ -60,19 +60,24 @@ TBD - created by archiving change bills-management-and-insights. Update Purpose 
 - **WHEN** `?limit=200`
 - **THEN** 系統 SHALL 自動 cap 為 50、不報錯（避免大量 result）
 
-### Requirement: 既有 GET /api/analytics/categories 加 compare_with_previous
+### Requirement: GET /api/analytics/categories 與 /categories/compare 拆分端點
 
-既有 `GET /api/analytics/categories` 端點 SHALL 新增 `?compare_with_previous=true` 可選參數，true 時 response 每項 SHALL 額外含 `previous_amount_minor_units` 與 `change_percent` 欄位（與上月對比）。預設 false 維持既有行為。
+`GET /api/analytics/categories` SHALL 固定回傳 `ApiResponse[list[CategoryItem]]`（`{category, total}`，`total` 為 NTD 整數元），不接受 `compare_with_previous` 參數。系統 SHALL 另提供 `GET /api/analytics/categories/compare` 端點：`month`（YYYY-MM）為必填，回傳 `ApiResponse[list[CategoryWithCompareItem]]`（`{category, total, previous_total, change_percent}`），`change_percent = (total - previous_total) / previous_total * 100`。
 
-#### Scenario: compare_with_previous=true
+#### Scenario: 基礎端點回應形狀固定
 
-- **WHEN** `GET /api/analytics/categories?year=2026&month=5&compare_with_previous=true`
-- **THEN** response 每 category 項 SHALL 含 `{category_id, name, current_amount, previous_amount, change_percent}`；`change_percent = (current - previous) / previous * 100`，previous=0 時 change_percent SHALL 為 null（避免除 0）
+- **WHEN** `GET /api/analytics/categories?month=2026-05`
+- **THEN** response 每項 SHALL 僅含 `{category, total}`，形狀不隨參數改變
 
-#### Scenario: 預設不影響既有 client
+#### Scenario: compare 端點月對月比較
 
-- **WHEN** 不帶該參數
-- **THEN** response shape SHALL 與本 change 前完全一致，既有 frontend 整合不受影響
+- **WHEN** `GET /api/analytics/categories/compare?month=2026-05`
+- **THEN** response 每項 SHALL 含 `{category, total, previous_total, change_percent}`；前月無資料或為 0 時 `change_percent` SHALL 為 null（避免除 0）
+
+#### Scenario: compare 端點 month 必填
+
+- **WHEN** `GET /api/analytics/categories/compare`（缺 month）
+- **THEN** SHALL 回 422
 
 ### Requirement: /insights 前端頁面整合
 

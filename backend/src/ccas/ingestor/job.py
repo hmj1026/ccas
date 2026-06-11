@@ -479,9 +479,22 @@ async def run_ingestion_job(
                         )
                     finally:
                         bank_processed += 1
-                        await reporter.stage_item_done(
-                            "ingest", processed=bank_processed
-                        )
+                        # Progress reporting is pure UI and non-business-
+                        # critical: a reporter failure must not abort the loop
+                        # or roll back the flushed-but-uncommitted batch.
+                        # Swallow-with-log is deliberate here (logged, so not
+                        # a silent failure).
+                        try:
+                            await reporter.stage_item_done(
+                                "ingest", processed=bank_processed
+                            )
+                        except Exception:
+                            logger.warning(
+                                "ingest progress reporting failed "
+                                "(processed=%d); continuing",
+                                bank_processed,
+                                exc_info=True,
+                            )
             elif message.html_body is not None:
                 try:
                     await _process_web_fetch(
@@ -495,7 +508,19 @@ async def run_ingestion_job(
                     )
                 finally:
                     bank_processed += 1
-                    await reporter.stage_item_done("ingest", processed=bank_processed)
+                    # Same rationale as above: progress reporting failures are
+                    # logged but never abort the uncommitted batch.
+                    try:
+                        await reporter.stage_item_done(
+                            "ingest", processed=bank_processed
+                        )
+                    except Exception:
+                        logger.warning(
+                            "ingest progress reporting failed "
+                            "(processed=%d); continuing",
+                            bank_processed,
+                            exc_info=True,
+                        )
 
     await session.commit()
 

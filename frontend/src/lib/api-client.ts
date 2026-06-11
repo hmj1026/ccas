@@ -8,6 +8,41 @@ const API_BASE = import.meta.env.VITE_API_BASE ?? ''
 const JSON_HEADERS: HeadersInit = { 'Content-Type': 'application/json' }
 
 /**
+ * 從錯誤回應 body 萃取可讀的錯誤訊息。
+ * 優先序：`message` 欄位 → FastAPI 422 `detail` 陣列（串接各項 msg）
+ * → `detail` 字串 → HTTP 狀態碼。
+ *
+ * @param body - 解析後的回應 body（可能為 null）
+ * @param status - HTTP 狀態碼，作為最後 fallback
+ */
+function extractErrorMessage(body: unknown, status: number): string {
+  if (body && typeof body === 'object') {
+    if ('message' in body) {
+      const { message } = body as { message: unknown }
+      if (typeof message === 'string' && message) return message
+    }
+    if ('detail' in body) {
+      const { detail } = body as { detail: unknown }
+      if (Array.isArray(detail)) {
+        // Defensive: raw FastAPI validation errors are objects with a `msg`
+        // field; join them so users never see "[object Object]".
+        const joined = detail
+          .map((item) =>
+            item && typeof item === 'object' && 'msg' in item
+              ? String((item as { msg: unknown }).msg)
+              : String(item),
+          )
+          .join('; ')
+        if (joined) return joined
+      } else if (detail !== null && detail !== undefined) {
+        return String(detail)
+      }
+    }
+  }
+  return `HTTP ${status}`
+}
+
+/**
  * 解析 fetch Response，非 2xx 時拋出帶訊息的 Error。
  * 優先從回應 body 的 `message` 或 `detail` 欄位取得錯誤訊息。
  *
@@ -18,13 +53,7 @@ const JSON_HEADERS: HeadersInit = { 'Content-Type': 'application/json' }
 async function handleResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
     const body = await response.json().catch(() => null)
-    const message =
-      body && typeof body === 'object' && 'message' in body
-        ? (body as { message: string }).message
-        : body && typeof body === 'object' && 'detail' in body
-          ? String((body as { detail: string }).detail)
-        : `HTTP ${response.status}`
-    throw new Error(message)
+    throw new Error(extractErrorMessage(body, response.status))
   }
   if (response.status === 204) {
     return null as T

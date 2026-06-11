@@ -21,10 +21,11 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
 def _set_session_cookie(response: Response, token: str) -> None:
-    """Set an HttpOnly session cookie carrying token + current token version.
+    """Set an HttpOnly session cookie pinned to the current token version.
 
-    Cookie value is the opaque base64(json({"t": token, "v": version})) blob
-    produced by ``encode_session_cookie``; this lets the server invalidate
+    Cookie value is the opaque HMAC-signed ``{version}.{timestamp}.{hmac}``
+    blob produced by ``encode_session_cookie`` — the plaintext API token
+    never leaves the server. The embedded version lets the server invalidate
     every active cookie atomically when ``api-token-version`` is bumped by
     the rotate endpoint, without any per-cookie revocation list.
 

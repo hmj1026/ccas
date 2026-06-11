@@ -79,7 +79,7 @@ def _patches(**stage_returns: Any):
             ),
         ),
         patch(
-            "ccas.pipeline.orchestrator.run_notify_job",
+            "ccas.bot.job.run_notify_job",
             return_value=stage_returns.get(
                 "notify",
                 NotifySummary(sent_count=1, failed_count=0, errors=[]),

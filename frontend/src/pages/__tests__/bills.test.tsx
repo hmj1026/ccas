@@ -187,6 +187,22 @@ describe('BillsPage', () => {
     expect(mockApiPatch).toHaveBeenCalledWith('/api/bills/1', { is_paid: true })
   })
 
+  it('shows error banner when toggling paid status fails', async () => {
+    const user = userEvent.setup()
+    mockApiPatch.mockRejectedValue(new Error('更新付款狀態失敗'))
+
+    renderWithProviders(<BillsPage />)
+
+    await waitFor(() => {
+      expect(screen.getByText('中國信託')).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByLabelText('標記為已繳'))
+
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('更新付款狀態失敗')
+  })
+
   it('does not fetch transactions until expanded', async () => {
     renderWithProviders(<BillsPage />)
 
