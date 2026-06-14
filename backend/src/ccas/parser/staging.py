@@ -17,6 +17,7 @@ from ccas.storage.models import (
     Bill,
     PaymentReminder,
     StagedAttachment,
+    StagedAttachmentStatus,
     Transaction,
 )
 
@@ -41,11 +42,18 @@ async def fetch_parseable_attachments(
     if force:
         stmt = select(StagedAttachment).where(
             StagedAttachment.status.in_(
-                ["decrypted", "parsed", "parse_failed", "parse_skipped"]
+                [
+                    StagedAttachmentStatus.DECRYPTED,
+                    StagedAttachmentStatus.PARSED,
+                    StagedAttachmentStatus.PARSE_FAILED,
+                    StagedAttachmentStatus.PARSE_SKIPPED,
+                ]
             )
         )
     else:
-        stmt = select(StagedAttachment).where(StagedAttachment.status == "decrypted")
+        stmt = select(StagedAttachment).where(
+            StagedAttachment.status == StagedAttachmentStatus.DECRYPTED
+        )
     stmt = apply_pipeline_filters(stmt, options)
     result = await session.execute(stmt)
     return result.scalars().all()
@@ -175,7 +183,7 @@ async def update_attachment_status(
     session: AsyncSession,
     attachment: StagedAttachment,
     *,
-    status: str,
+    status: StagedAttachmentStatus,
     error_reason: str | None = None,
 ) -> None:
     """更新附件的處理狀態。
