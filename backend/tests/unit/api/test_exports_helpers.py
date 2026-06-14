@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 from datetime import date
 
-from ccas.api.routers.exports import _build_query, _row_values
+from ccas.api.routers.exports import _build_query, _neutralize, _row_values
 from ccas.storage.models import Transaction
 
 
@@ -114,3 +114,38 @@ class TestRowValues:
         assert json.loads(row[11]) == []
         assert row[12] == ""
         assert row[13] == ""
+
+
+class TestFormulaInjectionNeutralization:
+    """OWASP CSV Formula Injection 防護（R03）。"""
+
+    def test_neutralize_prefixes_formula_leading_strings(self):
+        assert _neutralize("=HYPERLINK(1)") == "'=HYPERLINK(1)"
+        assert _neutralize("+1+2") == "'+1+2"
+        assert _neutralize("-2+3") == "'-2+3"
+        assert _neutralize("@SUM(A1)") == "'@SUM(A1)"
+        assert _neutralize("\tcmd") == "'\tcmd"
+        assert _neutralize("\rcmd") == "'\rcmd"
+
+    def test_neutralize_passes_safe_values_through(self):
+        assert _neutralize("星巴克") == "星巴克"
+        assert _neutralize("") == ""
+        assert _neutralize(150) == 150  # numeric untouched
+        assert _neutralize(None) is None
+
+    def test_row_values_neutralizes_user_controlled_fields(self):
+        txn = Transaction(
+            bill_id=1,
+            trans_date=date(2026, 5, 10),
+            merchant="=cmd|'/C calc'!A1",
+            amount=100,
+            currency="TWD",
+            merchant_alias="+attack",
+            note="@evil()",
+            tags=["x"],
+        )
+        row = _row_values(txn, "CTBC", "2026-05", include_user_fields=True)
+        assert row[4] == "'=cmd|'/C calc'!A1"  # merchant neutralized
+        assert row[5] == 100  # numeric amount unchanged
+        assert row[12] == "'+attack"  # merchant_alias neutralized
+        assert row[13] == "'@evil()"  # note neutralized

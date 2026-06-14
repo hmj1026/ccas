@@ -5,6 +5,7 @@
 """
 
 import logging
+import os
 from pathlib import Path
 
 from google.auth.exceptions import RefreshError
@@ -19,9 +20,27 @@ GMAIL_SCOPES = ("https://www.googleapis.com/auth/gmail.readonly",)
 
 
 def write_private_token_file(path: Path, content: str) -> None:
-    """寫入 token 檔並收斂權限到 owner-only。"""
-    path.write_text(content)
-    path.chmod(0o600)
+    """以 0600 權限原子建檔寫入 token，避免 write→chmod 之間的 race window。
+
+    對照 ``storage.secrets.MasterKeyManager``：直接用 ``os.open`` 帶
+    ``0o600`` mode 建檔，讓檔案從一開始就是 owner-only，而非先以預設
+    umask 落地再 chmod（後者有短暫世界可讀的時間窗,可能洩漏 OAuth token）。
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC
+    fd = os.open(path, flags, 0o600)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(content)
+    except Exception:
+        # fdopen 失敗時 fd 尚未被接管，需手動關閉避免洩漏。
+        try:
+            os.close(fd)
+        except OSError:
+            pass
+        raise
+    # 防禦性 chmod：對抗少數系統下 umask 仍影響 os.open mode 的情況。
+    os.chmod(path, 0o600)
 
 
 class GmailAuthError(IngestError):
