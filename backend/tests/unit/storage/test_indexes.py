@@ -18,6 +18,8 @@ from ccas.storage.models import Base
 
 EXPECTED_INDEXES: dict[str, str] = {
     "ix_transactions_bill_id": "transactions",
+    "ix_transactions_category_trans_date": "transactions",
+    "ix_transactions_merchant": "transactions",
     "ix_payment_reminders_bill_id": "payment_reminders",
     "ix_staged_attachments_status": "staged_attachments",
     "ix_bills_billing_month": "bills",

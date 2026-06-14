@@ -50,8 +50,9 @@ def test_budget_amount_ntd_rename_up_down_up(
 ) -> None:
     cfg, db_path = alembic_scratch
 
-    # up: head schema uses the NTD column names
-    command.upgrade(cfg, "head")
+    # up to the rename revision itself (not global head) so that ``downgrade -1``
+    # always reverses *this* migration regardless of later migrations stacked on top.
+    command.upgrade(cfg, "f3a9d8c1b2e4")
     budgets = _columns(db_path, "budgets")
     alerts = _columns(db_path, "budget_alerts")
     assert "amount_ntd" in budgets
