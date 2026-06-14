@@ -52,7 +52,7 @@ Requires Docker + Docker Compose. First create a Google Cloud OAuth client — s
 
 ```bash
 mkdir ~/ccas && cd ~/ccas
-RELEASE=v0.2.0   # pin a released version
+RELEASE=v0.3.0   # pin a released version
 curl -fsSL -o docker-compose.yml \
   "https://github.com/<owner>/ccas/releases/download/${RELEASE}/docker-compose.yml"
 curl -fsSL -o example.env \
