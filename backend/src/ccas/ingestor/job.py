@@ -36,7 +36,7 @@ from ccas.ingestor.staging import (
 )
 from ccas.pipeline.options import PipelineOptions
 from ccas.pipeline.progress import NoopProgressReporter, ProgressReporter
-from ccas.storage.models import BankConfig, BankSettings
+from ccas.storage.models import BankConfig, BankSettings, StagedAttachmentStatus
 
 logger = logging.getLogger(__name__)
 
@@ -228,7 +228,7 @@ async def _process_attachment(
             message_date=attachment.message_date,
             original_filename=attachment.filename,
             staged_path=new_stored,
-            status="staged",
+            status=StagedAttachmentStatus.STAGED,
             part_id=attachment.part_id,
         )
         summary.staged_count += 1
@@ -250,7 +250,7 @@ async def _process_attachment(
                 message_date=attachment.message_date,
                 original_filename=attachment.filename,
                 staged_path=None,
-                status="failed",
+                status=StagedAttachmentStatus.FAILED,
                 error_reason=str(exc),
                 part_id=attachment.part_id,
             )
@@ -336,7 +336,7 @@ async def _process_web_fetch(
             message_date=message.message_date,
             original_filename=staged_filename,
             staged_path=new_stored,
-            status="staged",
+            status=StagedAttachmentStatus.STAGED,
             source_type="web_fetch",
             part_id=synthetic_part_id,
         )
@@ -353,14 +353,14 @@ async def _process_web_fetch(
             )
             summary.skipped_count += 1
             logger.warning(error_msg)
-            new_status = "fetch_expired"
+            new_status = StagedAttachmentStatus.FETCH_EXPIRED
             new_reason = _EXPIRED_FETCH_REASON
         else:
             error_msg = f"Web-fetch 失敗 ({bank_code}/{message.message_id}): {exc}"
             summary.failed_count += 1
             summary.errors.append(error_msg)
             logger.error(error_msg, exc_info=True)
-            new_status = "failed"
+            new_status = StagedAttachmentStatus.FAILED
             new_reason = exc_str
 
         if existing is None:

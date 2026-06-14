@@ -109,5 +109,5 @@ def decrypt_pdf(pdf_path: Path, password: str | None) -> DecryptResult:
         ) as pdf:
             pdf.save(pdf_path)
             return DecryptResult(needed_decryption=True)
-    except pikepdf.PasswordError:
-        raise DecryptionError("Invalid password")
+    except pikepdf.PasswordError as exc:
+        raise DecryptionError("Invalid password") from exc

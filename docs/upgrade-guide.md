@@ -13,7 +13,7 @@
 cd ~/ccas    # 你 docker-compose.yml 所在的目錄
 
 # 1) 修改 .env 的版本
-sed -i 's/^CCAS_VERSION=.*/CCAS_VERSION=v0.2.0/' .env
+sed -i 's/^CCAS_VERSION=.*/CCAS_VERSION=v0.3.0/' .env
 
 # 2) 拉新 image 並重啟
 docker compose -f docker-compose.yml pull
@@ -88,8 +88,8 @@ docker compose -f docker-compose.yml down
 rm -rf data
 tar -xzf ccas-backup-<舊時間戳>.tar.gz
 
-# 3) 改 .env 的 CCAS_VERSION 回舊版
-sed -i 's/^CCAS_VERSION=.*/CCAS_VERSION=v0.1.0/' .env
+# 3) 改 .env 的 CCAS_VERSION 回舊版（換成你要回滾到的版號）
+sed -i 's/^CCAS_VERSION=.*/CCAS_VERSION=<舊版號>/' .env
 
 # 4) 重新啟動
 docker compose -f docker-compose.yml pull
@@ -109,7 +109,7 @@ docker compose -f docker-compose.yml up -d
 2. 沒事先備份就升級 = 出狀況時無路可退
 3. release floating tag 在 main push 時會更新；若你沒追 commit log，可能在意外時段拉到 unfinished work
 
-建議：在 `.env` 釘精確版號（`v0.1.0`），手動排定升級時段。
+建議：在 `.env` 釘精確版號（例：`v0.3.0`），手動排定升級時段。
 
 ---
 

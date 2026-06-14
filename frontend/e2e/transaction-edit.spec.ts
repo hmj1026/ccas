@@ -191,4 +191,33 @@ test.describe('Transaction edit', () => {
     await page.getByRole('button', { name: '新增' }).click()
     await expect(page.getByText('業務')).toBeVisible()
   })
+
+  test('PUT 失敗時顯示錯誤提示且頁面不被破壞 (R08/R23)', async ({ page }) => {
+    const state = { detail: { ...BASE_DETAIL } }
+    await setupRoutes(page, state)
+    // 覆寫 detail 路由：GET 正常、PUT 回 422，驗證失敗會宣讀錯誤而非靜默。
+    await page.route('**/api/transactions/42', async (route) => {
+      const method = route.request().method()
+      if (method === 'GET') {
+        await route.fulfill({ json: ok(state.detail) })
+        return
+      }
+      if (method === 'PUT') {
+        await route.fulfill({
+          status: 422,
+          contentType: 'application/json',
+          body: JSON.stringify({ success: false, data: null, message: '分類無效' }),
+        })
+        return
+      }
+      await route.fulfill({ status: 405 })
+    })
+
+    await page.goto('/transactions/42')
+    await page.getByLabel('分類選擇').selectOption('2')
+
+    // 錯誤 alert（role="alert"）出現，且頁面其餘內容仍可用
+    await expect(page.getByRole('alert')).toBeVisible()
+    await expect(page.getByText('Starbucks')).toBeVisible()
+  })
 })

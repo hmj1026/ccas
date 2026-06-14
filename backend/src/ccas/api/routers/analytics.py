@@ -11,6 +11,7 @@ from ccas.api.schemas import (
     CategoryWithCompareItem,
     TrendItem,
 )
+from ccas.constants import DEFAULT_CATEGORY
 from ccas.storage.database import get_db_session
 from ccas.storage.models import Bill, Transaction
 from ccas.storage.queries import fetch_bank_names
@@ -84,11 +85,11 @@ def _category_totals_stmt():
     """Aggregate transaction totals grouped by category (uncategorized fallback)."""
     return (
         select(
-            func.coalesce(Transaction.category, "未分類"),
+            func.coalesce(Transaction.category, DEFAULT_CATEGORY),
             func.coalesce(func.sum(Transaction.amount), 0),
         )
         .join(Bill, Transaction.bill_id == Bill.id)
-        .group_by(func.coalesce(Transaction.category, "未分類"))
+        .group_by(func.coalesce(Transaction.category, DEFAULT_CATEGORY))
         .order_by(func.sum(Transaction.amount).desc())
     )
 
@@ -123,16 +124,30 @@ async def get_categories_compare(
     session: AsyncSession = Depends(get_db_session),
 ):
     """取得指定月份類別分布，附前一個月的金額與變化百分比。"""
-    base_stmt = _category_totals_stmt()
-    stmt = _apply_month_year_filter(base_stmt, month, None)
-    rows = (await session.execute(stmt)).all()
-
-    prev_stmt = _apply_month_year_filter(base_stmt, _previous_month(month), None)
-    prev_rows = (await session.execute(prev_stmt)).all()
-    prev_by_cat = {row[0]: int(row[1]) for row in prev_rows}
+    # 單一查詢同時取本月與前一月（GROUP BY billing_month, category），
+    # 再於 Python 端分桶，取代原本兩次 round-trip（R30）。
+    prev_month = _previous_month(month)
+    stmt = (
+        select(
+            Bill.billing_month,
+            func.coalesce(Transaction.category, DEFAULT_CATEGORY),
+            func.coalesce(func.sum(Transaction.amount), 0),
+        )
+        .join(Bill, Transaction.bill_id == Bill.id)
+        .where(Bill.billing_month.in_([month, prev_month]))
+        .group_by(
+            Bill.billing_month,
+            func.coalesce(Transaction.category, DEFAULT_CATEGORY),
+        )
+    )
+    cur_by_cat: dict[str, int] = {}
+    prev_by_cat: dict[str, int] = {}
+    for billing_month, cat, total in (await session.execute(stmt)).all():
+        bucket = cur_by_cat if billing_month == month else prev_by_cat
+        bucket[cat] = int(total)
 
     items: list[CategoryWithCompareItem] = []
-    for cat, total in rows:
+    for cat, total in sorted(cur_by_cat.items(), key=lambda kv: kv[1], reverse=True):
         previous = prev_by_cat.get(cat)
         if previous is None or previous == 0:
             change_pct: float | None = None

@@ -8,8 +8,7 @@
 import re
 
 from ccas.classifier.rules import ClassificationRule, RuleSet
-
-DEFAULT_CATEGORY = "未分類"
+from ccas.constants import DEFAULT_CATEGORY  # re-export for backward compat
 
 
 def normalize(text: str) -> str:

@@ -48,7 +48,10 @@ function CreateBudgetDialog({
   onCreate,
   isPending,
 }: {
-  readonly onCreate: (body: BudgetCreateRequest) => void
+  readonly onCreate: (
+    body: BudgetCreateRequest,
+    opts: { onSuccess: () => void },
+  ) => void
   readonly isPending: boolean
 }) {
   const [open, setOpen] = useState(false)
@@ -75,18 +78,25 @@ function CreateBudgetDialog({
       setError(`${scope} 必須指定範圍（類別名 / 銀行代碼）`)
       return
     }
-    onCreate({
-      scope,
-      scope_ref: scope === 'monthly_total' ? null : scopeRef.trim(),
-      amount_ntd: amountNum,
-      alert_threshold_percent: thresholdNum,
-      enabled: true,
-    })
-    setOpen(false)
-    setScope('monthly_total')
-    setScopeRef('')
-    setAmount('')
-    setThreshold('80')
+    // 僅在 API 成功後才關閉並清空表單；失敗時保留輸入並由父層顯示錯誤。
+    onCreate(
+      {
+        scope,
+        scope_ref: scope === 'monthly_total' ? null : scopeRef.trim(),
+        amount_ntd: amountNum,
+        alert_threshold_percent: thresholdNum,
+        enabled: true,
+      },
+      {
+        onSuccess: () => {
+          setOpen(false)
+          setScope('monthly_total')
+          setScopeRef('')
+          setAmount('')
+          setThreshold('80')
+        },
+      },
+    )
   }
 
   if (!open) {
@@ -241,8 +251,10 @@ function SettingsBudgetsPage() {
     mutationFn: (body: BudgetCreateRequest) =>
       apiPost<ApiResponse<BudgetItem>>('/api/budgets', body),
     onSuccess: () => {
+      setMutationError(null)
       queryClient.invalidateQueries({ queryKey: ['budgets'] })
     },
+    onError: (err: Error) => setMutationError(err.message),
   })
 
   const updateMutation = useMutation({
@@ -296,7 +308,7 @@ function SettingsBudgetsPage() {
         </p>
       ) : null}
       <CreateBudgetDialog
-        onCreate={(body) => createMutation.mutate(body)}
+        onCreate={(body, opts) => createMutation.mutate(body, opts)}
         isPending={createMutation.isPending}
       />
       {budgets.length === 0 ? (

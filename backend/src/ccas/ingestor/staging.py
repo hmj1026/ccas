@@ -12,7 +12,7 @@ from pathlib import Path
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ccas.storage.models import StagedAttachment
+from ccas.storage.models import StagedAttachment, StagedAttachmentStatus
 
 _BANK_CODE_RE = re.compile(r"^[A-Za-z0-9_-]+$")
 
@@ -176,7 +176,7 @@ async def create_staged_record(
     message_date: datetime,
     original_filename: str,
     staged_path: str | None,
-    status: str,
+    status: StagedAttachmentStatus,
     error_reason: str | None = None,
     source_type: str = "attachment",
     part_id: str = "",
@@ -220,7 +220,7 @@ async def update_staged_record_failure(
     session: AsyncSession,
     record: StagedAttachment,
     *,
-    status: str,
+    status: StagedAttachmentStatus,
     error_reason: str,
 ) -> None:
     """更新既有 StagedAttachment 的狀態與錯誤原因（失敗路徑使用）。

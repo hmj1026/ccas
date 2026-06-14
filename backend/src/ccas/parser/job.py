@@ -30,7 +30,7 @@ from ccas.parser.staging import (
 )
 from ccas.pipeline.options import PipelineOptions
 from ccas.pipeline.progress import NoopProgressReporter, ProgressReporter
-from ccas.storage.models import StagedAttachment
+from ccas.storage.models import StagedAttachment, StagedAttachmentStatus
 
 logger = logging.getLogger(__name__)
 
@@ -155,7 +155,10 @@ async def _process_attachment(
         summary.errors.append(error_msg)
         logger.error(error_msg)
         await update_attachment_status(
-            session, attachment, status="parse_failed", error_reason=error_msg
+            session,
+            attachment,
+            status=StagedAttachmentStatus.PARSE_FAILED,
+            error_reason=error_msg,
         )
         return
 
@@ -170,7 +173,10 @@ async def _process_attachment(
         summary.errors.append(error_msg)
         logger.error(error_msg)
         await update_attachment_status(
-            session, attachment, status="parse_failed", error_reason=error_msg
+            session,
+            attachment,
+            status=StagedAttachmentStatus.PARSE_FAILED,
+            error_reason=error_msg,
         )
         return
 
@@ -187,7 +193,10 @@ async def _process_attachment(
         summary.errors.append(error_msg)
         logger.error(error_msg)
         await update_attachment_status(
-            session, attachment, status="parse_failed", error_reason=error_msg
+            session,
+            attachment,
+            status=StagedAttachmentStatus.PARSE_FAILED,
+            error_reason=error_msg,
         )
         return
 
@@ -213,7 +222,7 @@ async def _process_attachment(
             await update_attachment_status(
                 session,
                 attachment,
-                status="parse_skipped",
+                status=StagedAttachmentStatus.PARSE_SKIPPED,
                 error_reason=error_detail,
             )
             return
@@ -231,7 +240,10 @@ async def _process_attachment(
             },
         )
         await update_attachment_status(
-            session, attachment, status="parse_failed", error_reason=error_detail
+            session,
+            attachment,
+            status=StagedAttachmentStatus.PARSE_FAILED,
+            error_reason=error_detail,
         )
         return
 
@@ -248,7 +260,9 @@ async def _process_attachment(
             parse_result.bank_code,
             parse_result.billing_month,
         )
-        await update_attachment_status(session, attachment, status="parsed")
+        await update_attachment_status(
+            session, attachment, status=StagedAttachmentStatus.PARSED
+        )
         return
 
     if bill_exists and force:
@@ -265,7 +279,9 @@ async def _process_attachment(
     await create_bill_and_transactions(
         session, parse_result, file_path=str(staged_path)
     )
-    await update_attachment_status(session, attachment, status="parsed")
+    await update_attachment_status(
+        session, attachment, status=StagedAttachmentStatus.PARSED
+    )
 
     summary.parsed_count += 1
     logger.info(

@@ -13,7 +13,7 @@ from ccas.ingestor.staging import (
     create_staged_record,
     find_existing_staged,
 )
-from ccas.storage.models import Base, StagedAttachment
+from ccas.storage.models import Base, StagedAttachment, StagedAttachmentStatus
 
 
 @pytest.fixture
@@ -258,7 +258,7 @@ class TestCreateStagedRecord:
             message_date=datetime(2026, 3, 10),
             original_filename="bill.pdf",
             staged_path="/data/staging/CTBC/msg-001_bill.pdf",
-            status="staged",
+            status=StagedAttachmentStatus.STAGED,
         )
 
         assert record.id is not None
@@ -281,7 +281,7 @@ class TestCreateStagedRecord:
             message_date=datetime(2026, 3, 15),
             original_filename="statement.pdf",
             staged_path=None,
-            status="failed",
+            status=StagedAttachmentStatus.FAILED,
             error_reason="HttpError 500: Internal Server Error",
         )
 

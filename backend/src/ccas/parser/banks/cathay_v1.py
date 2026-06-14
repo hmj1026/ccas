@@ -399,19 +399,29 @@ def _extract_transactions_text(
     pages: list[pdfplumber.page.Page],
     billing_year: int,
 ) -> list[TransactionItem]:
-    """Extract transactions from text lines."""
+    """Extract transactions from text lines.
+
+    Full format (date date merchant amount) is tried across all pages first;
+    only if no page yields any full-format row do we fall back to simple format
+    across all pages. The fallback guard must live OUTSIDE the page loop —
+    otherwise a multi-page bill whose first page is full-format would skip the
+    simple-format fallback on later pages and silently drop their transactions.
+    """
     items: list[TransactionItem] = []
+    # Phase 1: full format across all pages.
     for page in pages:
         raw_text = page.extract_text() or ""
         text = _crop_transaction_section(raw_text)
-        # Try full format first (date date merchant amount)
         for match in _RE_TRANSACTION_LINE.finditer(text):
             item = _parse_text_transaction(match, billing_year)
             if item is not None:
                 items.append(item)
 
-        if not items:
-            # Fallback to simple format (date merchant amount)
+    # Phase 2: simple-format fallback only when full format found nothing.
+    if not items:
+        for page in pages:
+            raw_text = page.extract_text() or ""
+            text = _crop_transaction_section(raw_text)
             for match in _RE_TRANSACTION_LINE_SIMPLE.finditer(text):
                 item = _parse_simple_text_transaction(match, billing_year)
                 if item is not None:

@@ -93,3 +93,15 @@ async def test_overview_upcoming_bills(client: AsyncClient, db_session: AsyncSes
     assert len(upcoming) >= 1
     assert upcoming[0]["bank_code"] == "CTBC"
     assert upcoming[0]["is_paid"] is False
+
+
+async def test_overview_requires_auth(client: AsyncClient):
+    """R31：缺 Token 的 overview 請求回 401。"""
+    response = await client.get("/api/overview")
+    assert response.status_code == 401
+
+
+async def test_overview_rejects_bad_month_pattern(client: AsyncClient):
+    """R31：month 不符 YYYY-MM 樣式回 422。"""
+    response = await client.get("/api/overview?month=2026-13", headers=auth_headers())
+    assert response.status_code == 422

@@ -10,8 +10,12 @@ import { AlertCircle, Inbox, Loader2 } from 'lucide-react'
  */
 export function LoadingState({ message = '載入中...' }: { readonly message?: string }) {
   return (
-    <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-      <Loader2 className="size-8 animate-spin" />
+    <div
+      role="status"
+      aria-live="polite"
+      className="flex flex-col items-center justify-center py-12 text-muted-foreground"
+    >
+      <Loader2 className="size-8 animate-spin" aria-hidden="true" />
       <p className="mt-3 text-sm">{message}</p>
     </div>
   )
@@ -24,8 +28,11 @@ export function LoadingState({ message = '載入中...' }: { readonly message?: 
  */
 export function ErrorState({ message = '發生錯誤' }: { readonly message?: string }) {
   return (
-    <div className="flex flex-col items-center justify-center py-12 text-destructive">
-      <AlertCircle className="size-8" />
+    <div
+      role="alert"
+      className="flex flex-col items-center justify-center py-12 text-destructive"
+    >
+      <AlertCircle className="size-8" aria-hidden="true" />
       <p className="mt-3 text-sm">{message}</p>
     </div>
   )
@@ -38,8 +45,11 @@ export function ErrorState({ message = '發生錯誤' }: { readonly message?: st
  */
 export function EmptyState({ message = '暫無資料' }: { readonly message?: string }) {
   return (
-    <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
-      <Inbox className="size-8" />
+    <div
+      role="status"
+      className="flex flex-col items-center justify-center py-12 text-muted-foreground"
+    >
+      <Inbox className="size-8" aria-hidden="true" />
       <p className="mt-3 text-sm">{message}</p>
     </div>
   )

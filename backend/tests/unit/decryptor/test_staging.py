@@ -6,7 +6,7 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from ccas.decryptor.staging import fetch_pending_attachments, update_attachment_status
-from ccas.storage.models import Base, StagedAttachment
+from ccas.storage.models import Base, StagedAttachment, StagedAttachmentStatus
 
 
 @pytest.fixture
@@ -94,7 +94,9 @@ class TestUpdateAttachmentStatus:
         db_session.add(att)
         await db_session.flush()
 
-        await update_attachment_status(db_session, att, status="decrypted")
+        await update_attachment_status(
+            db_session, att, status=StagedAttachmentStatus.DECRYPTED
+        )
         assert att.status == "decrypted"
         assert att.error_reason is None
 
@@ -107,7 +109,7 @@ class TestUpdateAttachmentStatus:
         await update_attachment_status(
             db_session,
             att,
-            status="decrypt_failed",
+            status=StagedAttachmentStatus.DECRYPT_FAILED,
             error_reason="Invalid password",
         )
         assert att.status == "decrypt_failed"

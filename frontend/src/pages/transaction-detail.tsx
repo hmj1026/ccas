@@ -338,9 +338,15 @@ function TransactionDetailPage() {
           </div>
         </section>
 
-        {updateMutation.isError && (
-          <div className="rounded-md border border-destructive bg-destructive/10 p-3 text-sm">
-            儲存失敗：{updateMutation.error?.message ?? '未知錯誤'}
+        {(updateMutation.isError || resetOverrideMutation.isError) && (
+          <div
+            role="alert"
+            className="rounded-md border border-destructive bg-destructive/10 p-3 text-sm"
+          >
+            儲存失敗：
+            {updateMutation.error?.message ??
+              resetOverrideMutation.error?.message ??
+              '未知錯誤'}
             <Button
               variant="link"
               size="sm"

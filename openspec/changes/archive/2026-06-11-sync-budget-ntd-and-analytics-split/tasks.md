@@ -26,4 +26,4 @@
 
 - [x] 4.1 撰寫 delta specs（`budget-and-overspend-alerts`、`insights-dashboard-v2`）
 - [x] 4.2 `/opsx:sync` 套用 delta 至 `openspec/specs/`
-- [ ] 4.3 `/opsx:archive` 歸檔本變更
+- [x] 4.3 `/opsx:archive` 歸檔本變更

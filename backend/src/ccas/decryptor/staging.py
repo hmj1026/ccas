@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ccas.pipeline.filters import apply_pipeline_filters
 from ccas.pipeline.options import PipelineOptions
-from ccas.storage.models import StagedAttachment
+from ccas.storage.models import StagedAttachment, StagedAttachmentStatus
 
 
 async def fetch_pending_attachments(
@@ -32,10 +32,18 @@ async def fetch_pending_attachments(
     force = options.force if options else False
     if force:
         stmt = select(StagedAttachment).where(
-            StagedAttachment.status.in_(["staged", "decrypted", "decrypt_failed"])
+            StagedAttachment.status.in_(
+                [
+                    StagedAttachmentStatus.STAGED,
+                    StagedAttachmentStatus.DECRYPTED,
+                    StagedAttachmentStatus.DECRYPT_FAILED,
+                ]
+            )
         )
     else:
-        stmt = select(StagedAttachment).where(StagedAttachment.status == "staged")
+        stmt = select(StagedAttachment).where(
+            StagedAttachment.status == StagedAttachmentStatus.STAGED
+        )
     stmt = apply_pipeline_filters(stmt, options)
     result = await session.execute(stmt)
     return result.scalars().all()
@@ -45,7 +53,7 @@ async def update_attachment_status(
     session: AsyncSession,
     attachment: StagedAttachment,
     *,
-    status: str,
+    status: StagedAttachmentStatus,
     error_reason: str | None = None,
 ) -> None:
     """更新附件的處理狀態。

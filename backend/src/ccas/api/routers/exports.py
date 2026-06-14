@@ -58,6 +58,18 @@ USER_COLUMNS: tuple[str, ...] = (
     "note",
 )
 
+# OWASP CSV/Formula Injection 防護：試算表軟體會把以這些字元開頭的儲存格
+# 當成公式執行（=cmd|... / +HYPERLINK / @SUM / -2+3 等）。匯出前在前面補一個
+# 單引號讓其被當作純文字。Tab / CR 亦可觸發部分軟體的公式解析。
+_FORMULA_PREFIXES: tuple[str, ...] = ("=", "+", "-", "@", "\t", "\r")
+
+
+def _neutralize(value: Any) -> Any:
+    """Prefix a single quote to formula-leading strings; pass non-str through."""
+    if isinstance(value, str) and value and value[0] in _FORMULA_PREFIXES:
+        return "'" + value
+    return value
+
 
 def _build_query(
     *,
@@ -112,7 +124,7 @@ def _row_values(
                 txn.note or "",
             ]
         )
-    return base
+    return [_neutralize(v) for v in base]
 
 
 async def _csv_streaming(

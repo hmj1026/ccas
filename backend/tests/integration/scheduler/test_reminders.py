@@ -8,10 +8,49 @@ from datetime import date, timedelta
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ccas.scheduler.reminders import send_payment_reminders
 from ccas.storage.models import BankConfig, Bill, PaymentReminder
+
+
+async def _reminder_count(session: AsyncSession, bill_id: int) -> int:
+    return int(
+        (
+            await session.execute(
+                select(func.count())
+                .select_from(PaymentReminder)
+                .where(PaymentReminder.bill_id == bill_id)
+            )
+        ).scalar_one()
+    )
+
+
+class TestClaimBeforeSend:
+    """R21：先 claim 後送 —— 送失敗應釋放 claim，下次排程可重送。"""
+
+    @pytest.mark.asyncio
+    async def test_send_failure_releases_claim_and_retries_next_run(
+        self, db_session: AsyncSession
+    ) -> None:
+        today = date(2026, 3, 31)
+        await _seed_bank(db_session)
+        bill = await _seed_bill(db_session, due_date=today + timedelta(days=3))
+
+        # 第一次：send 失敗 → 不留下 claim
+        failing = AsyncMock(side_effect=RuntimeError("telegram down"))
+        with patch("ccas.scheduler.reminders.send_message", failing):
+            result1 = await send_payment_reminders(db_session, today=today)
+        assert result1["sent"] == 0
+        assert await _reminder_count(db_session, bill.id) == 0, "失敗後不應殘留 claim"
+
+        # 第二次：send 成功 → 補送並留下記錄
+        ok = AsyncMock(return_value={"ok": True})
+        with patch("ccas.scheduler.reminders.send_message", ok):
+            result2 = await send_payment_reminders(db_session, today=today)
+        assert result2["sent"] == 1
+        assert await _reminder_count(db_session, bill.id) == 1
 
 
 async def _seed_bank(session: AsyncSession, bank_code: str = "CTBC") -> None:

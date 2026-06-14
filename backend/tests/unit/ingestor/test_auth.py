@@ -1,11 +1,37 @@
 """OAuth 憑證載入與 token 自動刷新的單元測試。"""
 
+import stat
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 from google.auth.exceptions import RefreshError
 
-from ccas.ingestor.auth import GmailAuthError, load_credentials
+from ccas.ingestor.auth import (
+    GmailAuthError,
+    load_credentials,
+    write_private_token_file,
+)
+
+
+class TestWritePrivateTokenFile:
+    """R15：token 檔須一落地即為 owner-only（0600），無 race window。"""
+
+    def test_writes_content_with_owner_only_mode(self, tmp_path: Path) -> None:
+        target = tmp_path / "nested" / "token.json"
+        write_private_token_file(target, '{"token": "abc"}')
+
+        assert target.read_text(encoding="utf-8") == '{"token": "abc"}'
+        mode = stat.S_IMODE(target.stat().st_mode)
+        assert mode == 0o600, f"預期 0600，實得 {oct(mode)}"
+
+    def test_overwrites_existing_token_and_keeps_mode(self, tmp_path: Path) -> None:
+        target = tmp_path / "token.json"
+        write_private_token_file(target, "old")
+        write_private_token_file(target, "new")
+
+        assert target.read_text(encoding="utf-8") == "new"
+        assert stat.S_IMODE(target.stat().st_mode) == 0o600
 
 
 class TestLoadCredentials:
@@ -25,13 +51,14 @@ class TestLoadCredentials:
         assert result is mock_creds
         mock_creds.refresh.assert_not_called()
 
+    @patch("ccas.ingestor.auth.write_private_token_file")
     @patch("ccas.ingestor.auth.Request")
     @patch("ccas.ingestor.auth.Credentials.from_authorized_user_file")
     @patch("ccas.ingestor.auth.Path")
     def test_expired_token_auto_refreshes(
-        self, mock_path_cls, mock_from_file, mock_request_cls
+        self, mock_path_cls, mock_from_file, mock_request_cls, mock_write
     ):
-        """token 過期時自動呼叫 refresh()。"""
+        """token 過期時自動呼叫 refresh() 並以私有權限回寫。"""
         mock_path_instance = MagicMock()
         mock_path_instance.exists.return_value = True
         mock_path_cls.return_value = mock_path_instance
@@ -47,8 +74,8 @@ class TestLoadCredentials:
 
         assert result is mock_creds
         mock_creds.refresh.assert_called_once_with(mock_request_cls.return_value)
-        mock_path_instance.write_text.assert_called_once_with('{"token": "refreshed"}')
-        mock_path_instance.chmod.assert_called_once_with(0o600)
+        # 回寫委派給原子建檔 helper（0600 權限於 helper 內保證）
+        mock_write.assert_called_once_with(mock_path_instance, '{"token": "refreshed"}')
 
     @patch("ccas.ingestor.auth.Request")
     @patch("ccas.ingestor.auth.Credentials.from_authorized_user_file")

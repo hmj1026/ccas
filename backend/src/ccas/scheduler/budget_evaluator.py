@@ -84,15 +84,23 @@ def _format_aggregated_message(
     return "\n".join(lines)
 
 
-async def _existing_thresholds(
-    session: AsyncSession, budget_id: int, period_ym: str
-) -> set[int]:
-    stmt = select(BudgetAlert.threshold_breached_percent).where(
-        BudgetAlert.budget_id == budget_id,
+async def _existing_thresholds_map(
+    session: AsyncSession, budget_ids: list[int], period_ym: str
+) -> dict[int, set[int]]:
+    """一次查出多個 budget 在當期已觸發的 thresholds，避免迴圈內 N+1。"""
+    result: dict[int, set[int]] = {}
+    if not budget_ids:
+        return result
+    stmt = select(
+        BudgetAlert.budget_id,
+        BudgetAlert.threshold_breached_percent,
+    ).where(
+        BudgetAlert.budget_id.in_(budget_ids),
         BudgetAlert.period_year_month == period_ym,
     )
-    rows = (await session.execute(stmt)).scalars().all()
-    return set(rows)
+    for budget_id, pct in (await session.execute(stmt)).all():
+        result.setdefault(budget_id, set()).add(pct)
+    return result
 
 
 async def evaluate_budgets(
@@ -112,13 +120,17 @@ async def evaluate_budgets(
     triggered: list[tuple[Budget, BudgetAlert]] = []
     skipped = 0
 
+    # 一次撈出所有 enabled budget 在當期的既有 alert thresholds（R28：消除 N+1）。
+    active_ids = [b.id for b in budgets if b.amount_ntd > 0]
+    existing_map = await _existing_thresholds_map(session, active_ids, period)
+
     for budget in budgets:
         if budget.amount_ntd <= 0:
             skipped += 1
             continue
 
         current = await _aggregate_period(session, budget, period)
-        existing = await _existing_thresholds(session, budget.id, period)
+        existing = existing_map.get(budget.id, set())
 
         # Two-tier ladder: configured threshold + 100% (over-budget)
         thresholds: list[int] = sorted({budget.alert_threshold_percent, 100})

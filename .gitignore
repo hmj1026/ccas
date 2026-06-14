@@ -117,3 +117,10 @@ docker-compose.local.yml
 compact-notes/
 backend/data/captcha-archive/
 .gitnexus
+
+# Claude Code session artifacts & generated workflow scripts (transient)
+.claude/artifacts/
+.claude/workflows/
+
+# Working plan file (per-user CLAUDE.md convention: deleted on completion)
+IMPLEMENTATION_PLAN.md

@@ -134,6 +134,28 @@ describe('SettingsBudgetsPage', () => {
     })
   })
 
+  it('keeps dialog open and shows error banner when creation fails (R02)', async () => {
+    mockedGet.mockResolvedValue({ success: true, data: [], message: '' })
+    mockedPost.mockRejectedValueOnce(new Error('建立預算失敗'))
+
+    renderPage()
+    await userEvent.click(
+      await screen.findByRole('button', { name: /新增預算/ }),
+    )
+
+    const amountInput = screen.getByLabelText(/月度上限金額/)
+    await userEvent.clear(amountInput)
+    await userEvent.type(amountInput, '30000')
+    await userEvent.click(screen.getByRole('button', { name: '建立' }))
+
+    // 失敗時應顯示錯誤橫幅，而非靜默關閉
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('建立預算失敗')
+    // 對話框仍開著（建立鈕仍在、輸入仍保留）
+    expect(screen.getByRole('button', { name: '建立' })).toBeInTheDocument()
+    expect(screen.getByLabelText(/月度上限金額/)).toHaveValue(30000)
+  })
+
   it('rejects creation when monthly_category lacks scope_ref', async () => {
     mockedGet.mockResolvedValue({ success: true, data: [], message: '' })
     renderPage()

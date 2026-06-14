@@ -85,4 +85,65 @@ test.describe('Operations center', () => {
     await expect(page.getByText('parse 47 / 120 (39%)')).toBeVisible()
     await expect(page.getByText('running').first()).toBeVisible()
   })
+
+  test('pipeline run 失敗時顯示錯誤訊息 (R08)', async ({ page }) => {
+    const failedRun = {
+      id: 'run-1',
+      job_id: 'job-1',
+      status: 'failed',
+      triggered_by: 'api',
+      params: { force: false, bank_code: 'CTBC', year: 2026, month: 3 },
+      current_stage: 'parse',
+      current_stage_processed: 10,
+      current_stage_total: 120,
+      stage_summary: [{ stage: 'parse', ok: 0, fail: 1, elapsed_ms: 500 }],
+      error_message: '解析失敗：PDF 密碼錯誤',
+      started_at: new Date(Date.now() - 5000).toISOString(),
+      completed_at: new Date().toISOString(),
+      created_at: '2026-05-01T12:00:00Z',
+      updated_at: '2026-05-01T12:00:05Z',
+    }
+    let triggered = false
+
+    await mockAuthenticatedSession(page)
+    await page.route('**/api/settings/banks', async (route) => {
+      await route.fulfill({
+        json: ok([
+          {
+            id: 1,
+            bank_code: 'CTBC',
+            bank_name: '中國信託',
+            gmail_filter: 'from:ctbc',
+            active_parser_version: 'v1',
+            is_active: true,
+          },
+        ]),
+      })
+    })
+    await page.route('**/api/pipeline/trigger', async (route) => {
+      triggered = true
+      await route.fulfill({ json: ok({ job_id: 'job-1', run_id: 'run-1' }) })
+    })
+    await page.route('**/api/pipeline/runs/run-1', async (route) => {
+      await route.fulfill({ json: ok(failedRun) })
+    })
+    await page.route('**/api/pipeline/runs', async (route) => {
+      await route.fulfill({ json: ok(triggered ? [failedRun] : []) })
+    })
+
+    await page.goto('/operations')
+    await page.getByLabel('銀行').selectOption('CTBC')
+    await page.getByLabel('年度').selectOption('2026')
+    await page.getByLabel('月份').selectOption('3')
+    await page.getByRole('button', { name: '開始執行' }).click()
+
+    // 1) 失敗狀態在執行紀錄中可見
+    const failedRow = page.locator('tr', { hasText: 'failed' }).first()
+    await expect(failedRow).toBeVisible()
+    await expect(page.getByText('failed').first()).toBeVisible()
+
+    // 2) 點開該列詳情 → 錯誤訊息呈現給使用者
+    await failedRow.getByRole('button').first().click()
+    await expect(page.getByText('解析失敗：PDF 密碼錯誤')).toBeVisible()
+  })
 })
