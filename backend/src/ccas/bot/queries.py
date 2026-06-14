@@ -11,6 +11,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from ccas.constants import DEFAULT_CATEGORY
 from ccas.storage.models import BankConfig, Bill, Transaction
 
 
@@ -109,12 +110,12 @@ async def fetch_category_summary(
     """
     stmt = (
         select(
-            func.coalesce(Transaction.category, "未分類"),
+            func.coalesce(Transaction.category, DEFAULT_CATEGORY),
             func.sum(Transaction.amount),
         )
         .join(Bill, Transaction.bill_id == Bill.id)
         .where(Bill.billing_month == billing_month)
-        .group_by(func.coalesce(Transaction.category, "未分類"))
+        .group_by(func.coalesce(Transaction.category, DEFAULT_CATEGORY))
         .order_by(func.sum(Transaction.amount).desc())
     )
     result = await session.execute(stmt)

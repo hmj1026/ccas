@@ -63,3 +63,20 @@ async def test_staged_attachment_status_has_all_nine_values():
         "failed",
         "fetch_expired",
     }
+
+
+async def test_pipeline_stage_literal_matches_orchestrator_stage_order():
+    """R18：API 的 PipelineStageLiteral 須與 orchestrator.STAGE_ORDER 同步。
+
+    兩者是同一組 pipeline stage 名稱的手寫複本（PipelineStage 無對應
+    StrEnum，故不在 LITERAL_ENUM_PAIRS 內）。若有人新增/改名 stage 卻只改
+    其中一邊，from_stage/to_stage 會對新 stage 直接回 422 —— 此測試攔截漂移。
+    """
+    from ccas.pipeline.orchestrator import STAGE_ORDER
+
+    literal_values = get_args(schemas.PipelineStageLiteral)
+    assert set(literal_values) == set(STAGE_ORDER), (
+        "PipelineStageLiteral 與 orchestrator.STAGE_ORDER 不同步："
+        f"literal-only={set(literal_values) - set(STAGE_ORDER)}, "
+        f"order-only={set(STAGE_ORDER) - set(literal_values)}"
+    )
