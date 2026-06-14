@@ -72,7 +72,9 @@ function Layout() {
   const queryClient = useQueryClient()
   const logout = useMutation({
     mutationFn: () => apiDelete<ApiResponse<null>>('/api/auth/session'),
-    onSuccess: async () => {
+    // 登出語意上前端狀態必然清除：不論 API 成敗都清快取並導向 /login，
+    // 避免 API 失敗時使用者卡在已登出畫面（R11）。
+    onSettled: async () => {
       await queryClient.invalidateQueries({ queryKey: ['auth', 'session'] })
       navigate('/login', { replace: true })
     },
@@ -80,6 +82,13 @@ function Layout() {
 
   return (
     <div className="flex min-h-screen bg-background">
+      {/* Skip link：鍵盤使用者可跳過側欄導覽直接到主內容（R24） */}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[100] focus:rounded focus:bg-background focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:shadow"
+      >
+        跳至主要內容
+      </a>
       {/* Mobile overlay */}
       {mobileOpen && (
         <div
@@ -169,7 +178,7 @@ function Layout() {
           </button>
           <span className="ml-3 text-lg font-bold">CCAS</span>
         </header>
-        <main className="flex-1 p-4 lg:p-6">
+        <main id="main-content" tabIndex={-1} className="flex-1 p-4 lg:p-6">
           <Outlet />
         </main>
       </div>

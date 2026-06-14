@@ -4,7 +4,7 @@
  */
 import { useQuery } from '@tanstack/react-query'
 import { Download, ChevronLeft, ChevronRight, Pencil } from 'lucide-react'
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import { apiGet, apiFetchBlob } from '@/lib/api-client'
 import type { PaginatedResponse, TransactionItem } from '@/lib/types'
@@ -34,6 +34,9 @@ function TransactionsPage() {
 
   const handleFilterChange = useFilterParams(true)
 
+  const [isExporting, setIsExporting] = useState(false)
+  const [exportError, setExportError] = useState<string | null>(null)
+
   const { data, isLoading, error } = useQuery({
     queryKey: ['transactions', year, month, bankCode, category, q, page],
     queryFn: () =>
@@ -53,19 +56,27 @@ function TransactionsPage() {
    * 動態產生帶篩選條件的檔名（含月份或年度）。
    */
   async function handleExportCsv() {
-    const blob = await apiFetchBlob('/api/transactions/export', {
-      year: year ? Number(year) : undefined,
-      month: month || undefined,
-      bank_code: bankCode || undefined,
-      category: category || undefined,
-      q: q || undefined,
-    })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `transactions${month ? `-${month}` : year ? `-${year}` : ''}.csv`
-    a.click()
-    URL.revokeObjectURL(url)
+    setExportError(null)
+    setIsExporting(true)
+    try {
+      const blob = await apiFetchBlob('/api/transactions/export', {
+        year: year ? Number(year) : undefined,
+        month: month || undefined,
+        bank_code: bankCode || undefined,
+        category: category || undefined,
+        q: q || undefined,
+      })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `transactions${month ? `-${month}` : year ? `-${year}` : ''}.csv`
+      a.click()
+      URL.revokeObjectURL(url)
+    } catch (err) {
+      setExportError(err instanceof Error ? err.message : 'CSV 匯出失敗，請稍後再試')
+    } finally {
+      setIsExporting(false)
+    }
   }
 
   /**
@@ -86,11 +97,22 @@ function TransactionsPage() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">交易明細</h1>
-        <Button variant="outline" size="sm" onClick={handleExportCsv}>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleExportCsv}
+          disabled={isExporting}
+        >
           <Download className="size-4" data-icon="inline-start" />
-          匯出 CSV
+          {isExporting ? '匯出中...' : '匯出 CSV'}
         </Button>
       </div>
+
+      {exportError ? (
+        <div role="alert" className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          {exportError}
+        </div>
+      ) : null}
 
       <FilterBar
         show={FILTER_SHOW}

@@ -8,6 +8,7 @@ import { lazy, Suspense, useState } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router'
 import AuthGuard from '@/components/auth-guard'
 import Layout from '@/components/layout'
+import { ErrorBoundary } from '@/components/shared/error-boundary'
 import { LoadingState } from '@/components/shared/states'
 import LoginPage from '@/pages/login'
 import {
@@ -64,6 +65,7 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
+        <ErrorBoundary>
         <Routes>
           <Route path="login" element={<LoginPage />} />
           <Route
@@ -113,6 +115,7 @@ function App() {
             </Route>
           </Route>
         </Routes>
+        </ErrorBoundary>
       </BrowserRouter>
     </QueryClientProvider>
   )
