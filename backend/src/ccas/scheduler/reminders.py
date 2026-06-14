@@ -6,8 +6,9 @@
 
 import logging
 from datetime import date, timedelta
+from typing import Any, cast
 
-from sqlalchemy import select
+from sqlalchemy import CursorResult, delete, select
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -36,32 +37,40 @@ async def _fetch_unpaid_bills_due_on(
     return list(result.scalars().all())
 
 
-async def _already_reminded(
+async def _claim_reminder(
     session: AsyncSession,
     bill_id: int,
     reminder_type: str,
 ) -> bool:
-    """檢查是否已發送過此類型提醒。"""
-    stmt = select(PaymentReminder.id).where(
-        PaymentReminder.bill_id == bill_id,
-        PaymentReminder.reminder_type == reminder_type,
-    )
-    result = await session.execute(stmt)
-    return result.scalar_one_or_none() is not None
+    """先 claim 後送：原子 INSERT 取得發送權，回傳是否由本次成功 claim。
 
-
-async def _record_reminder(
-    session: AsyncSession,
-    bill_id: int,
-    reminder_type: str,
-) -> None:
-    """記錄已發送的提醒（使用 INSERT OR IGNORE 防止並行衝突）。"""
+    以 ``INSERT ... ON CONFLICT DO NOTHING`` + commit 搶占 (bill_id, reminder_type)
+    唯一鍵。``rowcount > 0`` 表示本次新建（取得發送權）；``0`` 表示已有人 claim
+    過（先前已送或並行 worker 搶先），應跳過。先 claim 再送可避免「送出成功但
+    記錄失敗 → 下次重送」的舊有 race（R21）。
+    """
     stmt = (
         sqlite_insert(PaymentReminder)
         .values(bill_id=bill_id, reminder_type=reminder_type)
         .on_conflict_do_nothing(index_elements=["bill_id", "reminder_type"])
     )
-    await session.execute(stmt)
+    result = cast(CursorResult[Any], await session.execute(stmt))
+    await session.commit()
+    return result.rowcount > 0
+
+
+async def _release_reminder(
+    session: AsyncSession,
+    bill_id: int,
+    reminder_type: str,
+) -> None:
+    """送出失敗時釋放先前的 claim，讓下次排程可重試（避免提醒永久遺失）。"""
+    await session.execute(
+        delete(PaymentReminder).where(
+            PaymentReminder.bill_id == bill_id,
+            PaymentReminder.reminder_type == reminder_type,
+        )
+    )
     await session.commit()
 
 
@@ -97,7 +106,8 @@ async def send_payment_reminders(
         bills = await _fetch_unpaid_bills_due_on(session, target_date)
 
         for bill in bills:
-            if await _already_reminded(session, bill.id, reminder_type):
+            # 先 claim：搶不到（已送 / 並行搶先）就跳過。
+            if not await _claim_reminder(session, bill.id, reminder_type):
                 skipped += 1
                 continue
 
@@ -107,7 +117,6 @@ async def send_payment_reminders(
                 await send_message(
                     settings.telegram_bot_token, settings.telegram_chat_id, text
                 )
-                await _record_reminder(session, bill.id, reminder_type)
                 sent += 1
                 logger.info(
                     "Sent %s reminder for bill #%d (%s)",
@@ -116,6 +125,8 @@ async def send_payment_reminders(
                     bank_name,
                 )
             except Exception as exc:
+                # 送出失敗 → 釋放 claim，讓下次排程重試。
+                await _release_reminder(session, bill.id, reminder_type)
                 logger.error(
                     "Failed to send %s reminder for bill #%d: %s",
                     reminder_type,
