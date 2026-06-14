@@ -67,15 +67,11 @@ addopts = "-m 'not live_fubon'"
 
 [tool.coverage.run]
 source = ["ccas"]
+# 僅排除真正無法以單元/整合測試覆蓋的入口樣板（app factory / __main__ CLI
+# bootstrap）。業務 router 一律納入覆蓋率，避免 fail_under 名實不符（R04）。
 omit = [
     "src/ccas/*/app.py",
     "src/ccas/*/__main__.py",
-    "src/ccas/scheduler/reminders.py",
-    "src/ccas/api/routers/analytics.py",
-    "src/ccas/api/routers/overview.py",
-    "src/ccas/api/routers/pipeline.py",
-    "src/ccas/api/routers/transactions.py",
-    "src/ccas/api/routers/settings.py",
 ]
 
 [tool.coverage.report]

@@ -251,3 +251,119 @@ class TestCategoriesCompareWithPrevious:
         assert items[0]["total"] == 1000
         # legacy schema 不含 previous_total / change_percent
         assert "previous_total" not in items[0]
+
+
+class TestCompareBanksYearFilter:
+    """R17：compare/banks 的 year 過濾分支（既有測試只覆蓋 month）。"""
+
+    async def test_year_filter_groups_only_matching_year(
+        self, client: AsyncClient, db_session: AsyncSession
+    ) -> None:
+        await _seed_bank(db_session, "CTBC", "中國信託")
+        await db_session.commit()
+        await _seed_bill_with_txns(
+            db_session,
+            bank_code="CTBC",
+            billing_month="2025-05",
+            txns=[(1000, "M1", None)],
+        )
+        await _seed_bill_with_txns(
+            db_session,
+            bank_code="CTBC",
+            billing_month="2026-05",
+            txns=[(2000, "M2", None)],
+        )
+        resp = await client.get(
+            "/api/analytics/compare/banks?year=2026",
+            headers=auth_headers(),
+        )
+        assert resp.status_code == 200
+        data = resp.json()["data"]
+        # 僅 2026 年帳單計入
+        assert data == [{"bank_code": "CTBC", "bank_name": "中國信託", "total": 2000}]
+
+
+class TestTopMerchantsPeriodBranches:
+    """R17：top-merchants 的 period=month / period=year 過濾分支。"""
+
+    async def _seed_two_months(self, db_session: AsyncSession) -> None:
+        await _seed_bank(db_session, "CTBC", "中國信託")
+        await db_session.commit()
+        today = date.today()
+        this_month = f"{today.year:04d}-{today.month:02d}"
+        prev_year = f"{today.year - 1:04d}-{today.month:02d}"
+        await _seed_bill_with_txns(
+            db_session,
+            bank_code="CTBC",
+            billing_month=this_month,
+            txns=[(900, "NOW_MERCHANT", None)],
+        )
+        await _seed_bill_with_txns(
+            db_session,
+            bank_code="CTBC",
+            billing_month=prev_year,
+            txns=[(100, "OLD_MERCHANT", None)],
+        )
+
+    async def test_period_month_filters_current_month(
+        self, client: AsyncClient, db_session: AsyncSession
+    ) -> None:
+        await self._seed_two_months(db_session)
+        resp = await client.get(
+            "/api/analytics/top-merchants?period=month",
+            headers=auth_headers(),
+        )
+        assert resp.status_code == 200
+        merchants = {row["merchant"] for row in resp.json()["data"]}
+        assert "NOW_MERCHANT" in merchants
+        assert "OLD_MERCHANT" not in merchants
+
+    async def test_period_year_filters_current_year(
+        self, client: AsyncClient, db_session: AsyncSession
+    ) -> None:
+        await self._seed_two_months(db_session)
+        resp = await client.get(
+            "/api/analytics/top-merchants?period=year",
+            headers=auth_headers(),
+        )
+        assert resp.status_code == 200
+        merchants = {row["merchant"] for row in resp.json()["data"]}
+        assert "NOW_MERCHANT" in merchants
+        assert "OLD_MERCHANT" not in merchants
+
+
+class TestAnalyticsAuthAndValidation:
+    """R31：analytics v2 端點的 401（未授權）與 422（參數驗證）路徑。"""
+
+    async def test_compare_banks_requires_auth(self, client: AsyncClient) -> None:
+        resp = await client.get("/api/analytics/compare/banks")
+        assert resp.status_code == 401
+
+    async def test_top_merchants_requires_auth(self, client: AsyncClient) -> None:
+        resp = await client.get("/api/analytics/top-merchants")
+        assert resp.status_code == 401
+
+    async def test_compare_banks_rejects_bad_month_pattern(
+        self, client: AsyncClient
+    ) -> None:
+        resp = await client.get(
+            "/api/analytics/compare/banks?month=2026-13",
+            headers=auth_headers(),
+        )
+        assert resp.status_code == 422
+
+    async def test_top_merchants_rejects_out_of_range_limit(
+        self, client: AsyncClient
+    ) -> None:
+        resp = await client.get(
+            "/api/analytics/top-merchants?limit=0",
+            headers=auth_headers(),
+        )
+        assert resp.status_code == 422
+
+    async def test_compare_years_rejects_bad_metric(self, client: AsyncClient) -> None:
+        resp = await client.get(
+            "/api/analytics/compare/years?metric=bogus",
+            headers=auth_headers(),
+        )
+        assert resp.status_code == 422
