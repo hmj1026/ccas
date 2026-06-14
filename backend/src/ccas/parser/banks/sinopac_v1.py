@@ -338,6 +338,10 @@ def _parse_transaction_row(
                 return None
 
             amount = int(raw_amount.replace(",", ""))
+            # 與文字路徑一致：退款保留為負數（R14 / R26）。table cell 無原始
+            # 行文字，故 raw_line 傳空字串（僅靠 merchant 關鍵字與負號判定）。
+            if _is_refund_row("", merchant, amount):
+                amount = -abs(amount)
             posting_date = _parse_mmdd(raw_posting_date, year)
             if posting_date is None:
                 posting_date = _parse_date(raw_posting_date, year)
@@ -365,6 +369,8 @@ def _parse_transaction_row(
                 return None
 
             amount = int(raw_amount.replace(",", ""))
+            if _is_refund_row("", merchant, amount):
+                amount = -abs(amount)
             return TransactionItem(
                 trans_date=trans_date,
                 merchant=merchant,
@@ -391,7 +397,13 @@ def _extract_transactions_text(
     bills), then falls back to legacy YYYY/MM/DD patterns for back-compat
     with older fixtures.
     """
+    # Three fallback tiers for mutually-exclusive PDF formats. Each tier scans
+    # ALL pages before the next tier's guard is evaluated — guards must live
+    # outside the page loop, otherwise a multi-page bill that matched an earlier
+    # tier on page 1 would silently skip later pages' rows.
     items: list[TransactionItem] = []
+
+    # Tier 1: real-PDF MM/DD format (covers all production SINOPAC bills).
     for page in pages:
         text = page.extract_text() or ""
         for match in _RE_SINOPAC_REAL_TXN.finditer(text):
@@ -399,17 +411,19 @@ def _extract_transactions_text(
             if item is not None:
                 items.append(item)
 
-        if items:
-            continue
+    # Tier 2: legacy full format (date date merchant amount).
+    if not items:
+        for page in pages:
+            text = page.extract_text() or ""
+            for match in _RE_TRANSACTION_LINE.finditer(text):
+                item = _parse_text_transaction(match, billing_year)
+                if item is not None:
+                    items.append(item)
 
-        # Try full format next (date date merchant amount)
-        for match in _RE_TRANSACTION_LINE.finditer(text):
-            item = _parse_text_transaction(match, billing_year)
-            if item is not None:
-                items.append(item)
-
-        if not items:
-            # Fallback to simple format (date merchant amount)
+    # Tier 3: legacy simple format (date merchant amount).
+    if not items:
+        for page in pages:
+            text = page.extract_text() or ""
             for match in _RE_TRANSACTION_LINE_SIMPLE.finditer(text):
                 item = _parse_simple_text_transaction(match, billing_year)
                 if item is not None:
@@ -436,8 +450,9 @@ def _parse_real_text_transaction(
         if "本期應繳金額合計" in merchant or "小計" in merchant:
             return None
 
+        # 退款 / 回饋 / 沖銷：保留為負數明細（利於對帳），而非整筆丟棄（R26）。
         if _is_refund_row(match.group(0), merchant, amount):
-            return None
+            amount = -abs(amount)
 
         return TransactionItem(
             trans_date=trans_date,
@@ -465,6 +480,10 @@ def _parse_text_transaction(
         if trans_date is None:
             return None
 
+        # 退款保留為負數，與 Tier-1 / table 路徑一致（R14 / R26）。
+        if _is_refund_row(match.group(0), merchant, amount):
+            amount = -abs(amount)
+
         return TransactionItem(
             trans_date=trans_date,
             merchant=merchant,
@@ -488,6 +507,10 @@ def _parse_simple_text_transaction(
 
         if trans_date is None:
             return None
+
+        # 退款保留為負數，與其他路徑一致（R14 / R26）。
+        if _is_refund_row(match.group(0), merchant, amount):
+            amount = -abs(amount)
 
         return TransactionItem(
             trans_date=trans_date,

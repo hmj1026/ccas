@@ -414,6 +414,9 @@ def _extract_transactions_text(
     if items:
         return items
 
+    # Legacy text fallback. Full format across all pages first; the simple-format
+    # guard must sit OUTSIDE the page loop so a multi-page bill does not skip the
+    # fallback on later pages once an earlier page matched full format.
     for page in pages:
         text = page.extract_text() or ""
         for match in _RE_TRANSACTION_LINE.finditer(text):
@@ -421,7 +424,9 @@ def _extract_transactions_text(
             if item is not None:
                 items.append(item)
 
-        if not items:
+    if not items:
+        for page in pages:
+            text = page.extract_text() or ""
             for match in _RE_TRANSACTION_LINE_SIMPLE.finditer(text):
                 item = _parse_simple_text_transaction(
                     match, billing_year, billing_month_num
@@ -462,6 +467,7 @@ def _parse_esun_real_transaction(
         amount = int(match.group(4).replace(",", ""))
 
         if trans_date is None:
+            logger.warning("跳過日期無法解析的 ESUN 交易行: %s", match.group(0))
             return None
 
         # Skip rows that are summary/subtotal lines rather than real txns.
@@ -491,6 +497,7 @@ def _parse_esun_single_date_transaction(
         amount = int(match.group(3).replace(",", ""))
 
         if trans_date is None:
+            logger.warning("跳過日期無法解析的 ESUN 單日期交易行: %s", match.group(0))
             return None
 
         # Skip summary rows: "上期應繳金額： TWD 10,615" etc.

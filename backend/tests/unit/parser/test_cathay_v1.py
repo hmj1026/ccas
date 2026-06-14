@@ -11,6 +11,7 @@ from unittest.mock import MagicMock, patch
 import pdfplumber.page
 import pytest
 
+from ccas.parser.banks.cathay_v1 import _extract_transactions_text
 from ccas.parser.base import ParseError
 
 from .conftest import (
@@ -382,3 +383,25 @@ class TestRealPdfFormat:
         assert month == EXPECTED_CATHAY_REAL_ANCIENT_MONTH
         assert total == EXPECTED_CATHAY_REAL_ANCIENT_TOTAL
         assert due == EXPECTED_CATHAY_REAL_ANCIENT_DUE
+
+
+class TestExtractTransactionsTextMultiPage:
+    """R12：text fallback 守衛須在頁迴圈外，避免多頁帳單漏算交易。"""
+
+    def test_simple_format_collected_across_all_pages(self):
+        """兩頁皆 simple-format：兩頁交易都要被收集（舊碼只會收到第 1 頁）。"""
+        page1 = make_mock_page("2026/03/05 星巴克 150\n")
+        page2 = make_mock_page("2026/03/18 誠品書店 980\n")
+        items = _extract_transactions_text([page1, page2], 2026)
+        merchants = {i.merchant for i in items}
+        assert len(items) == 2
+        assert "星巴克" in merchants
+        assert "誠品書店" in merchants
+
+    def test_full_format_match_suppresses_simple_fallback(self):
+        """有任一頁命中 full-format 時，simple fallback 不應再啟動（避免重複/雜訊）。"""
+        page1 = make_mock_page("2026/03/05 2026/03/07 誠品書店 980\n")
+        page2 = make_mock_page("2026/03/18 星巴克 150\n")
+        items = _extract_transactions_text([page1, page2], 2026)
+        assert len(items) == 1
+        assert items[0].merchant == "誠品書店"

@@ -507,8 +507,9 @@ def _parse_ubot_real_transaction(
     if trans_date is None:
         return None
 
+    # 回饋 / 退款 / 沖銷：保留為負數明細（利於對帳），而非整筆丟棄（R26）。
     if _is_cashback_row(match.group(0), merchant, amount):
-        return None
+        amount = -abs(amount)
 
     return TransactionItem(
         trans_date=trans_date,

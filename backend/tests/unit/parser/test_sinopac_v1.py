@@ -267,17 +267,18 @@ class TestRealPdfFormat:
 
         txns = parser._extract_transactions(pages, 2026)
 
-        # Refund rows (negative amount / 永豐自扣 prefix) are filtered out to
-        # keep analytics on actual consumption.
-        assert len(txns) == 3
-        for txn in txns:
-            assert txn.amount > 0
-            assert not txn.merchant.startswith("永豐自扣")
+        # 退款政策（R26）：退款列（永豐自扣 / 負數）保留為負數明細，而非丟棄。
+        # 預期 3 筆消費 + 1 筆退款（-7147）；頁尾「本期應繳金額合計」摘要列仍排除。
+        assert len(txns) == 4
 
-        consumption_amounts = [t.amount for t in txns]
-        assert 500 in consumption_amounts
-        assert 975 in consumption_amounts
-        assert 1188 in consumption_amounts
+        amounts = [t.amount for t in txns]
+        assert 500 in amounts
+        assert 975 in amounts
+        assert 1188 in amounts
+        # 退款保留為負數
+        assert -7147 in amounts
+        refund = next(t for t in txns if t.amount < 0)
+        assert refund.merchant.startswith("永豐自扣")
 
         txn_with_card = next(t for t in txns if t.amount == 500)
         assert txn_with_card.card_last4 == "4300"

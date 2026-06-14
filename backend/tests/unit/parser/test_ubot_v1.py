@@ -481,7 +481,8 @@ class TestRealPdfFormat:
         assert len(txns) == 1
         assert txns[0].amount == 98
 
-    def test_filters_out_negative_refund(self):
+    def test_keeps_negative_refund_as_negative(self):
+        """退款政策（R26）：保留退款列為負數明細，而非整筆丟棄。"""
         parser = _make_parser()
         page = make_mock_page("12/31 12/26 專案：想分調整某保險公司 ＸＸＸＸ -12,152\n")
 
@@ -490,7 +491,8 @@ class TestRealPdfFormat:
             2026,
         )
 
-        assert len(txns) == 0
+        assert len(txns) == 1
+        assert txns[0].amount == -12152
 
     def test_card_header_tracking(self):
         parser = _make_parser()
@@ -516,11 +518,10 @@ class TestRealPdfFormat:
             2026,
         )
 
-        # Refund row (-12152) is filtered out; expect installment, local,
-        # foreign, and mobile payment rows only.
+        # 退款列（-12152）保留為負數明細（R26）；其餘為分期、本地、外幣、行支等列。
         amounts = [t.amount for t in txns]
         assert 2603 in amounts
         assert 12152 in amounts
-        assert -12152 not in amounts
+        assert -12152 in amounts
         assert 120 in amounts
         assert 98 in amounts
