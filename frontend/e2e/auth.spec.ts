@@ -2,6 +2,13 @@ import { test, expect } from '@playwright/test'
 
 const API_TOKEN = process.env.API_TOKEN ?? '123456'
 
+// 走真實登入流程（不 mock /api），需後端在線。乾淨環境下自我 skip；設定
+// E2E_BACKEND=1（搭配 docker compose up + seed token）才執行（R07）。
+test.skip(
+  !process.env.E2E_BACKEND,
+  'requires a real backend (set E2E_BACKEND=1 with the API running)',
+)
+
 test.describe('Authentication', () => {
   test('root redirects to login', async ({ page }) => {
     await page.goto('/')

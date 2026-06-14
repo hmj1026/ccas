@@ -2,6 +2,13 @@ import { test, expect } from '@playwright/test'
 
 const API_TOKEN = process.env.API_TOKEN ?? '123456'
 
+// 真實登入後驗證各頁渲染（不 mock /api），需後端在線 + seed 資料。乾淨環境
+// 下自我 skip；設定 E2E_BACKEND=1 才執行（R07）。
+test.skip(
+  !process.env.E2E_BACKEND,
+  'requires a real backend with seeded data (set E2E_BACKEND=1)',
+)
+
 test.describe('Authenticated pages', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/login')
