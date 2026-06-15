@@ -7,11 +7,11 @@ import logging
 from typing import cast
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from fastapi.responses import JSONResponse
 from redis import Redis
 from rq import Queue
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ccas.api.schemas import (
@@ -147,17 +147,32 @@ def _run_summary(row: PipelineRun) -> PipelineRunSummary:
 
 @router.get("/runs", response_model=ApiResponse[list[PipelineRunSummary]])
 async def list_pipeline_runs(
+    response: Response,
     status: PipelineRunStatus | None = None,
     limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
     session: AsyncSession = Depends(get_db_session),
 ) -> ApiResponse[list[PipelineRunSummary]]:
-    """列出最近的 pipeline 執行紀錄。limit 超出 1-100 回 422。"""
-    stmt = select(PipelineRun)
-    if status is not None:
-        stmt = stmt.where(PipelineRun.status == status)
-    stmt = stmt.order_by(PipelineRun.created_at.desc()).limit(limit)
+    """列出最近的 pipeline 執行紀錄（支援 offset 分頁）。
 
-    rows = (await session.execute(stmt)).scalars().all()
+    回應維持 ``ApiResponse[list[PipelineRunSummary]]`` 信封，未過濾的總筆數
+    透過 ``X-Total-Count`` header 暴露給前端做「載入更多」。limit 超出 1-100
+    或 offset < 0 回 422。
+    """
+    # Total over the SAME status filter but ignoring limit/offset, so the
+    # frontend knows when it has paged through every matching run.
+    count_stmt = select(func.count()).select_from(PipelineRun)
+    page_stmt = select(PipelineRun)
+    if status is not None:
+        count_stmt = count_stmt.where(PipelineRun.status == status)
+        page_stmt = page_stmt.where(PipelineRun.status == status)
+    page_stmt = (
+        page_stmt.order_by(PipelineRun.created_at.desc()).offset(offset).limit(limit)
+    )
+
+    total = (await session.execute(count_stmt)).scalar_one()
+    rows = (await session.execute(page_stmt)).scalars().all()
+    response.headers["X-Total-Count"] = str(total)
     return ApiResponse(data=[_run_summary(row) for row in rows])
 
 
@@ -169,7 +184,7 @@ async def get_pipeline_run(
     """取得單筆 pipeline 執行紀錄詳情。"""
     row = await session.get(PipelineRun, run_id)
     if row is None:
-        raise HTTPException(status_code=404, detail="Pipeline run not found")
+        raise HTTPException(status_code=404, detail=f"找不到執行紀錄 #{run_id}")
 
     return ApiResponse(
         data=PipelineRunDetail.model_validate(_run_summary(row).model_dump())

@@ -101,7 +101,7 @@ async def update_setup_bank(
     """Upsert a ``bank_settings`` row; returns the merged view of that bank."""
     normalized = code.strip().upper()
     if not normalized:
-        raise HTTPException(status_code=400, detail="bank code 不可為空")
+        raise HTTPException(status_code=422, detail="bank code 不可為空")
 
     # Race-safe UPSERT: SQLite ON CONFLICT DO UPDATE collapses the
     # read-modify-write into a single atomic statement. Concurrent PUT

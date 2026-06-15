@@ -13,6 +13,8 @@ CRUD endpoints for ``classification_rules`` 表，加上即時規則測試端點
 
 from __future__ import annotations
 
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
@@ -34,7 +36,28 @@ from ccas.storage.models import (
     UserClassificationRule,
 )
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/api/rules", tags=["rules"])
+
+
+def _integrity_error_to_http(exc: IntegrityError) -> HTTPException:
+    """Map a DB IntegrityError to a friendly 422 without leaking schema.
+
+    ``str(exc.orig)`` exposes table/column names to the client (e.g.
+    ``UNIQUE constraint failed: classification_rules.pattern``). We log the
+    original error server-side for diagnosis and return a sanitized
+    Traditional-Chinese message keyed off the constraint class.
+    """
+    raw = str(exc.orig)
+    logger.warning("Rules IntegrityError: %s", raw)
+    if "UNIQUE" in raw:
+        detail = "相同 pattern 的規則已存在"
+    elif "FOREIGN KEY" in raw:
+        detail = "指定的 category_id 不存在"
+    else:
+        detail = "資料完整性錯誤，請確認輸入值"
+    return HTTPException(status_code=422, detail=detail)
 
 
 def _to_item(
@@ -113,7 +136,7 @@ async def create_rule(
         await session.commit()
     except IntegrityError as exc:
         await session.rollback()
-        raise HTTPException(status_code=422, detail=str(exc.orig)) from exc
+        raise _integrity_error_to_http(exc) from exc
     await session.refresh(rule)
     return ApiResponse(data=_to_item(rule, category_name))
 
@@ -145,7 +168,7 @@ async def update_rule(
         await session.commit()
     except IntegrityError as exc:
         await session.rollback()
-        raise HTTPException(status_code=422, detail=str(exc.orig)) from exc
+        raise _integrity_error_to_http(exc) from exc
     await session.refresh(rule)
     category_name = await _resolve_category_name(session, rule.category_id)
     return ApiResponse(data=_to_item(rule, category_name))

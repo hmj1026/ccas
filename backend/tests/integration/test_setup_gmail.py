@@ -179,20 +179,22 @@ class TestAuthorize:
 
 
 class TestCallback:
-    async def test_callback_with_unknown_state_returns_400(
+    async def test_callback_with_unknown_state_returns_422(
         self,
         client: AsyncClient,
         gmail_paths: tuple[Path, Path],
     ) -> None:
+        # Unknown/used OAuth state is invalid input → 422 (aligns with the
+        # 422 input-validation convention in budgets/rules/transactions).
         resp = await client.get(
             "/api/setup/gmail/callback",
             params={"code": "any", "state": "nonexistent-state"},
             headers=auth_headers(),
             follow_redirects=False,
         )
-        assert resp.status_code == 400
+        assert resp.status_code == 422
 
-    async def test_callback_with_expired_state_returns_400(
+    async def test_callback_with_expired_state_returns_422(
         self,
         client: AsyncClient,
         db_session: AsyncSession,
@@ -215,7 +217,9 @@ class TestCallback:
             headers=auth_headers(),
             follow_redirects=False,
         )
-        assert resp.status_code == 400
+        assert resp.status_code == 422
+        # Expired-state detail guides the user to retry the authorize flow.
+        assert "請重新點擊授權按鈕" in resp.json()["detail"]
 
     @respx.mock
     async def test_callback_happy_path_writes_token_and_redirects(

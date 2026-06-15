@@ -8,7 +8,13 @@ from ccas.storage.models import Base
 config = context.config
 
 if config.config_file_name is not None:
-    fileConfig(config.config_file_name)
+    # disable_existing_loggers defaults to True, which would set ``.disabled =
+    # True`` on every logger not named in alembic.ini's [loggers] section
+    # (e.g. ``ccas.ingestor.job``). When migrations run inside a pytest session
+    # (the Alembic up/down/up tests call command.upgrade()), that silences
+    # application loggers for the rest of the session and breaks later tests
+    # that assert on log propagation via caplog. Keep existing loggers intact.
+    fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 target_metadata = Base.metadata
 

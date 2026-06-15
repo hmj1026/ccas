@@ -81,7 +81,7 @@ def _load_credentials_payload(settings: Settings) -> dict[str, Any]:
         return json.loads(creds_path.read_text())
     except json.JSONDecodeError as exc:
         raise HTTPException(
-            status_code=400,
+            status_code=422,
             detail=f"credentials.json 解析失敗：{exc}",
         ) from exc
 
@@ -205,7 +205,7 @@ async def callback(
     """Exchange ``code`` + stored verifier for tokens; write token.json."""
     row = await session.get(GmailOAuthState, state)
     if row is None:
-        raise HTTPException(status_code=400, detail="未知或已使用的 OAuth state")
+        raise HTTPException(status_code=422, detail="未知或已使用的 OAuth state")
 
     created_at = row.created_at
     if created_at.tzinfo is None:
@@ -213,7 +213,10 @@ async def callback(
     if datetime.now(UTC) - created_at > _STATE_TTL:
         await session.delete(row)
         await session.commit()
-        raise HTTPException(status_code=400, detail="OAuth state 已過期，請重新授權")
+        raise HTTPException(
+            status_code=422,
+            detail="OAuth state 已過期，請重新點擊授權按鈕",
+        )
 
     verifier = row.code_verifier
     payload = _load_credentials_payload(settings)

@@ -136,6 +136,49 @@ async def test_list_pipeline_runs_filters_status_and_orders_desc(
 
 
 @pytest.mark.asyncio
+async def test_list_pipeline_runs_offset_pagination_and_total_header(
+    client: AsyncClient, db_session: AsyncSession
+):
+    """offset 分頁取下一頁；X-Total-Count 回未分頁的總筆數。"""
+    now = datetime.now(UTC)
+    # 5 runs, created_at strictly increasing so DESC order is deterministic.
+    db_session.add_all(
+        [_make_run(f"run-{i}", created_at=now + timedelta(seconds=i)) for i in range(5)]
+    )
+    await db_session.commit()
+
+    # Page 1: limit=2 → newest two (run-4, run-3); header reports full count 5.
+    page1 = await client.get(
+        "/api/pipeline/runs?limit=2&offset=0", headers=auth_headers()
+    )
+    assert page1.status_code == 200
+    assert page1.headers["X-Total-Count"] == "5"
+    page1_ids = [item["id"] for item in page1.json()["data"]]
+    assert page1_ids == ["run-4", "run-3"]
+
+    # Page 2: same limit, offset=2 → next two (run-2, run-1); count unchanged.
+    page2 = await client.get(
+        "/api/pipeline/runs?limit=2&offset=2", headers=auth_headers()
+    )
+    assert page2.status_code == 200
+    assert page2.headers["X-Total-Count"] == "5"
+    page2_ids = [item["id"] for item in page2.json()["data"]]
+    assert page2_ids == ["run-2", "run-1"]
+    # No overlap between pages.
+    assert set(page1_ids).isdisjoint(page2_ids)
+
+
+@pytest.mark.asyncio
+async def test_list_pipeline_runs_rejects_negative_offset(client: AsyncClient):
+    """offset < 0 回 422（統一信封格式）。"""
+    response = await client.get("/api/pipeline/runs?offset=-1", headers=auth_headers())
+    assert response.status_code == 422
+    body = response.json()
+    assert body["success"] is False
+    assert "offset" in body["message"]
+
+
+@pytest.mark.asyncio
 async def test_pipeline_run_detail_shape(client: AsyncClient, db_session: AsyncSession):
     db_session.add(_make_run("detail-1", status=PipelineRunStatus.FAILED))
     await db_session.commit()
@@ -169,7 +212,8 @@ async def test_pipeline_run_detail_not_found(client: AsyncClient):
     response = await client.get("/api/pipeline/runs/missing", headers=auth_headers())
 
     assert response.status_code == 404
-    assert "not found" in response.json()["detail"].lower()
+    # 404 detail is Traditional Chinese and echoes the requested run_id.
+    assert response.json()["detail"] == "找不到執行紀錄 #missing"
 
 
 @pytest.mark.asyncio
