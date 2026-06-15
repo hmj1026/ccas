@@ -15,6 +15,7 @@ import pdfplumber
 import pdfplumber.page
 
 from ccas.parser.base import BankParser, ParseError
+from ccas.parser.refund_utils import is_refund_merchant, parse_amount_cell
 from ccas.parser.registry import registry
 from ccas.parser.result import ParseResult, TransactionItem
 
@@ -35,9 +36,12 @@ _CATHAY_KEYWORDS_FALLBACK = ("多利金", "信用卡")
 _RE_BILLING_MONTH = re.compile(r"(\d{4})\s*[年/]\s*(\d{1,2})\s*月?\s*(?:份|月)")
 # 繳費截止日：2026/04/15 or 繳款截止日：2026-04-15
 _RE_DUE_DATE = re.compile(r"繳[費款]截止日[：:]\s*(\d{4})[/-](\d{1,2})[/-](\d{1,2})")
-# 本期應繳總額：NT$ 12,345 or 本期應繳金額 12,345 or 應繳總額：12,345
+# 本期應繳總額：NT$ 12,345（最精確，優先採用以避免誤抓「本期最低應繳金額」）。
+_RE_TOTAL_AMOUNT_REAL = re.compile(r"本期應繳總額[：:]?\s*(?:NT\$?\s*)?([\d,]+)")
+# 泛用後援：應繳總額／應繳金額。負向預看排除「最低應繳…」，避免在「最低應繳金額」
+# 早於「本期應繳總額」出現時誤抓最低應繳值。
 _RE_TOTAL_AMOUNT = re.compile(
-    r"(?:本期)?應繳[總金][額額][：:]?\s*(?:NT\$?\s*)?([\d,]+)"
+    r"(?<!最低)應繳[總金][額額][：:]?\s*(?:NT\$?\s*)?([\d,]+)"
 )
 
 # -- ROC date support --
@@ -111,8 +115,13 @@ _RE_TRANSACTION_LINE_SIMPLE = re.compile(
 )
 
 
-def _parse_date(raw: str, billing_year: int) -> date | None:
-    """Parse a date string in various formats (YYYY/MM/DD, MM/DD, ROC YYY/MM/DD)."""
+def _parse_date(raw: str, billing_year: int, billing_month_num: int = 0) -> date | None:
+    """Parse a date string in various formats (YYYY/MM/DD, MM/DD, ROC YYY/MM/DD).
+
+    When ``billing_month_num`` is provided and a 2-part MM/DD month exceeds it,
+    the year is shifted back by one to handle cross-year billing cycles (a
+    January statement that lists the prior December's transactions).
+    """
     parts = raw.split("/")
     if len(parts) != 3 and len(parts) != 2:
         return None
@@ -120,7 +129,10 @@ def _parse_date(raw: str, billing_year: int) -> date | None:
     try:
         if len(parts) == 2:
             # MM/DD format
-            return date(billing_year, int(parts[0]), int(parts[1]))
+            mm = int(parts[0])
+            cross_year = billing_month_num > 0 and mm > billing_month_num
+            year = billing_year - 1 if cross_year else billing_year
+            return date(year, mm, int(parts[1]))
         year_part = int(parts[0])
         month = int(parts[1])
         day = int(parts[2])
@@ -132,12 +144,15 @@ def _parse_date(raw: str, billing_year: int) -> date | None:
         return None
 
 
-def _parse_mmdd(raw: str, year: int) -> date | None:
+def _parse_mmdd(raw: str, billing_year: int, billing_month_num: int = 0) -> date | None:
     """Parse an 'MM/DD' string into a Python date using the given year."""
     match = _RE_DATE_MMDD.match(raw)
     if not match:
         return None
-    return date(year, int(match.group(1)), int(match.group(2)))
+    mm = int(match.group(1))
+    cross_year = billing_month_num > 0 and mm > billing_month_num
+    year = billing_year - 1 if cross_year else billing_year
+    return date(year, mm, int(match.group(2)))
 
 
 class CathayV1Parser(BankParser):
@@ -168,7 +183,10 @@ class CathayV1Parser(BankParser):
             pages = pdf.pages
             billing_month, total_amount, due_date = self._extract_summary(pages)
             billing_year = int(billing_month.split("-")[0])
-            transactions = self._extract_transactions(pages, billing_year)
+            billing_month_num = int(billing_month.split("-")[1])
+            transactions = self._extract_transactions(
+                pages, billing_year, billing_month_num
+            )
 
         return ParseResult(
             bank_code=self.bank_code,
@@ -265,7 +283,15 @@ class CathayV1Parser(BankParser):
         return None
 
     def _extract_total_amount(self, text: str) -> int | None:
-        """Extract total payable amount from text."""
+        """Extract total payable amount from text.
+
+        Prefers the precise ``本期應繳總額`` marker so we never capture the
+        nearby ``本期最低應繳金額`` (minimum payment) when it happens to appear
+        first in the page text.
+        """
+        match = _RE_TOTAL_AMOUNT_REAL.search(text)
+        if match:
+            return int(match.group(1).replace(",", ""))
         match = _RE_TOTAL_AMOUNT.search(text)
         if not match:
             return None
@@ -275,16 +301,17 @@ class CathayV1Parser(BankParser):
         self,
         pages: list[pdfplumber.page.Page],
         billing_year: int,
+        billing_month_num: int = 0,
     ) -> tuple[TransactionItem, ...]:
         """Extract transaction items from all pages.
 
         Tries table extraction first, then text line parsing.
         """
-        items = _extract_transactions_table(pages, billing_year)
+        items = _extract_transactions_table(pages, billing_year, billing_month_num)
         if items:
             return tuple(items)
 
-        items = _extract_transactions_text(pages, billing_year)
+        items = _extract_transactions_text(pages, billing_year, billing_month_num)
         return tuple(items)
 
 
@@ -294,6 +321,7 @@ class CathayV1Parser(BankParser):
 def _extract_transactions_table(
     pages: list[pdfplumber.page.Page],
     billing_year: int,
+    billing_month_num: int = 0,
 ) -> list[TransactionItem]:
     """Extract transactions from tables."""
     items: list[TransactionItem] = []
@@ -302,7 +330,7 @@ def _extract_transactions_table(
             if not _is_transaction_table(table):
                 continue
             for row in table[1:]:
-                item = _parse_transaction_row(row, billing_year)
+                item = _parse_transaction_row(row, billing_year, billing_month_num)
                 if item is not None:
                     items.append(item)
     return items
@@ -328,6 +356,7 @@ def _is_transaction_table(table: list[list[str | None]]) -> bool:
 def _parse_transaction_row(
     row: list[str | None],
     year: int,
+    billing_month_num: int = 0,
 ) -> TransactionItem | None:
     """Parse a single table row into a TransactionItem.
 
@@ -344,17 +373,19 @@ def _parse_transaction_row(
             merchant = cells[3]
             raw_amount = cells[4]
 
-            trans_date = _parse_mmdd(raw_trans_date, year)
+            trans_date = _parse_mmdd(raw_trans_date, year, billing_month_num)
             if trans_date is None:
-                trans_date = _parse_date(raw_trans_date, year)
+                trans_date = _parse_date(raw_trans_date, year, billing_month_num)
             if trans_date is None:
                 logger.warning("跳過無法解析交易日的行: %s", cells)
                 return None
 
-            amount = int(raw_amount.replace(",", ""))
-            posting_date = _parse_mmdd(raw_posting_date, year)
+            amount = parse_amount_cell(raw_amount)
+            if is_refund_merchant(merchant):
+                amount = -abs(amount)
+            posting_date = _parse_mmdd(raw_posting_date, year, billing_month_num)
             if posting_date is None:
-                posting_date = _parse_date(raw_posting_date, year)
+                posting_date = _parse_date(raw_posting_date, year, billing_month_num)
             is_valid_card = raw_card_last4.isdigit() and len(raw_card_last4) == 4
             card_last4 = raw_card_last4 if is_valid_card else None
 
@@ -371,14 +402,16 @@ def _parse_transaction_row(
             merchant = cells[1]
             raw_amount = cells[2]
 
-            trans_date = _parse_mmdd(raw_trans_date, year)
+            trans_date = _parse_mmdd(raw_trans_date, year, billing_month_num)
             if trans_date is None:
-                trans_date = _parse_date(raw_trans_date, year)
+                trans_date = _parse_date(raw_trans_date, year, billing_month_num)
             if trans_date is None:
                 logger.warning("跳過無法解析交易日的行: %s", cells)
                 return None
 
-            amount = int(raw_amount.replace(",", ""))
+            amount = parse_amount_cell(raw_amount)
+            if is_refund_merchant(merchant):
+                amount = -abs(amount)
             return TransactionItem(
                 trans_date=trans_date,
                 merchant=merchant,
@@ -398,6 +431,7 @@ def _parse_transaction_row(
 def _extract_transactions_text(
     pages: list[pdfplumber.page.Page],
     billing_year: int,
+    billing_month_num: int = 0,
 ) -> list[TransactionItem]:
     """Extract transactions from text lines.
 
@@ -413,7 +447,7 @@ def _extract_transactions_text(
         raw_text = page.extract_text() or ""
         text = _crop_transaction_section(raw_text)
         for match in _RE_TRANSACTION_LINE.finditer(text):
-            item = _parse_text_transaction(match, billing_year)
+            item = _parse_text_transaction(match, billing_year, billing_month_num)
             if item is not None:
                 items.append(item)
 
@@ -423,7 +457,9 @@ def _extract_transactions_text(
             raw_text = page.extract_text() or ""
             text = _crop_transaction_section(raw_text)
             for match in _RE_TRANSACTION_LINE_SIMPLE.finditer(text):
-                item = _parse_simple_text_transaction(match, billing_year)
+                item = _parse_simple_text_transaction(
+                    match, billing_year, billing_month_num
+                )
                 if item is not None:
                     items.append(item)
     return items
@@ -432,16 +468,21 @@ def _extract_transactions_text(
 def _parse_text_transaction(
     match: re.Match[str],
     billing_year: int,
+    billing_month_num: int = 0,
 ) -> TransactionItem | None:
     """Parse a full-format text transaction line."""
     try:
-        trans_date = _parse_date(match.group(1), billing_year)
-        posting_date = _parse_date(match.group(2), billing_year)
+        trans_date = _parse_date(match.group(1), billing_year, billing_month_num)
+        posting_date = _parse_date(match.group(2), billing_year, billing_month_num)
         merchant = match.group(3).strip()
         amount = int(match.group(4).replace(",", ""))
 
         if trans_date is None:
             return None
+
+        # 退款商戶（退款/退費/退貨/沖銷…）保留為負數明細，利於對帳。
+        if is_refund_merchant(merchant):
+            amount = -abs(amount)
 
         return TransactionItem(
             trans_date=trans_date,
@@ -457,15 +498,20 @@ def _parse_text_transaction(
 def _parse_simple_text_transaction(
     match: re.Match[str],
     billing_year: int,
+    billing_month_num: int = 0,
 ) -> TransactionItem | None:
     """Parse a simple-format text transaction line."""
     try:
-        trans_date = _parse_date(match.group(1), billing_year)
+        trans_date = _parse_date(match.group(1), billing_year, billing_month_num)
         merchant = match.group(2).strip()
         amount = int(match.group(3).replace(",", ""))
 
         if trans_date is None:
             return None
+
+        # 退款商戶保留為負數明細，與其他路徑一致。
+        if is_refund_merchant(merchant):
+            amount = -abs(amount)
 
         return TransactionItem(
             trans_date=trans_date,

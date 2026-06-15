@@ -15,6 +15,7 @@ import pdfplumber
 import pdfplumber.page
 
 from ccas.parser.base import BankParser, ParseError
+from ccas.parser.refund_utils import is_refund_merchant, parse_amount_cell
 from ccas.parser.registry import registry
 from ccas.parser.result import ParseResult, TransactionItem
 
@@ -320,7 +321,9 @@ def _parse_transaction_row(
                 logger.warning("跳過無法解析交易日的行: %s", cells)
                 return None
 
-            amount = int(raw_amount.replace(",", ""))
+            amount = parse_amount_cell(raw_amount)
+            if is_refund_merchant(merchant):
+                amount = -abs(amount)
             posting_date = _parse_mmdd(raw_posting_date, year, billing_month_num)
             if posting_date is None:
                 posting_date = _parse_date(raw_posting_date, year, billing_month_num)
@@ -347,7 +350,9 @@ def _parse_transaction_row(
                 logger.warning("跳過無法解析交易日的行: %s", cells)
                 return None
 
-            amount = int(raw_amount.replace(",", ""))
+            amount = parse_amount_cell(raw_amount)
+            if is_refund_merchant(merchant):
+                amount = -abs(amount)
             return TransactionItem(
                 trans_date=trans_date,
                 merchant=merchant,
@@ -416,6 +421,10 @@ def _parse_taishin_real_transaction(
     if trans_date is None:
         return None
 
+    # 退款商戶（退款/退費/退貨/沖銷…）保留為負數明細；負號金額本就由 regex 捕捉。
+    if is_refund_merchant(merchant):
+        amount = -abs(amount)
+
     return TransactionItem(
         trans_date=trans_date,
         merchant=merchant,
@@ -473,6 +482,9 @@ def _parse_text_transaction(
         if trans_date is None:
             return None
 
+        if is_refund_merchant(merchant):
+            amount = -abs(amount)
+
         return TransactionItem(
             trans_date=trans_date,
             merchant=merchant,
@@ -497,6 +509,9 @@ def _parse_simple_text_transaction(
 
         if trans_date is None:
             return None
+
+        if is_refund_merchant(merchant):
+            amount = -abs(amount)
 
         return TransactionItem(
             trans_date=trans_date,
