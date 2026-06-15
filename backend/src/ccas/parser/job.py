@@ -30,7 +30,7 @@ from ccas.parser.staging import (
 )
 from ccas.pipeline.options import PipelineOptions
 from ccas.pipeline.progress import NoopProgressReporter, ProgressReporter
-from ccas.storage.models import StagedAttachment, StagedAttachmentStatus
+from ccas.storage.models import BankConfig, StagedAttachment, StagedAttachmentStatus
 
 logger = logging.getLogger(__name__)
 
@@ -142,10 +142,15 @@ async def _process_attachment(
     attachment: StagedAttachment,
     session: AsyncSession,
     summary: ParseSummary,
+    bank_config: BankConfig | None,
     *,
     force: bool = False,
 ) -> None:
-    """處理單一附件的解析。"""
+    """處理單一附件的解析。
+
+    ``bank_config`` 由呼叫端的 per-bank 快取預先載入後傳入（避免每筆附件
+    重複查詢 ``bank_configs``）。``None`` 表示該銀行無設定。
+    """
     bank_code = attachment.bank_code
     raw_path = attachment.staged_path
 
@@ -180,8 +185,7 @@ async def _process_attachment(
         )
         return
 
-    # 取得銀行設定以獲取 active_parser_version
-    bank_config = await get_bank_config(session, bank_code)
+    # 銀行設定由呼叫端 per-bank 快取預先載入並傳入（active_parser_version）。
     active_version = bank_config.active_parser_version if bank_config else None
 
     # 從 registry 取得候選 parser
@@ -324,16 +328,40 @@ async def run_parse_job(
         logger.info("沒有待解析的附件，跳過 parsing")
         return summary
 
+    # Stage N+1 cache: load each distinct bank_code's BankConfig ONCE instead of
+    # querying bank_configs per attachment.
+    bank_config_cache: dict[str, BankConfig | None] = {}
+    for bank_code in {a.bank_code for a in attachments}:
+        bank_config_cache[bank_code] = await get_bank_config(session, bank_code)
+
     processed = 0
     for attachment in attachments:
         try:
-            await _process_attachment(attachment, session, summary, force=force)
+            await _process_attachment(
+                attachment,
+                session,
+                summary,
+                bank_config_cache.get(attachment.bank_code),
+                force=force,
+            )
+            # Per-item commit: a mid-batch crash must not lose already-processed
+            # rows (and must not desync disk vs DB).
+            await session.commit()
+        except Exception:
+            # Roll back only this item's uncommitted changes, then continue to
+            # the next attachment (item B: partial success persists).
+            await session.rollback()
+            logger.exception(
+                "parse item failed unexpectedly (%s/%s); rolled back, continuing",
+                attachment.bank_code,
+                attachment.original_filename,
+            )
         finally:
             processed += 1
             # Progress reporting is pure UI and non-business-critical: a
             # reporter failure must not abort the loop or roll back the
-            # flushed-but-uncommitted batch. Swallow-with-log is deliberate
-            # here (logged, so not a silent failure).
+            # already-committed item. Swallow-with-log is deliberate here
+            # (logged, so not a silent failure).
             try:
                 await reporter.stage_item_done("parse", processed=processed)
             except Exception:
@@ -342,8 +370,6 @@ async def run_parse_job(
                     processed,
                     exc_info=True,
                 )
-
-    await session.commit()
 
     logger.info(
         "Parsing 完成：%d 解析, %d 略過, %d 失敗",

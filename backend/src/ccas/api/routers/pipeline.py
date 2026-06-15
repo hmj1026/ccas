@@ -8,6 +8,7 @@ from typing import cast
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import JSONResponse
 from redis import Redis
 from rq import Queue
 from sqlalchemy import select
@@ -48,11 +49,14 @@ def get_redis_client() -> Redis:
 async def trigger_pipeline(
     body: PipelineTriggerRequest | None = None,
     session: AsyncSession = Depends(get_db_session),
-) -> ApiResponse[PipelineTriggerData]:
+) -> ApiResponse[PipelineTriggerData] | JSONResponse:
     """將 pipeline 加入 RQ 工作隊列，立即回傳 job ID。
 
     Args:
         body: 可選的 pipeline 參數（force, bank_code, year, month）。
+
+    若 Redis 不可達導致 enqueue 失敗，會把先前建立的 QUEUED row 標記為
+    FAILED（避免留下永不執行的 orphan row），並回傳 503 統一信封。
     """
     queue = Queue(connection=get_redis_client())
 
@@ -71,14 +75,39 @@ async def trigger_pipeline(
     )
     await session.commit()
 
-    job = queue.enqueue(
-        run_pipeline_sync,
-        opts,
-        run_id=run_id,
-        retry=get_retry(),
-        on_failure=on_failure_handler,
-        job_timeout="30m",
-    )
+    try:
+        job = queue.enqueue(
+            run_pipeline_sync,
+            opts,
+            run_id=run_id,
+            retry=get_retry(),
+            on_failure=on_failure_handler,
+            job_timeout="30m",
+        )
+    except Exception as exc:
+        # Enqueue failed (RedisError / connection refused / any unexpected
+        # error): the job never entered the queue, so the RQ on_failure
+        # callback can never fire. Mark the orphan QUEUED row FAILED here so it
+        # does not linger forever as "queued". Broad catch is intentional and
+        # logged below (logger.exception) — never a silent failure.
+        logger.exception("Pipeline enqueue failed (run_id=%s)", run_id)
+        error_message = f"Pipeline enqueue failed: {exc}"
+        run = await session.get(PipelineRun, run_id)
+        if run is not None:
+            run.status = PipelineRunStatus.FAILED
+            run.error_message = error_message
+            await session.commit()
+        # Return the project's ApiResponse error envelope (success=false). A
+        # raised HTTPException would yield FastAPI's default {"detail": ...}
+        # without a `success` field, so build the JSONResponse explicitly.
+        return JSONResponse(
+            status_code=503,
+            content={
+                "success": False,
+                "message": error_message,
+                "data": None,
+            },
+        )
 
     run = await session.get(PipelineRun, run_id)
     if run is not None:

@@ -151,8 +151,15 @@ async def _process_attachment(
     summary: IngestionSummary,
     *,
     force: bool = False,
-) -> None:
-    """處理單個 PDF 附件：dedupe 檢查、下載、寫檔、建立記錄。"""
+) -> str | None:
+    """處理單個 PDF 附件：dedupe 檢查、下載、寫檔、建立記錄。
+
+    Returns:
+        若取代了一筆舊 staged 記錄，回傳「需在 commit 之後刪除的舊磁碟
+        檔案」storage-relative 路徑；否則回傳 ``None``。呼叫端必須先 commit
+        DB，再依此回傳值清理舊檔（DB-first，失敗的磁碟清理只留無參照的
+        orphan 檔，絕不破壞 DB 狀態）。
+    """
     if should_skip_attachment(bank_code, attachment.filename):
         summary.skipped_count += 1
         logger.debug(
@@ -213,11 +220,15 @@ async def _process_attachment(
         await asyncio.to_thread(lambda: target_dir.mkdir(parents=True, exist_ok=True))
         await asyncio.to_thread(staged_path.write_bytes, pdf_bytes)
 
-        # Cleanup old record only after new download succeeds
+        # DB-first ordering: persist new record + delete old record (flush),
+        # let the caller commit, THEN clean up the old disk file. Capture the
+        # old path into a local string BEFORE the commit so we never read it off
+        # a possibly-expired ORM attribute afterwards.
         new_stored = staged_path_for_storage(staging_dir, staged_path)
+        old_staged_path_to_cleanup: str | None = None
         if existing is not None:
             if existing.staged_path is not None and existing.staged_path != new_stored:
-                await _cleanup_old_staged_file(staging_dir, existing.staged_path)
+                old_staged_path_to_cleanup = existing.staged_path
             await delete_staged_record(session, existing)
 
         await create_staged_record(
@@ -233,6 +244,7 @@ async def _process_attachment(
         )
         summary.staged_count += 1
         logger.info("已 staged 附件：%s -> %s", attachment.filename, staged_path)
+        return old_staged_path_to_cleanup
 
     except Exception as exc:
         error_msg = f"附件下載失敗 ({bank_code}/{attachment.filename}): {exc}"
@@ -254,6 +266,7 @@ async def _process_attachment(
                 error_reason=str(exc),
                 part_id=attachment.part_id,
             )
+        return None
 
 
 async def _process_web_fetch(
@@ -265,21 +278,26 @@ async def _process_web_fetch(
     summary: IngestionSummary,
     *,
     force: bool = False,
-) -> None:
+) -> str | None:
     """處理無附件郵件的 web-fetch PDF 下載。
 
     透過 FetcherRegistry 查找對應的 BankFetcher，
     從 HTML 郵件內容中下載 PDF 帳單。
+
+    Returns:
+        若取代了一筆舊 staged 記錄，回傳「需在 commit 之後刪除的舊磁碟
+        檔案」storage-relative 路徑；否則回傳 ``None``（語意同
+        ``_process_attachment``）。
     """
     from ccas.ingestor.fetcher import fetcher_registry
 
     fetcher = fetcher_registry.get(bank_code)
     if fetcher is None:
-        return
+        return None
 
     assert message.html_body is not None  # noqa: S101
     if not fetcher.can_fetch(message.html_body):
-        return
+        return None
 
     synthetic_attachment_id = f"web_fetch_{message.message_id}"
     synthetic_part_id = f"web:{message.message_id}"
@@ -297,7 +315,7 @@ async def _process_web_fetch(
             await backfill_part_id(session, existing, synthetic_part_id)
             summary.skipped_count += 1
             logger.debug("略過已存在的 web-fetch：%s", message.message_id)
-            return
+            return None
 
         if is_failed_retry:
             logger.info("自動重試 failed web-fetch：%s", message.message_id)
@@ -322,10 +340,14 @@ async def _process_web_fetch(
         await asyncio.to_thread(lambda: target_dir.mkdir(parents=True, exist_ok=True))
         await asyncio.to_thread(staged_path.write_bytes, pdf_bytes)
 
+        # DB-first ordering (same as _process_attachment): persist DB, let the
+        # caller commit, THEN clean up the old disk file. Capture the old path
+        # into a local string before the commit.
         new_stored = staged_path_for_storage(staging_dir, staged_path)
+        old_staged_path_to_cleanup: str | None = None
         if existing is not None:
             if existing.staged_path is not None and existing.staged_path != new_stored:
-                await _cleanup_old_staged_file(staging_dir, existing.staged_path)
+                old_staged_path_to_cleanup = existing.staged_path
             await delete_staged_record(session, existing)
 
         await create_staged_record(
@@ -342,6 +364,7 @@ async def _process_web_fetch(
         )
         summary.staged_count += 1
         logger.info("已 web-fetch staged：%s -> %s", message.message_id, staged_path)
+        return old_staged_path_to_cleanup
 
     except Exception as exc:
         exc_str = str(exc)
@@ -384,6 +407,7 @@ async def _process_web_fetch(
                 status=new_status,
                 error_reason=new_reason,
             )
+        return None
 
 
 async def run_ingestion_job(
@@ -468,7 +492,7 @@ async def run_ingestion_job(
             if message.pdf_attachments:
                 for attachment in message.pdf_attachments:
                     try:
-                        await _process_attachment(
+                        old_path = await _process_attachment(
                             session,
                             service,
                             bank.bank_code,
@@ -477,13 +501,40 @@ async def run_ingestion_job(
                             summary,
                             force=force,
                         )
+                        # Per-item commit: persist this attachment's DB state
+                        # before touching disk, so a mid-batch crash keeps
+                        # committed rows and never desyncs disk vs DB.
+                        await session.commit()
+                        # DB is now durable; cleaning the replaced old file is
+                        # best-effort. A failed cleanup only leaves an
+                        # unreferenced orphan file (logged), never corrupt DB.
+                        if old_path is not None:
+                            try:
+                                await _cleanup_old_staged_file(
+                                    settings.staging_dir, old_path
+                                )
+                            except Exception:
+                                logger.warning(
+                                    "ingest old-file cleanup failed (%s); "
+                                    "orphan left on disk, DB is consistent",
+                                    old_path,
+                                    exc_info=True,
+                                )
+                    except Exception:
+                        await session.rollback()
+                        logger.exception(
+                            "ingest item failed unexpectedly (%s/%s); rolled "
+                            "back, continuing",
+                            bank.bank_code,
+                            attachment.filename,
+                        )
                     finally:
                         bank_processed += 1
                         # Progress reporting is pure UI and non-business-
                         # critical: a reporter failure must not abort the loop
-                        # or roll back the flushed-but-uncommitted batch.
-                        # Swallow-with-log is deliberate here (logged, so not
-                        # a silent failure).
+                        # or roll back the already-committed item. Swallow-with-
+                        # log is deliberate here (logged, so not a silent
+                        # failure).
                         try:
                             await reporter.stage_item_done(
                                 "ingest", processed=bank_processed
@@ -497,7 +548,7 @@ async def run_ingestion_job(
                             )
             elif message.html_body is not None:
                 try:
-                    await _process_web_fetch(
+                    old_path = await _process_web_fetch(
                         session,
                         bank.bank_code,
                         message,
@@ -506,10 +557,31 @@ async def run_ingestion_job(
                         summary,
                         force=force,
                     )
+                    await session.commit()
+                    if old_path is not None:
+                        try:
+                            await _cleanup_old_staged_file(
+                                settings.staging_dir, old_path
+                            )
+                        except Exception:
+                            logger.warning(
+                                "ingest old-file cleanup failed (%s); orphan "
+                                "left on disk, DB is consistent",
+                                old_path,
+                                exc_info=True,
+                            )
+                except Exception:
+                    await session.rollback()
+                    logger.exception(
+                        "ingest web-fetch item failed unexpectedly (%s/%s); "
+                        "rolled back, continuing",
+                        bank.bank_code,
+                        message.message_id,
+                    )
                 finally:
                     bank_processed += 1
                     # Same rationale as above: progress reporting failures are
-                    # logged but never abort the uncommitted batch.
+                    # logged but never abort the already-committed item.
                     try:
                         await reporter.stage_item_done(
                             "ingest", processed=bank_processed
@@ -522,8 +594,9 @@ async def run_ingestion_job(
                             exc_info=True,
                         )
 
-    await session.commit()
-
+    # Commits now happen per item inside the loop (item B); a final batch commit
+    # is no longer needed. A trailing no-op commit would be harmless but is
+    # dropped to make the per-item commit boundary the single source of truth.
     logger.info(
         "Ingestion 完成：%d 銀行, %d 郵件, %d staged, %d skipped, %d failed",
         summary.banks_processed,

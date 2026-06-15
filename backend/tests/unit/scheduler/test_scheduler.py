@@ -7,9 +7,14 @@ import os
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from apscheduler.events import EVENT_JOB_MISSED
+from apscheduler.events import EVENT_JOB_ERROR, EVENT_JOB_MISSED
 
-from ccas.scheduler.__main__ import _on_job_missed, _touch_heartbeat, main
+from ccas.scheduler.__main__ import (
+    _on_job_error,
+    _on_job_missed,
+    _touch_heartbeat,
+    main,
+)
 from ccas.scheduler.jobs import trigger_pipeline_via_rq
 
 
@@ -278,11 +283,17 @@ class TestSchedulerMisfirePolicy:
         assert heartbeat_call.kwargs["misfire_grace_time"] < 3600
 
     def test_missed_job_listener_registered_before_start(self):
-        """main() 應在 start() 前註冊 EVENT_JOB_MISSED listener。"""
+        """main() 應在 start() 前註冊 EVENT_JOB_MISSED + EVENT_JOB_ERROR listener。"""
         mock_cls = _run_main_with_mock_scheduler()
         scheduler = mock_cls.scheduler_instance
 
-        scheduler.add_listener.assert_called_once_with(_on_job_missed, EVENT_JOB_MISSED)
+        # Both the missed-job and the job-error listeners must be registered.
+        listener_calls = [
+            (call.args[0], call.args[1])
+            for call in scheduler.add_listener.call_args_list
+        ]
+        assert (_on_job_missed, EVENT_JOB_MISSED) in listener_calls
+        assert (_on_job_error, EVENT_JOB_ERROR) in listener_calls
         # registered before the (blocking) start() call
         method_order = [name for name, *_ in scheduler.mock_calls]
         assert method_order.index("add_listener") < method_order.index("start")

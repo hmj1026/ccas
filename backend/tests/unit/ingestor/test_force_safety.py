@@ -102,14 +102,22 @@ class TestForceModeSafety:
         existing_record,
         summary,
     ):
-        """When force download succeeds, old record and file should be cleaned up."""
+        """When force download succeeds, the old DB record is deleted and the
+        old disk file is RETURNED for the caller to clean up AFTER commit.
+
+        Stage 3 item B reorders this to DB-first: ``_process_attachment`` no
+        longer unlinks the old file itself (so DB state is durable before any
+        disk mutation); it returns the old storage-relative path and the
+        run-loop performs the unlink post-commit. The cleanup helper is
+        therefore NOT called inside ``_process_attachment``.
+        """
         mock_find.return_value = existing_record
         mock_path = MagicMock()
         mock_path.parent = MagicMock()
         mock_build_path.return_value = mock_path
         session = AsyncMock()
 
-        await _process_attachment(
+        old_path = await _process_attachment(
             session,
             MagicMock(),
             "CTBC",
@@ -119,10 +127,9 @@ class TestForceModeSafety:
             force=True,
         )
 
-        # Old record should be cleaned up after download success
-        mock_cleanup.assert_called_once_with(
-            "/data/staged", existing_record.staged_path
-        )
+        # Old disk file is deferred to the caller (returned), NOT unlinked here.
+        mock_cleanup.assert_not_called()
+        assert old_path == existing_record.staged_path
         mock_delete.assert_called_once_with(session, existing_record)
 
         # New record should be created

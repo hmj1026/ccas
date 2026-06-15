@@ -63,7 +63,10 @@ async def test_reporter_failure_does_not_abort_parse_batch(
     # Every item was still processed despite the reporter raising each time.
     assert process_mock.await_count == 3
     assert reporter.item_calls == 3
-    # Batch reached commit (no rollback caused by progress reporting).
-    session.commit.assert_awaited_once()
+    # Stage 3 item B: commit is now per item (reporter raises in the finally
+    # AFTER each per-item commit). All 3 items committed; a progress-reporting
+    # failure must never trigger a rollback.
+    assert session.commit.await_count == 3
+    session.rollback.assert_not_awaited()
     # Swallow-with-log: failure is logged, not silent.
     assert "parse progress reporting failed" in caplog.text
