@@ -134,10 +134,12 @@ function CategoryKeywordSection() {
     mutationFn: (body: CategoryKeywordCreateRequest) =>
       apiPost<ApiResponse<CategoryKeywordItem>>('/api/settings/categories', body),
     onSuccess: () => {
+      setMutationError(null)
       queryClient.invalidateQueries({ queryKey: ['settings', 'categories'] })
       setNewKeyword('')
       setNewCategory('')
     },
+    onError: (err: Error) => setMutationError(err.message),
   })
 
   const deleteCategory = useMutation({
@@ -154,10 +156,13 @@ function CategoryKeywordSection() {
 
   /**
    * 驗證欄位非空後送出新增分類關鍵字請求。
-   * 任一欄位為空時提早返回，不送出請求。
+   * 任一欄位為空時顯示 inline 錯誤訊息，不送出請求。
    */
   function handleAdd() {
-    if (!newKeyword.trim() || !newCategory.trim()) return
+    if (!newKeyword.trim() || !newCategory.trim()) {
+      setMutationError('請輸入關鍵字與分類名稱')
+      return
+    }
     createCategory.mutate({
       keyword: newKeyword.trim(),
       category: newCategory.trim(),
@@ -183,7 +188,10 @@ function CategoryKeywordSection() {
           type="text"
           placeholder="關鍵字"
           value={newKeyword}
-          onChange={(e) => setNewKeyword(e.target.value)}
+          onChange={(e) => {
+            setNewKeyword(e.target.value)
+            if (mutationError) setMutationError(null)
+          }}
           className="h-8 flex-1 rounded-lg border border-input bg-background px-3 text-sm"
           aria-label="新增關鍵字"
         />
@@ -191,7 +199,10 @@ function CategoryKeywordSection() {
           type="text"
           placeholder="分類"
           value={newCategory}
-          onChange={(e) => setNewCategory(e.target.value)}
+          onChange={(e) => {
+            setNewCategory(e.target.value)
+            if (mutationError) setMutationError(null)
+          }}
           className="h-8 flex-1 rounded-lg border border-input bg-background px-3 text-sm"
           aria-label="新增分類"
         />

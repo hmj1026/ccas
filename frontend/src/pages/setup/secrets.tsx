@@ -13,7 +13,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle, KeyRound, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import { apiDelete, apiGet, apiPost, apiPut } from '@/lib/api-client'
-import type { ApiResponse } from '@/lib/types'
+import type {
+  ApiResponse,
+  BankSecretStatus,
+  ImportFromEnvResult,
+  SecretSource,
+} from '@/lib/types'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -26,21 +31,6 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog'
 import { ErrorState, LoadingState } from '@/components/shared/states'
-
-type SecretSource = 'db' | 'env' | 'none'
-
-interface BankSecretStatus {
-  readonly bank_code: string
-  readonly has_db_secret: boolean
-  readonly has_env_secret: boolean
-  readonly effective_source: SecretSource
-}
-
-interface ImportFromEnvResult {
-  readonly imported: number
-  readonly skipped_already_in_db: number
-  readonly bank_codes_imported: readonly string[]
-}
 
 const QUERY_KEY = ['setup', 'secrets'] as const
 

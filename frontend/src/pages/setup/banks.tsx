@@ -10,19 +10,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertTriangle } from 'lucide-react'
 import { useState } from 'react'
 import { apiGet, apiPut } from '@/lib/api-client'
-import type { ApiResponse } from '@/lib/types'
+import type { ApiResponse, SetupBankItem } from '@/lib/types'
 import { Button } from '@/components/ui/button'
 import { EmptyState, ErrorState, LoadingState } from '@/components/shared/states'
-
-interface SetupBankItem {
-  readonly code: string
-  readonly display_name: string | null
-  readonly enabled: boolean
-  readonly has_settings_row: boolean
-  readonly metadata_missing: boolean
-  readonly total_pdfs: number
-  readonly last_ingest_at: string | null
-}
 
 const QUERY_KEY = ['setup', 'banks'] as const
 

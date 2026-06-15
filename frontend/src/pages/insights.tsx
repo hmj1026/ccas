@@ -18,7 +18,7 @@ import {
   YAxis,
 } from 'recharts'
 import { apiGet } from '@/lib/api-client'
-import { currencyFormatter } from '@/lib/utils'
+import { currencyFormatter, formatAmount } from '@/lib/utils'
 import type {
   ApiResponse,
   BankCompareItem,
@@ -76,7 +76,7 @@ function CategoryListWithCompare({
           >
             <span className="font-medium">{row.category}</span>
             <span className="flex items-center gap-3">
-              <span>${row.total.toLocaleString()}</span>
+              <span>{formatAmount(row.total)}</span>
               <span className={`text-xs ${color}`}>{arrow}</span>
             </span>
           </li>

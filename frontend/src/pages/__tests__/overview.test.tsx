@@ -39,6 +39,9 @@ function setupMocks(overviewData = MOCK_OVERVIEW) {
   mockApiGet.mockImplementation((path: string) => {
     if (path === '/api/analytics/years') return Promise.resolve({ success: true, data: [2026], message: '' })
     if (path === '/api/settings/banks') return Promise.resolve({ success: true, data: [], message: '' })
+    if (path === '/api/settings/categories') return Promise.resolve({ success: true, data: [], message: '' })
+    // BudgetAlertBanner expects an array envelope; return empty so it renders null.
+    if (path === '/api/budgets/alerts/active') return Promise.resolve({ success: true, data: [], message: '' })
     return Promise.resolve(overviewData)
   })
 }
@@ -59,7 +62,8 @@ describe('OverviewPage', () => {
     renderWithProviders(<OverviewPage />)
 
     await waitFor(() => {
-      expect(screen.getByText('2026-03 總覽')).toBeInTheDocument()
+      // billing_month "2026-03" is localized to zh-TW year/month via formatDate.
+      expect(screen.getByText('2026/03 總覽')).toBeInTheDocument()
     })
     expect(screen.getByText('$50,000')).toBeInTheDocument()
     expect(screen.getByText('$30,000')).toBeInTheDocument()

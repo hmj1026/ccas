@@ -8,7 +8,7 @@ import { useMemo } from 'react'
 import { useSearchParams } from 'react-router'
 import { apiGet } from '@/lib/api-client'
 import type { ApiResponse, OverviewData } from '@/lib/types'
-import { formatAmount } from '@/lib/utils'
+import { formatAmount, formatDate } from '@/lib/utils'
 import { LoadingState, ErrorState, EmptyState } from '@/components/shared/states'
 import { FilterBar, type FilterBarParams } from '@/components/shared/filter-bar'
 import { BudgetAlertBanner } from '@/components/budget-alert-banner'
@@ -45,7 +45,7 @@ function OverviewPage() {
     <div className="space-y-6">
       <BudgetAlertBanner />
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h1 className="text-2xl font-bold">{overview.month} 總覽</h1>
+        <h1 className="text-2xl font-bold">{formatDate(overview.month)} 總覽</h1>
         <FilterBar
           show={FILTER_SHOW}
           values={filterValues}
@@ -91,7 +91,7 @@ function OverviewPage() {
                       {bill.bank_name ?? bill.bank_code}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      到期日: {bill.due_date}
+                      到期日: {formatDate(bill.due_date)}
                     </p>
                   </div>
                 </div>

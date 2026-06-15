@@ -8,7 +8,12 @@ import { useQuery } from '@tanstack/react-query'
 import { Download } from 'lucide-react'
 import { useState } from 'react'
 import { apiFetchBlob, apiGet } from '@/lib/api-client'
-import type { ApiResponse, BankConfigItem, ExportFormat } from '@/lib/types'
+import type {
+  ApiResponse,
+  BankConfigItem,
+  CategoryKeywordItem,
+  ExportFormat,
+} from '@/lib/types'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -52,6 +57,20 @@ export function ExportDialog({
     staleTime: 5 * 60 * 1000,
   })
   const banks = banksQuery.data?.data ?? []
+
+  // Shares the React Query cache entry with FilterBar's category dropdown.
+  const categoriesQuery = useQuery({
+    queryKey: ['settings', 'categories'],
+    queryFn: () =>
+      apiGet<ApiResponse<readonly CategoryKeywordItem[]>>(
+        '/api/settings/categories',
+      ),
+    staleTime: 5 * 60 * 1000,
+  })
+  // keyword→category 映射去重成不重複 category 名稱清單。
+  const categories = Array.from(
+    new Set((categoriesQuery.data?.data ?? []).map((c) => c.category)),
+  )
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -105,20 +124,26 @@ export function ExportDialog({
           <label className="flex flex-col text-sm">
             <span className="text-muted-foreground">起始日期</span>
             <input
+              id="export-start"
               type="date"
               className="rounded border border-input bg-background px-2 py-1"
               value={start}
               onChange={(e) => setStart(e.target.value)}
+              aria-describedby="export-error"
+              aria-invalid={error !== null}
             />
           </label>
           <label className="flex flex-col text-sm">
             <span className="text-muted-foreground">結束日期</span>
             <input
+              id="export-end"
               type="date"
               className="rounded border border-input bg-background px-2 py-1"
               value={end}
               min={start || undefined}
               onChange={(e) => setEnd(e.target.value)}
+              aria-describedby="export-error"
+              aria-invalid={error !== null}
             />
           </label>
         </div>
@@ -153,13 +178,30 @@ export function ExportDialog({
           </label>
           <label className="flex flex-col text-sm">
             <span className="text-muted-foreground">類別</span>
-            <input
-              type="text"
-              className="rounded border border-input bg-background px-2 py-1"
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-              placeholder="例：餐飲"
-            />
+            {categoriesQuery.isError ? (
+              // Fallback: keep export usable with manual category input.
+              <input
+                type="text"
+                className="rounded border border-input bg-background px-2 py-1"
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                placeholder="例：餐飲"
+                aria-label="類別（清單載入失敗，請手動輸入）"
+              />
+            ) : (
+              <select
+                className="rounded border border-input bg-background px-2 py-1"
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+              >
+                <option value="">全部分類</option>
+                {categories.map((c) => (
+                  <option key={c} value={c}>
+                    {c}
+                  </option>
+                ))}
+              </select>
+            )}
           </label>
         </div>
 
@@ -172,7 +214,14 @@ export function ExportDialog({
           包含使用者欄位（手動覆寫 / tags / merchant_alias / note）
         </label>
 
-        {error && <p className="text-xs text-destructive">{error}</p>}
+        {/* 持續掛載的 live region：whole-form API 錯誤；min-h 避免 layout shift。 */}
+        <p
+          id="export-error"
+          role="alert"
+          className="min-h-4 text-xs text-destructive"
+        >
+          {error ?? ''}
+        </p>
 
         <Button type="submit" disabled={busy} className="w-full">
           <Download className="size-4" data-icon="inline-start" />

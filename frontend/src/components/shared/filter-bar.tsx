@@ -7,9 +7,13 @@
  */
 import { useQuery } from '@tanstack/react-query'
 import { Search } from 'lucide-react'
-import { memo, useEffect, useRef, useState } from 'react'
+import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { apiGet } from '@/lib/api-client'
-import type { ApiResponse, BankConfigItem } from '@/lib/types'
+import type {
+  ApiResponse,
+  BankConfigItem,
+  CategoryKeywordItem,
+} from '@/lib/types'
 
 /** FilterBar 所有可篩選維度的目前值。 */
 export interface FilterBarParams {
@@ -61,6 +65,22 @@ function useBanks() {
   return useQuery({
     queryKey: ['settings', 'banks'],
     queryFn: () => apiGet<ApiResponse<readonly BankConfigItem[]>>('/api/settings/banks'),
+    staleTime: 5 * 60 * 1000,
+  })
+}
+
+/**
+ * 取得分類關鍵字清單，供分類篩選下拉使用。
+ * 與其他頁面共用同一 cache key（`['settings', 'categories']`），避免重複請求。
+ * 快取 5 分鐘，cache-key 風格對齊 useBanks()。
+ */
+function useCategories() {
+  return useQuery({
+    queryKey: ['settings', 'categories'],
+    queryFn: () =>
+      apiGet<ApiResponse<readonly CategoryKeywordItem[]>>(
+        '/api/settings/categories',
+      ),
     staleTime: 5 * 60 * 1000,
   })
 }
@@ -127,9 +147,17 @@ function DebouncedInput({
 export const FilterBar = memo(function FilterBar({ show, values, onChange, extra }: FilterBarProps) {
   const { data: yearsData } = useYears()
   const { data: banksData } = useBanks()
+  const showCategory = show.includes('category')
+  const { data: categoriesData } = useCategories()
 
   const years = yearsData?.data ?? []
   const banks = banksData?.data ?? []
+  // 後端回傳 keyword→category 映射（多 keyword 可對同一 category），
+  // 去重成不重複的 category 名稱清單供下拉使用。
+  const categories = useMemo(
+    () => Array.from(new Set((categoriesData?.data ?? []).map((c) => c.category))),
+    [categoriesData],
+  )
 
   /** 選年度時清除月份（year 與 month 互斥）。 */
   function handleYear(value: string) {
@@ -200,15 +228,20 @@ export const FilterBar = memo(function FilterBar({ show, values, onChange, extra
         </select>
       )}
 
-      {show.includes('category') && (
-        <DebouncedInput
-          type="text"
-          placeholder="分類"
+      {showCategory && (
+        <select
           value={values.category}
-          onCommit={(v) => onChange('category', v)}
-          className="h-8 w-28 rounded-lg border border-input bg-background px-3 text-sm"
+          onChange={(e) => onChange('category', e.target.value)}
+          className="h-8 rounded-lg border border-input bg-background px-3 text-sm"
           aria-label="分類篩選"
-        />
+        >
+          <option value="">全部分類</option>
+          {categories.map((c) => (
+            <option key={c} value={c}>
+              {c}
+            </option>
+          ))}
+        </select>
       )}
 
       {show.includes('q') && (

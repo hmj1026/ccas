@@ -157,11 +157,14 @@ function CreateBudgetDialog({
       <label className="flex flex-col text-sm">
         <span className="text-muted-foreground">月度上限金額（元）</span>
         <input
+          id="budget-amount"
           type="number"
           min={1}
           className="rounded border border-input bg-background px-2 py-1"
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
+          aria-describedby="budget-error"
+          aria-invalid={error !== null}
           required
         />
       </label>
@@ -177,7 +180,14 @@ function CreateBudgetDialog({
           onChange={(e) => setThreshold(e.target.value)}
         />
       </label>
-      {error && <p className="text-xs text-destructive">{error}</p>}
+      {/* 持續掛載的 live region：min-h 預留高度避免 layout shift。 */}
+      <p
+        id="budget-error"
+        role="alert"
+        className="min-h-4 text-xs text-destructive"
+      >
+        {error ?? ''}
+      </p>
       <Button type="submit" disabled={isPending}>
         建立
       </Button>
