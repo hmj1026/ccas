@@ -165,6 +165,54 @@ class TestMixedBatchScenario:
 
     @patch("ccas.decryptor.job.asyncio.to_thread")
     @patch("ccas.decryptor.job.get_settings")
+    async def test_decrypt_oserror_marks_attachment_failed(
+        self, mock_get_settings, mock_to_thread
+    ):
+        """解密期間的 OSError（例如 atomic save/replace 失敗）→ decrypt_failed。
+
+        驗證底層 I/O 例外不被吞掉：附件狀態落到 decrypt_failed，且 error_reason
+        非 None 並帶有原始錯誤訊息。
+        """
+        engine, session_factory = await _create_test_session()
+        async with session_factory() as session:
+            session.add(
+                _make_attachment(
+                    "CTBC",
+                    "msg-io",
+                    "att-io",
+                    staged_path="/tmp/io.pdf",
+                )
+            )
+            await session.commit()
+
+            mock_settings = MagicMock()
+            mock_settings.get_pdf_password.return_value = "correct_pw"
+            mock_settings.staging_dir = TEST_STAGING_DIR
+            mock_get_settings.return_value = mock_settings
+
+            async def fake_to_thread(fn, *args):
+                raise OSError("disk full during atomic save")
+
+            mock_to_thread.side_effect = fake_to_thread
+
+            summary = await run_decryption_job(session)
+
+            assert summary.failed_count == 1
+            assert summary.decrypted_count == 0
+
+            stmt = select(StagedAttachment).where(
+                StagedAttachment.gmail_attachment_id == "att-io"
+            )
+            result = await session.execute(stmt)
+            record = result.scalar_one()
+            assert record.status == "decrypt_failed"
+            assert record.error_reason is not None
+            assert "disk full during atomic save" in record.error_reason
+
+        await engine.dispose()
+
+    @patch("ccas.decryptor.job.asyncio.to_thread")
+    @patch("ccas.decryptor.job.get_settings")
     async def test_single_failure_does_not_abort_batch(
         self, mock_get_settings, mock_to_thread
     ):
