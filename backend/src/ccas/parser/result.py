@@ -48,6 +48,10 @@ class ParseResult:
         total_amount: 應繳總額（整數，元為單位）。
         due_date: 繳費截止日。
         transactions: 交易明細列表（tuple，不可變）。
+        due_date_estimated: 內部觀測旗標。為 ``True`` 時表示 ``due_date``
+            為估算值（非帳單明載），目前僅 CTBC 兩頁帳單在缺乏精確截止日時
+            退而估算為當月 28 日的路徑會設為 ``True``。此旗標**不**對外暴露於
+            任何 API/前端 schema，僅供持久化、可觀測性與提醒邏輯使用。
     """
 
     bank_code: str
@@ -55,3 +59,4 @@ class ParseResult:
     total_amount: int
     due_date: date
     transactions: tuple[TransactionItem, ...]
+    due_date_estimated: bool = False

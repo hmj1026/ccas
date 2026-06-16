@@ -68,6 +68,11 @@ class Bill(Base):
     billing_month: Mapped[str] = mapped_column(Text, nullable=False)
     total_amount: Mapped[int] = mapped_column(Integer, nullable=False)
     due_date: Mapped[date] = mapped_column(Date, nullable=False)
+    # 內部觀測旗標（不對外暴露於任何 API/前端 schema）：True 表示 due_date 為估算值
+    # （目前僅 CTBC 兩頁帳單缺乏精確截止日時估算為當月 28 日）。提醒邏輯據此放寬比對窗。
+    due_date_estimated: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("0")
+    )
     is_paid: Mapped[bool] = mapped_column(Boolean, default=False)
     is_notified: Mapped[bool] = mapped_column(Boolean, default=False)
     file_path: Mapped[str | None] = mapped_column(Text, nullable=True)
