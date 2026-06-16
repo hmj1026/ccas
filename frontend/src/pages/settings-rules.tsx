@@ -154,6 +154,7 @@ function RuleDialog({
         <label className="flex flex-col text-sm">
           <span className="text-muted-foreground">Pattern</span>
           <input
+            id="rule-pattern"
             type="text"
             className="rounded border border-input bg-background px-2 py-1"
             value={pattern}
@@ -162,13 +163,15 @@ function RuleDialog({
               patternType === 'regex' ? '^蝦皮商城.*' : '例：星巴克'
             }
             aria-label="pattern"
+            aria-describedby="rule-error"
+            aria-invalid={error !== null}
             required
           />
         </label>
 
         {complexRegexWarning && (
           <div
-            className="flex items-start gap-2 rounded border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900"
+            className="flex items-start gap-2 rounded border border-amber-300 bg-amber-500/10 p-2 text-xs text-amber-900 dark:border-amber-500/40 dark:text-amber-200"
             role="alert"
           >
             <AlertTriangle className="mt-0.5 size-4 shrink-0" />
@@ -249,7 +252,14 @@ function RuleDialog({
           )}
         </fieldset>
 
-        {error && <p className="text-xs text-destructive">{error}</p>}
+        {/* 持續掛載的 live region：min-h 預留高度避免 layout shift。 */}
+        <p
+          id="rule-error"
+          role="alert"
+          className="min-h-4 text-xs text-destructive"
+        >
+          {error ?? ''}
+        </p>
 
         <Button type="submit" disabled={!canSubmit || createMutation.isPending}>
           {createMutation.isPending ? '建立中…' : '建立規則'}

@@ -13,7 +13,7 @@
  */
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, RefreshCcw, Tag, X } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -30,10 +30,14 @@ import type {
   TransactionDetailItem,
   TransactionUpdateRequest,
 } from '@/lib/types'
-import { formatAmount } from '@/lib/utils'
+import { formatAmount, formatDate } from '@/lib/utils'
 
 const NOTE_DEBOUNCE_MS = 500
 const ALIAS_DEBOUNCE_MS = 500
+const SAVED_RESET_MS = 2000
+
+/** note / merchant_alias 自動儲存的狀態，獨立於共用的 updateMutation.isPending。 */
+type SaveStatus = 'idle' | 'saving' | 'saved'
 
 function classificationSourceLabel(detail: TransactionDetailItem): {
   readonly label: string
@@ -116,28 +120,61 @@ function TransactionDetailPage() {
   const [aliasDraft, setAliasDraft] = useState<string | null>(null)
   const [tagInput, setTagInput] = useState('')
 
+  // 自動儲存狀態，獨立於 updateMutation.isPending（後者跨 category/tags/note/alias 共用）。
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle')
+  const savedResetRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
   const noteValue = noteDraft ?? detail?.note ?? ''
   const aliasValue = aliasDraft ?? detail?.merchant_alias ?? ''
+
+  // 統一封裝「note / alias 自動儲存」的狀態轉換，避免兩個 effect 重複邏輯。
+  const { mutate: updateMutate } = updateMutation
+  function autoSave(body: TransactionUpdateRequest) {
+    if (savedResetRef.current !== null) {
+      clearTimeout(savedResetRef.current)
+      savedResetRef.current = null
+    }
+    setSaveStatus('saving')
+    updateMutate(body, {
+      onSuccess: () => {
+        setSaveStatus('saved')
+        savedResetRef.current = setTimeout(
+          () => setSaveStatus('idle'),
+          SAVED_RESET_MS,
+        )
+      },
+      onError: () => setSaveStatus('idle'),
+    })
+  }
+
+  // 卸載時清除殘留 timer，避免在 unmounted component 上 setState。
+  useEffect(() => {
+    return () => {
+      if (savedResetRef.current !== null) clearTimeout(savedResetRef.current)
+    }
+  }, [])
 
   // Debounced note auto-save：只有 noteDraft 已被使用者改過才送
   useEffect(() => {
     if (!detail || noteDraft === null) return
     if (noteDraft === (detail.note ?? '')) return
     const t = setTimeout(() => {
-      updateMutation.mutate({ note: noteDraft })
+      autoSave({ note: noteDraft })
     }, NOTE_DEBOUNCE_MS)
     return () => clearTimeout(t)
-  }, [noteDraft, detail, updateMutation])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- autoSave 為穩定封裝，刻意省略以避免每 render 重觸
+  }, [noteDraft, detail])
 
   // Debounced merchant_alias auto-save
   useEffect(() => {
     if (!detail || aliasDraft === null) return
     if (aliasDraft === detail.merchant_alias) return
     const t = setTimeout(() => {
-      updateMutation.mutate({ merchant_alias: aliasDraft })
+      autoSave({ merchant_alias: aliasDraft })
     }, ALIAS_DEBOUNCE_MS)
     return () => clearTimeout(t)
-  }, [aliasDraft, detail, updateMutation])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- autoSave 為穩定封裝，刻意省略以避免每 render 重觸
+  }, [aliasDraft, detail])
 
   // -- Handlers ------------------------------------------------------------
 
@@ -210,7 +247,8 @@ function TransactionDetailPage() {
             </div>
           </div>
           <div className="text-sm text-muted-foreground">
-            {detail.trans_date} · {detail.bank_code} · {detail.billing_month}
+            {formatDate(detail.trans_date)} · {detail.bank_code} ·{' '}
+            {formatDate(detail.billing_month)}
           </div>
         </section>
 
@@ -284,13 +322,20 @@ function TransactionDetailPage() {
             onChange={(e) => setNoteDraft(e.target.value)}
             onBlur={() => {
               if (detail && noteDraft !== null && noteDraft !== (detail.note ?? '')) {
-                updateMutation.mutate({ note: noteDraft })
+                autoSave({ note: noteDraft })
               }
             }}
             aria-label="備註"
           />
-          <div className="text-xs text-muted-foreground">
-            自動儲存（500ms）
+          <div
+            className="text-xs text-muted-foreground"
+            aria-live="polite"
+          >
+            {saveStatus === 'saving'
+              ? '儲存中…'
+              : saveStatus === 'saved'
+                ? '已儲存 ✓'
+                : '自動儲存（500ms）'}
           </div>
         </section>
 

@@ -39,11 +39,29 @@ def _with_auth_and_session(
     @wraps(handler_fn)
     async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         chat_id = update.effective_chat.id if update.effective_chat else None
+        # Authorization MUST stay OUTSIDE the try below so unauthorized chats
+        # never receive an error reply (no information leak to non-allowlisted
+        # users); they are silently ignored exactly as before.
         if chat_id is None or not is_chat_allowed(chat_id, allowed_chat_ids):
             return  # silently ignore
 
-        async with session_factory() as session:
-            await handler_fn(update, context, session)
+        try:
+            async with session_factory() as session:
+                await handler_fn(update, context, session)
+        except Exception:
+            # DB / Telegram errors must not leave the user with no feedback.
+            logger.exception("Bot handler error in %s", handler_fn.__name__)
+            # Replying can itself fail (Telegram API down); a failed error
+            # reply only warns — never re-raise into the framework.
+            if update.message is not None:
+                try:
+                    await update.message.reply_text("發生錯誤，請稍後再試。")
+                except Exception:
+                    logger.warning(
+                        "Bot error reply failed in %s",
+                        handler_fn.__name__,
+                        exc_info=True,
+                    )
 
     return wrapper
 

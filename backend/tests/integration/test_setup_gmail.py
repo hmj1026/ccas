@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ccas.config import get_settings
 from ccas.storage.models import GmailOAuthState
+from ccas.storage.oauth_secrets import read_token_payload
 from tests.integration.conftest import auth_headers
 
 
@@ -35,9 +36,17 @@ async def gmail_paths(
     monkeypatch.setenv("GMAIL_CREDENTIALS_PATH", str(creds))
     monkeypatch.setenv("GMAIL_TOKEN_PATH", str(token))
     monkeypatch.setenv("PUBLIC_BASE_URL", "http://localhost:8080")
+    # Stage 6 A3: OAuth creds are encrypted at rest with master.key; point the
+    # key into tmp so the test never writes into the repo's ./data/secrets.
+    monkeypatch.setenv("MASTER_KEY_PATH", str(tmp_path / "secrets" / "master.key"))
     get_settings.cache_clear()
     yield creds, token
     get_settings.cache_clear()
+
+
+def _read_oauth_file(path: Path) -> dict[str, Any]:
+    """Decrypt an on-disk OAuth file the way the router's read path does."""
+    return read_token_payload(path, get_settings().master_key_manager)
 
 
 def _valid_credentials_payload() -> dict[str, Any]:
@@ -80,8 +89,12 @@ class TestUploadCredentials:
         assert body["data"]["client_id_last8"] == "leusercontent.com"[-8:]
         assert creds_path.exists()
         assert creds_path.stat().st_mode & 0o777 == 0o600
-        # File must contain the original payload verbatim.
-        assert json.loads(creds_path.read_text()) == payload
+        # Stage 6 A3: file is encrypted at rest — the client_secret must NOT
+        # appear in cleartext, but the decrypt read path round-trips the payload.
+        on_disk = creds_path.read_text()
+        assert "GOCSPX-test-secret" not in on_disk
+        assert json.loads(on_disk)["ccas_enc"] is not None  # envelope, not payload
+        assert _read_oauth_file(creds_path) == payload
 
     async def test_upload_rejects_non_json_body(
         self,
@@ -179,20 +192,22 @@ class TestAuthorize:
 
 
 class TestCallback:
-    async def test_callback_with_unknown_state_returns_400(
+    async def test_callback_with_unknown_state_returns_422(
         self,
         client: AsyncClient,
         gmail_paths: tuple[Path, Path],
     ) -> None:
+        # Unknown/used OAuth state is invalid input → 422 (aligns with the
+        # 422 input-validation convention in budgets/rules/transactions).
         resp = await client.get(
             "/api/setup/gmail/callback",
             params={"code": "any", "state": "nonexistent-state"},
             headers=auth_headers(),
             follow_redirects=False,
         )
-        assert resp.status_code == 400
+        assert resp.status_code == 422
 
-    async def test_callback_with_expired_state_returns_400(
+    async def test_callback_with_expired_state_returns_422(
         self,
         client: AsyncClient,
         db_session: AsyncSession,
@@ -215,7 +230,9 @@ class TestCallback:
             headers=auth_headers(),
             follow_redirects=False,
         )
-        assert resp.status_code == 400
+        assert resp.status_code == 422
+        # Expired-state detail guides the user to retry the authorize flow.
+        assert "請重新點擊授權按鈕" in resp.json()["detail"]
 
     @respx.mock
     async def test_callback_happy_path_writes_token_and_redirects(
@@ -260,10 +277,13 @@ class TestCallback:
 
         assert resp.status_code in (302, 303, 307), resp.text
         assert "/setup/gmail" in resp.headers["location"]
-        # Token file written, state row deleted.
+        # Token file written (encrypted), state row deleted.
         assert token_path.exists()
         assert token_path.stat().st_mode & 0o777 == 0o600
-        token_data = json.loads(token_path.read_text())
+        # Stage 6 A3: refresh_token is NOT plaintext on disk; decrypt to verify.
+        on_disk = token_path.read_text()
+        assert "1//fake-refresh" not in on_disk
+        token_data = _read_oauth_file(token_path)
         assert token_data["refresh_token"] == "1//fake-refresh"
         rows = (await db_session.execute(select(GmailOAuthState))).scalars().all()
         assert all(r.state != "happy-state-1" for r in rows)
@@ -312,6 +332,31 @@ class TestStatus:
         assert (
             "https://www.googleapis.com/auth/gmail.readonly" in data["granted_scopes"]
         )
+
+    async def test_status_reads_legacy_plaintext_token(
+        self,
+        client: AsyncClient,
+        gmail_paths: tuple[Path, Path],
+    ) -> None:
+        """既有 plaintext token.json（Stage 6 之前）仍回報 connected。"""
+        _, token_path = gmail_paths
+        # Plaintext, no encryption envelope — simulates a pre-upgrade deployment.
+        token_path.write_text(
+            json.dumps(
+                {
+                    "token": "ya29.legacy",
+                    "refresh_token": "1//legacy",
+                    "scopes": ["https://www.googleapis.com/auth/gmail.readonly"],
+                }
+            )
+        )
+
+        resp = await client.get(
+            "/api/setup/gmail/status",
+            headers=auth_headers(),
+        )
+        assert resp.status_code == 200
+        assert resp.json()["data"]["connected"] is True
 
 
 class TestRevoke:

@@ -9,7 +9,11 @@ from pathlib import Path
 from google_auth_oauthlib.flow import InstalledAppFlow
 
 from ccas.config import get_settings
-from ccas.ingestor.auth import GMAIL_SCOPES, write_private_token_file
+from ccas.ingestor.auth import GMAIL_SCOPES
+from ccas.storage.oauth_secrets import (
+    read_token_payload,
+    write_encrypted_token_file,
+)
 
 
 class GmailAuthSetupError(ValueError):
@@ -48,12 +52,18 @@ def should_generate_token(paths: AuthPaths, *, force: bool) -> bool:
 
 def generate_token(paths: AuthPaths) -> Path:
     """執行 Gmail OAuth 授權並寫入 token 檔。"""
-    flow = InstalledAppFlow.from_client_secrets_file(
-        str(paths.credentials_path), list(GMAIL_SCOPES)
-    )
+    manager = get_settings().master_key_manager
+    # credentials.json may already be encrypted by the web upload flow; decrypt
+    # via the shared read path (tolerates legacy plaintext) instead of letting
+    # ``from_client_secrets_file`` choke on the encryption envelope
+    # (security-reviewer M4).
+    client_config = read_token_payload(paths.credentials_path, manager)
+    flow = InstalledAppFlow.from_client_config(client_config, list(GMAIL_SCOPES))
     creds = flow.run_local_server(port=0)
     paths.token_path.parent.mkdir(parents=True, exist_ok=True)
-    write_private_token_file(paths.token_path, creds.to_json())
+    # Encrypt at rest with the shared master.key (Stage 6 A3): the CLI-issued
+    # refresh_token must not land as plaintext, matching the web OAuth flow.
+    write_encrypted_token_file(paths.token_path, creds.to_json(), manager)
     return paths.token_path
 
 

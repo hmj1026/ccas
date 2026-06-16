@@ -74,7 +74,10 @@ async def test_reporter_failure_does_not_abort_ingest_batch(
     assert process_web_fetch_mock.await_count == 1
     assert reporter.item_calls == 3
     assert summary.banks_processed == 1
-    # Batch reached commit (no rollback caused by progress reporting).
-    session.commit.assert_awaited_once()
+    # Stage 3 item B: commit is now per item (the reporter raises in the
+    # finally AFTER each per-item commit). Each of the 3 items still committed,
+    # and the progress-reporting failure must never trigger a rollback.
+    assert session.commit.await_count == 3
+    session.rollback.assert_not_awaited()
     # Swallow-with-log: failure is logged, not silent.
     assert "ingest progress reporting failed" in caplog.text

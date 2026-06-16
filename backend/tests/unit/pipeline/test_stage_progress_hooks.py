@@ -135,6 +135,13 @@ async def test_decrypt_emits_started_and_per_attachment_progress() -> None:
             "ccas.decryptor.job.fetch_pending_attachments",
             new=AsyncMock(return_value=attachments),
         ),
+        # Stage 3 item C: run_decryption_job pre-resolves passwords per distinct
+        # bank_code into a cache before the loop. Patch it so this progress-hook
+        # test stays isolated from Fernet/password resolution.
+        patch(
+            "ccas.decryptor.job.resolve_passwords",
+            new=AsyncMock(return_value=("pw",)),
+        ),
         patch(
             "ccas.decryptor.job._process_attachment", new=AsyncMock(return_value=None)
         ),
@@ -314,7 +321,13 @@ async def test_ingest_no_active_banks_emits_zero_total() -> None:
 
 
 async def test_ingest_item_failure_advances_processed() -> None:
-    """§3A.7: ingestion attachment processing raise → processed still +1."""
+    """§3A.7: ingestion attachment processing raise → processed still +1.
+
+    Stage 3 item B makes the per-item failure resilient: an unexpected raise in
+    one attachment is rolled back and the batch CONTINUES to the next item (the
+    job no longer propagates the exception). The progress counter still advances
+    for every item via the innermost finally.
+    """
     reporter = FakeReporter()
     session = AsyncMock()
 
@@ -334,9 +347,10 @@ async def test_ingest_item_failure_advances_processed() -> None:
         patch("ccas.ingestor.job.search_messages", return_value=[msg]),
         patch("ccas.ingestor.job._process_attachment", side_effect=boom),
     ):
-        with pytest.raises(RuntimeError):
-            await run_ingestion_job(session, options=None, reporter=reporter)
+        # No longer raises: both failing items are rolled back and skipped.
+        await run_ingestion_job(session, options=None, reporter=reporter)
 
-    # First attachment raised; processed counter for that bank reached 1
-    # (innermost finally still ran).
-    assert _items(reporter, "ingest") == [1]
+    # Both attachments advanced the processed counter (innermost finally ran for
+    # each), and each failure triggered a rollback.
+    assert _items(reporter, "ingest") == [1, 2]
+    assert session.rollback.await_count == 2

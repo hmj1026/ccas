@@ -8,8 +8,10 @@ from __future__ import annotations
 
 from httpx import AsyncClient
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ccas.api.routers.rules import _integrity_error_to_http
 from ccas.storage.models import (
     Category,
     PatternType,
@@ -317,3 +319,46 @@ class TestRuleTestEndpoint:
             json={"pattern": "x", "pattern_type": "keyword", "sample_text": "x"},
         )
         assert resp.status_code == 401
+
+
+class TestIntegrityErrorMapping:
+    """``_integrity_error_to_http`` 把 DB 完整性錯誤轉成友善 422，不洩漏 schema。
+
+    說明：``classification_rules.pattern`` 目前沒有 UNIQUE 約束（見
+    ``5f9d4a7b3c8e`` migration 的 ``CREATE INDEX``，非 ``UNIQUE``），且 FK
+    違反在 ``create_rule`` 進 INSERT 前已由 ``_resolve_category_name`` 攔下，
+    因此 IntegrityError 路徑無法用真實端點觸發。改為直接單元測映射函式，
+    驗證它回 422、回友善訊息、且**不**把 column 名洩漏給 client。
+    """
+
+    @staticmethod
+    def _make_integrity_error(orig_message: str) -> IntegrityError:
+        return IntegrityError(
+            statement="INSERT INTO classification_rules ...",
+            params=None,
+            orig=Exception(orig_message),
+        )
+
+    def test_unique_violation_maps_to_friendly_message_without_leak(self) -> None:
+        exc = self._make_integrity_error(
+            "UNIQUE constraint failed: classification_rules.pattern"
+        )
+        http_exc = _integrity_error_to_http(exc)
+        assert http_exc.status_code == 422
+        assert http_exc.detail == "相同 pattern 的規則已存在"
+        # The raw column name must NOT leak to the client.
+        assert "classification_rules" not in http_exc.detail
+        assert "constraint" not in http_exc.detail.lower()
+
+    def test_foreign_key_violation_maps_to_friendly_message(self) -> None:
+        exc = self._make_integrity_error("FOREIGN KEY constraint failed")
+        http_exc = _integrity_error_to_http(exc)
+        assert http_exc.status_code == 422
+        assert http_exc.detail == "指定的 category_id 不存在"
+
+    def test_other_integrity_error_maps_to_generic_message(self) -> None:
+        exc = self._make_integrity_error("NOT NULL constraint failed: foo.bar")
+        http_exc = _integrity_error_to_http(exc)
+        assert http_exc.status_code == 422
+        assert http_exc.detail == "資料完整性錯誤，請確認輸入值"
+        assert "foo.bar" not in http_exc.detail

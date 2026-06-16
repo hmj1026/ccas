@@ -149,4 +149,13 @@ async def handle_paid(
         await session.commit()
         text = formatting.format_paid_success(bill, bank_names)
 
-    await update.message.reply_text(text)  # type: ignore[union-attr]
+    # The DB is already consistent (commit above). If the confirmation reply
+    # fails (Telegram API down), only warn — do NOT rollback, the bill IS paid.
+    try:
+        await update.message.reply_text(text)  # type: ignore[union-attr]
+    except Exception:
+        logger.warning(
+            "Bot /paid reply failed for bill_id=%s (DB already committed)",
+            bill_id,
+            exc_info=True,
+        )

@@ -10,6 +10,7 @@ Verifies against a scratch SQLite file that:
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Generator
 from pathlib import Path
 
@@ -20,6 +21,34 @@ from sqlalchemy import create_engine, inspect
 from alembic import command
 
 _BACKEND_ROOT = Path(__file__).resolve().parents[3]
+
+
+@pytest.fixture(autouse=True)
+def _restore_logging_state() -> Generator[None, None, None]:
+    """Restore global logging state around Alembic-driven tests.
+
+    ``alembic/env.py`` calls ``logging.config.fileConfig`` when migrations run.
+    The root fix passes ``disable_existing_loggers=False`` so application
+    loggers are never silenced, but this teardown is a defensive net: it
+    snapshots the ``.disabled`` flag of every existing logger and restores it
+    afterwards, guaranteeing this test can never leak logging-config state into
+    a later test (e.g. one asserting log propagation via ``caplog``).
+    """
+    manager = logging.Logger.manager
+    snapshot = {
+        name: logger.disabled
+        for name, logger in manager.loggerDict.items()
+        if isinstance(logger, logging.Logger)
+    }
+    root_disabled = logging.getLogger().disabled
+    try:
+        yield
+    finally:
+        logging.getLogger().disabled = root_disabled
+        for name, disabled in snapshot.items():
+            logger = manager.loggerDict.get(name)
+            if isinstance(logger, logging.Logger):
+                logger.disabled = disabled
 
 
 def _columns(db_path: Path, table: str) -> set[str]:

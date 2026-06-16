@@ -31,6 +31,7 @@ NC='\033[0m'
 missing_required=()
 missing_optional=()
 format_errors=()
+security_warnings=()
 
 if [[ ! -f "$EXAMPLE_FILE" ]]; then
   printf "${RED}[ERROR]${NC} 找不到 %s\n" "$EXAMPLE_FILE" >&2
@@ -114,6 +115,28 @@ if is_explicitly_set_in_env_file "API_TOKEN"; then
   fi
 fi
 
+# -----------------------------------------------------------------------------
+# Security hardening warnings（Stage 6 A1/A2；非阻斷：只 WARN，不影響 exit_code）
+# -----------------------------------------------------------------------------
+
+# A1：以 HTTPS 對外（PUBLIC_BASE_URL=https://…）卻未啟用 Secure cookie，
+# session cookie 可能在中間人攻擊下被竊。提醒設 API_COOKIE_SECURE=true。
+if [[ "${PUBLIC_BASE_URL:-}" =~ ^https:// ]]; then
+  if [[ "${API_COOKIE_SECURE:-}" != "true" ]]; then
+    security_warnings+=(
+      "PUBLIC_BASE_URL 為 https:// 但 API_COOKIE_SECURE 未設為 true；建議設定 API_COOKIE_SECURE=true 讓 session cookie 僅在 TLS 連線送出"
+    )
+  fi
+fi
+
+# A2：REDIS_PASSWORD 留空。dev / 單機（redis 綁 127.0.0.1）可接受；
+# production / redis 可被其他主機觸及時建議設定。
+if [[ -z "${REDIS_PASSWORD:-}" ]]; then
+  security_warnings+=(
+    "REDIS_PASSWORD 未設定（dev 可接受）；production 或 redis 可被其他主機觸及時建議設定 --requirepass 密碼並同步寫入 REDIS_URL"
+  )
+fi
+
 # 將 API_TOKEN 從 missing_required 移除（spec §3.3.1：未設定不視為 required）
 # 因為 .env.example 中 API_TOKEN= 行已被改為註解（# API_TOKEN=），不會出現在 missing_required；
 # 此處僅作為防呆 fallback：若有人改回 .env.example 的 API_TOKEN= 為非註解，仍允許未設定。
@@ -159,7 +182,15 @@ if [[ ${#missing_optional[@]} -gt 0 ]]; then
   done
 fi
 
-if [[ $exit_code -eq 0 && ${#missing_optional[@]} -eq 0 ]]; then
+# 安全性警告（非阻斷）：不影響 exit_code，僅提醒 operator。
+if [[ ${#security_warnings[@]} -gt 0 ]]; then
+  printf "${YELLOW}[WARN]${NC} 安全性建議（不影響驗證結果）：\n"
+  for msg in "${security_warnings[@]}"; do
+    printf "  - %s\n" "$msg"
+  done
+fi
+
+if [[ $exit_code -eq 0 && ${#missing_optional[@]} -eq 0 && ${#security_warnings[@]} -eq 0 ]]; then
   printf "${GREEN}[OK]${NC} 環境變數驗證通過\n"
 fi
 

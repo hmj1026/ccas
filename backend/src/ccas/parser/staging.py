@@ -155,6 +155,7 @@ async def create_bill_and_transactions(
         billing_month=parse_result.billing_month,
         total_amount=parse_result.total_amount,
         due_date=parse_result.due_date,
+        due_date_estimated=parse_result.due_date_estimated,
         file_path=file_path,
     )
     session.add(bill)

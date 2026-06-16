@@ -5,6 +5,7 @@ using text fixtures, not real PDFs.
 """
 
 from datetime import date
+from pathlib import Path
 from typing import cast
 from unittest.mock import MagicMock, patch
 
@@ -74,11 +75,15 @@ class TestExtractSummary:
         parser = _make_parser()
         page = make_mock_page(CTBC_FIRST_PAGE_TEXT)
 
-        billing_month, total_amount, due_date = parser._extract_summary([page])
+        billing_month, total_amount, due_date, due_date_estimated = (
+            parser._extract_summary([page])
+        )
 
         assert billing_month == EXPECTED_BILLING_MONTH
         assert total_amount == EXPECTED_TOTAL_AMOUNT
         assert due_date == EXPECTED_DUE_DATE
+        # Labeled format carries an exact 繳費截止日 — not estimated.
+        assert due_date_estimated is False
 
     def test_raises_on_missing_due_date(self):
         parser = _make_parser()
@@ -228,6 +233,8 @@ class TestParse:
         assert result.total_amount == EXPECTED_TOTAL_AMOUNT
         assert result.due_date == EXPECTED_DUE_DATE
         assert len(result.transactions) == 3
+        # Labeled format has an exact 繳費截止日 → precise, not estimated.
+        assert result.due_date_estimated is False
 
 
 # -- ROC format tests (real CTBC PDFs) --
@@ -254,7 +261,7 @@ class TestExtractSummaryRoc:
         page1 = make_mock_page(CTBC_ROC_FIRST_PAGE_TEXT)
         page3 = make_mock_page(CTBC_ROC_PAYMENT_PAGE_TEXT)
 
-        billing_month, total, due = parser._extract_summary([page1, page3])
+        billing_month, total, due, _estimated = parser._extract_summary([page1, page3])
 
         assert billing_month == EXPECTED_ROC_BILLING_MONTH
 
@@ -263,7 +270,7 @@ class TestExtractSummaryRoc:
         page1 = make_mock_page(CTBC_ROC_FIRST_PAGE_TEXT)
         page3 = make_mock_page(CTBC_ROC_PAYMENT_PAGE_TEXT)
 
-        _, total, _ = parser._extract_summary([page1, page3])
+        _, total, _, _ = parser._extract_summary([page1, page3])
 
         assert total == EXPECTED_ROC_TOTAL_AMOUNT
 
@@ -272,9 +279,11 @@ class TestExtractSummaryRoc:
         page1 = make_mock_page(CTBC_ROC_FIRST_PAGE_TEXT)
         page3 = make_mock_page(CTBC_ROC_PAYMENT_PAGE_TEXT)
 
-        _, _, due = parser._extract_summary([page1, page3])
+        _, _, due, estimated = parser._extract_summary([page1, page3])
 
         assert due == EXPECTED_ROC_DUE_DATE
+        # Payment-slip page provides the precise cutoff — not estimated.
+        assert estimated is False
 
 
 class TestExtractTransactionsRoc:
@@ -382,7 +391,13 @@ class TestIsNonTransactionMerchant:
 
 
 class TestNormalizeOcrMerchant:
-    """Tests for the _normalize_ocr_merchant helper."""
+    """Tests for the unified normalize_ocr_merchant SSOT (ocr_postprocess).
+
+    The former CTBC regex rules (``_OCR_MERCHANT_NORMALIZATION_RULES``) were
+    merged into ``ocr_postprocess.normalize_ocr_merchant`` and now run before
+    the brand-string corrections. These cases prove the merged function still
+    applies the former regex corrections.
+    """
 
     @pytest.mark.parametrize(
         "raw,expected",
@@ -400,9 +415,9 @@ class TestNormalizeOcrMerchant:
         ],
     )
     def test_normalizes_known_ocr_errors(self, raw: str, expected: str):
-        from ccas.parser.banks.ctbc_v1 import _normalize_ocr_merchant
+        from ccas.parser.banks.ctbc.ocr_postprocess import normalize_ocr_merchant
 
-        assert _normalize_ocr_merchant(raw) == expected
+        assert normalize_ocr_merchant(raw) == expected
 
 
 class TestIsGarbled:
@@ -460,27 +475,29 @@ class TestExtractTotalAmountPage1:
 
 
 class TestExtractDueDatePage1:
-    """Tests for _extract_due_date_page1."""
+    """Tests for _extract_due_date_page1 (returns (date, estimated))."""
 
-    def test_extracts_year_month_defaults_to_day28(self):
+    def test_extracts_year_month_defaults_to_day28_and_flags_estimated(self):
         from ccas.parser.banks.ctbc_v1 import _extract_due_date_page1
 
+        # 2-page zero-balance bill: page 1 has only ROC year+month (no day),
+        # so the cutoff is estimated as day 28 and flagged estimated=True.
         result = _extract_due_date_page1(CTBC_ROC_ZERO_BALANCE_PAGE1_TEXT)
-        assert result == date(2024, 1, 28)
+        assert result == (date(2024, 1, 28), True)
 
     def test_returns_none_when_no_roc_year_month(self):
         from ccas.parser.banks.ctbc_v1 import _extract_due_date_page1
 
         assert _extract_due_date_page1("no dates here") is None
 
-    def test_does_not_match_full_roc_date(self):
+    def test_prefers_full_roc_date_and_is_not_estimated(self):
         from ccas.parser.banks.ctbc_v1 import _extract_due_date_page1
 
-        # A page with only full NNN/MM/DD dates should not be matched
-        # by year+month regex
-        text_with_full_dates = "113/01/15\n113/01/20\n"
-        result = _extract_due_date_page1(text_with_full_dates)
-        assert result is None
+        # When a complete NNN/MM/DD date is present on page 1, it is the exact
+        # cutoff and must NOT be flagged as estimated.
+        text_with_full_date = "113/01 7.58\n繳款截止日 113/01/20\n"
+        result = _extract_due_date_page1(text_with_full_date)
+        assert result == (date(2024, 1, 20), False)
 
 
 class TestExtractSummaryZeroBalanceFallback:
@@ -491,13 +508,36 @@ class TestExtractSummaryZeroBalanceFallback:
         page1 = make_mock_page(CTBC_ROC_ZERO_BALANCE_PAGE1_TEXT)
         page2 = make_mock_page(CTBC_ROC_ZERO_BALANCE_TXN_PAGE_TEXT)
 
-        billing_month, total_amount, due_date = parser._extract_summary([page1, page2])
+        billing_month, total_amount, due_date, due_date_estimated = (
+            parser._extract_summary([page1, page2])
+        )
 
         assert billing_month == "2024-01"
         assert total_amount == 0
         assert due_date.day == 28
         assert due_date.month == 1
         assert due_date.year == 2024
+        # Day-28 fallback path → due date is estimated.
+        assert due_date_estimated is True
+
+    def test_two_page_zero_balance_sets_estimated_flag_on_parse_result(self):
+        """End-to-end parse() threads due_date_estimated=True into ParseResult."""
+        parser = _make_parser()
+        pdf_path = Path("dummy.pdf")
+        page1 = make_mock_page(CTBC_ROC_ZERO_BALANCE_PAGE1_TEXT)
+        page2 = make_mock_page(CTBC_ROC_ZERO_BALANCE_TXN_PAGE_TEXT)
+
+        with patch("ccas.parser.banks.ctbc_v1.pdfplumber") as mock_plumber:
+            mock_pdf = MagicMock()
+            mock_pdf.__enter__ = MagicMock(return_value=mock_pdf)
+            mock_pdf.__exit__ = MagicMock(return_value=False)
+            mock_pdf.pages = [page1, page2]
+            mock_plumber.open.return_value = mock_pdf
+
+            result = parser.parse(pdf_path)
+
+        assert result.due_date == date(2024, 1, 28)
+        assert result.due_date_estimated is True
 
 
 class TestCanParseOcrFallback:

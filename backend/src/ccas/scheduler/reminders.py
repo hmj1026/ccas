@@ -8,7 +8,7 @@ import logging
 from datetime import date, timedelta
 from typing import Any, cast
 
-from sqlalchemy import CursorResult, delete, select
+from sqlalchemy import CursorResult, and_, delete, or_, select
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,17 +19,38 @@ from ccas.storage.queries import fetch_bank_names
 
 logger = logging.getLogger(__name__)
 
+# 估算到期日（CTBC 兩頁帳單 day-28 fallback）放寬比對窗（天）。
+# 估算值可能高估真實截止日（月底/假日順延），太晚提醒會誤事；故對
+# ``due_date_estimated`` 帳單以 [target_date, target_date + N] 區間比對，
+# 讓高估的日期仍能提早觸發及時提醒。idempotency 仍以 (bill_id,
+# reminder_type) 唯一鍵把關，放寬窗不會重複發送。
+_ESTIMATED_DUE_WIDEN_DAYS = 3
+
 
 async def _fetch_unpaid_bills_due_on(
     session: AsyncSession,
     target_date: date,
 ) -> list[Bill]:
-    """查詢到期日為指定日期且未付的帳單。"""
+    """查詢應於指定日期提醒且未付的帳單。
+
+    精確到期日帳單以 ``due_date == target_date`` 比對；``due_date_estimated``
+    為 True 的帳單（到期日為估算值）改以 ``target_date <= due_date <=
+    target_date + _ESTIMATED_DUE_WIDEN_DAYS`` 區間比對，避免高估的截止日造成
+    提醒過晚。重複發送由 (bill_id, reminder_type) 唯一鍵防範（claim 機制）。
+    """
+    widened_end = target_date + timedelta(days=_ESTIMATED_DUE_WIDEN_DAYS)
     stmt = (
         select(Bill)
         .where(
             Bill.is_paid.is_(False),
-            Bill.due_date == target_date,
+            or_(
+                Bill.due_date == target_date,
+                and_(
+                    Bill.due_date_estimated.is_(True),
+                    Bill.due_date >= target_date,
+                    Bill.due_date <= widened_end,
+                ),
+            ),
         )
         .order_by(Bill.bank_code)
     )

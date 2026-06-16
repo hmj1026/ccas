@@ -148,9 +148,11 @@ describe('SettingsBudgetsPage', () => {
     await userEvent.type(amountInput, '30000')
     await userEvent.click(screen.getByRole('button', { name: '建立' }))
 
-    // 失敗時應顯示錯誤橫幅，而非靜默關閉
-    const alert = await screen.findByRole('alert')
-    expect(alert).toHaveTextContent('建立預算失敗')
+    // 失敗時應顯示錯誤橫幅，而非靜默關閉。
+    // 表單內另有一個常駐的 client-side 驗證 live region（role="alert"，此情境為空），
+    // 因此以文字定位 API 錯誤橫幅，避免 findByRole('alert') 命中多筆。
+    const alert = await screen.findByText('建立預算失敗')
+    expect(alert).toHaveAttribute('role', 'alert')
     // 對話框仍開著（建立鈕仍在、輸入仍保留）
     expect(screen.getByRole('button', { name: '建立' })).toBeInTheDocument()
     expect(screen.getByLabelText(/月度上限金額/)).toHaveValue(30000)

@@ -218,16 +218,19 @@ Gmail Inbox
 
 ```
 backend/src/ccas/
-  api/          # FastAPI routers
+  api/          # FastAPI routers（含登入速率限制，v0.4.0+）
   bot/          # Telegram bot handler
   classifier/   # Keyword-based classification
   config.py     # Pydantic settings
   decryptor/    # PDF decryption
-  ingestor/     # Gmail 附件下載 + staging；`fetcher/` 子模組含 BaseFetcher 介面、FUBON web-fetch 流程、captcha OCR（ddddocr）與 Claude Vision LLM fallback
-  parser/       # PDF parsing (per-bank)
+  ingestor/     # Gmail 附件下載 + staging；`fetcher/` 子模組含 BaseFetcher 介面、FUBON web-fetch 流程、captcha OCR（ddddocr）與 Claude Vision LLM fallback；原子 staging paths（v0.4.0+）
+  parser/       # PDF parsing (per-bank)；共用退款偵測模組 `refund_utils`（v0.4.0+）
   pipeline/     # Orchestration + CLI
   scheduler/    # APScheduler jobs
-  storage/      # SQLAlchemy models + database
+  storage/      # SQLAlchemy models + database；原子寫入 helper + OAuth 加密（v0.4.0+）
+    ├─ atomic.py       # 原子寫入（temp-then-rename）、OAuth secret 管理（v0.4.0+）
+    ├─ oauth_secrets.py # Gmail token.json / credentials.json 加密存放（v0.4.0+）
+    └─ paths.py        # Staging path helper（v0.4.0+）
 ```
 
 ## 7. 測試

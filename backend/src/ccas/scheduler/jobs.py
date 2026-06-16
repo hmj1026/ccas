@@ -52,17 +52,28 @@ def trigger_pipeline_via_rq(opts: dict | None = None) -> str:
             )
             await session.commit()
 
-            # params must stay the first positional arg: the worker's
-            # on_failure_handler reads bank_code from job.args[0],
-            # identical to the API trigger path.
-            job = queue.enqueue(
-                run_pipeline_sync,
-                params,
-                run_id=run_id,
-                retry=get_retry(),
-                on_failure=on_failure_handler,
-                job_timeout="30m",
-            )
+            try:
+                # params must stay the first positional arg: the worker's
+                # on_failure_handler reads bank_code from job.args[0],
+                # identical to the API trigger path.
+                job = queue.enqueue(
+                    run_pipeline_sync,
+                    params,
+                    run_id=run_id,
+                    retry=get_retry(),
+                    on_failure=on_failure_handler,
+                    job_timeout="30m",
+                )
+            except Exception:
+                # Enqueue failed: the job never entered the queue, so the RQ
+                # on_failure callback can never fire. Mark the orphan QUEUED row
+                # FAILED so it does not linger forever (mirrors the API path).
+                run = await session.get(PipelineRun, run_id)
+                if run is not None:
+                    run.status = PipelineRunStatus.FAILED
+                    run.error_message = "Pipeline enqueue failed (scheduler)"
+                    await session.commit()
+                raise
 
             run = await session.get(PipelineRun, run_id)
             if run is not None:
@@ -73,7 +84,18 @@ def trigger_pipeline_via_rq(opts: dict | None = None) -> str:
 
     # asyncio.run() assumes no running event loop (APScheduler executes this
     # in a plain sync thread); revisit before moving to an async scheduler.
-    job_id = asyncio.run(_run())
+    try:
+        job_id = asyncio.run(_run())
+    except Exception:
+        # APScheduler swallows unhandled exceptions into framework logs at a
+        # level operators may not see; log explicitly here. The PipelineRun row
+        # (if created) was already marked FAILED inside _run().
+        logger.exception(
+            "Scheduler pipeline trigger failed (run_id=%s, opts=%s)",
+            run_id,
+            params,
+        )
+        raise
     logger.info(
         "Pipeline job enqueued by scheduler: %s (run_id=%s, opts=%s)",
         job_id,
@@ -95,7 +117,13 @@ def run_payment_reminders_sync() -> dict[str, int]:
         await get_engine().dispose()
         return result
 
-    result = asyncio.run(_run())
+    try:
+        result = asyncio.run(_run())
+    except Exception:
+        # APScheduler swallows unhandled exceptions into framework logs; surface
+        # them explicitly so operators can act on a failed reminder run.
+        logger.exception("Scheduler payment reminders failed")
+        raise
     logger.info(
         "Payment reminders: sent=%d, skipped=%d", result["sent"], result["skipped"]
     )
@@ -114,7 +142,13 @@ def run_budget_evaluator_sync() -> dict[str, int]:
         await get_engine().dispose()
         return result
 
-    result = asyncio.run(_run())
+    try:
+        result = asyncio.run(_run())
+    except Exception:
+        # APScheduler swallows unhandled exceptions into framework logs; surface
+        # them explicitly so operators can act on a failed evaluator run.
+        logger.exception("Scheduler budget evaluator failed")
+        raise
     logger.info(
         "Budget evaluator: alerts_triggered=%d, skipped=%d",
         result["alerts_triggered"],

@@ -3,6 +3,7 @@
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi.responses import JSONResponse
 
 from ccas.api.deps import (
     current_api_token_version,
@@ -11,6 +12,11 @@ from ccas.api.deps import (
     is_valid_api_token,
     is_valid_session_cookie,
     verify_token,
+)
+from ccas.api.ratelimit import (
+    client_ip,
+    is_login_rate_limited,
+    register_login_failure,
 )
 from ccas.api.schemas import ApiResponse, SessionLoginRequest, SessionStatus
 from ccas.config import get_settings
@@ -81,10 +87,28 @@ async def get_session_status(request: Request):
 async def create_session(
     request: Request, body: SessionLoginRequest, response: Response
 ):
-    """以 API token 建立 browser session cookie。"""
-    remote_addr = request.client.host if request.client else "unknown"
+    """以 API token 建立 browser session cookie。
+
+    App-layer defense-in-depth rate limit (Stage 6 Item B): beyond nginx's
+    5r/m, a per-IP Redis failure counter trips a 429 after
+    ``LOGIN_FAIL_THRESHOLD`` bad-token attempts in a 60s window. Only failures
+    count; a correct token never increments. The limiter is **fail-open** — a
+    Redis outage degrades to "no app-layer limit" rather than locking out auth.
+    """
+    remote_addr = client_ip(request)
+    if await is_login_rate_limited(remote_addr):
+        logger.warning("auth_rate_limited: remote_addr=%s", remote_addr)
+        return JSONResponse(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            content={
+                "success": False,
+                "message": "登入嘗試次數過多，請稍後再試。",
+                "data": None,
+            },
+        )
     if not is_valid_api_token(body.token):
         logger.warning("auth_failed: remote_addr=%s", remote_addr)
+        await register_login_failure(remote_addr)
         raise HTTPException(status_code=401, detail="Invalid token")
     logger.info("session_created: remote_addr=%s", remote_addr)
     _set_session_cookie(response, body.token)

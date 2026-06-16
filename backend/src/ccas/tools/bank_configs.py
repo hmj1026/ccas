@@ -24,7 +24,6 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from ccas.storage.database import get_engine, get_session_factory
 from ccas.storage.models import BankConfig
-from ccas.storage.queries import invalidate_bank_names_cache
 
 
 class BankConfigValidationError(ValueError):
@@ -221,8 +220,6 @@ async def sync_bank_configs(
 
     if apply_changes:
         await session.commit()
-        # Bank names may have changed; drop the shared TTL read cache.
-        invalidate_bank_names_cache()
     else:
         await session.rollback()
 

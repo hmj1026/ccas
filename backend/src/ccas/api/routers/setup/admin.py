@@ -21,7 +21,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import os
 import secrets as stdlib_secrets
 from datetime import UTC, datetime
 from pathlib import Path
@@ -31,6 +30,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response
 from ccas.api.deps import current_api_token, current_api_token_version
 from ccas.api.schemas import AdminTokenInfo, AdminTokenRotateResult, ApiResponse
 from ccas.config import Settings, get_settings
+from ccas.storage.atomic import atomic_write_bytes
 
 logger = logging.getLogger(__name__)
 
@@ -47,23 +47,14 @@ _rotate_lock = asyncio.Lock()
 def _atomic_write_secret(path: Path, content: str) -> None:
     """Write *content* to *path* atomically with mode 0600.
 
-    Strategy: open ``<path>.tmp`` with ``O_EXCL`` to guarantee a fresh inode
-    with explicit 0600 mode, write the bytes, then ``os.replace`` to swap it
-    into place. Any concurrent reader sees either the prior file or the new
-    file, never a partial write. A stale ``.tmp`` from a crashed earlier
-    rotate is removed first because rotates are inherently re-entrant from
-    the operator's POV; refusing to recover would brick the endpoint.
+    Delegates to the shared ``atomic_write_bytes`` temp-then-rename helper,
+    which creates a fresh same-directory temp file, writes the bytes, applies
+    mode 0600, and ``os.replace``-s it into place. Any concurrent reader sees
+    either the prior file or the new file, never a partial write; a crash
+    leaves at most a stale temp file (auto-cleaned), never a half-written
+    secret.
     """
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    if tmp.exists():
-        tmp.unlink()
-    fd = os.open(str(tmp), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-    try:
-        os.write(fd, content.encode("utf-8"))
-    finally:
-        os.close(fd)
-    os.replace(tmp, path)
+    atomic_write_bytes(path, content.encode("utf-8"), mode=0o600)
 
 
 @router.get("/token-info", response_model=ApiResponse[AdminTokenInfo])

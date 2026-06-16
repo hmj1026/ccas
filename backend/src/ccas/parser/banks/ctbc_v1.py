@@ -60,25 +60,6 @@ _RE_PAGE1_RATE_LINE = re.compile(r"^\d{3}/\d{2}\s+([\d.]+)$", re.MULTILINE)
 # ROC year+month only (no day), negative lookahead avoids matching full NNN/MM/DD dates
 _RE_ROC_YEAR_MONTH = re.compile(r"\b(\d{3})/(\d{2})\b(?!/)")
 
-# -- OCR merchant name normalization rules --
-
-_OCR_MERCHANT_NORMALIZATION_RULES: tuple[tuple[str, str], ...] = (
-    ("Pi一金家便利商店", "全家便利商店"),
-    ("Pi一全家便利商店", "全家便利商店"),
-    (r"Pi一了Y[一了]+ELEVEN", "7-ELEVEN"),
-    (r"PIiI一了Y一ELEVEN", "7-ELEVEN"),
-    ("連加未麥芝勞", "麥當勞"),
-    ("台灣麥當馮", "麥當勞"),
-    ("無印恨品", "無印良品"),
-)
-
-
-def _normalize_ocr_merchant(text: str) -> str:
-    """Apply known OCR error corrections to a merchant name string."""
-    for pattern, replacement in _OCR_MERCHANT_NORMALIZATION_RULES:
-        text = re.sub(pattern, replacement, text)
-    return text.strip()
-
 
 def _is_garbled(text: str) -> bool:
     """Return True if text is predominantly CID-encoded garbage.
@@ -159,7 +140,9 @@ class CtbcV1Parser(BankParser):
         """Parse CTBC statement PDF into structured result."""
         with pdfplumber.open(pdf_path) as pdf:
             pages = pdf.pages
-            billing_month, total_amount, due_date = self._extract_summary(pages)
+            billing_month, total_amount, due_date, due_date_estimated = (
+                self._extract_summary(pages)
+            )
             billing_year = int(billing_month.split("-")[0])
             transactions = self._extract_transactions(pages, billing_year)
 
@@ -169,6 +152,7 @@ class CtbcV1Parser(BankParser):
             total_amount=total_amount,
             due_date=due_date,
             transactions=transactions,
+            due_date_estimated=due_date_estimated,
         )
 
     def _identify(self, text: str) -> bool:
@@ -188,10 +172,13 @@ class CtbcV1Parser(BankParser):
 
     def _extract_summary(
         self, pages: list[pdfplumber.page.Page]
-    ) -> tuple[str, int, date]:
-        """Extract billing_month, total_amount, due_date from page text.
+    ) -> tuple[str, int, date, bool]:
+        """Extract billing_month, total_amount, due_date, due_date_estimated.
 
         Tries ROC format first (real PDFs), then labeled format (test PDFs).
+        ``due_date_estimated`` is ``True`` only when the due date had to be
+        estimated via the page-1 day-28 fallback (CTBC 2-page bills lacking a
+        precise cutoff); every other extraction path yields ``False``.
 
         Raises:
             ParseError: If any mandatory summary field is missing.
@@ -215,6 +202,7 @@ class CtbcV1Parser(BankParser):
         if billing_month is None:
             raise ParseError("帳單摘要缺失", reason="找不到帳單月份")
 
+        due_date_estimated = False
         due_date = _extract_due_date_labeled(full_text)
         if due_date is None:
             due_date = _extract_due_date_ocr_legacy(full_text)
@@ -225,7 +213,9 @@ class CtbcV1Parser(BankParser):
             if _extract_total_amount_dollar(last_page_text) is not None:
                 due_date = _extract_due_date_roc(last_page_text)
         if due_date is None:
-            due_date = _extract_due_date_page1(first_page_text)
+            page1_due = _extract_due_date_page1(first_page_text)
+            if page1_due is not None:
+                due_date, due_date_estimated = page1_due
         if due_date is None:
             raise ParseError("帳單摘要缺失", reason="找不到繳費截止日")
 
@@ -239,7 +229,7 @@ class CtbcV1Parser(BankParser):
         if total_amount is None:
             raise ParseError("帳單摘要缺失", reason="找不到應繳總額")
 
-        return billing_month, total_amount, due_date
+        return billing_month, total_amount, due_date, due_date_estimated
 
     def _extract_transactions(
         self,
@@ -473,17 +463,36 @@ def _extract_total_amount_page1(first_page_text: str) -> int | None:
     return int(matches[-1].replace(",", ""))
 
 
-def _extract_due_date_page1(first_page_text: str) -> date | None:
+def _extract_due_date_page1(first_page_text: str) -> tuple[date, bool] | None:
     """Extract due date from page 1 when no payment slip page exists.
 
-    For 2-page bills the due date appears as year+month only (e.g. '113/01').
-    Defaults to day 28 per CTBC standard due day.
+    Returns a ``(due_date, estimated)`` pair, or ``None`` if no ROC
+    year/month token is present at all.
+
+    Resolution order:
+    1. Prefer a complete ROC date (``NNN/MM/DD``) on page 1 — this is the
+       statement's exact cutoff and is **not** estimated (``estimated=False``).
+    2. Otherwise fall back to year+month only (e.g. '113/01') and estimate the
+       cutoff as day 28 per CTBC's nominal due day (``estimated=True``). The
+       real cutoff varies by month-end / holiday順延, so an over-estimate can
+       push a reminder too late — callers should widen reminder windows when
+       this flag is set.
     """
+    full_match = _RE_ROC_DATE.search(first_page_text)
+    if full_match is not None:
+        roc_year, month, day = full_match.groups()
+        return _roc_to_date(int(roc_year), int(month), int(day)), False
+
     matches = _RE_ROC_YEAR_MONTH.findall(first_page_text)
     if not matches:
         return None
     roc_year_str, month_str = matches[-1]
-    return _roc_to_date(int(roc_year_str), int(month_str), 28)
+    roc_year = int(roc_year_str)
+    month = int(month_str)
+    logger.warning(
+        "CTBC 無法取得精確繳費截止日，估算為 %d/%02d/28 (ROC)", roc_year, month
+    )
+    return _roc_to_date(roc_year, month, 28), True
 
 
 # -- OCR legacy format helpers (old CTBC PDFs with garbled font encoding) --
@@ -549,7 +558,9 @@ def _ocr_merchant_image(
 ) -> str:
     """Crop a merchant image region and OCR it.
 
-    Returns the recognized text, or empty string on failure.
+    Returns the raw recognized text, or empty string on failure. Merchant-name
+    normalization is applied once downstream in ``_parse_roc_transaction`` via
+    the unified ``normalize_ocr_merchant`` (single SSOT in ``ocr_postprocess``).
     """
     if not is_ocr_available():
         return ""
@@ -561,7 +572,7 @@ def _ocr_merchant_image(
         bottom = float(img_bbox["bottom"])
         cropped = page.crop((x0, top, x1, bottom))
         pil_image = cropped.to_image(resolution=300).original
-        return _normalize_ocr_merchant(extract_text_from_image(pil_image))
+        return extract_text_from_image(pil_image)
     except (ValueError, AttributeError, OSError):
         logger.warning(
             "商戶圖片 OCR 失敗: x=%.0f y=%.0f",

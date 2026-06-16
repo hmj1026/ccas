@@ -17,6 +17,44 @@ export function cn(...inputs: ClassValue[]) {
 // scope 重用，避免每次 formatAmount/currencyFormatter 呼叫都重建。
 const INTEGER_FORMATTER = new Intl.NumberFormat('en-US')
 
+// 共用日期 formatter，理由同上：實例化成本集中於 module scope 重用。
+// `DAY_FORMATTER` 處理完整日期（YYYY-MM-DD / ISO）；`MONTH_FORMATTER` 處理
+// billing_month 這類「YYYY-MM」無日的值，避免被解析成 `Invalid Date`。
+const DAY_FORMATTER = new Intl.DateTimeFormat('zh-TW', {
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+})
+const MONTH_FORMATTER = new Intl.DateTimeFormat('zh-TW', {
+  year: 'numeric',
+  month: '2-digit',
+})
+
+/**
+ * 將後端 ISO 日期字串本地化為 zh-TW 顯示格式。
+ *
+ * 支援兩種輸入：
+ * - 完整日期（`YYYY-MM-DD` 或含時間的 ISO）→ `2026/03/15`
+ * - billing_month 的 `YYYY-MM`（無日）→ `2026/03`，避免渲染成 `Invalid Date`
+ *
+ * 無法解析時回退原字串，確保畫面不出現 `Invalid Date`。
+ *
+ * @param iso - 後端回傳的日期字串
+ * @returns 本地化後的日期字串
+ */
+export function formatDate(iso: string): string {
+  if (!iso) return iso
+  // `YYYY-MM`（billing_month）：無日，僅格式化年月。
+  const monthOnly = /^(\d{4})-(\d{2})$/.exec(iso)
+  if (monthOnly) {
+    const [, year, month] = monthOnly
+    const date = new Date(Number(year), Number(month) - 1, 1)
+    return Number.isNaN(date.getTime()) ? iso : MONTH_FORMATTER.format(date)
+  }
+  const date = new Date(iso)
+  return Number.isNaN(date.getTime()) ? iso : DAY_FORMATTER.format(date)
+}
+
 /**
  * 將數字金額格式化為帶幣別前綴的字串。
  * TWD 顯示 `$`，其他幣別顯示幣別代碼。

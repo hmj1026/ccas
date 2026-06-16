@@ -12,7 +12,11 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
 import { useNavigate } from 'react-router'
 import { apiDelete, apiGet, apiPost } from '@/lib/api-client'
-import type { ApiResponse } from '@/lib/types'
+import type {
+  AdminTokenInfo,
+  AdminTokenRotateResult,
+  ApiResponse,
+} from '@/lib/types'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -25,18 +29,6 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog'
 import { ErrorState, LoadingState } from '@/components/shared/states'
-
-interface AdminTokenInfo {
-  readonly last4: string
-  readonly created_at: string | null
-  readonly version: number
-}
-
-interface AdminTokenRotateResult {
-  readonly token: string
-  readonly version: number
-  readonly last4: string
-}
 
 const QUERY_KEY = ['setup', 'admin', 'token-info'] as const
 
