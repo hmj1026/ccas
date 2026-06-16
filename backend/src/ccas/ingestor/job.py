@@ -36,6 +36,7 @@ from ccas.ingestor.staging import (
 )
 from ccas.pipeline.options import PipelineOptions
 from ccas.pipeline.progress import NoopProgressReporter, ProgressReporter
+from ccas.storage.atomic import atomic_write_bytes
 from ccas.storage.models import BankConfig, BankSettings, StagedAttachmentStatus
 
 logger = logging.getLogger(__name__)
@@ -218,7 +219,7 @@ async def _process_attachment(
 
         target_dir = staged_path.parent
         await asyncio.to_thread(lambda: target_dir.mkdir(parents=True, exist_ok=True))
-        await asyncio.to_thread(staged_path.write_bytes, pdf_bytes)
+        await asyncio.to_thread(atomic_write_bytes, staged_path, pdf_bytes)
 
         # DB-first ordering: persist new record + delete old record (flush),
         # let the caller commit, THEN clean up the old disk file. Capture the
@@ -338,7 +339,7 @@ async def _process_web_fetch(
 
         target_dir = staged_path.parent
         await asyncio.to_thread(lambda: target_dir.mkdir(parents=True, exist_ok=True))
-        await asyncio.to_thread(staged_path.write_bytes, pdf_bytes)
+        await asyncio.to_thread(atomic_write_bytes, staged_path, pdf_bytes)
 
         # DB-first ordering (same as _process_attachment): persist DB, let the
         # caller commit, THEN clean up the old disk file. Capture the old path

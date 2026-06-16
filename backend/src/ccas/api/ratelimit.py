@@ -97,8 +97,17 @@ def client_ip(request: Request) -> str:
         forwarded = request.headers.get("x-forwarded-for")
         if forwarded:
             first = forwarded.split(",", 1)[0].strip()
+            # Only honour a syntactically-valid IP. A mis-configured or
+            # compromised upstream could relay a non-IP / oversized value that
+            # would otherwise become an arbitrary (and unbounded) Redis bucket
+            # key; fall back to the real socket peer in that case.
             if first:
-                return first
+                try:
+                    ipaddress.ip_address(first)
+                except ValueError:
+                    pass
+                else:
+                    return first
     if request.client is not None:
         return request.client.host
     return "unknown"

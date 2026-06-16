@@ -90,8 +90,10 @@ class TestForceModeSafety:
     @patch("ccas.ingestor.job.find_existing_staged", new_callable=AsyncMock)
     @patch("ccas.ingestor.job.create_staged_record", new_callable=AsyncMock)
     @patch("ccas.ingestor.job.build_staged_path")
+    @patch("ccas.ingestor.job.atomic_write_bytes")
     async def test_force_download_success_cleans_up_old_record(
         self,
+        mock_atomic_write,
         mock_build_path,
         mock_create,
         mock_find,
