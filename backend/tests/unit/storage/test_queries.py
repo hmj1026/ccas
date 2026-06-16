@@ -1,9 +1,12 @@
-"""ccas.storage.queries 銀行名稱 TTL 快取的單元測試。"""
+"""ccas.storage.queries.fetch_bank_names 的單元測試。
+
+cache 已移除（P3：跨 process 各持陳舊副本，Setup UI 改名最久 5 分鐘才生效），
+``fetch_bank_names`` 每次都重新查詢；測試聚焦於 fresh-read 語意。
+"""
 
 from __future__ import annotations
 
-import time
-from collections.abc import AsyncGenerator, Generator
+from collections.abc import AsyncGenerator
 
 import pytest
 from sqlalchemy.ext.asyncio import (
@@ -12,18 +15,9 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
-from ccas.storage import queries
 from ccas.storage.models import BankConfig, Base
-from ccas.storage.queries import fetch_bank_names, invalidate_bank_names_cache
+from ccas.storage.queries import fetch_bank_names
 from ccas.tools.bank_configs import BankConfigSpec, sync_bank_configs
-
-
-@pytest.fixture(autouse=True)
-def _fresh_cache() -> Generator[None, None, None]:
-    """Reset the module-level cache so tests never see leaked entries."""
-    invalidate_bank_names_cache()
-    yield
-    invalidate_bank_names_cache()
 
 
 @pytest.fixture
@@ -42,61 +36,25 @@ async def _seed_bank(session: AsyncSession, code: str, name: str) -> None:
     await session.commit()
 
 
-def _expire_cache_entry() -> None:
-    """Rewind the cached entry's expiry so the TTL appears lapsed.
-
-    Patching ``time.monotonic`` globally would disturb the asyncio event
-    loop, so the test mutates the cache entry directly instead.
-    """
-    _, mapping = queries._bank_names_cache[queries._BANK_NAMES_CACHE_KEY]
-    queries._bank_names_cache[queries._BANK_NAMES_CACHE_KEY] = (
-        time.monotonic() - 1,
-        mapping,
-    )
-
-
-class TestFetchBankNamesCache:
+class TestFetchBankNames:
     async def test_returns_bank_code_to_name_mapping(
         self, session: AsyncSession
     ) -> None:
         await _seed_bank(session, "CTBC", "中國信託")
         assert await fetch_bank_names(session) == {"CTBC": "中國信託"}
 
-    async def test_second_call_within_ttl_returns_cached_result(
-        self, session: AsyncSession
-    ) -> None:
+    async def test_reflects_new_rows_immediately(self, session: AsyncSession) -> None:
         await _seed_bank(session, "CTBC", "中國信託")
         assert await fetch_bank_names(session) == {"CTBC": "中國信託"}
 
-        # New row is invisible until the TTL lapses or the cache is dropped.
+        # 無快取：新增的 bank 立刻可見，不需等待 TTL 或手動 invalidate。
         await _seed_bank(session, "ESUN", "玉山銀行")
-        assert await fetch_bank_names(session) == {"CTBC": "中國信託"}
-
-    async def test_invalidate_forces_refetch(self, session: AsyncSession) -> None:
-        await _seed_bank(session, "CTBC", "中國信託")
-        await fetch_bank_names(session)
-        await _seed_bank(session, "ESUN", "玉山銀行")
-
-        invalidate_bank_names_cache()
-
         assert await fetch_bank_names(session) == {
             "CTBC": "中國信託",
             "ESUN": "玉山銀行",
         }
 
-    async def test_ttl_expiry_refetches(self, session: AsyncSession) -> None:
-        await _seed_bank(session, "CTBC", "中國信託")
-        await fetch_bank_names(session)
-        await _seed_bank(session, "ESUN", "玉山銀行")
-
-        _expire_cache_entry()
-
-        assert await fetch_bank_names(session) == {
-            "CTBC": "中國信託",
-            "ESUN": "玉山銀行",
-        }
-
-    async def test_returned_dict_is_a_copy(self, session: AsyncSession) -> None:
+    async def test_returned_dict_is_independent(self, session: AsyncSession) -> None:
         await _seed_bank(session, "CTBC", "中國信託")
         first = await fetch_bank_names(session)
         first["HACK"] = "mutated"
@@ -104,10 +62,12 @@ class TestFetchBankNamesCache:
         assert await fetch_bank_names(session) == {"CTBC": "中國信託"}
 
 
-class TestSyncBankConfigsInvalidation:
-    async def test_apply_sync_drops_cache(self, session: AsyncSession) -> None:
+class TestSyncBankConfigsVisibility:
+    async def test_apply_sync_is_visible_immediately(
+        self, session: AsyncSession
+    ) -> None:
         await _seed_bank(session, "CTBC", "中國信託")
-        await fetch_bank_names(session)  # warm the cache
+        await fetch_bank_names(session)
 
         specs = [
             BankConfigSpec(

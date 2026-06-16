@@ -90,6 +90,9 @@ class Transaction(Base):
         Index("ix_transactions_bill_id", "bill_id"),
         # 類別篩選 + 依交易日排序（交易列表 / 匯出）與類別彙總（analytics）熱路徑。
         Index("ix_transactions_category_trans_date", "category", "trans_date"),
+        # 無類別篩選時的預設 ORDER BY trans_date DESC（交易列表熱路徑），
+        # 複合索引 (category, trans_date) 在缺少 category 條件時無法覆蓋此排序。
+        Index("ix_transactions_trans_date", "trans_date"),
         # 商家彙總（top-merchants GROUP BY merchant）與商家篩選熱路徑。
         Index("ix_transactions_merchant", "merchant"),
     )
