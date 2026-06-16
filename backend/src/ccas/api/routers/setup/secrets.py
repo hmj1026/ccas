@@ -113,7 +113,7 @@ async def upsert_secret(
     """Encrypt + UPSERT a per-bank PDF password."""
     normalized = code.strip().upper()
     if not normalized:
-        raise HTTPException(status_code=400, detail="bank code 不可為空")
+        raise HTTPException(status_code=422, detail="bank code 不可為空")
 
     cipher = settings.master_key_manager.encrypt(payload.password)
     # Race-safe UPSERT — see banks.py rationale.

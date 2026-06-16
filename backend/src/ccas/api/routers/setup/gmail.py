@@ -17,8 +17,10 @@ PKCE (RFC 7636) 強制啟用，避免授權 code 攔截攻擊。State 條目儲�
   且其 ``fetch_token`` 使用 requests session；本實作直接以 ``httpx.AsyncClient``
   打 Google OAuth endpoints，可獲得乾淨的 async 路徑、便於用 ``respx`` mock
   整合測試，不需額外 ``run_in_threadpool`` 包裝。
-- credentials.json 仍以原始 JSON 形式落檔，沿用既有 ``ingestor/auth.py`` 與
-  ``tools/gmail_auth.py`` 的 fallback 路徑（PR-C2 不動該流程）。
+- credentials.json / token.json 以 master.key Fernet 加密落檔（envelope 格式，
+  見 ``ccas.storage.oauth_secrets``）。讀取時自動解密，並向後相容既有 plaintext
+  檔（legacy fallback），下一次寫入時升級為密文。client_secret / refresh_token
+  不再以明文存放於 ``data/``。
 """
 
 from __future__ import annotations
@@ -45,9 +47,14 @@ from ccas.api.schemas import (
     GmailCredentialsUploadResult,
 )
 from ccas.config import Settings, get_settings
-from ccas.ingestor.auth import GMAIL_SCOPES, write_private_token_file
+from ccas.ingestor.auth import GMAIL_SCOPES
 from ccas.storage.database import get_db_session
 from ccas.storage.models import GmailOAuthState
+from ccas.storage.oauth_secrets import (
+    read_token_payload,
+    write_encrypted_token_file,
+)
+from ccas.storage.secrets import MasterKeyMismatchError
 
 logger = logging.getLogger(__name__)
 
@@ -67,7 +74,12 @@ _FRONTEND_RESULT_PATH = "/setup/gmail"
 
 
 def _load_credentials_payload(settings: Settings) -> dict[str, Any]:
-    """Load credentials.json from disk, or raise 400."""
+    """Load (decrypt) credentials.json from disk, or raise 400.
+
+    Tolerates legacy plaintext credentials.json via ``read_token_payload``'s
+    fallback; an encrypted file that the current master.key cannot decrypt
+    surfaces as 500 (fail-loud) rather than a misleading parse error.
+    """
     creds_path = Path(settings.gmail_credentials_path)
     if not creds_path.exists():
         raise HTTPException(
@@ -78,11 +90,14 @@ def _load_credentials_payload(settings: Settings) -> dict[str, Any]:
             ),
         )
     try:
-        return json.loads(creds_path.read_text())
+        return read_token_payload(creds_path, settings.master_key_manager)
     except json.JSONDecodeError as exc:
+        # Don't interpolate ``exc``: JSONDecodeError.__str__ embeds the offending
+        # document fragment, which could echo stored credential bytes back to the
+        # caller (security-reviewer H2).
         raise HTTPException(
-            status_code=400,
-            detail=f"credentials.json 解析失敗：{exc}",
+            status_code=422,
+            detail="credentials.json 解析失敗（格式不正確）",
         ) from exc
 
 
@@ -129,7 +144,7 @@ async def upload_credentials(
     file: UploadFile = File(...),
     settings: Settings = Depends(get_settings),
 ) -> ApiResponse[GmailCredentialsUploadResult]:
-    """Upload Google OAuth ``credentials.json`` and persist with 0600 perms."""
+    """Upload Google OAuth ``credentials.json``, encrypt, persist 0600."""
     raw = await file.read()
     if len(raw) > 1_000_000:
         raise HTTPException(
@@ -138,16 +153,18 @@ async def upload_credentials(
     try:
         payload = json.loads(raw)
     except json.JSONDecodeError as exc:
-        raise HTTPException(
-            status_code=422, detail=f"上傳檔案不是合法 JSON：{exc}"
-        ) from exc
+        # Avoid echoing the uploaded bytes back via JSONDecodeError's message
+        # (security-reviewer H2).
+        raise HTTPException(status_code=422, detail="上傳檔案不是合法 JSON") from exc
     if not isinstance(payload, dict):
         raise HTTPException(status_code=422, detail="credentials.json 頂層必須為物件")
     client_id, _ = _extract_oauth_client(payload)
 
     target = Path(settings.gmail_credentials_path)
     target.parent.mkdir(parents=True, exist_ok=True)
-    write_private_token_file(target, json.dumps(payload, indent=2))
+    write_encrypted_token_file(
+        target, json.dumps(payload, indent=2), settings.master_key_manager
+    )
 
     return ApiResponse(
         data=GmailCredentialsUploadResult(
@@ -205,7 +222,7 @@ async def callback(
     """Exchange ``code`` + stored verifier for tokens; write token.json."""
     row = await session.get(GmailOAuthState, state)
     if row is None:
-        raise HTTPException(status_code=400, detail="未知或已使用的 OAuth state")
+        raise HTTPException(status_code=422, detail="未知或已使用的 OAuth state")
 
     created_at = row.created_at
     if created_at.tzinfo is None:
@@ -213,7 +230,10 @@ async def callback(
     if datetime.now(UTC) - created_at > _STATE_TTL:
         await session.delete(row)
         await session.commit()
-        raise HTTPException(status_code=400, detail="OAuth state 已過期，請重新授權")
+        raise HTTPException(
+            status_code=422,
+            detail="OAuth state 已過期，請重新點擊授權按鈕",
+        )
 
     verifier = row.code_verifier
     payload = _load_credentials_payload(settings)
@@ -255,7 +275,9 @@ async def callback(
     }
     token_path = Path(settings.gmail_token_path)
     token_path.parent.mkdir(parents=True, exist_ok=True)
-    write_private_token_file(token_path, json.dumps(token_record, indent=2))
+    write_encrypted_token_file(
+        token_path, json.dumps(token_record, indent=2), settings.master_key_manager
+    )
 
     await session.delete(row)
     await session.commit()
@@ -278,8 +300,12 @@ async def status(
     if not token_path.exists():
         return ApiResponse(data=GmailConnectionStatus(connected=False))
     try:
-        token_data = json.loads(token_path.read_text())
-    except json.JSONDecodeError:
+        token_data = read_token_payload(token_path, settings.master_key_manager)
+    except (json.JSONDecodeError, MasterKeyMismatchError):
+        # Unreadable/undecryptable token.json is treated as "not connected"
+        # (status is advisory; the user can re-run the OAuth flow). A master.key
+        # mismatch is logged so operators can spot a botched data/ restore.
+        logger.warning("Gmail token.json unreadable; reporting disconnected")
         return ApiResponse(data=GmailConnectionStatus(connected=False))
 
     scopes = token_data.get("scopes")
@@ -306,8 +332,10 @@ async def revoke(
     token_path = Path(settings.gmail_token_path)
     if token_path.exists():
         try:
-            token_data = json.loads(token_path.read_text())
-        except json.JSONDecodeError:
+            token_data = read_token_payload(token_path, settings.master_key_manager)
+        except (json.JSONDecodeError, MasterKeyMismatchError):
+            # Best-effort remote revoke: if we cannot read the token we still
+            # delete the local file below (the authoritative "stop using it").
             token_data = {}
         access_or_refresh = token_data.get("token") or token_data.get("refresh_token")
         if isinstance(access_or_refresh, str) and access_or_refresh:

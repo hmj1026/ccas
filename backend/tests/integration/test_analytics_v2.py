@@ -220,6 +220,100 @@ class TestCategoriesCompareWithPrevious:
         assert data["交通"]["previous_total"] == 500
         assert data["交通"]["change_percent"] == -60.0
 
+    async def test_new_category_without_previous_has_null_compare(
+        self, client: AsyncClient, db_session: AsyncSession
+    ) -> None:
+        """(a) 本月新類別、前月無資料 → previous_total null、change_percent null。"""
+        await _seed_bank(db_session, "CTBC", "中國信託")
+        await db_session.commit()
+        # Previous month (2026-04) has only 餐飲; current month (2026-05) adds 旅遊.
+        await _seed_bill_with_txns(
+            db_session,
+            bank_code="CTBC",
+            billing_month="2026-04",
+            txns=[(1000, "M1", "餐飲")],
+        )
+        await _seed_bill_with_txns(
+            db_session,
+            bank_code="CTBC",
+            billing_month="2026-05",
+            txns=[(1000, "M2", "餐飲"), (777, "M3", "旅遊")],
+        )
+
+        resp = await client.get(
+            "/api/analytics/categories/compare?month=2026-05",
+            headers=auth_headers(),
+        )
+        assert resp.status_code == 200, resp.text
+        data = {row["category"]: row for row in resp.json()["data"]}
+        assert data["旅遊"]["total"] == 777
+        assert data["旅遊"]["previous_total"] is None
+        assert data["旅遊"]["change_percent"] is None
+
+    async def test_zero_previous_total_yields_null_change_no_crash(
+        self, client: AsyncClient, db_session: AsyncSession
+    ) -> None:
+        """(b) 前月 total 為 0（充值+退款互抵）→ change_percent null，不除零。"""
+        await _seed_bank(db_session, "CTBC", "中國信託")
+        await db_session.commit()
+        # Previous month 娛樂 nets to 0 (a charge fully refunded — refunds are
+        # stored as negative line items, not dropped).
+        await _seed_bill_with_txns(
+            db_session,
+            bank_code="CTBC",
+            billing_month="2026-04",
+            txns=[(500, "CHARGE", "娛樂"), (-500, "REFUND", "娛樂")],
+        )
+        await _seed_bill_with_txns(
+            db_session,
+            bank_code="CTBC",
+            billing_month="2026-05",
+            txns=[(300, "M1", "娛樂")],
+        )
+
+        resp = await client.get(
+            "/api/analytics/categories/compare?month=2026-05",
+            headers=auth_headers(),
+        )
+        assert resp.status_code == 200, resp.text
+        data = {row["category"]: row for row in resp.json()["data"]}
+        assert data["娛樂"]["total"] == 300
+        assert data["娛樂"]["previous_total"] == 0
+        # Zero-previous guard: no divide-by-zero, change_percent is null.
+        assert data["娛樂"]["change_percent"] is None
+
+    async def test_previous_only_category_appears_with_minus_100(
+        self, client: AsyncClient, db_session: AsyncSession
+    ) -> None:
+        """(c) 前月有、本月消失的類別仍出現：total=0、change_percent=-100。"""
+        await _seed_bank(db_session, "CTBC", "中國信託")
+        await db_session.commit()
+        # 交通 present last month (2026-04), absent this month (2026-05).
+        await _seed_bill_with_txns(
+            db_session,
+            bank_code="CTBC",
+            billing_month="2026-04",
+            txns=[(1000, "M1", "餐飲"), (800, "M2", "交通")],
+        )
+        await _seed_bill_with_txns(
+            db_session,
+            bank_code="CTBC",
+            billing_month="2026-05",
+            txns=[(1200, "M3", "餐飲")],
+        )
+
+        resp = await client.get(
+            "/api/analytics/categories/compare?month=2026-05",
+            headers=auth_headers(),
+        )
+        assert resp.status_code == 200, resp.text
+        data = {row["category"]: row for row in resp.json()["data"]}
+        # 交通 no longer silently vanishes: full downward trend.
+        assert "交通" in data
+        assert data["交通"]["total"] == 0
+        assert data["交通"]["previous_total"] == 800
+        assert data["交通"]["change_percent"] == -100.0
+
     async def test_compare_requires_month(self, client: AsyncClient) -> None:
         """categories/compare 未帶 month 應回 422。"""
         resp = await client.get(

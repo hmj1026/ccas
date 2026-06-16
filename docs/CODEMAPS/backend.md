@@ -1,4 +1,4 @@
-<!-- Generated: 2026-05-10 | Files scanned: ~130 | Token estimate: ~1180 -->
+<!-- Generated: 2026-06-17 | Files scanned: ~133 | Token estimate: ~1220 -->
 
 # Backend
 
@@ -141,15 +141,15 @@ Health:
 
 | Module | Files | LOC | Purpose |
 |--------|-------|-----|---------|
-| api | 20 | ~3060 | FastAPI routes（18 routers，含 setup/）、schemas、deps、security headers |
-| parser | 17 | ~4604 | 7 bank parsers + registry + OCR fallback |
-| ingestor | 18 | ~2337 | Gmail download + staging；fetcher（FUBON web-fetch + captcha） |
+| api | 20 | ~3100 | FastAPI routes（18 routers，含 setup/）、schemas、deps、security headers、登入速率限制（v0.4.0+） |
+| parser | 18 | ~4650 | 7 bank parsers + registry + OCR fallback + 共用退款偵測（v0.4.0+） |
+| ingestor | 18 | ~2350 | Gmail download + staging；fetcher（FUBON web-fetch + captcha）；原子 staging paths（v0.4.0+） |
 | bot | 10 | ~932 | Telegram commands、notifications、reminder dispatch |
 | pipeline | 8 | ~870 | Orchestrator + progress（stage_finished）+ CLI + worker glue |
 | tools | 4 | ~773 | Bank configs YAML、Gmail auth helpers、reclassify utility |
 | classifier | 5 | ~410 | Engine：user-rule 優先 + keyword fallback |
-| decryptor | 5 | ~386 | PDF password resolution；staged_path 相對路徑 |
-| storage | 5 | ~340 | ORM models（含 PipelineRun / Budget / ClassificationRule …）+ async session |
+| decryptor | 5 | ~390 | PDF password resolution；staged_path 相對路徑 |
+| storage | 8 | ~520 | ORM models + async session + 原子寫入 + OAuth 加密（v0.4.0+） |
 | scheduler | 5 | ~310 | APScheduler cron + heartbeat writer + reminder dispatch |
 | core | 4 | ~475 | config / errors / log / __init__ |
-| **Total** | **~130** | **~14500** | |
+| **Total** | **~133** | **~14780** | |

@@ -70,13 +70,16 @@ async def _seed_bill(
     bank_code: str = "CTBC",
     due_date: date,
     is_paid: bool = False,
+    due_date_estimated: bool = False,
+    total_amount: int = 5000,
 ) -> Bill:
     bill = Bill(
         bank_code=bank_code,
         billing_month=due_date.strftime("%Y-%m"),
-        total_amount=5000,
+        total_amount=total_amount,
         due_date=due_date,
         is_paid=is_paid,
+        due_date_estimated=due_date_estimated,
     )
     session.add(bill)
     await session.flush()
@@ -234,3 +237,91 @@ class TestDuplicateReminderProtection:
         assert result1["sent"] == 1
         assert result2["sent"] == 0
         assert result2["skipped"] == 1
+
+
+class TestEstimatedDueDateWidenedWindow:
+    """ctbc-due-date-estimate-flag：估算到期日的放寬比對窗。"""
+
+    @pytest.mark.asyncio
+    async def test_estimated_bill_outside_exact_window_still_reminded(
+        self, db_session: AsyncSession
+    ):
+        """估算到期日落在放寬窗（非精確 3/1 天）的帳單仍應被提醒。
+
+        due_date = today+5（高估）對精確比對不符（3 天 / 1 天皆不中），但因
+        due_date_estimated=True，3day pass 的放寬窗 [today+3, today+6] 命中。
+        """
+        today = date(2026, 3, 31)
+        await _seed_bank(db_session)
+        await _seed_bill(
+            db_session,
+            due_date=today + timedelta(days=5),
+            due_date_estimated=True,
+        )
+
+        mock_send = AsyncMock(return_value={"ok": True})
+        with patch("ccas.scheduler.reminders.send_message", mock_send):
+            result = await send_payment_reminders(db_session, today=today)
+
+        assert result["sent"] >= 1
+
+    @pytest.mark.asyncio
+    async def test_non_estimated_bill_outside_exact_window_not_reminded(
+        self, db_session: AsyncSession
+    ):
+        """非估算帳單即使落在放寬窗範圍也不放寬，維持精確比對行為。"""
+        today = date(2026, 3, 31)
+        await _seed_bank(db_session)
+        await _seed_bill(
+            db_session,
+            due_date=today + timedelta(days=5),
+            due_date_estimated=False,
+        )
+
+        mock_send = AsyncMock(return_value={"ok": True})
+        with patch("ccas.scheduler.reminders.send_message", mock_send):
+            result = await send_payment_reminders(db_session, today=today)
+
+        assert result["sent"] == 0
+        mock_send.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_estimated_bill_widened_send_is_idempotent(
+        self, db_session: AsyncSession
+    ):
+        """放寬窗不破壞 idempotency：連續兩次執行第二次不重送。"""
+        today = date(2026, 3, 31)
+        await _seed_bank(db_session)
+        await _seed_bill(
+            db_session,
+            due_date=today + timedelta(days=5),
+            due_date_estimated=True,
+        )
+
+        mock_send = AsyncMock(return_value={"ok": True})
+        with patch("ccas.scheduler.reminders.send_message", mock_send):
+            result1 = await send_payment_reminders(db_session, today=today)
+            result2 = await send_payment_reminders(db_session, today=today)
+
+        assert result1["sent"] >= 1
+        # 第二次同 (bill, reminder_type) 已被 claim，不重送。
+        assert result2["sent"] == 0
+
+    @pytest.mark.asyncio
+    async def test_estimated_bill_paid_not_reminded(self, db_session: AsyncSession):
+        """已付的估算帳單不應被提醒（維持 is_paid 過濾）。"""
+        today = date(2026, 3, 31)
+        await _seed_bank(db_session)
+        await _seed_bill(
+            db_session,
+            due_date=today + timedelta(days=5),
+            due_date_estimated=True,
+            is_paid=True,
+        )
+
+        mock_send = AsyncMock(return_value={"ok": True})
+        with patch("ccas.scheduler.reminders.send_message", mock_send):
+            result = await send_payment_reminders(db_session, today=today)
+
+        assert result["sent"] == 0
+        mock_send.assert_not_called()

@@ -445,3 +445,69 @@ export interface ClassificationRuleTestRequest {
 export interface ClassificationRuleTestResponse {
   readonly matches: boolean
 }
+
+// -- Setup / Onboarding (oauth-onboarding-ui §8–§11) --
+//
+// 集中原先散落於 src/pages/setup/* 的 inline interface，縮小型別漂移面。
+
+/** Bank-management 合併視圖列（`GET /api/setup/banks`）。 */
+export interface SetupBankItem {
+  readonly code: string
+  readonly display_name: string | null
+  readonly enabled: boolean
+  readonly has_settings_row: boolean
+  readonly metadata_missing: boolean
+  readonly total_pdfs: number
+  readonly last_ingest_at: string | null
+}
+
+/** Admin token 摘要（`GET /api/setup/admin/token-info`）。 */
+export interface AdminTokenInfo {
+  readonly last4: string
+  readonly created_at: string | null
+  readonly version: number
+}
+
+/** Admin token rotate 結果（`POST /api/setup/admin/token-rotate`）。 */
+export interface AdminTokenRotateResult {
+  readonly token: string
+  readonly version: number
+  readonly last4: string
+}
+
+/** Gmail 連線狀態（`GET /api/setup/gmail/status`）。 */
+export interface GmailConnectionStatus {
+  readonly connected: boolean
+  readonly email: string | null
+  readonly granted_scopes: readonly string[]
+}
+
+/** Gmail credentials 上傳結果。 */
+export interface GmailCredentialsUploadResult {
+  readonly saved_path: string
+  readonly client_id_last8: string
+}
+
+/** Gmail OAuth authorize URL。 */
+export interface GmailAuthorizeUrl {
+  readonly authorize_url: string
+  readonly state: string
+}
+
+/** PDF 密碼來源優先序：db > env > none。 */
+export type SecretSource = 'db' | 'env' | 'none'
+
+/** 單一銀行密碼狀態（`GET /api/setup/secrets`）。 */
+export interface BankSecretStatus {
+  readonly bank_code: string
+  readonly has_db_secret: boolean
+  readonly has_env_secret: boolean
+  readonly effective_source: SecretSource
+}
+
+/** 由 env 匯入 DB 密碼的結果。 */
+export interface ImportFromEnvResult {
+  readonly imported: number
+  readonly skipped_already_in_db: number
+  readonly bank_codes_imported: readonly string[]
+}

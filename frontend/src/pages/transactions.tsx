@@ -8,7 +8,7 @@ import { useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router'
 import { apiGet, apiFetchBlob } from '@/lib/api-client'
 import type { PaginatedResponse, TransactionItem } from '@/lib/types'
-import { formatAmount } from '@/lib/utils'
+import { formatAmount, formatDate } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { LoadingState, ErrorState, EmptyState } from '@/components/shared/states'
 import { FilterBar, type FilterBarParams } from '@/components/shared/filter-bar'
@@ -144,7 +144,7 @@ function TransactionsPage() {
               <tbody>
                 {data.data.map((tx) => (
                   <tr key={tx.id} className="tr-list border-t border-border">
-                    <td className="px-3 py-2 whitespace-nowrap">{tx.trans_date}</td>
+                    <td className="px-3 py-2 whitespace-nowrap">{formatDate(tx.trans_date)}</td>
                     <td className="px-3 py-2">{tx.merchant}</td>
                     <td className="px-3 py-2">{tx.category ?? '-'}</td>
                     <td className="px-3 py-2">{tx.bank_code}</td>

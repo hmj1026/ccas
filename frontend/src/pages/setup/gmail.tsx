@@ -18,7 +18,12 @@ import { CheckCircle2, ExternalLink, Loader2, Upload } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router'
 import { apiGet, apiPost } from '@/lib/api-client'
-import type { ApiResponse } from '@/lib/types'
+import type {
+  ApiResponse,
+  GmailAuthorizeUrl,
+  GmailConnectionStatus,
+  GmailCredentialsUploadResult,
+} from '@/lib/types'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -31,22 +36,6 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog'
 import { ErrorState, LoadingState } from '@/components/shared/states'
-
-interface GmailConnectionStatus {
-  readonly connected: boolean
-  readonly email: string | null
-  readonly granted_scopes: readonly string[]
-}
-
-interface GmailCredentialsUploadResult {
-  readonly saved_path: string
-  readonly client_id_last8: string
-}
-
-interface GmailAuthorizeUrl {
-  readonly authorize_url: string
-  readonly state: string
-}
 
 const STATUS_QUERY_KEY = ['setup', 'gmail', 'status'] as const
 

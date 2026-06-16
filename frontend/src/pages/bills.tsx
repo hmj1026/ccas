@@ -8,7 +8,7 @@ import { ExternalLink, Check, Clock, ChevronLeft, ChevronRight, ChevronDown, Che
 import { useSearchParams } from 'react-router'
 import { apiGet, apiPatch } from '@/lib/api-client'
 import type { ApiResponse, BillItem, PaginatedResponse, TransactionItem } from '@/lib/types'
-import { cn, formatAmount } from '@/lib/utils'
+import { cn, formatAmount, formatDate } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Collapsible, CollapsibleTrigger, CollapsiblePanel } from '@/components/ui/collapsible'
 import { LoadingState, ErrorState, EmptyState } from '@/components/shared/states'
@@ -178,7 +178,7 @@ const BillRow = memo(function BillRow({ bill, onTogglePaid, isPending }: BillRow
           <div className="space-y-1">
             <p className="font-medium">{name}</p>
             <p className="text-sm text-muted-foreground">
-              {bill.billing_month} / 到期日: {bill.due_date}
+              {formatDate(bill.billing_month)} / 到期日: {formatDate(bill.due_date)}
             </p>
             <p className="text-lg font-bold">{formatAmount(bill.total_amount)}</p>
           </div>
@@ -235,9 +235,9 @@ const BillRow = memo(function BillRow({ bill, onTogglePaid, isPending }: BillRow
           <div className="border-t border-border px-4 pb-4 pt-3 space-y-3">
             <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm sm:grid-cols-4">
               <dt className="text-muted-foreground">帳單月份</dt>
-              <dd className="font-medium">{bill.billing_month}</dd>
+              <dd className="font-medium">{formatDate(bill.billing_month)}</dd>
               <dt className="text-muted-foreground">繳費截止日</dt>
-              <dd className="font-medium">{bill.due_date}</dd>
+              <dd className="font-medium">{formatDate(bill.due_date)}</dd>
               <dt className="text-muted-foreground">應繳總額</dt>
               <dd className="font-bold">{formatAmount(bill.total_amount)}</dd>
               <dt className="text-muted-foreground">付款狀態</dt>
@@ -263,7 +263,7 @@ const BillRow = memo(function BillRow({ bill, onTogglePaid, isPending }: BillRow
                   <tbody>
                     {txData.data.map((tx) => (
                       <tr key={tx.id} className="border-t border-border">
-                        <td className="px-3 py-1.5 whitespace-nowrap">{tx.trans_date}</td>
+                        <td className="px-3 py-1.5 whitespace-nowrap">{formatDate(tx.trans_date)}</td>
                         <td className="px-3 py-1.5">{tx.merchant}</td>
                         <td className="px-3 py-1.5">
                           {tx.category ? (

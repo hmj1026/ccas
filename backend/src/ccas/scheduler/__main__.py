@@ -10,7 +10,11 @@ import sys
 from functools import partial
 from pathlib import Path
 
-from apscheduler.events import EVENT_JOB_MISSED, JobExecutionEvent
+from apscheduler.events import (
+    EVENT_JOB_ERROR,
+    EVENT_JOB_MISSED,
+    JobExecutionEvent,
+)
 from apscheduler.schedulers.blocking import BlockingScheduler
 
 from ccas.config import get_settings
@@ -36,6 +40,22 @@ def _on_job_missed(event: JobExecutionEvent) -> None:
         "Scheduler job missed: job_id=%s scheduled_run_time=%s",
         event.job_id,
         event.scheduled_run_time,
+    )
+
+
+def _on_job_error(event: JobExecutionEvent) -> None:
+    """Log all job errors uniformly so no exception is swallowed silently.
+
+    The job entrypoints in ``scheduler.jobs`` already log their own exceptions
+    via ``logger.exception``; this listener is the framework-level backstop that
+    guarantees every executor failure (including ones raised outside those
+    try/except blocks) is surfaced with its traceback.
+    """
+    logger.error(
+        "Scheduler job error: job_id=%s scheduled_run_time=%s",
+        event.job_id,
+        event.scheduled_run_time,
+        exc_info=event.exception,
     )
 
 
@@ -125,6 +145,8 @@ def main() -> None:
 
     # Surface dropped runs (misfire beyond grace time) in logs at warning level.
     scheduler.add_listener(_on_job_missed, EVENT_JOB_MISSED)
+    # Surface executor exceptions (jobs that ran but raised) at error level.
+    scheduler.add_listener(_on_job_error, EVENT_JOB_ERROR)
 
     logger.info(
         "Starting scheduler with 4 jobs: daily_pipeline, "

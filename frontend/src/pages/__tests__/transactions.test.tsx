@@ -1,7 +1,7 @@
 /**
  * Transactions 頁面測試 -- 載入、篩選與 query param 同步。
  */
-import { screen, waitFor } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import TransactionsPage from '../transactions'
@@ -42,10 +42,21 @@ const MOCK_RESPONSE = {
   },
 }
 
+const MOCK_BANKS = [
+  { id: 1, bank_code: 'CTBC', bank_name: '中信', gmail_filter: '', active_parser_version: 'v1', is_active: true },
+]
+
+const MOCK_CATEGORIES = [
+  { id: 1, keyword: '星巴克', category: '餐飲' },
+  { id: 2, keyword: '麥當勞', category: '餐飲' },
+  { id: 3, keyword: '台電', category: '居家' },
+]
+
 function setupMocks(txResponse = MOCK_RESPONSE) {
   mockApiGet.mockImplementation((path: string) => {
     if (path === '/api/analytics/years') return Promise.resolve({ success: true, data: [2026], message: '' })
-    if (path === '/api/settings/banks') return Promise.resolve({ success: true, data: [], message: '' })
+    if (path === '/api/settings/banks') return Promise.resolve({ success: true, data: MOCK_BANKS, message: '' })
+    if (path === '/api/settings/categories') return Promise.resolve({ success: true, data: MOCK_CATEGORIES, message: '' })
     return Promise.resolve(txResponse)
   })
 }
@@ -68,7 +79,11 @@ describe('TransactionsPage', () => {
     await waitFor(() => {
       expect(screen.getByText('Starbucks')).toBeInTheDocument()
     })
-    expect(screen.getByText('餐飲')).toBeInTheDocument()
+    // '餐飲' appears both in the row cell and as a category <option>; assert the
+    // table cell specifically via its row.
+    const row = screen.getByText('Starbucks').closest('tr')
+    expect(row).not.toBeNull()
+    expect(within(row as HTMLElement).getByText('餐飲')).toBeInTheDocument()
     expect(screen.getByText('$150')).toBeInTheDocument()
   })
 
@@ -115,6 +130,62 @@ describe('TransactionsPage', () => {
       expect(mockApiGet).toHaveBeenCalledWith(
         '/api/transactions',
         expect.objectContaining({ q: 'star' }),
+      )
+    })
+  })
+
+  it('writes bank filter under the bank_code URL alias (not bank)', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<TransactionsPage />)
+
+    await waitFor(() => {
+      expect(screen.getByText('Starbucks')).toBeInTheDocument()
+    })
+
+    // useFilterParams maps the `bank` FilterKey to the `bank_code` URL param,
+    // which the page reads back to drive the API query.
+    await user.selectOptions(screen.getByLabelText('銀行篩選'), 'CTBC')
+
+    await waitFor(() => {
+      expect(mockApiGet).toHaveBeenCalledWith(
+        '/api/transactions',
+        expect.objectContaining({ bank_code: 'CTBC' }),
+      )
+    })
+    // The raw `bank` key must never reach the API.
+    const sawBareBankKey = mockApiGet.mock.calls.some(
+      ([path, params]) =>
+        path === '/api/transactions' &&
+        params != null &&
+        Object.prototype.hasOwnProperty.call(params, 'bank'),
+    )
+    expect(sawBareBankKey).toBe(false)
+  })
+
+  it('resets pagination to page 1 when a filter changes', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<TransactionsPage />, {
+      initialEntries: ['/transactions?page=2'],
+    })
+
+    await waitFor(() => {
+      expect(screen.getByText('Starbucks')).toBeInTheDocument()
+    })
+
+    // Sanity: initial load honored page=2 from the URL.
+    expect(mockApiGet).toHaveBeenCalledWith(
+      '/api/transactions',
+      expect.objectContaining({ page: 2 }),
+    )
+
+    // Changing a filter must drop the `page` param (resetPage=true), so the
+    // next query falls back to page 1.
+    await user.selectOptions(screen.getByLabelText('分類篩選'), '餐飲')
+
+    await waitFor(() => {
+      expect(mockApiGet).toHaveBeenCalledWith(
+        '/api/transactions',
+        expect.objectContaining({ category: '餐飲', page: 1 }),
       )
     })
   })

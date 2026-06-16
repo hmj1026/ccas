@@ -5,9 +5,9 @@ id ASC 排序，逐筆比對 transaction merchant。支援三種 pattern_type：
 
 - ``keyword``：normalize 後子字串比對（與既有 engine 同邏輯）
 - ``exact``：normalize 後完全相等
-- ``regex``：``re.search``，100ms timeout 保護避免 catastrophic backtracking
-  阻塞 classify pipeline；timeout / 編譯錯誤皆 fail-soft（log warning + 視為
-  not match），不阻斷其他規則。
+- ``regex``：預編譯後 ``Pattern.search``，100ms timeout 保護避免 catastrophic
+  backtracking 阻塞 classify pipeline；timeout / 編譯錯誤皆 fail-soft（log
+  warning + 視為 not match），不阻斷其他規則。
 
 設計：
 - ``UserRuleMatcher.load(session)`` 一次性 query 規則 + 對應 category 名，
@@ -15,7 +15,9 @@ id ASC 排序，逐筆比對 transaction merchant。支援三種 pattern_type：
 - regex 透過 ``asyncio.wait_for(loop.run_in_executor(...), timeout=0.1)``
   實現 timeout；executor thread 雖無法真的中斷 ``re.search``，但不會阻塞
   caller 的事件迴圈
-- ``_re_search`` 抽出為 module-level 函式以利測試 monkeypatch
+- REGEX 規則於 ``load()`` 時 ``re.compile`` 一次並存於 ``UserRule``，
+  避免每筆 transaction 重複編譯；``_re_search`` 抽出為 module-level 函式以利
+  測試 monkeypatch
 """
 
 from __future__ import annotations
@@ -41,9 +43,27 @@ logger = logging.getLogger(__name__)
 REGEX_TIMEOUT_SECONDS: float = 0.1
 
 
-def _re_search(pattern: str, text: str) -> re.Match[str] | None:
-    """re.search 的薄包裝，作為測試 monkeypatch 的注入點。"""
-    return re.search(pattern, text)
+def _re_search(pattern: re.Pattern[str], text: str) -> re.Match[str] | None:
+    """已編譯 regex 的 ``search`` 薄包裝，作為測試 monkeypatch 的注入點。"""
+    return pattern.search(text)
+
+
+def _compile_pattern(pattern: str, pattern_type: PatternType) -> re.Pattern[str] | None:
+    """對 REGEX 規則預編譯；無效 regex 回傳 ``None``（fail-soft），
+
+    非 REGEX 規則一律回傳 ``None``。編譯錯誤 log warning 後視為「無此規則」，
+    在 ``_regex_match`` 內會被當成 not match，與既有 fail-soft 行為一致。
+    """
+    if pattern_type != PatternType.REGEX:
+        return None
+    try:
+        return re.compile(pattern)
+    except re.error as exc:
+        logger.warning(
+            "regex pattern error, treating as no match",
+            extra={"pattern": pattern, "error": str(exc)},
+        )
+        return None
 
 
 @dataclass(frozen=True)
@@ -52,6 +72,11 @@ class UserRule:
 
     與 ``UserClassificationRule`` ORM model 解耦，避免 detached instance 問題。
     ``category_name`` 為 JOIN ``categories.category`` 後的字串值。
+
+    ``compiled_pattern`` 在 ``load()`` 時對 REGEX 規則預編譯一次，避免每筆
+    transaction 重複 ``re.compile`` / 依賴 ``re`` 模組的小型 LRU 快取；非 REGEX
+    規則為 ``None``。``re.Pattern`` 不可 pickle，但本 snapshot 僅存在於單次
+    ``load()`` 的記憶體中、不會被序列化，因此無影響。
     """
 
     id: int
@@ -59,6 +84,7 @@ class UserRule:
     pattern_type: PatternType
     category_name: str
     priority: int
+    compiled_pattern: re.Pattern[str] | None = None
 
 
 class UserRuleMatcher:
@@ -92,6 +118,7 @@ class UserRuleMatcher:
                 pattern_type=row[0].pattern_type,
                 category_name=row[1],
                 priority=row[0].priority,
+                compiled_pattern=_compile_pattern(row[0].pattern, row[0].pattern_type),
             )
             for row in result.all()
         )
@@ -115,15 +142,27 @@ class UserRuleMatcher:
         if rule.pattern_type == PatternType.EXACT:
             return normalize(rule.pattern) == normalized_merchant
         if rule.pattern_type == PatternType.REGEX:
-            return await self._regex_match(rule.pattern, normalized_merchant)
+            return await self._regex_match(rule, normalized_merchant)
         return False
 
-    async def _regex_match(self, pattern: str, text: str) -> bool:
-        """re.search 含 100ms timeout 與 fail-soft 行為。"""
+    async def _regex_match(self, rule: UserRule, text: str) -> bool:
+        """已編譯 regex 的 search，含 100ms timeout 與 fail-soft 行為。
+
+        優先使用 ``load()`` 時預編譯的 ``rule.compiled_pattern``；若為 ``None``
+        （例如直接以建構式建立、或編譯失敗），則於此 fail-soft 編譯一次，
+        無效 regex 視為 not match。
+        """
+        compiled = rule.compiled_pattern
+        if compiled is None:
+            compiled = _compile_pattern(rule.pattern, PatternType.REGEX)
+            if compiled is None:
+                # 編譯失敗已於 _compile_pattern log warning，視為 not match。
+                return False
+
         loop = asyncio.get_running_loop()
         try:
             match = await asyncio.wait_for(
-                loop.run_in_executor(None, _re_search, pattern, text),
+                loop.run_in_executor(None, _re_search, compiled, text),
                 timeout=REGEX_TIMEOUT_SECONDS,
             )
             return match is not None
@@ -131,12 +170,6 @@ class UserRuleMatcher:
             logger.warning(
                 "regex pattern exceeded %dms timeout, treating as no match",
                 int(REGEX_TIMEOUT_SECONDS * 1000),
-                extra={"pattern": pattern},
-            )
-            return False
-        except re.error as exc:
-            logger.warning(
-                "regex pattern error, treating as no match",
-                extra={"pattern": pattern, "error": str(exc)},
+                extra={"pattern": rule.pattern},
             )
             return False

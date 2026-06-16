@@ -47,26 +47,14 @@ async def _process_attachment(
     attachment: StagedAttachment,
     session: AsyncSession,
     summary: DecryptionSummary,
+    passwords: tuple[str, ...],
 ) -> None:
-    """處理單一附件的解密。"""
+    """處理單一附件的解密。
+
+    ``passwords`` 由呼叫端的 per-bank 快取預先解析後傳入（避免每筆附件
+    重複 Fernet 解密）。密碼解析失敗的銀行已在外層被跳過，不會進到這裡。
+    """
     settings = get_settings()
-    try:
-        passwords = await resolve_passwords(session, settings, attachment.bank_code)
-    except DecryptError as exc:
-        error_msg = (
-            f"密碼解析失敗 ({attachment.bank_code}/"
-            f"{attachment.original_filename}): {exc}"
-        )
-        summary.failed_count += 1
-        summary.errors.append(error_msg)
-        logger.error(error_msg)
-        await update_attachment_status(
-            session,
-            attachment,
-            status=StagedAttachmentStatus.DECRYPT_FAILED,
-            error_reason=str(exc),
-        )
-        return
     raw_path = attachment.staged_path
 
     if raw_path is None:
@@ -191,15 +179,58 @@ async def run_decryption_job(
         logger.info("沒有待解密的附件，跳過 decryption")
         return summary
 
+    settings = get_settings()
+    # Stage N+1 cache: resolve each distinct bank_code's passwords ONCE
+    # (Fernet decryption is otherwise repeated per attachment). Cache holds the
+    # resolved password tuple on success, or the DecryptError on failure so the
+    # bank's attachments can be skipped consistently without re-resolving.
+    password_cache: dict[str, tuple[str, ...] | DecryptError] = {}
+    for bank_code in {a.bank_code for a in attachments}:
+        try:
+            password_cache[bank_code] = await resolve_passwords(
+                session, settings, bank_code
+            )
+        except DecryptError as exc:
+            password_cache[bank_code] = exc
+
     processed = 0
     for attachment in attachments:
         try:
-            await _process_attachment(attachment, session, summary)
+            cached = password_cache[attachment.bank_code]
+            if isinstance(cached, DecryptError):
+                # Pre-resolution failed for this bank: record the failure once
+                # per attachment and skip decryption (no double-counting — the
+                # per-item path is never entered for this attachment).
+                error_msg = (
+                    f"密碼解析失敗 ({attachment.bank_code}/"
+                    f"{attachment.original_filename}): {cached}"
+                )
+                summary.failed_count += 1
+                summary.errors.append(error_msg)
+                logger.error(error_msg)
+                await update_attachment_status(
+                    session,
+                    attachment,
+                    status=StagedAttachmentStatus.DECRYPT_FAILED,
+                    error_reason=str(cached),
+                )
+            else:
+                await _process_attachment(attachment, session, summary, cached)
+            # Per-item commit: a mid-batch crash must not lose already-processed
+            # rows (and must not desync disk vs DB).
+            await session.commit()
+        except Exception:
+            # Roll back only this item's uncommitted changes, then continue to
+            # the next attachment (item B: partial success persists).
+            await session.rollback()
+            logger.exception(
+                "decrypt item failed unexpectedly (%s/%s); rolled back, continuing",
+                attachment.bank_code,
+                attachment.original_filename,
+            )
         finally:
             processed += 1
             await reporter.stage_item_done("decrypt", processed=processed)
-
-    await session.commit()
 
     logger.info(
         "Decryption 完成：%d 解密, %d 透通, %d 略過, %d 失敗",

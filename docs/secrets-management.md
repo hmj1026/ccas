@@ -6,10 +6,11 @@
 
 | 項目 | 預設位置 | 用途 |
 |---|---|---|
-| `master.key` | `${CCAS_DATA_LOCATION}/secrets/master.key` | Fernet 對稱金鑰，用來解密 `bank_secrets` |
+| `master.key` | `${CCAS_DATA_LOCATION}/secrets/master.key` | Fernet 對稱金鑰，用來解密 `bank_secrets` 與 Gmail OAuth 憑證 |
 | API token | `${CCAS_DATA_LOCATION}/secrets/api-token` | Web UI / API 的登入 token |
 | API token version | `${CCAS_DATA_LOCATION}/secrets/api-token-version` | cookie session 失效控制 |
-| Gmail token | `${CCAS_DATA_LOCATION}/token.json` | Gmail OAuth refresh token |
+| Gmail credentials | `${CCAS_DATA_LOCATION}/credentials.json` | OAuth client（含 `client_secret`）— 以 `master.key` 加密落檔 |
+| Gmail token | `${CCAS_DATA_LOCATION}/token.json` | Gmail OAuth refresh token — 以 `master.key` 加密落檔 |
 | `bank_secrets` | SQLite DB | 各銀行 PDF 密碼密文 |
 
 `master.key`、API token 與 Gmail token 都不應 commit。prod compose 會把
@@ -74,6 +75,11 @@ PUBLIC_BASE_URL=https://ccas.example.com
 https://ccas.example.com/setup/gmail/callback
 ```
 
+`credentials.json` 與 `token.json` 皆以 `master.key`（與 `bank_secrets` 同一把）
+加密落檔，權限 `0600`；磁碟上看到的是 `{"ccas_enc": 1, "ciphertext": "..."}`
+信封而非明文 `client_secret` / `refresh_token`。為相容既有部署，讀取時若偵測到
+舊版明文檔仍可載入，並在下一次寫入（OAuth 回呼 / token 自動刷新）時自動升級為密文。
+
 ## 備份與還原
 
 完整備份至少包含 `${CCAS_DATA_LOCATION}`：
@@ -87,4 +93,11 @@ docker compose -f docker-compose.yml start
 建議另備份 `.env`，因為它可能含 Telegram token 與 env fallback 密碼。
 
 還原時，解壓同一份 data 目錄並使用同一份 `.env` 啟動即可。只還原 SQLite、不還原
-`secrets/master.key` 會造成 DB 內的 PDF 密碼密文無法解密。
+`secrets/master.key` 會造成 DB 內的 PDF 密碼密文（及 `token.json` /
+`credentials.json` 加密 OAuth 憑證）無法解密。
+
+> **金鑰分離備援**：`data/` 同時存放「加密後的 OAuth 憑證」與會解密它們的
+> `secrets/master.key`。把整個 `data/` 打包外送（雲端硬碟、第三方備份）時，
+> 兩者放在同一份壓縮檔等於把鎖和鑰匙一起寄出，加密形同虛設。建議將
+> `master.key` 抽出、與 `data/` 備份**分開保存**（例如另存於密碼管理器或獨立的
+> 金鑰保管庫），還原時再放回 `${CCAS_DATA_LOCATION}/secrets/`。

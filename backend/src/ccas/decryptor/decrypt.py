@@ -1,7 +1,9 @@
 """PDF 解密核心模組。
 
-使用 pikepdf 嘗試開啟 PDF 檔案，偵測是否加密，
-並以指定密碼解密後覆寫原始檔案（in-place）。
+使用 pikepdf 嘗試開啟 PDF 檔案，偵測是否加密，並以指定密碼解密後
+*原子性* 覆寫原始檔案：來源以唯讀開啟，解密結果先寫入同目錄的暫存檔，
+成功後才以 ``os.replace`` 換入。中途崩潰只會留下暫存檔，原始 PDF 不會
+半寫損毀。
 """
 
 from dataclasses import dataclass
@@ -10,6 +12,7 @@ from pathlib import Path
 import pikepdf
 
 from ccas.errors import DecryptError
+from ccas.storage.atomic import atomic_replace_via
 
 
 class DecryptionError(DecryptError):
@@ -17,6 +20,22 @@ class DecryptionError(DecryptError):
 
     def __init__(self, reason: str = "", **ctx: object) -> None:
         super().__init__("PDF 解密失敗", reason=reason, **ctx)
+
+
+def _save_decrypted(pdf_path: Path, password: str | None) -> None:
+    """Open *pdf_path* read-only and atomically overwrite it decrypted.
+
+    The source is opened without ``allow_overwriting_input`` so pikepdf keeps a
+    read-only handle; the decrypted output is written to a same-directory temp
+    file and ``os.replace``-d into place. ``pikepdf.PasswordError`` propagates to
+    let the caller try the next candidate password; any ``OSError`` from save or
+    rename also propagates so the job marks the attachment failed (never
+    swallowed). Leftover temp files are removed by ``atomic_replace_via``.
+    """
+    # pikepdf.open expects str | bytes for password; an empty string means
+    # "no password" and is equivalent to the prior no-arg open() call.
+    with pikepdf.open(pdf_path, password=password or "") as pdf:
+        atomic_replace_via(pdf_path, pdf.save, suffix=".dec.tmp")
 
 
 @dataclass(frozen=True)
@@ -52,9 +71,8 @@ def decrypt_pdf_multi(pdf_path: Path, passwords: tuple[str, ...]) -> DecryptResu
         FileNotFoundError: PDF 檔案不存在。
     """
     try:
-        with pikepdf.open(pdf_path, allow_overwriting_input=True) as pdf:
-            pdf.save(pdf_path)
-            return DecryptResult(needed_decryption=False)
+        _save_decrypted(pdf_path, password=None)
+        return DecryptResult(needed_decryption=False)
     except pikepdf.PasswordError:
         pass
 
@@ -63,11 +81,8 @@ def decrypt_pdf_multi(pdf_path: Path, passwords: tuple[str, ...]) -> DecryptResu
 
     for pw in passwords:
         try:
-            with pikepdf.open(
-                pdf_path, password=pw, allow_overwriting_input=True
-            ) as pdf:
-                pdf.save(pdf_path)
-                return DecryptResult(needed_decryption=True)
+            _save_decrypted(pdf_path, password=pw)
+            return DecryptResult(needed_decryption=True)
         except pikepdf.PasswordError:
             continue
 
@@ -94,9 +109,8 @@ def decrypt_pdf(pdf_path: Path, password: str | None) -> DecryptResult:
         FileNotFoundError: PDF 檔案不存在。
     """
     try:
-        with pikepdf.open(pdf_path, allow_overwriting_input=True) as pdf:
-            pdf.save(pdf_path)
-            return DecryptResult(needed_decryption=False)
+        _save_decrypted(pdf_path, password=None)
+        return DecryptResult(needed_decryption=False)
     except pikepdf.PasswordError:
         pass
 
@@ -104,10 +118,7 @@ def decrypt_pdf(pdf_path: Path, password: str | None) -> DecryptResult:
         raise DecryptionError("Password not found in settings")
 
     try:
-        with pikepdf.open(
-            pdf_path, password=password, allow_overwriting_input=True
-        ) as pdf:
-            pdf.save(pdf_path)
-            return DecryptResult(needed_decryption=True)
+        _save_decrypted(pdf_path, password=password)
+        return DecryptResult(needed_decryption=True)
     except pikepdf.PasswordError as exc:
         raise DecryptionError("Invalid password") from exc

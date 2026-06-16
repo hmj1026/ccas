@@ -12,40 +12,47 @@ class TestDecryptPdfMultiUnencrypted:
     """Unencrypted PDF passthrough with multi-password API."""
 
     @patch("ccas.decryptor.decrypt.pikepdf")
-    def test_unencrypted_passthrough(self, mock_pikepdf):
+    def test_unencrypted_passthrough(self, mock_pikepdf, tmp_path: Path):
         """Unencrypted PDF passes through regardless of passwords."""
+        pdf_path = tmp_path / "bill.pdf"
+        pdf_path.write_bytes(b"original")
         mock_pdf = MagicMock()
+        mock_pdf.save.side_effect = lambda tmp: Path(tmp).write_bytes(b"decrypted")
         mock_pikepdf.open.return_value.__enter__ = MagicMock(return_value=mock_pdf)
         mock_pikepdf.open.return_value.__exit__ = MagicMock(return_value=False)
 
-        result = decrypt_pdf_multi(Path("/fake/bill.pdf"), ("pw1", "pw2"))
+        result = decrypt_pdf_multi(pdf_path, ("pw1", "pw2"))
 
         assert result == DecryptResult(needed_decryption=False)
+        assert pdf_path.read_bytes() == b"decrypted"
+        assert not any(tmp_path.glob("*.dec.tmp"))
 
 
 class TestDecryptPdfMultiFallback:
     """Multi-password fallback behavior."""
 
     @patch("ccas.decryptor.decrypt.pikepdf")
-    def test_primary_succeeds_legacy_not_tried(self, mock_pikepdf):
+    def test_primary_succeeds_legacy_not_tried(self, mock_pikepdf, tmp_path: Path):
         """Primary password works -> legacy never attempted."""
         mock_pikepdf.PasswordError = type("PasswordError", (Exception,), {})
+        pdf_path = tmp_path / "encrypted.pdf"
+        pdf_path.write_bytes(b"original")
         call_count = {"n": 0}
 
         def fake_open(path, password=None, **kwargs):
             call_count["n"] += 1
             if call_count["n"] == 1:
                 raise mock_pikepdf.PasswordError("encrypted")
+            inner = MagicMock()
+            inner.save.side_effect = lambda tmp: Path(tmp).write_bytes(b"decrypted")
             ctx = MagicMock()
-            ctx.__enter__ = MagicMock(return_value=MagicMock())
+            ctx.__enter__ = MagicMock(return_value=inner)
             ctx.__exit__ = MagicMock(return_value=False)
             return ctx
 
         mock_pikepdf.open.side_effect = fake_open
 
-        result = decrypt_pdf_multi(
-            Path("/fake/encrypted.pdf"), ("correct-pw", "legacy-pw")
-        )
+        result = decrypt_pdf_multi(pdf_path, ("correct-pw", "legacy-pw"))
 
         assert result == DecryptResult(needed_decryption=True)
         assert call_count["n"] == 2  # no-password attempt + primary
@@ -55,25 +62,27 @@ class TestDecryptPdfMultiFallback:
         assert "legacy-pw" not in passwords_used
 
     @patch("ccas.decryptor.decrypt.pikepdf")
-    def test_primary_fails_legacy_succeeds(self, mock_pikepdf):
+    def test_primary_fails_legacy_succeeds(self, mock_pikepdf, tmp_path: Path):
         """Primary fails, legacy_1 succeeds -> decrypted."""
         mock_pikepdf.PasswordError = type("PasswordError", (Exception,), {})
+        pdf_path = tmp_path / "encrypted.pdf"
+        pdf_path.write_bytes(b"original")
         call_count = {"n": 0}
 
         def fake_open(path, password=None, **kwargs):
             call_count["n"] += 1
             if call_count["n"] <= 2:  # no-password + primary both fail
                 raise mock_pikepdf.PasswordError("bad")
+            inner = MagicMock()
+            inner.save.side_effect = lambda tmp: Path(tmp).write_bytes(b"decrypted")
             ctx = MagicMock()
-            ctx.__enter__ = MagicMock(return_value=MagicMock())
+            ctx.__enter__ = MagicMock(return_value=inner)
             ctx.__exit__ = MagicMock(return_value=False)
             return ctx
 
         mock_pikepdf.open.side_effect = fake_open
 
-        result = decrypt_pdf_multi(
-            Path("/fake/encrypted.pdf"), ("wrong-pw", "correct-legacy")
-        )
+        result = decrypt_pdf_multi(pdf_path, ("wrong-pw", "correct-legacy"))
 
         assert result == DecryptResult(needed_decryption=True)
         assert call_count["n"] == 3  # no-password + primary + legacy

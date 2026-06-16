@@ -15,6 +15,7 @@ import pdfplumber
 import pdfplumber.page
 
 from ccas.parser.base import BankParser, ParseError
+from ccas.parser.refund_utils import REFUND_LINE_PREFIXES, is_refund_merchant
 from ccas.parser.registry import registry
 from ccas.parser.result import ParseResult, TransactionItem
 
@@ -88,23 +89,23 @@ _RE_TRANSACTION_LINE_SIMPLE = re.compile(
     re.MULTILINE,
 )
 
-_REFUND_KEYWORDS = ("退款", "退費", "退貨", "沖銷", "取消授權", "永豐自扣")
-_REFUND_LINE_PREFIXES = ("(-)", "－", "(−)")
+# 永豐自扣（自動扣款入帳）為永豐專屬措辭，以 extra_keywords 補充至共用退款判定。
+_SINOPAC_EXTRA_REFUND_KEYWORDS = ("永豐自扣",)
 
 
 def _is_refund_row(raw_line: str, merchant: str, amount: int) -> bool:
     """Return True if the row represents a refund / credit / auto-debit.
 
-    Uses ``startswith`` on the merchant (not substring) so legitimate
-    merchants that happen to contain a keyword mid-word — e.g. 「退休俱樂部」
-    — are not filtered.
+    Delegates merchant-keyword matching to the shared ``is_refund_merchant``
+    (which uses ``startswith`` so legitimate merchants containing a keyword
+    mid-word — e.g. 「退休俱樂部」 — are not filtered), and additionally treats
+    negative amounts and ``(-)``-prefixed lines as refunds.
     """
-    stripped = merchant.lstrip()
-    if stripped.startswith(_REFUND_KEYWORDS):
+    if is_refund_merchant(merchant, extra_keywords=_SINOPAC_EXTRA_REFUND_KEYWORDS):
         return True
     if amount < 0:
         return True
-    if raw_line.lstrip().startswith(_REFUND_LINE_PREFIXES):
+    if raw_line.lstrip().startswith(REFUND_LINE_PREFIXES):
         return True
     return False
 

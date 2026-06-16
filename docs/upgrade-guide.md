@@ -13,7 +13,7 @@
 cd ~/ccas    # 你 docker-compose.yml 所在的目錄
 
 # 1) 修改 .env 的版本
-sed -i 's/^CCAS_VERSION=.*/CCAS_VERSION=v0.3.0/' .env
+sed -i 's/^CCAS_VERSION=.*/CCAS_VERSION=v0.4.0/' .env
 
 # 2) 拉新 image 並重啟
 docker compose -f docker-compose.yml pull
@@ -38,6 +38,33 @@ CCAS 採 [SemVer](https://semver.org/)：
 | Major（`v0.x.x` → `v1.0.0`） | 可能 breaking change；release notes 會明示 | 升級前**閱讀 release notes**、備份 |
 
 每次 release 的詳細 changelog 見 [GitHub Releases](https://github.com/<owner>/ccas/releases)。
+
+---
+
+## v0.4.0（Minor）— 解析正確性、加密、效能
+
+**適用對象**：v0.3.x 升級至 v0.4.0。
+
+**新增功能**：
+- 退款 / 沖銷明細統一跨行偵測（`ccas.parser.refund_utils`）
+- OAuth credentials（`token.json` / `credentials.json`）**現已於磁碟上以 Fernet + `master.key` 加密存放**（非明文）
+- 原子寫入保護（PDF 解密、staged 檔、機密寫入皆採 temp→`os.replace`）
+- 登入端點速率限制
+- 帳單估計繳款期（CTBC 特定功能）
+- 交易日期快速索引優化
+
+**Database 異動**：
+- 新 index：`ix_transactions_trans_date`（交易查詢加速）
+- 新欄位：`bills.due_date_estimated`（bool，區分實際期限 vs 估計期限）
+
+**Migration 自動執行**：Alembic migration 會在 backend 容器啟動時自動執行，**無需手動操作**。
+
+**安全相關注意**：
+- **OAuth 加密金鑰備份**：v0.4.0 開始，Gmail `token.json` 與 `credentials.json` 以 `master.key` 加密寫入磁碟檔（非明文）
+  - `master.key` 遺失 = 既有授權變成無法解密
+  - **強烈建議**：除了定期備份 `${CCAS_DATA_LOCATION}` 整個目錄外，**務必單獨妥善保管 `master.key`**
+  - 如果只備份了資料目錄但沒有 `master.key`，該備份在實災時無法復原 OAuth 授權
+  - 如何備份與復原：見 [secrets-management.md](secrets-management.md) 詳細指南
 
 ---
 
@@ -109,7 +136,7 @@ docker compose -f docker-compose.yml up -d
 2. 沒事先備份就升級 = 出狀況時無路可退
 3. release floating tag 在 main push 時會更新；若你沒追 commit log，可能在意外時段拉到 unfinished work
 
-建議：在 `.env` 釘精確版號（例：`v0.3.0`），手動排定升級時段。
+建議：在 `.env` 釘精確版號（例：`v0.4.0`），手動排定升級時段。
 
 ---
 

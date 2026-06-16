@@ -1,4 +1,4 @@
-<!-- Generated: 2026-05-10 | Files scanned: 12 | Token estimate: ~1020 -->
+<!-- Generated: 2026-06-17 | Files scanned: 12 | Token estimate: ~1080 -->
 
 # Data
 
@@ -19,6 +19,7 @@ SQLite triggers 同步維護 `updated_at`（避開 ORM `onupdate=` 在 Core-styl
 | billing_month | str | |
 | total_amount | int | TWD（整數元） |
 | due_date | date | |
+| due_date_estimated | bool | default 0；CTBC 部分帳單繳款期為估計值，不直接列於 PDF（v0.4.0+） |
 | is_paid | bool | |
 | is_notified | bool | default False, set after Telegram notify |
 | file_path | str? | |
@@ -45,7 +46,7 @@ SQLite triggers 同步維護 `updated_at`（避開 ORM `onupdate=` 在 Core-styl
 | merchant_alias | str | default ""；使用者自訂顯示名 |
 | created_at | datetime | |
 | updated_at | datetime | trigger 維護 |
-| **IX** | (category, trans_date) | analytics filter 加速 |
+| **IX** | (category, trans_date), trans_date | analytics filter + bill detail list 加速（v0.4.0+） |
 
 ### categories
 keyword (str, UQ) -> category (str), source (str, `"seed"` / `"user"`)
@@ -171,3 +172,5 @@ PipelineRun (no FK，獨立紀錄)
 | a4b8c2d6e0f1 | Add transactions user fields (manual_category_override、tags、merchant_alias、updated_at) + (category, trans_date) index |
 | 5f9d4a7b3c8e | Add classification_rules、budgets、budget_alerts（含 priority DESC index） |
 | 9b3e2c8a4f10 | Add reminder_settings（per-bill override，含 updated_at trigger） |
+| 65070f49fd2d | Add transactions.trans_date index（bill detail list 加速查詢，v0.4.0） |
+| a344841591e6 | Add bills.due_date_estimated（CTBC estimated due date marker，v0.4.0） |

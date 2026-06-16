@@ -2,6 +2,7 @@
  * Top merchants table component (§13.5)。
  */
 import type { TopMerchantItem } from '@/lib/types'
+import { formatAmount } from '@/lib/utils'
 import { EmptyState } from '@/components/shared/states'
 
 export function TopMerchantsTable({
@@ -27,7 +28,7 @@ export function TopMerchantsTable({
               <td className="px-3 py-2">{idx + 1}</td>
               <td className="px-3 py-2 font-medium">{row.merchant}</td>
               <td className="px-3 py-2 text-right">
-                ${row.total.toLocaleString()}
+                {formatAmount(row.total)}
               </td>
               <td className="px-3 py-2 text-right text-muted-foreground">
                 {row.count}

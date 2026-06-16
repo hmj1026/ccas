@@ -2,7 +2,7 @@
   "enableAllProjectMcpServers": true,
   "enabledPlugins": {
     "codex@openai-codex": true,
-    "everything-claude-code@everything-claude-code": true,
+    "ecc@ecc": true,
     "pyright-lsp@claude-plugins-official": true
   },
   "env": {

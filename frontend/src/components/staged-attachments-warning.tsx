@@ -14,6 +14,7 @@ import type {
   StagedAttachmentItem,
   StagedAttachmentStatus,
 } from '@/lib/types'
+import { formatDate } from '@/lib/utils'
 
 const WARN_STATUSES = [
   'fetch_expired',
@@ -52,10 +53,6 @@ function isWarnStatus(status: StagedAttachmentStatus): status is WarnStatus {
   return (WARN_STATUSES as readonly StagedAttachmentStatus[]).includes(status)
 }
 
-function formatDate(iso: string): string {
-  return iso.slice(0, 10)
-}
-
 export function StagedAttachmentsWarning() {
   const [expanded, setExpanded] = useState(false)
 
@@ -82,26 +79,26 @@ export function StagedAttachmentsWarning() {
   }, {})
 
   return (
-    <div className="rounded-lg border border-orange-300 bg-orange-50 p-4">
+    <div className="rounded-lg border border-orange-300 bg-orange-500/10 p-4 dark:border-orange-500/40">
       <button
         type="button"
         className="flex w-full items-center justify-between gap-3"
         onClick={() => setExpanded((v) => !v)}
         aria-expanded={expanded}
       >
-        <div className="flex items-center gap-2 text-sm font-medium text-orange-900">
+        <div className="flex items-center gap-2 text-sm font-medium text-orange-900 dark:text-orange-200">
           <AlertTriangle className="size-4" />
           <span>需要注意的附件（{data.data.length} 筆）</span>
-          <span className="text-xs text-orange-700">
+          <span className="text-xs text-orange-700 dark:text-orange-300">
             {WARN_STATUSES.filter((s) => countsByStatus[s])
               .map((s) => `${STATUS_BADGE[s].label} ${countsByStatus[s]}`)
               .join('・')}
           </span>
         </div>
         {expanded ? (
-          <ChevronUp className="size-4 text-orange-700" />
+          <ChevronUp className="size-4 text-orange-700 dark:text-orange-300" />
         ) : (
-          <ChevronDown className="size-4 text-orange-700" />
+          <ChevronDown className="size-4 text-orange-700 dark:text-orange-300" />
         )}
       </button>
 
@@ -117,7 +114,7 @@ export function StagedAttachmentsWarning() {
             return (
               <div
                 key={item.id}
-                className="rounded border border-orange-200 bg-white p-3 text-sm"
+                className="rounded border border-orange-200 bg-card p-3 text-sm dark:border-orange-500/30"
               >
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
@@ -140,7 +137,7 @@ export function StagedAttachmentsWarning() {
                   {item.original_filename}
                 </p>
                 {hint && (
-                  <p className="mt-1 text-xs text-orange-700">{hint}</p>
+                  <p className="mt-1 text-xs text-orange-700 dark:text-orange-300">{hint}</p>
                 )}
                 {item.error_reason && (
                   <p className="mt-1 break-all text-xs text-muted-foreground">

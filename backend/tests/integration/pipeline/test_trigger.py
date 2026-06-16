@@ -7,8 +7,12 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from httpx import AsyncClient
+from redis.exceptions import RedisError
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from ccas.api.routers import pipeline as pipeline_module
+from ccas.storage.models import PipelineRun, PipelineRunStatus
 from tests.integration.conftest import auth_headers
 
 
@@ -151,3 +155,63 @@ class TestPipelineTriggerEndpoint:
 
         assert response.status_code == 422
         mock_queue.enqueue.assert_not_called()
+
+
+class TestPipelineTriggerEnqueueFailure:
+    """P1: enqueue 失敗（Redis 不可達等）不得留下 orphan QUEUED row。"""
+
+    @pytest.mark.asyncio
+    async def test_redis_error_returns_503_and_marks_run_failed(
+        self, client: AsyncClient, db_session: AsyncSession
+    ):
+        """enqueue 拋 RedisError → 503、success=false、row 終態 FAILED。"""
+        mock_queue = MagicMock()
+        mock_queue.enqueue.side_effect = RedisError("Connection refused")
+
+        with (
+            patch("ccas.api.routers.pipeline.Redis"),
+            patch("ccas.api.routers.pipeline.Queue", return_value=mock_queue),
+        ):
+            response = await client.post(
+                "/api/pipeline/trigger",
+                headers=auth_headers(),
+            )
+
+        assert response.status_code == 503
+        body = response.json()
+        assert body["success"] is False
+        assert body["data"] is None
+
+        rows = (await db_session.execute(select(PipelineRun))).scalars().all()
+        assert len(rows) == 1
+        # No orphan QUEUED row: the run ends FAILED with an error message.
+        assert rows[0].status == PipelineRunStatus.FAILED
+        assert rows[0].error_message
+
+    @pytest.mark.asyncio
+    async def test_generic_error_returns_503_and_marks_run_failed(
+        self, client: AsyncClient, db_session: AsyncSession
+    ):
+        """enqueue 拋 RuntimeError（非 redis）也須 503 + row FAILED。"""
+        mock_queue = MagicMock()
+        mock_queue.enqueue.side_effect = RuntimeError("boom")
+
+        with (
+            patch("ccas.api.routers.pipeline.Redis"),
+            patch("ccas.api.routers.pipeline.Queue", return_value=mock_queue),
+        ):
+            response = await client.post(
+                "/api/pipeline/trigger",
+                headers=auth_headers(),
+            )
+
+        assert response.status_code == 503
+        body = response.json()
+        assert body["success"] is False
+
+        rows = (await db_session.execute(select(PipelineRun))).scalars().all()
+        assert len(rows) == 1
+        assert rows[0].status == PipelineRunStatus.FAILED
+        # No QUEUED row left behind.
+        queued = [r for r in rows if r.status == PipelineRunStatus.QUEUED]
+        assert queued == []

@@ -78,12 +78,24 @@ function LoginPage() {
             className="h-10 w-full rounded-lg border border-input bg-background px-3 text-sm"
             autoComplete="current-password"
             aria-label="API Token"
+            aria-describedby="login-error"
+            aria-invalid={errorMessage !== ''}
           />
         </label>
 
-        {errorMessage ? (
-          <p className="text-sm text-destructive">{errorMessage}</p>
-        ) : null}
+        {/*
+          Persistent live region: always mounted so screen readers announce新
+          錯誤；用 min-h 預留高度避免錯誤出現時 layout shift。渲染空字串而非
+          條件 unmount，避免 SR 朗讀殘留內容。
+        */}
+        <p
+          id="login-error"
+          role="alert"
+          aria-live="assertive"
+          className="min-h-5 text-sm text-destructive"
+        >
+          {errorMessage}
+        </p>
 
         <Button
           type="submit"

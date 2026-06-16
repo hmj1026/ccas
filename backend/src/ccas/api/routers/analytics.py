@@ -146,21 +146,32 @@ async def get_categories_compare(
         bucket = cur_by_cat if billing_month == month else prev_by_cat
         bucket[cat] = int(total)
 
+    # Iterate over the UNION of current + previous category keys (not just
+    # current-month buckets). A category present last month but absent this
+    # month would otherwise vanish silently; here it surfaces with total=0,
+    # previous_total=<prev>, change_percent=-100.0 (full downward trend).
+    # The zero-previous guard is preserved: previous_total of 0 or None yields
+    # change_percent=None (no divide-by-zero, no spurious +inf).
+    all_cats = set(cur_by_cat) | set(prev_by_cat)
     items: list[CategoryWithCompareItem] = []
-    for cat, total in sorted(cur_by_cat.items(), key=lambda kv: kv[1], reverse=True):
+    for cat in all_cats:
+        total = cur_by_cat.get(cat, 0)
         previous = prev_by_cat.get(cat)
         if previous is None or previous == 0:
             change_pct: float | None = None
         else:
-            change_pct = round((int(total) - previous) / previous * 100.0, 2)
+            change_pct = round((total - previous) / previous * 100.0, 2)
         items.append(
             CategoryWithCompareItem(
                 category=cat,
-                total=int(total),
+                total=total,
                 previous_total=previous,
                 change_percent=change_pct,
             )
         )
+    # Preserve descending-by-current-total ordering (previous-only categories
+    # with total=0 sort to the bottom).
+    items.sort(key=lambda item: item.total, reverse=True)
     return ApiResponse(data=items)
 
 
