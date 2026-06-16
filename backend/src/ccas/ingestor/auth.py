@@ -4,15 +4,26 @@
 並在 access token 過期時自動刷新。
 """
 
+from __future__ import annotations
+
+import json
 import logging
 import os
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from google.auth.exceptions import RefreshError
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 
 from ccas.errors import IngestError
+from ccas.storage.oauth_secrets import (
+    read_token_payload,
+    write_encrypted_token_file,
+)
+
+if TYPE_CHECKING:
+    from ccas.storage.secrets import MasterKeyManager
 
 logger = logging.getLogger(__name__)
 
@@ -32,8 +43,8 @@ def write_private_token_file(path: Path, content: str) -> None:
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as fh:
             fh.write(content)
-    except Exception:
-        # fdopen 失敗時 fd 尚未被接管，需手動關閉避免洩漏。
+    except (OSError, UnicodeEncodeError):
+        # fdopen / write 失敗時 fd 可能尚未被接管，需手動關閉避免洩漏。
         try:
             os.close(fd)
         except OSError:
@@ -50,18 +61,38 @@ class GmailAuthError(IngestError):
         super().__init__("Gmail OAuth 驗證失敗", reason=reason, **ctx)
 
 
-def load_credentials(credentials_path: str, token_path: str) -> Credentials:
+def _resolve_master_key_manager(
+    manager: MasterKeyManager | None,
+) -> MasterKeyManager:
+    """Return *manager* if given, else the process Settings' manager."""
+    if manager is not None:
+        return manager
+    from ccas.config import get_settings
+
+    return get_settings().master_key_manager
+
+
+def load_credentials(
+    credentials_path: str,
+    token_path: str,
+    manager: MasterKeyManager | None = None,
+) -> Credentials:
     """從 token.json 載入 OAuth Credentials，必要時自動刷新。
+
+    token.json 以 master.key Fernet 加密落檔（envelope 格式）；本函式讀取時
+    解密，並向後相容既有 plaintext token.json。刷新成功後回寫 **加密** token，
+    確保下一次刷新不會把 refresh_token 重新明文化（spec Stage 6 A3）。
 
     Args:
         credentials_path: OAuth 應用程式憑證 JSON 檔路徑（首次授權時使用）。
         token_path: 授權後保存的 token JSON 檔路徑。
+        manager: ``MasterKeyManager``；省略時由 ``get_settings`` 取得（注入便於測試）。
 
     Returns:
         有效的 Credentials 實例。
 
     Raises:
-        GmailAuthError: token 不存在、已失效且無法刷新。
+        GmailAuthError: token 不存在、已失效且無法刷新，或密文無法解密。
     """
     token_file = Path(token_path)
     if not token_file.exists():
@@ -70,7 +101,21 @@ def load_credentials(credentials_path: str, token_path: str) -> Credentials:
         )
         raise GmailAuthError(msg)
 
-    creds = Credentials.from_authorized_user_file(str(token_file), list(GMAIL_SCOPES))
+    key_manager = _resolve_master_key_manager(manager)
+    try:
+        token_info = read_token_payload(token_file, key_manager)
+    except json.JSONDecodeError as exc:
+        # Corrupt/garbled token.json (or undecryptable plaintext-looking JSON).
+        # A genuine master.key mismatch raises MasterKeyMismatchError, which is
+        # intentionally NOT caught here so the job fails loud with the
+        # "restore data/secrets" guidance rather than a misleading re-auth hint.
+        msg = (
+            f"Token 檔案無法解析：{token_path}。"
+            "請刪除 token.json 後重新執行 OAuth 授權流程。"
+        )
+        raise GmailAuthError(msg) from exc
+
+    creds = Credentials.from_authorized_user_info(token_info, list(GMAIL_SCOPES))
 
     if creds.valid:
         return creds
@@ -89,7 +134,7 @@ def load_credentials(credentials_path: str, token_path: str) -> Credentials:
         )
         raise GmailAuthError(msg) from exc
 
-    # 刷新成功後回寫 token 檔案
-    write_private_token_file(token_file, creds.to_json())
+    # 刷新成功後回寫 **加密** token 檔案，避免下次刷新再度明文化。
+    write_encrypted_token_file(token_file, creds.to_json(), key_manager)
 
     return creds
