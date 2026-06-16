@@ -31,7 +31,7 @@ mkdir ~/ccas && cd ~/ccas
 `docker-compose.yml` 與 `example.env`：
 
 ```bash
-RELEASE=v0.1.0   # 改為要安裝的精確版號
+RELEASE=v0.4.0   # 改為要安裝的精確版號
 curl -fsSL -o docker-compose.yml \
   "https://github.com/<owner>/ccas/releases/download/${RELEASE}/docker-compose.yml"
 curl -fsSL -o example.env \
