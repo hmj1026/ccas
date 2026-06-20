@@ -55,6 +55,9 @@ class Settings(BaseSettings):
     gmail_credentials_path: str = "./data/credentials.json"
     gmail_token_path: str = "./data/token.json"
     staging_dir: str = "./data/staging"
+    # 單筆 PDF 解析逾時（秒）。毒藥 PDF 觸發 pdfplumber 無限阻塞時，
+    # asyncio.wait_for 逾時讓 worker 標記 PARSE_FAILED 並繼續下一筆。
+    pdf_parse_timeout_seconds: float = 60.0
     log_level: str = "INFO"
     log_format: str = "json"
     log_dir: str = ""
