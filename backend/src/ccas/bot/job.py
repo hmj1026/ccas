@@ -157,6 +157,13 @@ async def run_notify_job(
                 )
         finally:
             processed += 1
-            await reporter.stage_item_done("notify", processed=processed)
+            try:
+                await reporter.stage_item_done("notify", processed=processed)
+            except Exception:
+                logger.warning(
+                    "notify progress reporting failed (processed=%d); continuing",
+                    processed,
+                    exc_info=True,
+                )
 
     return summary
