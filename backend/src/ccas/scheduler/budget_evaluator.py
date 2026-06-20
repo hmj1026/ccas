@@ -22,18 +22,17 @@ from __future__ import annotations
 import logging
 from datetime import UTC, date, datetime
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ccas.config import get_settings
 from ccas.messaging import send_message
 from ccas.storage.models import (
-    Bill,
     Budget,
     BudgetAlert,
     BudgetScope,
-    Transaction,
 )
+from ccas.storage.queries import aggregate_current_periods
 
 logger = logging.getLogger(__name__)
 
@@ -41,24 +40,6 @@ logger = logging.getLogger(__name__)
 def _current_year_month(today: date | None = None) -> str:
     today = today or date.today()
     return f"{today.year:04d}-{today.month:02d}"
-
-
-async def _aggregate_period(
-    session: AsyncSession,
-    budget: Budget,
-    period_ym: str,
-) -> int:
-    """Sum the matching transactions for budget scope in given period."""
-    stmt = (
-        select(func.coalesce(func.sum(Transaction.amount), 0))
-        .join(Bill, Transaction.bill_id == Bill.id)
-        .where(Bill.billing_month == period_ym)
-    )
-    if budget.scope == BudgetScope.MONTHLY_CATEGORY:
-        stmt = stmt.where(Transaction.category == budget.scope_ref)
-    elif budget.scope == BudgetScope.MONTHLY_BANK:
-        stmt = stmt.where(Bill.bank_code == budget.scope_ref)
-    return int((await session.execute(stmt)).scalar_one() or 0)
 
 
 def _scope_label(b: Budget) -> str:
@@ -120,16 +101,19 @@ async def evaluate_budgets(
     triggered: list[tuple[Budget, BudgetAlert]] = []
     skipped = 0
 
-    # 一次撈出所有 enabled budget 在當期的既有 alert thresholds（R28：消除 N+1）。
-    active_ids = [b.id for b in budgets if b.amount_ntd > 0]
+    # 一次撈出所有 enabled budget 在當期的既有 alert thresholds + 當月累計花費，
+    # 兩者皆批次查詢（R28 + R-budget-N+1：消除迴圈內 N+1）。
+    active_budgets = [b for b in budgets if b.amount_ntd > 0]
+    active_ids = [b.id for b in active_budgets]
     existing_map = await _existing_thresholds_map(session, active_ids, period)
+    current_map = await aggregate_current_periods(session, active_budgets, period)
 
     for budget in budgets:
         if budget.amount_ntd <= 0:
             skipped += 1
             continue
 
-        current = await _aggregate_period(session, budget, period)
+        current = current_map.get(budget.id, 0)
         existing = existing_map.get(budget.id, set())
 
         # Two-tier ladder: configured threshold + 100% (over-budget)

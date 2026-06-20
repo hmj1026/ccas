@@ -22,7 +22,7 @@ from datetime import UTC, date, datetime
 from typing import cast, get_args
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ccas.api.schemas import (
@@ -37,13 +37,12 @@ from ccas.api.schemas import (
 from ccas.storage.database import get_db_session
 from ccas.storage.models import (
     BankConfig,
-    Bill,
     Budget,
     BudgetAlert,
     BudgetScope,
     Category,
-    Transaction,
 )
+from ccas.storage.queries import aggregate_current_periods
 
 router = APIRouter(prefix="/api/budgets", tags=["budgets"])
 
@@ -60,7 +59,9 @@ def _scope_str(scope: BudgetScope | str) -> BudgetScopeLiteral:
     return cast(BudgetScopeLiteral, val)
 
 
-def _to_item(b: Budget) -> BudgetItem:
+def _to_item(
+    b: Budget, current_period: BudgetCurrentPeriod | None = None
+) -> BudgetItem:
     return BudgetItem(
         id=b.id,
         scope=_scope_str(b.scope),
@@ -70,6 +71,7 @@ def _to_item(b: Budget) -> BudgetItem:
         enabled=b.enabled,
         created_at=b.created_at,
         updated_at=b.updated_at,
+        current_period=current_period,
     )
 
 
@@ -107,14 +109,29 @@ async def _validate_scope_ref(
 @router.get("", response_model=ApiResponse[list[BudgetItem]])
 async def list_budgets(
     scope: BudgetScopeLiteral | None = Query(default=None),
+    include_current_period: bool = Query(default=False),
     session: AsyncSession = Depends(get_db_session),
 ) -> ApiResponse[list[BudgetItem]]:
-    """列出全部預算，可選 scope filter。"""
+    """列出全部預算，可選 scope filter。
+
+    ``include_current_period=true`` 時內聯每筆當月累計（O(1) 批次查詢），
+    讓前端免逐筆呼叫 ``/current-period`` 端點（消除 1+N）；預設 false 維持向下相容。
+    """
     stmt = select(Budget).order_by(Budget.id.asc())
     if scope is not None:
         stmt = stmt.where(Budget.scope == scope)
-    rows = (await session.execute(stmt)).scalars().all()
-    return ApiResponse(data=[_to_item(b) for b in rows])
+    rows = list((await session.execute(stmt)).scalars().all())
+    if not include_current_period:
+        return ApiResponse(data=[_to_item(b) for b in rows])
+
+    period = _current_year_month()
+    current_map = await aggregate_current_periods(session, rows, period)
+    return ApiResponse(
+        data=[
+            _to_item(b, _to_current_period(b, current_map.get(b.id, 0), period))
+            for b in rows
+        ]
+    )
 
 
 @router.post(
@@ -193,23 +210,20 @@ def _current_year_month(today: date | None = None) -> str:
     return f"{today.year:04d}-{today.month:02d}"
 
 
-async def _aggregate_current_period(
-    session: AsyncSession,
-    budget: Budget,
-    period_ym: str,
-) -> int:
-    """計算指定 budget 在 period_ym 的累計花費（NTD 整數元）。"""
-    stmt = (
-        select(func.coalesce(func.sum(Transaction.amount), 0))
-        .join(Bill, Transaction.bill_id == Bill.id)
-        .where(Bill.billing_month == period_ym)
+def _to_current_period(
+    budget: Budget, current: int, period_ym: str
+) -> BudgetCurrentPeriod:
+    """組裝單筆 current-period（百分比 + threshold 狀態）。"""
+    percent = (current / budget.amount_ntd * 100.0) if budget.amount_ntd > 0 else 0.0
+    return BudgetCurrentPeriod(
+        budget_id=budget.id,
+        period_year_month=period_ym,
+        amount_ntd=budget.amount_ntd,
+        current_amount_ntd=current,
+        percent=round(percent, 2),
+        threshold_breached=percent >= budget.alert_threshold_percent,
+        alert_threshold_percent=budget.alert_threshold_percent,
     )
-    if budget.scope == BudgetScope.MONTHLY_CATEGORY:
-        stmt = stmt.where(Transaction.category == budget.scope_ref)
-    elif budget.scope == BudgetScope.MONTHLY_BANK:
-        stmt = stmt.where(Bill.bank_code == budget.scope_ref)
-    result = await session.execute(stmt)
-    return int(result.scalar_one() or 0)
 
 
 @router.get(
@@ -280,16 +294,5 @@ async def get_current_period(
         raise HTTPException(status_code=404, detail=f"budget_id={budget_id} 不存在")
 
     period = _current_year_month()
-    current = await _aggregate_current_period(session, b, period)
-    percent = (current / b.amount_ntd * 100.0) if b.amount_ntd > 0 else 0.0
-    return ApiResponse(
-        data=BudgetCurrentPeriod(
-            budget_id=b.id,
-            period_year_month=period,
-            amount_ntd=b.amount_ntd,
-            current_amount_ntd=current,
-            percent=round(percent, 2),
-            threshold_breached=percent >= b.alert_threshold_percent,
-            alert_threshold_percent=b.alert_threshold_percent,
-        )
-    )
+    current_map = await aggregate_current_periods(session, [b], period)
+    return ApiResponse(data=_to_current_period(b, current_map.get(b.id, 0), period))

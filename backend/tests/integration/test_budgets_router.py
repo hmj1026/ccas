@@ -230,6 +230,77 @@ class TestUpdateDeleteBudget:
         assert resp.status_code == 404
 
 
+class TestListWithCurrentPeriod:
+    """R-budget-N+1：``?include_current_period=true`` 內聯當月累計，消除前端 1+N。"""
+
+    async def test_current_period_omitted_by_default(
+        self, client: AsyncClient, db_session: AsyncSession
+    ) -> None:
+        await _seed_budget(db_session, scope=BudgetScope.MONTHLY_TOTAL, amount=10000)
+        resp = await client.get("/api/budgets", headers=auth_headers())
+        assert resp.status_code == 200
+        item = resp.json()["data"][0]
+        # 預設不附帶（向下相容）：欄位存在但為 null。
+        assert item.get("current_period") is None
+
+    async def test_includes_current_period_inline(
+        self, client: AsyncClient, db_session: AsyncSession
+    ) -> None:
+        db_session.add(Category(keyword="food-key", category="餐飲"))
+        await db_session.commit()
+        total_b = await _seed_budget(
+            db_session, scope=BudgetScope.MONTHLY_TOTAL, amount=10000, threshold=80
+        )
+        cat_b = await _seed_budget(
+            db_session,
+            scope=BudgetScope.MONTHLY_CATEGORY,
+            scope_ref="餐飲",
+            amount=5000,
+        )
+        bank_b = await _seed_budget(
+            db_session,
+            scope=BudgetScope.MONTHLY_BANK,
+            scope_ref="CTBC",
+            amount=8000,
+        )
+        await _seed_bill_and_txns(
+            db_session,
+            bank_code="CTBC",
+            txns=[(3000, "M1", "餐飲"), (5000, "M2", "交通")],
+        )
+
+        resp = await client.get(
+            "/api/budgets?include_current_period=true", headers=auth_headers()
+        )
+        assert resp.status_code == 200, resp.text
+        by_id = {item["id"]: item for item in resp.json()["data"]}
+
+        total_cp = by_id[total_b.id]["current_period"]
+        assert total_cp is not None
+        assert total_cp["current_amount_ntd"] == 8000
+        assert total_cp["percent"] == 80.0
+        assert total_cp["threshold_breached"] is True
+
+        assert by_id[cat_b.id]["current_period"]["current_amount_ntd"] == 3000
+        assert by_id[bank_b.id]["current_period"]["current_amount_ntd"] == 8000
+
+    async def test_scope_filter_still_applies_with_current_period(
+        self, client: AsyncClient, db_session: AsyncSession
+    ) -> None:
+        await _seed_budget(db_session, scope=BudgetScope.MONTHLY_TOTAL, amount=10000)
+        await _seed_budget(
+            db_session, scope=BudgetScope.MONTHLY_BANK, scope_ref="CTBC", amount=8000
+        )
+        resp = await client.get(
+            "/api/budgets?scope=monthly_bank&include_current_period=true",
+            headers=auth_headers(),
+        )
+        items = resp.json()["data"]
+        assert len(items) == 1
+        assert items[0]["scope"] == "monthly_bank"
+        assert items[0]["current_period"] is not None
+
+
 class TestCurrentPeriod:
     async def test_monthly_total_aggregation(
         self, client: AsyncClient, db_session: AsyncSession

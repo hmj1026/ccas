@@ -601,6 +601,18 @@ class ReminderTestResult(BaseModel):
 BudgetScopeLiteral = Literal["monthly_total", "monthly_category", "monthly_bank"]
 
 
+class BudgetCurrentPeriod(BaseModel):
+    """``GET /api/budgets/{id}/current-period`` response。"""
+
+    budget_id: int
+    period_year_month: str
+    amount_ntd: int
+    current_amount_ntd: int
+    percent: float
+    threshold_breached: bool
+    alert_threshold_percent: int
+
+
 class BudgetItem(BaseModel):
     """單筆預算設定。"""
 
@@ -612,6 +624,8 @@ class BudgetItem(BaseModel):
     enabled: bool
     created_at: datetime
     updated_at: datetime
+    # ``?include_current_period=true`` 時內聯當月累計；其餘情境為 None（向下相容）。
+    current_period: BudgetCurrentPeriod | None = None
 
 
 class BudgetCreateRequest(BaseModel):
@@ -632,18 +646,6 @@ class BudgetUpdateRequest(BaseModel):
     amount_ntd: int | None = Field(default=None, ge=1)
     alert_threshold_percent: int | None = Field(default=None, ge=1, le=100)
     enabled: bool | None = None
-
-
-class BudgetCurrentPeriod(BaseModel):
-    """``GET /api/budgets/{id}/current-period`` response。"""
-
-    budget_id: int
-    period_year_month: str
-    amount_ntd: int
-    current_amount_ntd: int
-    percent: float
-    threshold_breached: bool
-    alert_threshold_percent: int
 
 
 class BudgetAlertItem(BaseModel):

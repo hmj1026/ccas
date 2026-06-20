@@ -51,7 +51,7 @@ describe('SettingsBudgetsPage', () => {
 
   it('shows empty state when no budgets', async () => {
     mockedGet.mockImplementation((path: string) => {
-      if (path === '/api/budgets') {
+      if (path === '/api/budgets?include_current_period=true') {
         return Promise.resolve({ success: true, data: [], message: '' })
       }
       return Promise.resolve({ success: true, data: null, message: '' })
@@ -65,18 +65,13 @@ describe('SettingsBudgetsPage', () => {
   })
 
   it('renders budget with progress bar', async () => {
-    mockedGet.mockImplementation((path: string) => {
-      if (path === '/api/budgets') {
-        return Promise.resolve({
-          success: true,
-          data: [sampleBudget],
-          message: '',
-        })
-      }
-      if (path === '/api/budgets/1/current-period') {
-        return Promise.resolve({
-          success: true,
-          data: {
+    // current_period 由列表端點內聯回傳（不再逐筆呼叫 /current-period）。
+    mockedGet.mockResolvedValue({
+      success: true,
+      data: [
+        {
+          ...sampleBudget,
+          current_period: {
             budget_id: 1,
             period_year_month: '2026-05',
             amount_ntd: 30000,
@@ -85,10 +80,9 @@ describe('SettingsBudgetsPage', () => {
             threshold_breached: true,
             alert_threshold_percent: 80,
           },
-          message: '',
-        })
-      }
-      return Promise.resolve({ success: true, data: null, message: '' })
+        },
+      ],
+      message: '',
     })
 
     renderPage()
@@ -178,7 +172,7 @@ describe('SettingsBudgetsPage', () => {
 
   it('deletes a budget after confirming in the dialog', async () => {
     mockedGet.mockImplementation((path: string) => {
-      if (path === '/api/budgets') {
+      if (path === '/api/budgets?include_current_period=true') {
         return Promise.resolve({
           success: true,
           data: [sampleBudget],
@@ -210,7 +204,7 @@ describe('SettingsBudgetsPage', () => {
 
   it('does not delete when the confirmation dialog is cancelled', async () => {
     mockedGet.mockImplementation((path: string) => {
-      if (path === '/api/budgets') {
+      if (path === '/api/budgets?include_current_period=true') {
         return Promise.resolve({
           success: true,
           data: [sampleBudget],
@@ -234,7 +228,7 @@ describe('SettingsBudgetsPage', () => {
 
   it('shows error banner when deletion fails, clears after success', async () => {
     mockedGet.mockImplementation((path: string) => {
-      if (path === '/api/budgets') {
+      if (path === '/api/budgets?include_current_period=true') {
         return Promise.resolve({
           success: true,
           data: [sampleBudget],
@@ -270,7 +264,7 @@ describe('SettingsBudgetsPage', () => {
 
   it('shows error banner when enabled toggle fails', async () => {
     mockedGet.mockImplementation((path: string) => {
-      if (path === '/api/budgets') {
+      if (path === '/api/budgets?include_current_period=true') {
         return Promise.resolve({
           success: true,
           data: [sampleBudget],
@@ -291,7 +285,7 @@ describe('SettingsBudgetsPage', () => {
 
   it('toggles enabled flag', async () => {
     mockedGet.mockImplementation((path: string) => {
-      if (path === '/api/budgets') {
+      if (path === '/api/budgets?include_current_period=true') {
         return Promise.resolve({
           success: true,
           data: [sampleBudget],
