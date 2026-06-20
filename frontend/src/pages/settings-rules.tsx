@@ -47,16 +47,22 @@ const PATTERN_TYPE_LABELS: Record<PatternType, string> = {
 const PATTERN_TYPE_HELP: Record<PatternType, string> = {
   keyword: '不分大小寫的子字串比對；例：「星巴克」可命中「星巴克 #1234」',
   exact: '大小寫敏感的完全相等；適合精確商家名',
-  regex: 'Python 風格 regex；含 100ms timeout fail-soft',
+  regex: 'Python 風格 regex；fail-soft；危險 pattern 會被擋下（ReDoS 防護）',
 }
 
 /**
- * 偵測 regex 中疑似 nested quantifier 的 ReDoS 風險 pattern。
- * 命中如 `(a+)+`、`(a*)*`、`(a+)*` 等 catastrophic backtracking 經典 case。
+ * 偵測 regex 中疑似 catastrophic-backtracking 的 ReDoS 風險 pattern。
+ * 命中兩類經典 case：
+ *  - nested quantifier：`(a+)+`、`(a*)*`、`(a+){2,}`
+ *  - ambiguous alternation：`(a|b|ab)+`、`(\w|\w\w)+`
+ *
+ * SSOT 對應後端 `schemas._NESTED_QUANTIFIER_RE`（backend/src/ccas/api/schemas.py）—
+ * 兩處 regex 必須完全一致；後端為最終把關，本前端啟發式僅提供即時警示。
  */
 function detectComplexRegex(pattern: string): boolean {
-  // Match a quantifier (+/*/{n,m}) inside a group, followed by another quantifier outside.
-  return /\([^)]*[+*][^)]*\)[+*]/.test(pattern)
+  // A group containing a quantifier (+/*) or alternation (|), followed by an
+  // outer quantifier (+/* or {n,}). Mirrors backend _NESTED_QUANTIFIER_RE.
+  return /\([^)]*(?:[+*]|\|)[^)]*\)(?:[+*]|\{\d+,?\d*\})/.test(pattern)
 }
 
 function RuleDialog({

@@ -245,6 +245,22 @@ describe('SettingsRulesPage', () => {
     ).toBeInTheDocument()
   })
 
+  it('warns on ambiguous-alternation regex (SSOT with backend)', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    setupRoutes([])
+    renderPage()
+
+    await user.click(await screen.findByRole('button', { name: '新增規則' }))
+    await user.selectOptions(screen.getByLabelText('pattern_type'), 'regex')
+    // (a|b|ab)+ has no inner quantifier but still backtracks catastrophically;
+    // the broadened detectComplexRegex must flag it, matching backend rejection.
+    await user.type(screen.getByLabelText('pattern'), '(a|b|ab)+')
+
+    expect(
+      screen.getByText(/nested quantifier/i),
+    ).toBeInTheDocument()
+  })
+
   it('test rule mutation calls /api/rules/test', async () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
     setupRoutes([])

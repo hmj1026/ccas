@@ -362,3 +362,174 @@ class TestIntegrityErrorMapping:
         assert http_exc.status_code == 422
         assert http_exc.detail == "資料完整性錯誤，請確認輸入值"
         assert "foo.bar" not in http_exc.detail
+
+
+class TestReDoSValidation:
+    """audit P2 classify-regex-perf-and-redos：API 層拒收疑似 catastrophic-backtracking
+    regex（nested quantifier + ambiguous alternation）並對 pattern / sample_text 設長度
+    上限，與前端 ``detectComplexRegex`` 啟發式維持 SSOT，杜絕直接打 API 繞過前端警示。
+    """
+
+    async def test_create_rejects_nested_quantifier_regex(
+        self, client: AsyncClient, db_session: AsyncSession
+    ) -> None:
+        cat = await _seed_category(db_session, "風險")
+        resp = await client.post(
+            "/api/rules",
+            headers=auth_headers(),
+            json={
+                "pattern": r"(a+)+",
+                "pattern_type": "regex",
+                "category_id": cat.id,
+            },
+        )
+        assert resp.status_code == 422
+
+    async def test_create_allows_safe_regex(
+        self, client: AsyncClient, db_session: AsyncSession
+    ) -> None:
+        cat = await _seed_category(db_session, "便利商店")
+        resp = await client.post(
+            "/api/rules",
+            headers=auth_headers(),
+            json={
+                "pattern": r"^7-?eleven",
+                "pattern_type": "regex",
+                "category_id": cat.id,
+            },
+        )
+        assert resp.status_code == 201, resp.text
+
+    async def test_create_allows_keyword_with_parens(
+        self, client: AsyncClient, db_session: AsyncSession
+    ) -> None:
+        """keyword 型別含字面 ``(a+)+`` 不應被 regex 啟發式誤殺。"""
+        cat = await _seed_category(db_session, "X")
+        resp = await client.post(
+            "/api/rules",
+            headers=auth_headers(),
+            json={
+                "pattern": r"(a+)+",
+                "pattern_type": "keyword",
+                "category_id": cat.id,
+            },
+        )
+        assert resp.status_code == 201, resp.text
+
+    async def test_update_rejects_nested_quantifier_regex(
+        self, client: AsyncClient, db_session: AsyncSession
+    ) -> None:
+        cat = await _seed_category(db_session, "X")
+        rule = UserClassificationRule(
+            pattern="x",
+            pattern_type=PatternType.KEYWORD,
+            category_id=cat.id,
+        )
+        db_session.add(rule)
+        await db_session.commit()
+        await db_session.refresh(rule)
+
+        resp = await client.put(
+            f"/api/rules/{rule.id}",
+            headers=auth_headers(),
+            json={"pattern": r"(a*)*", "pattern_type": "regex"},
+        )
+        assert resp.status_code == 422
+
+    async def test_update_rejects_redos_pattern_without_pattern_type(
+        self, client: AsyncClient, db_session: AsyncSession
+    ) -> None:
+        """只帶 pattern（省略 pattern_type）的更新仍套用 ReDoS 啟發式。"""
+        cat = await _seed_category(db_session, "X")
+        rule = UserClassificationRule(
+            pattern="^safe",
+            pattern_type=PatternType.REGEX,
+            category_id=cat.id,
+        )
+        db_session.add(rule)
+        await db_session.commit()
+        await db_session.refresh(rule)
+
+        resp = await client.put(
+            f"/api/rules/{rule.id}",
+            headers=auth_headers(),
+            json={"pattern": r"(a+)+"},
+        )
+        assert resp.status_code == 422
+
+    async def test_test_endpoint_rejects_nested_quantifier_regex(
+        self, client: AsyncClient, db_session: AsyncSession
+    ) -> None:
+        resp = await client.post(
+            "/api/rules/test",
+            headers=auth_headers(),
+            json={
+                "pattern": r"(a+)+",
+                "pattern_type": "regex",
+                "sample_text": "aaa",
+            },
+        )
+        assert resp.status_code == 422
+
+    async def test_create_rejects_alternation_bomb_regex(
+        self, client: AsyncClient, db_session: AsyncSession
+    ) -> None:
+        """ambiguous alternation 如 (a|b|ab)+ 會 catastrophic backtrack，亦須拒收。"""
+        cat = await _seed_category(db_session, "風險")
+        resp = await client.post(
+            "/api/rules",
+            headers=auth_headers(),
+            json={
+                "pattern": r"(a|b|ab)+",
+                "pattern_type": "regex",
+                "category_id": cat.id,
+            },
+        )
+        assert resp.status_code == 422
+
+    async def test_create_allows_disjoint_alternation_without_outer_quantifier(
+        self, client: AsyncClient, db_session: AsyncSession
+    ) -> None:
+        """不接外層量詞的互斥交替（如 ``^(CTBC|ESUN)$``）是安全的，不應誤殺。"""
+        cat = await _seed_category(db_session, "銀行")
+        resp = await client.post(
+            "/api/rules",
+            headers=auth_headers(),
+            json={
+                "pattern": r"^(CTBC|ESUN)$",
+                "pattern_type": "regex",
+                "category_id": cat.id,
+            },
+        )
+        assert resp.status_code == 201, resp.text
+
+    async def test_create_rejects_pattern_over_max_length(
+        self, client: AsyncClient, db_session: AsyncSession
+    ) -> None:
+        """pattern 長度上限 (200) 收斂殘餘 ReDoS 的爆炸半徑；超長即 422。"""
+        cat = await _seed_category(db_session, "X")
+        resp = await client.post(
+            "/api/rules",
+            headers=auth_headers(),
+            json={
+                "pattern": "x" * 201,
+                "pattern_type": "keyword",
+                "category_id": cat.id,
+            },
+        )
+        assert resp.status_code == 422
+
+    async def test_test_endpoint_rejects_oversized_sample_text(
+        self, client: AsyncClient, db_session: AsyncSession
+    ) -> None:
+        """sample_text 長度上限 (500) 限制即時測試端點的最壞回溯成本；超長即 422。"""
+        resp = await client.post(
+            "/api/rules/test",
+            headers=auth_headers(),
+            json={
+                "pattern": r"^7-?eleven",
+                "pattern_type": "regex",
+                "sample_text": "a" * 501,
+            },
+        )
+        assert resp.status_code == 422

@@ -4,10 +4,11 @@
 統一使用 ``ApiResponse`` 信封格式。
 """
 
+import re
 from datetime import date, datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 # NOTE: 下列 Literal 的 SSOT 為 ccas.storage.models 的對應 StrEnum
 # （StagedAttachmentStatus / PipelineRunStatus / PatternType / ReminderChannel /
@@ -454,6 +455,41 @@ class AdminTokenRotateResult(BaseModel):
 
 PatternTypeLiteral = Literal["keyword", "exact", "regex"]
 
+# audit P2 classify-regex-perf-and-redos：與前端 ``detectComplexRegex`` 啟發式維持
+# SSOT（``settings-rules.tsx`` — 兩處 regex 必須完全一致），於 API 層拒收疑似
+# catastrophic-backtracking 的 regex，杜絕直接打 API 繞過前端警示注入 ReDoS pattern。
+#
+# 命中條件：一個群組內含「量詞（+/*）或交替（|）」，且該群組外又接量詞（+/* 或 {n,}）。
+# 涵蓋兩類經典 catastrophic backtracking：
+#   - nested quantifier：``(a+)+``、``(a*)*``、``(a+){2,}``
+#   - ambiguous alternation：``(a|b|ab)+``、``(\w|\w\w)+``
+# 為過近似啟發式：對不重疊的安全交替（如 ``(?:VISA|MASTER)+``）會誤拒，屬可接受成本；
+# 真正的精準防線是 ``user_rules.load()`` 期對每個 pattern 以惡意短字串做的 burn-in。
+_NESTED_QUANTIFIER_RE = re.compile(r"\([^)]*(?:[+*]|\|)[^)]*\)(?:[+*]|\{\d+,?\d*\})")
+
+# regex pattern 與 test sample_text 的長度上限。catastrophic backtracking 為輸入長度的
+# 指數/多項式函數；對未被啟發式攔下的殘餘 pattern，限制長度可收斂最壞情況的爆炸半徑。
+_MAX_PATTERN_LENGTH = 200
+_MAX_SAMPLE_TEXT_LENGTH = 500
+
+
+def _reject_redos_regex(pattern: str | None, pattern_type: str | None) -> None:
+    """偵測到疑似 ReDoS 的 regex（nested quantifier / ambiguous alternation）時
+    raise ValueError（→ 422）。
+
+    僅在 ``pattern_type == "regex"`` 時檢查；keyword/exact 不受影響。此為過近似
+    啟發式，誤判時錯誤訊息指引使用者改寫。
+    """
+    if (
+        pattern_type == "regex"
+        and pattern is not None
+        and _NESTED_QUANTIFIER_RE.search(pattern)
+    ):
+        raise ValueError(
+            "regex 含巢狀量詞或模糊交替（如 (a+)+、(a|ab)+），可能造成 ReDoS；"
+            "請改寫為非巢狀量詞且交替分支互不重疊"
+        )
+
 
 class ClassificationRuleItem(BaseModel):
     """單筆使用者自訂分類規則（含對應 category 名稱）。"""
@@ -472,29 +508,50 @@ class ClassificationRuleItem(BaseModel):
 class ClassificationRuleCreateRequest(BaseModel):
     """``POST /api/rules`` request body。"""
 
-    pattern: str = Field(min_length=1)
+    pattern: str = Field(min_length=1, max_length=_MAX_PATTERN_LENGTH)
     pattern_type: PatternTypeLiteral
     category_id: int = Field(ge=1)
     priority: int = Field(default=0)
     enabled: bool = Field(default=True)
 
+    @model_validator(mode="after")
+    def _validate_no_redos(self) -> "ClassificationRuleCreateRequest":
+        _reject_redos_regex(self.pattern, self.pattern_type)
+        return self
+
 
 class ClassificationRuleUpdateRequest(BaseModel):
     """``PUT /api/rules/{id}`` request body（所有欄位皆可選）。"""
 
-    pattern: str | None = Field(default=None, min_length=1)
+    pattern: str | None = Field(
+        default=None, min_length=1, max_length=_MAX_PATTERN_LENGTH
+    )
     pattern_type: PatternTypeLiteral | None = None
     category_id: int | None = Field(default=None, ge=1)
     priority: int | None = None
     enabled: bool | None = None
 
+    @model_validator(mode="after")
+    def _validate_no_redos(self) -> "ClassificationRuleUpdateRequest":
+        # 部分更新只帶 pattern 而省略 pattern_type 時，schema 層無從得知 DB 既有
+        # 型別；保守起見視為 regex 套用啟發式（對 keyword 規則略為過嚴，但
+        # ReDoS 風險 > 誤拒成本，且 load 期 burn-in 為最終防線）。
+        effective_type = self.pattern_type if self.pattern_type is not None else "regex"
+        _reject_redos_regex(self.pattern, effective_type)
+        return self
+
 
 class ClassificationRuleTestRequest(BaseModel):
     """``POST /api/rules/test`` request body（即時 UI 預覽用）。"""
 
-    pattern: str = Field(min_length=1)
+    pattern: str = Field(min_length=1, max_length=_MAX_PATTERN_LENGTH)
     pattern_type: PatternTypeLiteral
-    sample_text: str
+    sample_text: str = Field(max_length=_MAX_SAMPLE_TEXT_LENGTH)
+
+    @model_validator(mode="after")
+    def _validate_no_redos(self) -> "ClassificationRuleTestRequest":
+        _reject_redos_regex(self.pattern, self.pattern_type)
+        return self
 
 
 class ClassificationRuleTestResponse(BaseModel):
