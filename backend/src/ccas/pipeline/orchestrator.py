@@ -9,7 +9,6 @@ from __future__ import annotations
 import logging
 import time
 from collections.abc import Awaitable, Callable
-from typing import TYPE_CHECKING
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,10 +18,12 @@ from ccas.ingestor.job import IngestionSummary, run_ingestion_job
 from ccas.parser.job import ParseSummary, run_parse_job
 from ccas.pipeline.options import PipelineOptions
 from ccas.pipeline.progress import NoopProgressReporter, ProgressReporter
-from ccas.pipeline.summary import FailedItem, PipelineSummary, StageSummary
-
-if TYPE_CHECKING:
-    from ccas.bot.job import NotifySummary
+from ccas.pipeline.summary import (
+    FailedItem,
+    NotifySummary,
+    PipelineSummary,
+    StageSummary,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +32,7 @@ STAGE_ORDER: tuple[str, ...] = ("ingest", "decrypt", "parse", "classify", "notif
 # Interface of the notify stage: orchestrator only depends on this callable
 # shape; the concrete run_notify_job binding is assembled by the caller
 # (pipeline/worker.py) or lazily imported in the default path.
-NotifyJob = Callable[..., Awaitable["NotifySummary"]]
+NotifyJob = Callable[..., Awaitable[NotifySummary]]
 
 
 def _summary_to_progress(stage_summary: StageSummary) -> tuple[int, int]:
