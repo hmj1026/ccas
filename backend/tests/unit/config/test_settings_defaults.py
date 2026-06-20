@@ -47,7 +47,15 @@ class TestDocumentedDefaults:
         assert settings.api_session_max_age == 43200
 
     def test_cookie_secure_default(self, settings):
-        assert settings.api_cookie_secure is False
+        # Secure-by-default: cookie only sent over TLS unless explicitly opted out.
+        assert settings.api_cookie_secure is True
+
+    def test_cookie_secure_opt_out(self, monkeypatch):
+        """HTTP-only local dev can opt out via API_COOKIE_SECURE=false."""
+        monkeypatch.setenv("API_TOKEN", "test-token")
+        monkeypatch.setenv("API_COOKIE_SECURE", "false")
+        s = Settings(_env_file=None)
+        assert s.api_cookie_secure is False
 
     def test_fubon_captcha_max_retries_default(self, settings):
         assert settings.fubon_captcha_max_retries == 7

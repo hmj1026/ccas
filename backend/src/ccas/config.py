@@ -75,7 +75,10 @@ class Settings(BaseSettings):
     frontend_origins: str = "http://127.0.0.1:5173,http://localhost:5173"
     api_session_cookie_name: str = "ccas_session"
     api_session_max_age: int = 43200
-    api_cookie_secure: bool = False
+    # Secure-by-default: the session cookie carries the Secure flag (TLS-only)
+    # unless an HTTP-only local dev explicitly opts out with
+    # API_COOKIE_SECURE=false. check-env.sh blocks an HTTPS deploy that opts out.
+    api_cookie_secure: bool = True
     redis_url: str = "redis://localhost:6379/0"
     scheduler_api_base_url: str = ""
     telegram_allowed_chat_ids: str = ""

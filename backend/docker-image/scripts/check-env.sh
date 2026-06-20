@@ -116,15 +116,18 @@ if is_explicitly_set_in_env_file "API_TOKEN"; then
 fi
 
 # -----------------------------------------------------------------------------
-# Security hardening warnings（Stage 6 A1/A2；非阻斷：只 WARN，不影響 exit_code）
+# Security hardening checks（Stage 6 A1/A2）
+# A1 阻斷（format_errors，影響 exit_code）；A2 為非阻斷 WARN
 # -----------------------------------------------------------------------------
 
-# A1：以 HTTPS 對外（PUBLIC_BASE_URL=https://…）卻未啟用 Secure cookie，
-# session cookie 可能在中間人攻擊下被竊。提醒設 API_COOKIE_SECURE=true。
+# A1：以 HTTPS 對外（PUBLIC_BASE_URL=https://…）卻顯式關閉 Secure cookie，
+# session cookie 可能在中間人攻擊下被竊。後端預設 API_COOKIE_SECURE=true（安全預設），
+# 故僅在「.env 顯式設為非 true」時阻斷啟動；未設定者沿用安全預設、不阻斷。
 if [[ "${PUBLIC_BASE_URL:-}" =~ ^https:// ]]; then
-  if [[ "${API_COOKIE_SECURE:-}" != "true" ]]; then
-    security_warnings+=(
-      "PUBLIC_BASE_URL 為 https:// 但 API_COOKIE_SECURE 未設為 true；建議設定 API_COOKIE_SECURE=true 讓 session cookie 僅在 TLS 連線送出"
+  if is_explicitly_set_in_env_file "API_COOKIE_SECURE" \
+    && [[ "${API_COOKIE_SECURE:-}" != "true" ]]; then
+    format_errors+=(
+      "PUBLIC_BASE_URL 為 https:// 但 API_COOKIE_SECURE 顯式設為非 true；HTTPS 部署不可關閉 Secure cookie（移除該行採用預設 true，或設為 true）"
     )
   fi
 fi
