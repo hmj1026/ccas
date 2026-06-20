@@ -16,6 +16,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ccas.api.schemas import (
     ApiResponse,
+    PaginatedResponse,
+    PaginationMeta,
     PipelineRunDetail,
     PipelineRunStatusLiteral,
     PipelineRunSummary,
@@ -145,19 +147,22 @@ def _run_summary(row: PipelineRun) -> PipelineRunSummary:
     )
 
 
-@router.get("/runs", response_model=ApiResponse[list[PipelineRunSummary]])
+@router.get("/runs", response_model=PaginatedResponse[PipelineRunSummary])
 async def list_pipeline_runs(
     response: Response,
     status: PipelineRunStatus | None = None,
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
     session: AsyncSession = Depends(get_db_session),
-) -> ApiResponse[list[PipelineRunSummary]]:
+) -> PaginatedResponse[PipelineRunSummary]:
     """列出最近的 pipeline 執行紀錄（支援 offset 分頁）。
 
-    回應維持 ``ApiResponse[list[PipelineRunSummary]]`` 信封，未過濾的總筆數
-    透過 ``X-Total-Count`` header 暴露給前端做「載入更多」。limit 超出 1-100
-    或 offset < 0 回 422。
+    回應採統一 ``PaginatedResponse`` 信封（與 /api/bills 等列表一致），``pagination``
+    由 limit/offset 換算。為向下相容仍保留 ``X-Total-Count`` header（未過濾的總筆數）。
+    limit 超出 1-100 或 offset < 0 回 422。
+
+    註：``pagination.page`` 以 ``floor(offset/limit)+1`` 計，僅在 offset 為 limit
+    倍數時精確；本端點以 limit/offset 為分頁真值，``page`` 為便利欄位。
     """
     # Total over the SAME status filter but ignoring limit/offset, so the
     # frontend knows when it has paged through every matching run.
@@ -173,7 +178,16 @@ async def list_pipeline_runs(
     total = (await session.execute(count_stmt)).scalar_one()
     rows = (await session.execute(page_stmt)).scalars().all()
     response.headers["X-Total-Count"] = str(total)
-    return ApiResponse(data=[_run_summary(row) for row in rows])
+    return PaginatedResponse(
+        data=[_run_summary(row) for row in rows],
+        pagination=PaginationMeta(
+            # limit≥1（Query 約束）故無除零風險；offset 為 limit 倍數時頁碼精確。
+            page=(offset // limit) + 1,
+            page_size=limit,
+            total=total,
+            total_pages=max(1, (total + limit - 1) // limit),
+        ),
+    )
 
 
 @router.get("/runs/{run_id}", response_model=ApiResponse[PipelineRunDetail])

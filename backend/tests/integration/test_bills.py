@@ -135,6 +135,71 @@ async def test_list_bills_pagination(client: AsyncClient, db_session: AsyncSessi
     assert body["pagination"]["page_size"] == 2
 
 
+async def test_bill_transactions_returns_all_and_total_header_when_under_cap(
+    client: AsyncClient, db_session: AsyncSession
+):
+    from ccas.storage.models import Transaction
+
+    unpaid_id, _ = await _seed_bills(db_session)
+    db_session.add_all(
+        [
+            Transaction(
+                bill_id=unpaid_id,
+                trans_date=date(2026, 3, 1),
+                merchant=f"M{i}",
+                amount=100,
+                currency="TWD",
+            )
+            for i in range(3)
+        ]
+    )
+    await db_session.commit()
+
+    resp = await client.get(
+        f"/api/bills/{unpaid_id}/transactions", headers=auth_headers()
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert len(body["data"]) == 3
+    assert resp.headers["X-Total-Count"] == "3"
+    # 未截斷時 message 留空。
+    assert body["message"] == ""
+
+
+async def test_bill_transactions_capped_at_hard_limit(
+    client: AsyncClient, db_session: AsyncSession
+):
+    """R-api-pagination：交易明細隱式上限，避免異常帳單拖垮回應；完整筆數走 header。"""
+    from ccas.api.routers.bills import TRANSACTIONS_HARD_LIMIT
+    from ccas.storage.models import Transaction
+
+    unpaid_id, _ = await _seed_bills(db_session)
+    total = TRANSACTIONS_HARD_LIMIT + 5
+    db_session.add_all(
+        [
+            Transaction(
+                bill_id=unpaid_id,
+                trans_date=date(2026, 3, 1),
+                merchant=f"M{i}",
+                amount=100,
+                currency="TWD",
+            )
+            for i in range(total)
+        ]
+    )
+    await db_session.commit()
+
+    resp = await client.get(
+        f"/api/bills/{unpaid_id}/transactions", headers=auth_headers()
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert len(body["data"]) == TRANSACTIONS_HARD_LIMIT
+    assert resp.headers["X-Total-Count"] == str(total)
+    # 截斷時 body 內提供 in-band 提示。
+    assert str(total) in body["message"]
+
+
 async def test_update_bill_paid(client: AsyncClient, db_session: AsyncSession):
     """將帳單標記為已繳。"""
     unpaid_id, _ = await _seed_bills(db_session)

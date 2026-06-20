@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from fastapi.responses import FileResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -22,6 +22,10 @@ from ccas.storage.models import Bill, Transaction
 from ccas.storage.queries import fetch_bank_names
 
 router = APIRouter(prefix="/api/bills", tags=["bills"])
+
+# 防護上限：單一帳單交易明細一次最多回傳的筆數，避免異常帳單拖垮回應。
+# 正常帳單遠低於此值；完整筆數另透過 X-Total-Count header 暴露。
+TRANSACTIONS_HARD_LIMIT = 500
 
 
 def _resolve_bill_pdf_path(file_path: str, allowed_root: str) -> Path:
@@ -128,20 +132,42 @@ async def update_bill(
 )
 async def list_bill_transactions(
     bill_id: int,
+    response: Response,
     session: AsyncSession = Depends(get_db_session),
 ) -> ApiResponse[list[TransactionItem]]:
-    """取得指定帳單的所有交易明細，依交易日期升序排列。"""
+    """取得指定帳單的交易明細，依交易日期升序排列。
+
+    為避免異常帳單（極端交易筆數）拖垮回應，隱式上限為 ``TRANSACTIONS_HARD_LIMIT``
+    筆；完整筆數透過 ``X-Total-Count`` header 暴露。正常帳單遠低於此上限。
+    """
     await _get_bill_or_404(session, bill_id)
+
+    total = (
+        await session.execute(
+            select(func.count())
+            .select_from(Transaction)
+            .where(Transaction.bill_id == bill_id)
+        )
+    ).scalar_one()
 
     stmt = (
         select(Transaction, Bill.bank_code, Bill.billing_month)
         .join(Bill, Transaction.bill_id == Bill.id)
         .where(Transaction.bill_id == bill_id)
         .order_by(Transaction.trans_date)
+        .limit(TRANSACTIONS_HARD_LIMIT)
     )
     rows = (await session.execute(stmt)).all()
+    response.headers["X-Total-Count"] = str(total)
+    # 截斷時在 body 內 in-band 提示（不只靠 header），避免消費者誤判資料完整。
+    message = (
+        f"交易筆數超過上限，僅回傳前 {TRANSACTIONS_HARD_LIMIT} 筆（共 {total} 筆）"
+        if total > TRANSACTIONS_HARD_LIMIT
+        else ""
+    )
 
     return ApiResponse(
+        message=message,
         data=[
             TransactionItem(
                 id=txn.id,
@@ -158,7 +184,7 @@ async def list_bill_transactions(
                 billing_month=billing_month,
             )
             for txn, bank_code, billing_month in rows
-        ]
+        ],
     )
 
 
