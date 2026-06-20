@@ -288,6 +288,75 @@ class TestCallback:
         rows = (await db_session.execute(select(GmailOAuthState))).scalars().all()
         assert all(r.state != "happy-state-1" for r in rows)
 
+    async def test_callback_with_error_param_redirects_to_error_page(
+        self,
+        client: AsyncClient,
+        gmail_paths: tuple[Path, Path],
+    ) -> None:
+        # User denies consent → Google redirects with ?error=access_denied and
+        # NO code. Must become a friendly redirect (not a 422), without leaking
+        # Google's raw error string into the result URL.
+        resp = await client.get(
+            "/api/setup/gmail/callback",
+            params={"error": "access_denied", "state": "any-state"},
+            headers=auth_headers(),
+            follow_redirects=False,
+        )
+        assert resp.status_code == 303
+        location = resp.headers["location"]
+        assert "/setup/gmail" in location
+        assert "status=error" in location
+        assert "access_denied" not in location
+
+    async def test_callback_without_code_or_error_returns_400(
+        self,
+        client: AsyncClient,
+        gmail_paths: tuple[Path, Path],
+    ) -> None:
+        # A malformed callback (no code, no error) is a bad request (400), not a
+        # validation 422 — keeps it distinct from the unknown-state 422 case.
+        resp = await client.get(
+            "/api/setup/gmail/callback",
+            params={"state": "any-state"},
+            headers=auth_headers(),
+            follow_redirects=False,
+        )
+        assert resp.status_code == 400
+
+    @respx.mock
+    async def test_callback_token_exchange_failure_redirects_to_error(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        gmail_paths: tuple[Path, Path],
+    ) -> None:
+        # The state is consumed before the exchange, so a failed exchange must
+        # redirect to the frontend error page (not strand the user on a raw 4xx).
+        creds_path, _ = gmail_paths
+        creds_path.write_text(json.dumps(_valid_credentials_payload()))
+        respx.post("https://oauth2.googleapis.com/token").mock(
+            return_value=Response(400, json={"error": "invalid_grant"})
+        )
+        live_state = GmailOAuthState(
+            state="fail-state-1",
+            code_verifier="verifier-fail",
+            created_at=datetime.now(UTC),
+        )
+        db_session.add(live_state)
+        await db_session.commit()
+
+        resp = await client.get(
+            "/api/setup/gmail/callback",
+            params={"code": "bad-code", "state": "fail-state-1"},
+            headers=auth_headers(),
+            follow_redirects=False,
+        )
+        assert resp.status_code == 303
+        assert "status=error" in resp.headers["location"]
+        # State consumed (deleted before exchange) even on failure.
+        rows = (await db_session.execute(select(GmailOAuthState))).scalars().all()
+        assert all(r.state != "fail-state-1" for r in rows)
+
 
 class TestStatus:
     async def test_status_returns_disconnected_when_token_missing(
