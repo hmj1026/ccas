@@ -283,3 +283,33 @@ class TestRealPdfFormat:
         txn_with_card = next(t for t in txns if t.amount == 500)
         assert txn_with_card.card_last4 == "4300"
         assert txn_with_card.merchant.startswith("悠遊卡")
+
+    def test_cross_year_mmdd_real_text(self):
+        """Jan statement with Dec transactions → previous calendar year.
+
+        Regression: SINOPAC MM/DD paths always used billing_year, so a December
+        transaction on a January statement was stamped with the wrong year.
+        """
+        parser = _make_parser()
+        text = "12/28 12/30 跨年商店 120\n01/05 01/06 一月商店 80\n"
+        page = make_mock_page(text)
+
+        txns = parser._extract_transactions(
+            cast(list[pdfplumber.page.Page], [page]), 2026, 1
+        )
+
+        assert len(txns) == 2
+        dec = next(t for t in txns if t.merchant == "跨年商店")
+        assert dec.trans_date == date(2025, 12, 28)
+        assert dec.posting_date == date(2025, 12, 30)
+        jan = next(t for t in txns if t.merchant == "一月商店")
+        assert jan.trans_date == date(2026, 1, 5)
+
+    def test_parse_mmdd_cross_year_helper(self):
+        """_parse_mmdd shifts year back when month exceeds billing month."""
+        from ccas.parser.banks.sinopac_v1 import _parse_mmdd
+
+        assert _parse_mmdd("12/28", 2026, 1) == date(2025, 12, 28)
+        assert _parse_mmdd("01/05", 2026, 1) == date(2026, 1, 5)
+        # Default (billing_month_num=0) keeps the legacy no-shift behaviour.
+        assert _parse_mmdd("12/28", 2026) == date(2026, 12, 28)

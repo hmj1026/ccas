@@ -15,6 +15,7 @@ import pdfplumber
 import pdfplumber.page
 
 from ccas.parser.base import BankParser, ParseError
+from ccas.parser.refund_utils import is_refund_merchant, parse_amount_cell
 from ccas.parser.registry import registry
 from ccas.parser.result import ParseResult, TransactionItem
 
@@ -337,7 +338,9 @@ def _parse_transaction_row(
                 logger.warning("跳過無法解析交易日的行: %s", cells)
                 return None
 
-            amount = int(raw_amount.replace(",", ""))
+            amount = parse_amount_cell(raw_amount)
+            if is_refund_merchant(merchant):
+                amount = -abs(amount)
             posting_date = _parse_mmdd(raw_posting_date, year, billing_month_num)
             if posting_date is None:
                 posting_date = _parse_date(raw_posting_date, year, billing_month_num)
@@ -363,7 +366,9 @@ def _parse_transaction_row(
                 logger.warning("跳過無法解析交易日的行: %s", cells)
                 return None
 
-            amount = int(raw_amount.replace(",", ""))
+            amount = parse_amount_cell(raw_amount)
+            if is_refund_merchant(merchant):
+                amount = -abs(amount)
             return TransactionItem(
                 trans_date=trans_date,
                 merchant=merchant,
@@ -391,7 +396,6 @@ def _extract_transactions_text(
     older full-date patterns for synthetic/test fixtures.
     """
     items: list[TransactionItem] = []
-    consumed_spans: list[tuple[int, int]] = []
     for page in pages:
         text = page.extract_text() or ""
         page_spans: list[tuple[int, int]] = []
@@ -410,7 +414,6 @@ def _extract_transactions_text(
             )
             if item is not None:
                 items.append(item)
-        consumed_spans.extend(page_spans)
     if items:
         return items
 
@@ -464,7 +467,7 @@ def _parse_esun_real_transaction(
             match.group(2), billing_year, billing_month_num
         )
         merchant = match.group(3).strip()
-        amount = int(match.group(4).replace(",", ""))
+        amount = parse_amount_cell(match.group(4))
 
         if trans_date is None:
             logger.warning("跳過日期無法解析的 ESUN 交易行: %s", match.group(0))
@@ -473,6 +476,10 @@ def _parse_esun_real_transaction(
         # Skip rows that are summary/subtotal lines rather than real txns.
         if "本期" in merchant or "上期" in merchant or "合計" in merchant:
             return None
+
+        # 退款商戶（退款/退費/退貨/沖銷…）保留為負數明細，利於對帳。
+        if is_refund_merchant(merchant):
+            amount = -abs(amount)
 
         return TransactionItem(
             trans_date=trans_date,
@@ -494,7 +501,7 @@ def _parse_esun_single_date_transaction(
     try:
         trans_date = _parse_mmdd_loose(match.group(1), billing_year, billing_month_num)
         merchant = match.group(2).strip()
-        amount = int(match.group(3).replace(",", ""))
+        amount = parse_amount_cell(match.group(3))
 
         if trans_date is None:
             logger.warning("跳過日期無法解析的 ESUN 單日期交易行: %s", match.group(0))
@@ -503,6 +510,10 @@ def _parse_esun_single_date_transaction(
         # Skip summary rows: "上期應繳金額： TWD 10,615" etc.
         if "應繳" in merchant or "合計" in merchant:
             return None
+
+        # 退款/沖銷等貸方明細保留為負數明細。
+        if is_refund_merchant(merchant):
+            amount = -abs(amount)
 
         return TransactionItem(
             trans_date=trans_date,
@@ -524,10 +535,13 @@ def _parse_text_transaction(
         trans_date = _parse_date(match.group(1), billing_year, billing_month_num)
         posting_date = _parse_date(match.group(2), billing_year, billing_month_num)
         merchant = match.group(3).strip()
-        amount = int(match.group(4).replace(",", ""))
+        amount = parse_amount_cell(match.group(4))
 
         if trans_date is None:
             return None
+
+        if is_refund_merchant(merchant):
+            amount = -abs(amount)
 
         return TransactionItem(
             trans_date=trans_date,
@@ -549,10 +563,13 @@ def _parse_simple_text_transaction(
     try:
         trans_date = _parse_date(match.group(1), billing_year, billing_month_num)
         merchant = match.group(2).strip()
-        amount = int(match.group(3).replace(",", ""))
+        amount = parse_amount_cell(match.group(3))
 
         if trans_date is None:
             return None
+
+        if is_refund_merchant(merchant):
+            amount = -abs(amount)
 
         return TransactionItem(
             trans_date=trans_date,

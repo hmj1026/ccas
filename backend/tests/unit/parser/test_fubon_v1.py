@@ -182,6 +182,72 @@ class TestExtractSummary:
         _, total_amount, _ = parser._extract_summary([page])
         assert total_amount == 11274
 
+    def test_total_amount_prefers_current_period_over_previous(self):
+        """「前期應繳總額」 appearing first must not be mistaken for the total.
+
+        Regression: the generic 應繳總額 regex matches inside 前期應繳總額, so
+        a 前-period line ahead of the 本-period line would be returned first.
+        """
+        parser = _make_parser()
+        text = (
+            "台北富邦銀行 信用卡帳單\n"
+            "115年04月份帳單\n"
+            "繳費截止日：115/04/24\n"
+            "前期應繳總額 3,793元\n"
+            "本期應繳總額 11,274元\n"
+        )
+        page = make_mock_page(text)
+
+        _, total_amount, _ = parser._extract_summary([page])
+        assert total_amount == 11274
+
+    def test_total_amount_falls_back_to_generic_label(self):
+        """Bills with only 應繳總額 (no 本期 prefix) still resolve via fallback."""
+        parser = _make_parser()
+        text = (
+            "台北富邦銀行 信用卡帳單\n"
+            "115年04月份帳單\n"
+            "繳費截止日：115/04/24\n"
+            "應繳總額：NT$ 8,560\n"
+        )
+        page = make_mock_page(text)
+
+        _, total_amount, _ = parser._extract_summary([page])
+        assert total_amount == 8560
+
+    def test_total_amount_three_char_suffix(self):
+        """本期應繳總金額 (3-char 總金額 suffix) must be recognized."""
+        parser = _make_parser()
+        text = (
+            "台北富邦銀行 信用卡帳單\n"
+            "115年04月份帳單\n"
+            "繳費截止日：115/04/24\n"
+            "本期應繳總金額：NT$ 26,920\n"
+        )
+        page = make_mock_page(text)
+
+        _, total_amount, _ = parser._extract_summary([page])
+        assert total_amount == 26920
+
+    def test_total_amount_fallback_skips_previous_period(self):
+        """Fallback label must skip 前期應繳總額 and pick the bare 應繳總額.
+
+        When no 本期應繳 label exists, the generic regex must not match the
+        embedded 應繳總額 inside 前期應繳總額 (negative lookbehind on 前期).
+        """
+        parser = _make_parser()
+        text = (
+            "台北富邦銀行 信用卡帳單\n"
+            "115年04月份帳單\n"
+            "繳費截止日：115/04/24\n"
+            "前期應繳總額 3,793元\n"
+            "應繳總額：NT$ 11,274\n"
+        )
+        page = make_mock_page(text)
+
+        _, total_amount, _ = parser._extract_summary([page])
+        assert total_amount == 11274
+
     def test_extracts_tabular_billing_month(self):
         """帳單年月 header + ROC short format 115/04 on data row."""
         parser = _make_parser()

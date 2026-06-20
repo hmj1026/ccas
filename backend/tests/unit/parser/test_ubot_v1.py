@@ -215,6 +215,70 @@ class TestExtractTransactions:
         assert txns[0].merchant == "7-ELEVEN"
         assert txns[0].posting_date is None
 
+    def test_full_text_fallback_cashback_is_negative(self):
+        """Full-format text fallback must negate cashback/refund rows (R26).
+
+        Regression: only the real-format path applied _is_cashback_row, so a
+        refund posted as a positive amount via the legacy text path stayed +ve.
+        """
+        parser = _make_parser()
+        text = "2026/03/05 2026/03/07 退款手續費 100\n"
+        page = make_mock_page(text)
+
+        txns = parser._extract_transactions(
+            cast(list[pdfplumber.page.Page], [page]), 2026
+        )
+
+        assert len(txns) == 1
+        assert txns[0].amount == -100
+
+    def test_simple_text_fallback_cashback_is_negative(self):
+        """Simple-format text fallback must negate cashback/refund rows (R26)."""
+        parser = _make_parser()
+        text = "2026/03/05 現金回饋入帳 100\n"
+        page = make_mock_page(text)
+
+        txns = parser._extract_transactions(
+            cast(list[pdfplumber.page.Page], [page]), 2026
+        )
+
+        assert len(txns) == 1
+        assert txns[0].amount == -100
+
+    def test_table_path_cashback_is_negative(self):
+        """Table extraction path must also negate cashback/refund rows (R26).
+
+        Dispatch tries tables before text, so the table path needs the same
+        _is_cashback_row guard the real/text paths have.
+        """
+        parser = _make_parser()
+        header = ["交易日", "入帳日", "卡號末四碼", "交易說明", "金額"]
+        rows = [["03/05", "03/07", "1234", "現金回饋入帳", "100"]]
+        table = [header, *rows]
+        page = make_mock_page("", tables=[table])
+
+        txns = parser._extract_transactions(
+            cast(list[pdfplumber.page.Page], [page]), 2026
+        )
+
+        assert len(txns) == 1
+        assert txns[0].amount == -100
+
+    def test_table_path_3col_cashback_is_negative(self):
+        """3-column table fallback also negates cashback rows."""
+        parser = _make_parser()
+        header = ["交易日", "交易說明", "金額"]
+        rows = [["03/05", "退款手續費", "100"]]
+        table = [header, *rows]
+        page = make_mock_page("", tables=[table])
+
+        txns = parser._extract_transactions(
+            cast(list[pdfplumber.page.Page], [page]), 2026
+        )
+
+        assert len(txns) == 1
+        assert txns[0].amount == -100
+
     def test_skips_non_transaction_table(self):
         parser = _make_parser()
         non_txn_table = [["帳戶資訊", "值"], ["帳號", "1234567890"]]
