@@ -78,14 +78,14 @@ def _patches(**stage_returns: Any):
                 ),
             ),
         ),
-        patch(
-            "ccas.bot.job.run_notify_job",
-            return_value=stage_returns.get(
-                "notify",
-                NotifySummary(sent_count=1, failed_count=0, errors=[]),
-            ),
-        ),
     ]
+
+
+def _notify_job() -> AsyncMock:
+    """Injectable notify stage（orchestrator 已不 import bot；改由呼叫端注入）。"""
+    return AsyncMock(
+        return_value=NotifySummary(sent_count=1, failed_count=0, errors=[])
+    )
 
 
 @pytest.fixture
@@ -100,9 +100,8 @@ async def test_default_reporter_is_noop(mock_session: AsyncMock) -> None:
         _patches()[1],
         _patches()[2],
         _patches()[3],
-        _patches()[4],
     ):
-        summary = await run_pipeline(mock_session)
+        summary = await run_pipeline(mock_session, notify_job=_notify_job())
 
     # All five stages present; no reporter side-effect to inspect, just no
     # exception means Noop wrapping worked.
@@ -121,8 +120,10 @@ async def test_fake_reporter_receives_one_stage_finished_per_stage(
     reporter = FakeReporter()
 
     patches = _patches()
-    with patches[0], patches[1], patches[2], patches[3], patches[4]:
-        await run_pipeline(mock_session, progress_reporter=reporter)
+    with patches[0], patches[1], patches[2], patches[3]:
+        await run_pipeline(
+            mock_session, progress_reporter=reporter, notify_job=_notify_job()
+        )
 
     finished_stages = [
         c[1]["stage"] for c in reporter.calls if c[0] == "stage_finished"
@@ -149,8 +150,10 @@ async def test_stage_finished_ok_fail_split_excludes_failed_bucket(
         errors=["e1", "e2"],
     )
     patches = _patches(parse=parse_with_fail)
-    with patches[0], patches[1], patches[2], patches[3], patches[4]:
-        await run_pipeline(mock_session, progress_reporter=reporter)
+    with patches[0], patches[1], patches[2], patches[3]:
+        await run_pipeline(
+            mock_session, progress_reporter=reporter, notify_job=_notify_job()
+        )
 
     parse_finished = next(
         c
@@ -178,9 +181,10 @@ async def test_stage_exception_still_emits_stage_finished(
         _patches()[1],
         patch("ccas.pipeline.orchestrator.run_parse_job", side_effect=parse_boom),
         _patches()[3],
-        _patches()[4],
     ):
-        summary = await run_pipeline(mock_session, progress_reporter=reporter)
+        summary = await run_pipeline(
+            mock_session, progress_reporter=reporter, notify_job=_notify_job()
+        )
 
     finished = [c[1] for c in reporter.calls if c[0] == "stage_finished"]
     parse_finished = next(c for c in finished if c["stage"] == "parse")
@@ -208,8 +212,10 @@ async def test_stage_finished_elapsed_ms_non_negative(
     reporter = FakeReporter()
 
     patches = _patches()
-    with patches[0], patches[1], patches[2], patches[3], patches[4]:
-        await run_pipeline(mock_session, progress_reporter=reporter)
+    with patches[0], patches[1], patches[2], patches[3]:
+        await run_pipeline(
+            mock_session, progress_reporter=reporter, notify_job=_notify_job()
+        )
 
     elapsed_values = [
         c[1]["elapsed_ms"] for c in reporter.calls if c[0] == "stage_finished"
@@ -228,8 +234,13 @@ async def test_partial_stage_range_emits_finished_only_for_run_stages(
     options = PipelineOptions(from_stage="parse", to_stage="classify")
 
     patches = _patches()
-    with patches[0], patches[1], patches[2], patches[3], patches[4]:
-        await run_pipeline(mock_session, options=options, progress_reporter=reporter)
+    with patches[0], patches[1], patches[2], patches[3]:
+        await run_pipeline(
+            mock_session,
+            options=options,
+            progress_reporter=reporter,
+            notify_job=_notify_job(),
+        )
 
     finished_stages = [
         c[1]["stage"] for c in reporter.calls if c[0] == "stage_finished"

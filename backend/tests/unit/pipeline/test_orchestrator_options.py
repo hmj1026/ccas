@@ -46,29 +46,29 @@ def _patch_all_stages():
                 classified_count=0, skipped_count=0, total_count=0
             ),
         ),
-        patch(
-            "ccas.bot.job.run_notify_job",
-            new_callable=AsyncMock,
-            return_value=NotifySummary(),
-        ),
     )
+
+
+def _notify_mock() -> AsyncMock:
+    """Injectable notify stage（orchestrator 已不 import bot；改由呼叫端注入）。"""
+    return AsyncMock(return_value=NotifySummary())
 
 
 class TestOptionsForwarding:
     async def test_options_passed_to_ingest_and_parse(self, mock_session):
         options = PipelineOptions(force=True, bank_code="CTBC")
 
-        p_ingest, p_decrypt, p_parse, p_classify, p_notify = _patch_all_stages()
-        with p_ingest as m_ingest, p_decrypt, p_parse as m_parse, p_classify, p_notify:
-            await run_pipeline(mock_session, options)
+        p_ingest, p_decrypt, p_parse, p_classify = _patch_all_stages()
+        with p_ingest as m_ingest, p_decrypt, p_parse as m_parse, p_classify:
+            await run_pipeline(mock_session, options, notify_job=_notify_mock())
 
             m_ingest.assert_called_once_with(mock_session, options, reporter=ANY)
             m_parse.assert_called_once_with(mock_session, options, reporter=ANY)
 
     async def test_none_options_passed_by_default(self, mock_session):
-        p_ingest, p_decrypt, p_parse, p_classify, p_notify = _patch_all_stages()
-        with p_ingest as m_ingest, p_decrypt, p_parse as m_parse, p_classify, p_notify:
-            await run_pipeline(mock_session)
+        p_ingest, p_decrypt, p_parse, p_classify = _patch_all_stages()
+        with p_ingest as m_ingest, p_decrypt, p_parse as m_parse, p_classify:
+            await run_pipeline(mock_session, notify_job=_notify_mock())
 
             m_ingest.assert_called_once_with(mock_session, None, reporter=ANY)
             m_parse.assert_called_once_with(mock_session, None, reporter=ANY)
@@ -77,15 +77,14 @@ class TestOptionsForwarding:
         """Decrypt should receive options for bank/date filtering."""
         options = PipelineOptions(force=True, bank_code="CTBC")
 
-        p_ingest, p_decrypt, p_parse, p_classify, p_notify = _patch_all_stages()
+        p_ingest, p_decrypt, p_parse, p_classify = _patch_all_stages()
         with (
             p_ingest,
             p_decrypt as m_dec,
             p_parse,
             p_classify,
-            p_notify,
         ):
-            await run_pipeline(mock_session, options)
+            await run_pipeline(mock_session, options, notify_job=_notify_mock())
 
             m_dec.assert_called_once_with(mock_session, options, reporter=ANY)
 
@@ -93,15 +92,15 @@ class TestOptionsForwarding:
         """Classify and notify should NOT receive options."""
         options = PipelineOptions(force=True)
 
-        p_ingest, p_decrypt, p_parse, p_classify, p_notify = _patch_all_stages()
+        p_ingest, p_decrypt, p_parse, p_classify = _patch_all_stages()
+        m_ntf = _notify_mock()
         with (
             p_ingest,
             p_decrypt,
             p_parse,
             p_classify as m_cls,
-            p_notify as m_ntf,
         ):
-            await run_pipeline(mock_session, options)
+            await run_pipeline(mock_session, options, notify_job=m_ntf)
 
             m_cls.assert_called_once_with(mock_session, reporter=ANY)
             m_ntf.assert_called_once_with(mock_session, reporter=ANY)

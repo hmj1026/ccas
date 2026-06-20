@@ -8,6 +8,7 @@ import asyncio
 import json
 import sys
 
+from ccas.bot.job import run_notify_job
 from ccas.log import configure_logging
 from ccas.pipeline.options import PipelineOptions
 from ccas.pipeline.orchestrator import STAGE_ORDER, run_pipeline
@@ -96,7 +97,7 @@ def _parse_args(argv: list[str] | None = None) -> PipelineOptions:
 async def _main(options: PipelineOptions) -> PipelineSummary:
     session_factory = get_session_factory()
     async with session_factory() as session:
-        summary = await run_pipeline(session, options)
+        summary = await run_pipeline(session, options, notify_job=run_notify_job)
     await get_engine().dispose()
     return summary
 

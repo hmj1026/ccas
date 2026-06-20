@@ -30,8 +30,8 @@ logger = logging.getLogger(__name__)
 STAGE_ORDER: tuple[str, ...] = ("ingest", "decrypt", "parse", "classify", "notify")
 
 # Interface of the notify stage: orchestrator only depends on this callable
-# shape; the concrete run_notify_job binding is assembled by the caller
-# (pipeline/worker.py) or lazily imported in the default path.
+# shape; the concrete run_notify_job binding is injected by the caller
+# (pipeline/worker.py / pipeline/__main__.py). orchestrator never imports bot.
 NotifyJob = Callable[..., Awaitable[NotifySummary]]
 
 
@@ -229,7 +229,8 @@ async def run_pipeline(
     session: AsyncSession,
     options: PipelineOptions | None = None,
     progress_reporter: ProgressReporter | None = None,
-    notify_job: NotifyJob | None = None,
+    *,
+    notify_job: NotifyJob,
 ) -> PipelineSummary:
     """執行 pipeline 並回傳結構化摘要。
 
@@ -243,20 +244,14 @@ async def run_pipeline(
         progress_reporter: 進度回報實作。``None`` 預設包成
             :class:`NoopProgressReporter`，CLI / scheduler 路徑 stdout
             summary 行為完全不變（pipeline-operations-center §3.6 / D10）。
-        notify_job: 通知階段實作（:data:`NotifyJob` 介面）。``None`` 時
-            lazy import 預設的 :func:`ccas.bot.job.run_notify_job`；
-            正式組裝點在 pipeline/worker.py。
+        notify_job: 通知階段實作（:data:`NotifyJob` 介面），必填且 keyword-only。
+            由呼叫端注入（worker / CLI 注入 :func:`ccas.bot.job.run_notify_job`）；
+            orchestrator 不再 import bot 層（解除反向相依）。
 
     Returns:
         PipelineSummary 包含各階段統計與總耗時。
     """
     reporter: ProgressReporter = progress_reporter or NoopProgressReporter()
-
-    if notify_job is None:
-        # Lazy default keeps the orchestrator decoupled from the bot layer.
-        from ccas.bot.job import run_notify_job
-
-        notify_job = run_notify_job
 
     from_stage = options.from_stage if options else None
     to_stage = options.to_stage if options else None
