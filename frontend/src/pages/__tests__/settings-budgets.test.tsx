@@ -2,7 +2,7 @@
  * Vitest for SettingsBudgetsPage (bills-management-and-insights §12.6)。
  */
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -159,8 +159,12 @@ describe('SettingsBudgetsPage', () => {
       await screen.findByRole('button', { name: /新增預算/ }),
     )
 
-    const scopeSelect = screen.getByLabelText(/範圍/)
-    await userEvent.selectOptions(scopeSelect, 'monthly_category')
+    // 範圍 is a SelectField (base-ui): open listbox + click option.
+    await userEvent.click(screen.getByLabelText(/範圍/))
+    const listbox = await screen.findByRole('listbox')
+    await userEvent.click(
+      within(listbox).getByRole('option', { name: '單一類別' }),
+    )
 
     const amountInput = screen.getByLabelText(/月度上限金額/)
     await userEvent.type(amountInput, '5000')
