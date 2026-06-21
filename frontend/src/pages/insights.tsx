@@ -308,22 +308,26 @@ function InsightsPage() {
         </QuerySection>
       </section>
 
-      {month && (
-        <section className="rounded-lg border border-border p-4">
-          <h2 className="mb-4 text-lg font-semibold">
-            類別 vs 上月
+      <section className="rounded-lg border border-border p-4">
+        <h2 className="mb-4 text-lg font-semibold">
+          類別 vs 上月
+          {month && (
             <span className="ml-2 text-sm font-normal text-muted-foreground">
               {month}
             </span>
-          </h2>
+          )}
+        </h2>
+        {month ? (
           <QuerySection
             query={categoriesCompareQuery}
             onRetry={() => categoriesCompareQuery.refetch()}
           >
             {(data) => <CategoryListWithCompare data={data} />}
           </QuerySection>
-        </section>
-      )}
+        ) : (
+          <EmptyState message="請先於上方選擇月份以比較類別" />
+        )}
+      </section>
 
       <ExportDialog isOpen={exportOpen} onClose={() => setExportOpen(false)} />
     </div>

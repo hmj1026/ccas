@@ -85,6 +85,9 @@ describe('TransactionsPage', () => {
     expect(row).not.toBeNull()
     expect(within(row as HTMLElement).getByText('餐飲')).toBeInTheDocument()
     expect(screen.getByText('$150')).toBeInTheDocument()
+    // Merchant name is a keyboard-reachable link to the detail page.
+    const merchantLink = screen.getByRole('link', { name: 'Starbucks' })
+    expect(merchantLink).toHaveAttribute('href', '/transactions/1')
   })
 
   it('shows empty state when no data', async () => {

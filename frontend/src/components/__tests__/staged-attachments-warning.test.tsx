@@ -91,10 +91,21 @@ describe('StagedAttachmentsWarning', () => {
       name: /需要注意的附件/,
     })
     expect(toggle).toHaveAttribute('aria-expanded', 'false')
+    expect(toggle).toHaveAttribute(
+      'aria-controls',
+      'staged-attachments-panel',
+    )
+    // Panel exists even while collapsed so aria-controls always resolves.
+    const panel = document.getElementById('staged-attachments-panel')
+    expect(panel).not.toBeNull()
+    expect(panel).toHaveAttribute('hidden')
 
     await user.click(toggle)
 
     expect(toggle).toHaveAttribute('aria-expanded', 'true')
+    expect(
+      document.getElementById('staged-attachments-panel'),
+    ).not.toHaveAttribute('hidden')
     expect(screen.getByText('富邦')).toBeInTheDocument()
     expect(screen.getByText('fubon-2026-03.pdf')).toBeInTheDocument()
     expect(screen.getByText('中國信託')).toBeInTheDocument()

@@ -145,16 +145,27 @@ function TransactionsPage() {
                 {data.data.map((tx) => (
                   <tr key={tx.id} className="tr-list border-t border-border">
                     <td className="px-3 py-2 whitespace-nowrap">{formatDate(tx.trans_date)}</td>
-                    <td className="px-3 py-2">{tx.merchant}</td>
+                    <td className="px-3 py-2">
+                      <Link
+                        to={`/transactions/${tx.id}`}
+                        className="rounded-sm hover:text-foreground hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                      >
+                        {tx.merchant}
+                      </Link>
+                    </td>
                     <td className="px-3 py-2">{tx.category ?? '-'}</td>
                     <td className="px-3 py-2">{tx.bank_code}</td>
                     <td className="px-3 py-2 text-right whitespace-nowrap">
                       {formatAmount(tx.amount, tx.currency)}
                     </td>
                     <td className="px-3 py-2 text-right">
+                      {/* Visual-only duplicate of the keyboard-reachable merchant
+                          link above; hidden from AT/tab order to avoid two
+                          consecutive links to the same target per row. */}
                       <Link
                         to={`/transactions/${tx.id}`}
-                        aria-label={`編輯交易 ${tx.merchant}`}
+                        aria-hidden="true"
+                        tabIndex={-1}
                         className="inline-flex items-center text-muted-foreground hover:text-foreground"
                       >
                         <Pencil className="size-4" />
