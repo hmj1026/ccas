@@ -1,10 +1,14 @@
-# Tool Decision Guide: GitNexus / cx / claude-mem
+# Tool Decision Guide: GitNexus / cx / auto-memory
 
 ## Cost Gradient (prefer cheaper tools first)
 
 ```
-claude-mem read  →  cx  →  GitNexus MCP  →  Read tool (full file)
+auto-memory read  →  cx  →  GitNexus MCP  →  Read tool (full file)
 ```
+
+> "auto-memory" = the file-based memory at
+> `~/.claude/projects/-Users-paul-Project-ccas/memory/` (entries + `MEMORY.md` index),
+> loaded each session. Read it before reaching for cx / GitNexus.
 
 ---
 
@@ -35,7 +39,7 @@ claude-mem read  →  cx  →  GitNexus MCP  →  Read tool (full file)
 
 ---
 
-## claude-mem Storage Decision
+## Auto-memory Storage Decision
 
 **Save when any of these apply:**
 - User explicitly asks to remember
@@ -48,3 +52,6 @@ claude-mem read  →  cx  →  GitNexus MCP  →  Read tool (full file)
 - Derivable from git log / blame
 - Only valid for the current session (transient state)
 - Already documented in CLAUDE.md or other rules files
+
+> Entry format, frontmatter, and the `MEMORY.md` index convention follow the global
+> `~/.claude/CLAUDE.md` memory spec — do not duplicate those rules here.
