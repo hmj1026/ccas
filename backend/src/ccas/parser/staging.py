@@ -10,8 +10,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ccas.parser.result import ParseResult
-from ccas.pipeline.filters import apply_pipeline_filters
-from ccas.pipeline.options import PipelineOptions
+from ccas.shared.filters import apply_pipeline_filters
+from ccas.shared.pipeline_types import PipelineOptions
 from ccas.storage.models import (
     BankConfig,
     Bill,

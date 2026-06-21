@@ -34,8 +34,8 @@ from ccas.ingestor.staging import (
     staged_path_for_storage,
     update_staged_record_failure,
 )
-from ccas.pipeline.options import PipelineOptions
-from ccas.pipeline.progress import NoopProgressReporter, ProgressReporter
+from ccas.shared.pipeline_types import PipelineOptions
+from ccas.shared.progress import NoopProgressReporter, ProgressReporter
 from ccas.storage.atomic import atomic_write_bytes
 from ccas.storage.models import BankConfig, BankSettings, StagedAttachmentStatus
 

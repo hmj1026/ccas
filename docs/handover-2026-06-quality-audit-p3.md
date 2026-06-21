@@ -34,7 +34,8 @@
 | P3-8 REDIS_PASSWORD https prod 阻斷 | ✅ 已完成 | `7fdca20` |
 | P3-3 CSP SSOT 比對 + parser 動態探索 | ✅ 已完成 | `34fa532` |
 | P3-2 通知呼叫端統一 bot.notifications | ✅ 已完成 | `17b9745` |
-| P3-1 / P3-4 / P3-5 / P3-6 / P3-7 | ⬜ 待辦 | — |
+| P3-1 stage→pipeline 層解耦（建 ccas.shared） | ✅ 已完成 | （本批） |
+| P3-4 / P3-5 / P3-6 / P3-7 | ⬜ 待辦 | — |
 
 > P3-2 已順帶解決 `defensive_only_findings.md` #2（render_due_reminder 接 Bill ORM 不一致）——該項已改純量、不再是「純防禦勿修」。
 
@@ -46,10 +47,11 @@
 > `backend/src/ccas/parser/banks/ctbc_v1.py`）；前端相對於 `frontend/src/`；其餘（scripts/、
 > docs/、.claude/）為 repo 根目錄相對路徑。測試檔給完整 repo 相對路徑。
 
-### P3-1 stage 模組向上依賴 pipeline 協調層解耦（架構，M）
+### P3-1 stage 模組向上依賴 pipeline 協調層解耦（架構，M） — ✅ 已完成
 - **檔案**：ingestor/job.py, parser/job.py, parser/staging.py, decryptor/job.py, decryptor/staging.py, classifier/job.py, bot/job.py
-- **做法**：建 `ccas.shared.progress`（ProgressReporter Protocol + Noop）與 `ccas.shared.pipeline_types`（PipelineOptions）；`ccas.pipeline.progress/options` re-export 維持相容；`apply_pipeline_filters` 移至 shared（依賴方向 shared→storage）；測試通過後逐步改 stage import。DbProgressReporter 留 pipeline 層。
-- **風險**：純結構重構、爆炸半徑大；用 re-export 相容層降風險，用 `gitnexus_rename` 而非 find-replace；重跑全測試 + gitnexus 重新索引。
+- **做法**：建 `ccas.shared.progress`（ProgressReporter Protocol + Noop）與 `ccas.shared.pipeline_types`（PipelineOptions）；`ccas.pipeline.progress/options` re-export 維持相容；`apply_pipeline_filters` 移至 `ccas.shared.filters`（依賴方向 shared→storage）；stage import 全改 shared。DbProgressReporter 留 pipeline 層。
+- **實作結果**：新增 `ccas/shared/{__init__,pipeline_types,progress,filters}.py`（各帶 `__all__`）；pipeline 三檔轉純 re-export shim；7 個 stage 檔改 import；新增 `tests/unit/shared/test_layering.py`（AST 層界守門 + re-export 同一物件 `is` 斷言）；`test_options.py` patch 目標跟進 `ccas.shared.pipeline_types.date`。全套件 1703 passed、ruff + pyright strict 0 errors、python-reviewer APPROVE。
+- **殘留（非本次範疇）**：`bot/job.py` 仍 import `ccas.pipeline.summary.NotifySummary`——該值型別刻意置於 pipeline 層以打破 pipeline→bot 反向相依（見 `pipeline/summary.py` docstring），屬已定案設計。若日後要徹底解耦 bot，可評估將 summary 值型別一併下移 shared。
 
 ### P3-2 三處通知呼叫端統一改用 bot.notifications 高階層（架構，S） — ✅ 已完成（`17b9745`）
 - **檔案**：api/routers/reminders_settings.py, scheduler/reminders.py, bot/job.py

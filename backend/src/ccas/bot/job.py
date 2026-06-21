@@ -14,8 +14,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ccas.bot.notifications import notify_new_bill
 from ccas.config import get_settings
-from ccas.pipeline.progress import NoopProgressReporter, ProgressReporter
 from ccas.pipeline.summary import NotifySummary
+from ccas.shared.progress import NoopProgressReporter, ProgressReporter
 from ccas.storage.models import Bill, PaymentReminder
 from ccas.storage.queries import fetch_bank_names
 

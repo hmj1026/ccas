@@ -1,46 +1,10 @@
-"""Shared query filters for pipeline stages.
+"""Shared query filters for pipeline stages（相容 re-export）。
 
-Applies ``PipelineOptions`` bank_code and date range filters
-to ``StagedAttachment`` queries used by decrypt and parse stages.
+P3-1 起 ``apply_pipeline_filters`` 定義移至 ``ccas.shared.filters``（依賴方向
+shared→storage）以解除 stage→pipeline 的向上相依。本模組保留為相容層，
+既有 ``from ccas.pipeline.filters import apply_pipeline_filters`` 呼叫端零破壞。
 """
 
-from __future__ import annotations
+from ccas.shared.filters import apply_pipeline_filters
 
-from datetime import datetime
-
-from sqlalchemy import Select
-
-from ccas.pipeline.options import PipelineOptions
-from ccas.storage.models import StagedAttachment
-
-
-def apply_pipeline_filters(
-    stmt: Select[tuple[StagedAttachment]],
-    options: PipelineOptions | None,
-) -> Select[tuple[StagedAttachment]]:
-    """Apply bank_code and date_range filters to a StagedAttachment query.
-
-    Args:
-        stmt: Existing SQLAlchemy select statement.
-        options: Pipeline options (None means no filtering).
-
-    Returns:
-        Filtered select statement.
-    """
-    if options is None:
-        return stmt
-
-    if options.bank_code is not None:
-        stmt = stmt.where(StagedAttachment.bank_code == options.bank_code)
-
-    dr = options.date_range()
-    if dr is not None:
-        start, end = dr
-        start_dt = datetime(start.year, start.month, start.day)
-        end_dt = datetime(end.year, end.month, end.day)
-        stmt = stmt.where(
-            StagedAttachment.message_date >= start_dt,
-            StagedAttachment.message_date < end_dt,
-        )
-
-    return stmt
+__all__ = ["apply_pipeline_filters"]
