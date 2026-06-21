@@ -104,14 +104,14 @@ export function StagedAttachmentsWarning() {
       </button>
 
       {/* Panel is always present so the button's aria-controls always resolves
-          to a real node; collapsed state is conveyed via the hidden attribute. */}
+          to a real node; the hidden attribute is the sole visibility mechanism
+          (no inner expanded guard, so [hidden] alone governs the panel). */}
       <div
         id="staged-attachments-panel"
         hidden={!expanded}
         className="mt-3 space-y-2"
       >
-        {expanded &&
-          data.data.map((item) => {
+        {data.data.map((item) => {
             const badge = isWarnStatus(item.status)
               ? STATUS_BADGE[item.status]
               : undefined

@@ -285,7 +285,11 @@ function TransactionDetailPage() {
               uniqueCategories.find((c) => c.category === detail.category)?.id ??
                 '',
             )}
-            onValueChange={(v) => handleCategoryChange(Number(v))}
+            onValueChange={(v) => {
+              // The placeholder item ('' = current category) is a no-op; only
+              // a real category id triggers the update mutation.
+              if (v) handleCategoryChange(Number(v))
+            }}
             options={[
               { value: '', label: detail.category ?? '未分類' },
               ...uniqueCategories.map((c) => ({

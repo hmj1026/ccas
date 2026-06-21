@@ -37,10 +37,13 @@ function Harness({
 }
 
 describe('SelectField', () => {
-  it('associates a visible label with the trigger via htmlFor/id', () => {
+  it('associates a visible label with the trigger via aria-labelledby', () => {
     render(<Harness id="bank-select" />)
     const trigger = screen.getByLabelText('銀行')
     expect(trigger).toHaveAttribute('id', 'bank-select')
+    // SelectPrimitive.Label wires the accessible name through aria-labelledby;
+    // lock the contract so a base-ui upgrade can't silently break it.
+    expect(trigger).toHaveAttribute('aria-labelledby')
     // Selected option label shows in the trigger.
     expect(trigger).toHaveTextContent('全部')
   })
