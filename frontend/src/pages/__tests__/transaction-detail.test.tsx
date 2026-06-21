@@ -107,7 +107,7 @@ describe('TransactionDetailPage', () => {
     await waitFor(() => {
       expect(screen.getByText('Starbucks')).toBeInTheDocument()
     })
-    expect(screen.getByLabelText('分類選擇')).toBeInTheDocument()
+    expect(screen.getByLabelText('分類')).toBeInTheDocument()
     expect(screen.getByText('自動分類')).toBeInTheDocument()
   })
 
@@ -118,7 +118,9 @@ describe('TransactionDetailPage', () => {
       expect(screen.getByText('Starbucks')).toBeInTheDocument()
     })
 
-    await user.selectOptions(screen.getByLabelText('分類選擇'), '2')
+    // 分類 is a SelectField (base-ui): open listbox + click option.
+    await user.click(screen.getByLabelText('分類'))
+    await user.click(await screen.findByRole('option', { name: '購物' }))
     await waitFor(() => {
       expect(mockApiPatch).toHaveBeenCalledWith('/api/transactions/42', {
         category_id: 2,
@@ -189,9 +191,10 @@ describe('TransactionDetailPage', () => {
     const user = userEvent.setup()
     renderDetail('/transactions/42')
     await waitFor(() => {
-      expect(screen.getByLabelText('分類選擇')).toBeInTheDocument()
+      expect(screen.getByLabelText('分類')).toBeInTheDocument()
     })
-    await user.selectOptions(screen.getByLabelText('分類選擇'), '2')
+    await user.click(screen.getByLabelText('分類'))
+    await user.click(await screen.findByRole('option', { name: '購物' }))
     await waitFor(() => {
       expect(screen.getByText(/儲存失敗/)).toBeInTheDocument()
     })

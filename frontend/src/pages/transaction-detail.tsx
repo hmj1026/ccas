@@ -17,6 +17,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { SelectField } from '@/components/ui/select-field'
 import {
   Tooltip,
   TooltipContent,
@@ -276,23 +277,22 @@ function TransactionDetailPage() {
               </Button>
             )}
           </div>
-          <select
+          <SelectField
             id="category"
-            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-            value={
+            triggerClassName="w-full rounded-md px-3 py-2"
+            value={String(
               uniqueCategories.find((c) => c.category === detail.category)?.id ??
-              ''
-            }
-            onChange={(e) => handleCategoryChange(Number(e.target.value))}
-            aria-label="分類選擇"
-          >
-            <option value="">{detail.category ?? '未分類'}</option>
-            {uniqueCategories.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.category}
-              </option>
-            ))}
-          </select>
+                '',
+            )}
+            onValueChange={(v) => handleCategoryChange(Number(v))}
+            options={[
+              { value: '', label: detail.category ?? '未分類' },
+              ...uniqueCategories.map((c) => ({
+                value: String(c.id),
+                label: c.category,
+              })),
+            ]}
+          />
         </section>
 
         <section className="space-y-2">
