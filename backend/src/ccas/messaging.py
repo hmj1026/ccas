@@ -18,8 +18,6 @@ import httpx
 if TYPE_CHECKING:
     from datetime import date
 
-    from ccas.storage.models import Bill
-
 logger = logging.getLogger(__name__)
 
 _MAX_RETRIES = 3
@@ -128,15 +126,24 @@ def render_new_bill_notification(
 
 
 def render_due_reminder(
-    bill: Bill,
     bank_name: str,
+    total_amount: int,
+    due_date: date | None,
+    bill_id: int,
     days_until_due: int,
 ) -> str:
     """格式化到期提醒訊息。
 
+    接收純量參數（而非 ``Bill`` ORM 物件），與 ``render_new_bill_notification``
+    一致，讓 ``session.commit()`` / ``rollback()`` 後已 expire 的 ORM 呼叫端
+    （如 pipeline / scheduler）也能共用，避免 MissingGreenlet 並防止訊息格式
+    在多條路徑間靜默發散。
+
     Args:
-        bill: 未繳帳單。
         bank_name: 銀行名稱。
+        total_amount: 應繳金額（NTD 元）。
+        due_date: 繳費到期日。
+        bill_id: 帳單 ID（供 /paid 指令引用）。
         days_until_due: 距離到期的天數。
 
     Returns:
@@ -146,9 +153,9 @@ def render_due_reminder(
     return (
         f"繳費提醒\n\n"
         f"銀行：{bank_name}\n"
-        f"應繳金額：${bill.total_amount:,}\n"
-        f"到期日：{bill.due_date}（{urgency}）\n\n"
-        f"使用 /paid {bill.id} 標記已繳"
+        f"應繳金額：${total_amount:,}\n"
+        f"到期日：{due_date}（{urgency}）\n\n"
+        f"使用 /paid {bill_id} 標記已繳"
     )
 
 

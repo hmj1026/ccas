@@ -12,8 +12,8 @@ from sqlalchemy import CursorResult, and_, delete, or_, select
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ccas.bot.notifications import notify_due_reminder
 from ccas.config import get_settings
-from ccas.messaging import render_due_reminder, send_message
 from ccas.storage.models import Bill, PaymentReminder
 from ccas.storage.queries import fetch_bank_names
 
@@ -134,9 +134,14 @@ async def send_payment_reminders(
 
             bank_name = bank_names.get(bill.bank_code, bill.bank_code)
             try:
-                text = render_due_reminder(bill, bank_name, days_ahead)
-                await send_message(
-                    settings.telegram_bot_token, settings.telegram_chat_id, text
+                await notify_due_reminder(
+                    settings.telegram_bot_token,
+                    settings.telegram_chat_id,
+                    bank_name=bank_name,
+                    total_amount=bill.total_amount,
+                    due_date=bill.due_date,
+                    bill_id=bill.id,
+                    days_until_due=days_ahead,
                 )
                 sent += 1
                 logger.info(
