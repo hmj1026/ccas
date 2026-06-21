@@ -176,7 +176,13 @@ async def import_from_env(
     session: AsyncSession = Depends(get_db_session),
     settings: Settings = Depends(get_settings),
 ) -> ApiResponse[LoginCredentialImportResult]:
-    """Bulk-encrypt every registry credential present only in env into DB rows."""
+    """Bulk-encrypt every registry credential present only in env into DB rows.
+
+    Counting note: a registry credential set in neither DB nor env is dropped
+    silently (counted in neither ``imported`` nor ``skipped_already_in_db``),
+    so the two counts may not sum to the registry size — that residual is the
+    "not configured anywhere" set. (Matches setup/secrets.py import behaviour.)
+    """
     db_keys = await _db_credential_keys(session)
 
     imported: list[str] = []
