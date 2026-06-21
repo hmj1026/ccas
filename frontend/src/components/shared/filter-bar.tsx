@@ -89,14 +89,19 @@ function useCategories() {
  * 延遲提交的文字輸入。
  * 本地即時更新，blur 或 Enter 時才觸發 onCommit，避免每次 keystroke 觸發 API 查詢。
  * 外部 value 變更（例如 URL params 重置）時自動同步。
+ *
+ * `minCommitLength`：非空值需達此長度才提交，避免送出後端會以 422 拒絕的過短查詢
+ * （例如交易搜尋 q 的 min_length=2）。空字串永遠允許提交（用於清除篩選）。
  */
 function DebouncedInput({
   value: externalValue,
   onCommit,
+  minCommitLength = 0,
   ...rest
 }: Omit<React.ComponentProps<'input'>, 'onChange' | 'onBlur' | 'onKeyDown' | 'value'> & {
   readonly value: string
   readonly onCommit: (value: string) => void
+  readonly minCommitLength?: number
 }) {
   const [localValue, setLocalValue] = useState(externalValue)
   const [prevExternalValue, setPrevExternalValue] = useState(externalValue)
@@ -113,6 +118,8 @@ function DebouncedInput({
 
   function commit() {
     const trimmed = localValue.trim()
+    // 非空但未達門檻時不提交，避免觸發後端 422（空值放行以清除篩選）。
+    if (trimmed && trimmed.length < minCommitLength) return
     if (trimmed !== committedRef.current) {
       committedRef.current = trimmed
       onCommit(trimmed)
@@ -252,6 +259,7 @@ export const FilterBar = memo(function FilterBar({ show, values, onChange, extra
             placeholder="搜尋商家..."
             value={values.q}
             onCommit={(v) => onChange('q', v)}
+            minCommitLength={2}
             className="h-8 w-44 rounded-lg border border-input bg-background pl-8 pr-3 text-sm"
             aria-label="商家搜尋"
           />

@@ -158,6 +158,28 @@ async def test_list_transactions_search(client: AsyncClient, db_session: AsyncSe
     assert len(response.json()["data"]) == 1
 
 
+async def test_list_transactions_rejects_single_char_q(client: AsyncClient):
+    """單字元 q 過短回 422（避免昂貴的全表掃描；min_length=2）。"""
+    response = await client.get(
+        "/api/transactions?q=A",
+        headers=auth_headers(),
+    )
+    assert response.status_code == 422
+
+
+async def test_list_transactions_accepts_two_char_q(
+    client: AsyncClient, db_session: AsyncSession
+):
+    """雙字元 q 達門檻，正常查詢。"""
+    await _seed_transactions(db_session)
+    response = await client.get(
+        "/api/transactions?month=2026-03&q=星巴",
+        headers=auth_headers(),
+    )
+    assert response.status_code == 200
+    assert len(response.json()["data"]) == 1
+
+
 async def test_list_transactions_pagination(
     client: AsyncClient, db_session: AsyncSession
 ):

@@ -75,7 +75,11 @@ async def list_transactions(
     pagination: PaginationParams = Depends(),
     bank_code: str | None = Query(default=None),
     category: str | None = Query(default=None),
-    q: str | None = Query(default=None, description="商家名稱搜尋"),
+    q: str | None = Query(
+        default=None,
+        min_length=2,
+        description="商家名稱搜尋（至少 2 字元，避免昂貴的全表掃描）",
+    ),
     sort: SortLiteral = Query(default="trans_date_desc", description="排序"),
     session: AsyncSession = Depends(get_db_session),
 ):

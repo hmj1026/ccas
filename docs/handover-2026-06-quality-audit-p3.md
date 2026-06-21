@@ -34,8 +34,9 @@
 | P3-8 REDIS_PASSWORD https prod 阻斷 | ✅ 已完成 | `7fdca20` |
 | P3-3 CSP SSOT 比對 + parser 動態探索 | ✅ 已完成 | `34fa532` |
 | P3-2 通知呼叫端統一 bot.notifications | ✅ 已完成 | `17b9745` |
-| P3-1 stage→pipeline 層解耦（建 ccas.shared） | ✅ 已完成 | （本批） |
-| P3-4 / P3-5 / P3-6 / P3-7 | ⬜ 待辦 | — |
+| P3-1 stage→pipeline 層解耦（建 ccas.shared） | ✅ 已完成 | `87e096e` |
+| P3-4 效能預防性優化（5 子項） | ✅ 已完成 | （本批） |
+| P3-5 / P3-6 / P3-7 | ⬜ 待辦 | — |
 
 > P3-2 已順帶解決 `defensive_only_findings.md` #2（render_due_reminder 接 Bill ORM 不一致）——該項已改純量、不再是「純防禦勿修」。
 
@@ -63,10 +64,11 @@
 - **做法**：(a) CSP 真實重複點為 api/app.py 與 frontend/nginx.conf；最低風險＝新增 CI 腳本 grep 比對兩者一致（仿 `scripts/check-env-sync.sh`）。(b) banks/__init__.py 改 pkgutil.iter_modules + `^[a-z]+_v\d+$` 過濾自動載入，刪 `.claude/rules/parser-development.md` 步驟 5。
 - **風險**：動態探索須加測試斷言 registry 含全部 7 家 parser，避免漏載。
 
-### P3-4 效能預防性優化（效能，M）
-- **檔案**：api/routers/overview.py, classifier/engine.py, api/routers/transactions.py, ingestor/retry.py, frontend/vite.config.ts
+### P3-4 效能預防性優化（效能，M） — ✅ 已完成（本批）
+- **檔案**：api/routers/overview.py, classifier/engine.py, api/routers/transactions.py, ingestor/retry.py, frontend/vite.config.ts, frontend/src/components/shared/filter-bar.tsx
 - **做法**：(1) overview 摘要改 SQL 聚合(coalesce+sum+case)。(2) engine classify 外層快取 best_len 消除重複 normalize。(3) transactions q 參數 min_length=2。(4) retry.py 最後一次重試前略過 sleep。(5) vite manualChunks 加 query/router/ui。
-- **風險**：overview 改寫須確認空月份回 0 測試；q min_length 須確認前端未送單字元；retry sleep 次數變動須同步測試斷言。
+- **實作結果**：(1) overview 三摘要改單一 SQL 聚合，unpaid 取「非 paid」補集（else_）確保 paid+unpaid==spending 不變量、對應舊碼 `not b.is_paid` 語意。(3) q min_length=2 並同步前端 FilterBar.DebouncedInput 新增 minCommitLength={2}（空值放行清除、非空未達門檻不提交），避免單字元觸發 422。(4) retry 最後一次失敗後 break，3 次嘗試僅 2 段 backoff(1s,2s)。(5) build 驗證產出 query/router/ui chunk。全套件 1705 passed、ruff+pyright strict 0 errors、frontend eslint 0、python/database/frontend reviewer 全 APPROVE。
+- **風險（已驗證消解）**：overview 空月份回 0（test_overview_empty_db 已覆蓋）；q 單字元 422 + 雙字元正常（新增兩測試）；retry sleep 斷言已同步 test_retries_on_5xx。
 
 ### P3-5 API 一致性批次（易用性，M）
 - **檔案**：api/routers/analytics_v2.py, api/routers/transactions.py, api/routers/transactions_edit.py, api/app.py, api/routers/setup/gmail.py, `README.md`, `README.zh-TW.md`, `docs/install-quickstart.md`
