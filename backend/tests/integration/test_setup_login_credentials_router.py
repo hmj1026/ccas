@@ -148,6 +148,23 @@ class TestUpsertLoginCredential:
         )
         assert resp.status_code == 422
 
+    async def test_rejects_unknown_credential_combo(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        creds_env: Path,
+    ) -> None:
+        # Not in BANK_LOGIN_CREDENTIAL_KEYS → rejected, no orphan row written.
+        resp = await client.put(
+            "/api/setup/login-credentials/notabank/some_key",
+            json={"value": "x"},
+            headers=auth_headers(),
+        )
+        assert resp.status_code == 422
+        assert (
+            await db_session.get(BankLoginCredential, ("NOTABANK", "SOME_KEY")) is None
+        )
+
     async def test_upsert_overwrites_existing(
         self,
         client: AsyncClient,

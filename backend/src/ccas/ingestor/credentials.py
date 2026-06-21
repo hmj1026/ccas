@@ -30,7 +30,7 @@ BANK_LOGIN_CREDENTIAL_KEYS: dict[str, tuple[str, ...]] = {
 }
 
 
-def iter_known_credentials() -> list[tuple[str, str]]:
+def known_credentials() -> list[tuple[str, str]]:
     """列舉所有已知的 ``(bank_code, credential_key)`` 組合（皆大寫）。"""
     return [
         (bank_code, key)

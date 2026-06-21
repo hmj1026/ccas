@@ -33,7 +33,7 @@ from ccas.api.schemas import (
     LoginCredentialImportResult,
 )
 from ccas.config import Settings, get_settings
-from ccas.ingestor.credentials import iter_known_credentials
+from ccas.ingestor.credentials import known_credentials
 from ccas.storage.database import get_db_session
 from ccas.storage.models import BankLoginCredential
 
@@ -67,7 +67,7 @@ async def list_login_credentials(
     Universe = registry ``BANK_LOGIN_CREDENTIAL_KEYS`` ∪ DB rows。
     """
     db_keys = await _db_credential_keys(session)
-    universe = set(iter_known_credentials()) | db_keys
+    universe = set(known_credentials()) | db_keys
 
     items: list[BankLoginCredentialStatus] = []
     for bank_code, credential_key in sorted(universe):
@@ -108,6 +108,13 @@ async def upsert_login_credential(
     if not bank or not key:
         raise HTTPException(
             status_code=422, detail="bank_code 與 credential_key 不可為空"
+        )
+    # 只允許寫入註冊表已知的登入憑證，避免寫入永不會被 resolver 取用、
+    # 僅汙染 GET 列表的孤兒列。
+    if (bank, key) not in set(known_credentials()):
+        raise HTTPException(
+            status_code=422,
+            detail=f"未知的登入憑證組合：{bank}/{key}",
         )
 
     cipher = settings.master_key_manager.encrypt(payload.value)
@@ -174,7 +181,7 @@ async def import_from_env(
 
     imported: list[str] = []
     skipped = 0
-    for bank_code, credential_key in sorted(iter_known_credentials()):
+    for bank_code, credential_key in sorted(known_credentials()):
         if (bank_code, credential_key) in db_keys:
             skipped += 1
             continue

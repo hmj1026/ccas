@@ -434,6 +434,10 @@ class ImportFromEnvResult(BaseModel):
 
 # -- Setup: Bank login credentials (P3-7) --
 
+# 同 db/env/none 三態，但屬登入憑證網域（避免借用 PDF 密碼的 PdfSecretSource
+# 名稱造成語意混淆）。
+CredentialSource = Literal["db", "env", "none"]
+
 
 class BankLoginCredentialStatus(BaseModel):
     """單一 ``(bank_code, credential_key)`` 登入憑證來源狀態（不含明文）。"""
@@ -442,7 +446,7 @@ class BankLoginCredentialStatus(BaseModel):
     credential_key: str
     has_db_value: bool
     has_env_value: bool
-    effective_source: PdfSecretSource
+    effective_source: CredentialSource
 
 
 class BankLoginCredentialWriteRequest(BaseModel):
@@ -456,7 +460,7 @@ class BankLoginCredentialWriteResult(BaseModel):
 
     bank_code: str
     credential_key: str
-    effective_source: PdfSecretSource
+    effective_source: CredentialSource
 
 
 class LoginCredentialImportResult(BaseModel):
