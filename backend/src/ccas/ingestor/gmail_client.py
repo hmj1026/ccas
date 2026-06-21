@@ -253,29 +253,47 @@ def search_messages(
 
     for msg_ref in all_message_refs:
         msg_id = msg_ref["id"]
-        msg_data = call_with_retry(
-            lambda _id=msg_id: (
-                service.users().messages().get(userId="me", id=_id).execute()
+        try:
+            msg_data = call_with_retry(
+                lambda _id=msg_id: (
+                    service.users().messages().get(userId="me", id=_id).execute()
+                )
             )
-        )
 
-        payload = msg_data.get("payload", {})
-        headers = payload.get("headers", [])
-        message_date = _parse_message_date(headers)
+            payload = msg_data.get("payload", {})
+            headers = payload.get("headers", [])
+            message_date = _parse_message_date(headers)
 
-        pdf_attachments = _extract_pdf_attachments(msg_id, payload, message_date)
-        html_body: str | None = None
-        if not pdf_attachments:
-            html_body = _extract_html_body(payload)
+            pdf_attachments = _extract_pdf_attachments(msg_id, payload, message_date)
+            html_body: str | None = None
+            if not pdf_attachments:
+                html_body = _extract_html_body(payload)
 
-        result.append(
-            GmailMessage(
-                message_id=msg_id,
-                message_date=message_date,
-                pdf_attachments=tuple(pdf_attachments),
-                html_body=html_body,
+            result.append(
+                GmailMessage(
+                    message_id=msg_id,
+                    message_date=message_date,
+                    pdf_attachments=tuple(pdf_attachments),
+                    html_body=html_body,
+                )
             )
-        )
+        except RuntimeError:
+            raise  # safety limit from call_with_retry — must not be swallowed
+        except Exception:
+            # 單封郵件擷取失敗：隔離該封並繼續處理其餘郵件（與分頁中途失敗
+            # 路徑對稱），避免單封失敗中止整銀行剩餘郵件。
+            bank_label = bank_code or "?"
+            logger.warning(
+                "銀行 %s Gmail 郵件 %s 擷取失敗，已略過該封，繼續處理",
+                bank_label,
+                msg_id,
+                exc_info=True,
+            )
+            if partial_errors is not None:
+                partial_errors.append(
+                    f"銀行 {bank_label} Gmail 郵件 {msg_id} 擷取失敗，已略過該封"
+                )
+            continue
 
     return result
 

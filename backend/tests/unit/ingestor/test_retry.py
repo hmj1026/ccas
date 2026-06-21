@@ -47,6 +47,9 @@ class TestCallWithRetry:
         with pytest.raises(HttpError):
             call_with_retry(fn)
         assert fn.call_count == 3
+        # 用盡重試時，最後一次失敗後直接放棄，不再 sleep（省去無謂等待）：
+        # 3 次嘗試僅有 2 段 backoff（1s、2s）。
+        assert mock_sleep.call_args_list == [((1,),), ((2,),)]
 
     def test_no_retry_on_403(self):
         """非暫時性錯誤（403）不重試，直接拋出。"""

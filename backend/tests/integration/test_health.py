@@ -32,6 +32,17 @@ async def test_health_ready_ok(client: AsyncClient):
     mock_redis.aclose.assert_awaited_once()
 
 
+async def test_api_health_ready_alias(client: AsyncClient):
+    """``/api/health/ready`` 為反向代理 passthrough 別名，行為同 ``/health/ready``。"""
+    mock_redis = AsyncMock()
+    with patch("ccas.api.app.AsyncRedis") as redis_cls:
+        redis_cls.from_url.return_value = mock_redis
+        response = await client.get("/api/health/ready")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok", "db": "ok", "redis": "ok"}
+
+
 async def test_health_ready_redis_down_returns_503(client: AsyncClient):
     """Redis ping 失敗時回 503 degraded。"""
     mock_redis = AsyncMock()

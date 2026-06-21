@@ -4,14 +4,42 @@
 """
 
 from datetime import date, timedelta
+from types import SimpleNamespace
+from typing import cast
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
+from telegram import Update
+from telegram.ext import ContextTypes
 
-from ccas.bot import queries
+from ccas.bot import handlers, queries
 from ccas.bot.formatting import format_status
 from ccas.storage.models import BankConfig, Bill, Transaction
 from tests.integration.conftest import make_ctbc_bank_config
+
+
+def _make_update() -> SimpleNamespace:
+    """建立帶 AsyncMock reply_text 的假 Update。
+
+    回傳 SimpleNamespace（屬性存取為 Any）以便斷言端直接讀 mock 的
+    reply_text；handler 呼叫端以 cast(Update, ...) 對齊型別。
+    """
+    message = SimpleNamespace(reply_text=AsyncMock())
+    return SimpleNamespace(message=message)
+
+
+def _make_context(args: list[str] | None = None) -> SimpleNamespace:
+    """建立帶 args 的假 Context（呼叫端以 cast 對齊型別）。"""
+    return SimpleNamespace(args=args or [])
+
+
+def _as_update(update: SimpleNamespace) -> Update:
+    return cast(Update, update)
+
+
+def _as_context(context: SimpleNamespace) -> ContextTypes.DEFAULT_TYPE:
+    return cast(ContextTypes.DEFAULT_TYPE, context)
 
 
 async def _seed_bank_configs(session: AsyncSession) -> None:
@@ -202,3 +230,109 @@ class TestQueryHandlers:
 
         assert "中國信託" in text
         assert "國泰世華" in text
+
+
+@pytest.mark.asyncio
+class TestHandlersEndToEnd:
+    """直接呼叫 handler async 函式並驗證送出的 reply_text 字串。"""
+
+    async def test_handle_status_with_db(self, db_session: AsyncSession):
+        """/status 對「當月」帳單回覆含正確金額與銀行名稱。
+
+        固定 today = 2026-03-15（patch handler 端 module-level ``date``），
+        避免「午夜翻月」時播種月份與 handler 查詢月份不一致造成的 flake。
+        """
+        fixed_today = date(2026, 3, 15)
+        await _seed_bank_configs(db_session)
+        db_session.add_all(
+            [
+                Bill(
+                    bank_code="CTBC",
+                    billing_month="2026-03",
+                    total_amount=5000,
+                    due_date=date(2026, 4, 15),
+                    is_paid=False,
+                ),
+                Bill(
+                    bank_code="CATHAY",
+                    billing_month="2026-03",
+                    total_amount=8000,
+                    due_date=date(2026, 4, 10),
+                    is_paid=True,
+                ),
+            ]
+        )
+        await db_session.commit()
+
+        update = _make_update()
+        with patch("ccas.bot.handlers.date") as mock_date:
+            mock_date.today.return_value = fixed_today
+            await handlers.handle_status(
+                _as_update(update), _as_context(_make_context()), db_session
+            )
+
+        update.message.reply_text.assert_awaited_once()
+        text = update.message.reply_text.await_args.args[0]
+        assert "中國信託" in text
+        assert "$5,000" in text
+        assert "$8,000" in text
+        # 合計 = 5000 + 8000 = 13000
+        assert "$13,000" in text
+
+    async def test_handle_summary_with_db(self, db_session: AsyncSession):
+        """/summary {YYYY-MM} 回覆含該月帳單金額。"""
+        await _seed_bank_configs(db_session)
+        await _seed_bills(db_session)  # 2026-03: 5000 + 8000
+
+        update = _make_update()
+        await handlers.handle_summary(
+            _as_update(update), _as_context(_make_context(["2026-03"])), db_session
+        )
+
+        update.message.reply_text.assert_awaited_once()
+        text = update.message.reply_text.await_args.args[0]
+        assert "2026-03" in text
+        assert "$5,000" in text
+        assert "$8,000" in text
+
+    async def test_handle_category_with_db(self, db_session: AsyncSession):
+        """/category {YYYY-MM} 回覆含分類金額。"""
+        bill = Bill(
+            bank_code="CTBC",
+            billing_month="2026-03",
+            total_amount=500,
+            due_date=date(2026, 4, 15),
+        )
+        db_session.add(bill)
+        await db_session.flush()
+        db_session.add_all(
+            [
+                Transaction(
+                    bill_id=bill.id,
+                    trans_date=date(2026, 3, 1),
+                    merchant="星巴克",
+                    amount=300,
+                    category="餐飲",
+                ),
+                Transaction(
+                    bill_id=bill.id,
+                    trans_date=date(2026, 3, 2),
+                    merchant="台灣大車隊",
+                    amount=200,
+                    category="交通",
+                ),
+            ]
+        )
+        await db_session.commit()
+
+        update = _make_update()
+        await handlers.handle_category(
+            _as_update(update), _as_context(_make_context(["2026-03"])), db_session
+        )
+
+        update.message.reply_text.assert_awaited_once()
+        text = update.message.reply_text.await_args.args[0]
+        assert "餐飲" in text
+        assert "交通" in text
+        assert "$300" in text
+        assert "$200" in text

@@ -12,7 +12,7 @@ COPY pyproject.toml uv.lock ./
 # surface ``llm_fallback_unavailable`` at runtime (fail-loud) instead of
 # silently degrading to OCR-only.
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --no-dev --no-editable --extra fubon-llm
+    uv sync --frozen --no-dev --no-editable --extra fubon-llm
 # ddddocr ships its ONNX models inside the wheel (~76 MB), so no remote
 # preload is required at build time — the prior EasyOCR preload step was
 # removed via fix-fubon-captcha-solver-accuracy.
@@ -30,7 +30,7 @@ COPY src/ ./src/
 COPY alembic/ ./alembic/
 COPY alembic.ini ./
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --group dev
+    uv sync --frozen --group dev
 EXPOSE 8000
 # CMD 與 production 對齊：reload 由 docker-compose.override.yml 注入 UVICORN_RELOAD=1
 # 後，於 /scripts/docker-entrypoint.sh 內附加 --reload。dev 模式下 compose 以 entrypoint

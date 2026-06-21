@@ -144,7 +144,10 @@ class CtbcV1Parser(BankParser):
                 self._extract_summary(pages)
             )
             billing_year = int(billing_month.split("-")[0])
-            transactions = self._extract_transactions(pages, billing_year)
+            billing_month_num = int(billing_month.split("-")[1])
+            transactions = self._extract_transactions(
+                pages, billing_year, billing_month_num
+            )
 
         return ParseResult(
             bank_code=self.bank_code,
@@ -235,13 +238,20 @@ class CtbcV1Parser(BankParser):
         self,
         pages: list[pdfplumber.page.Page],
         billing_year: int,
+        billing_month_num: int = 0,
     ) -> tuple[TransactionItem, ...]:
         """Extract transaction items from all pages.
 
         Tries table extraction first (labeled format), then
         text line parsing (ROC format). Skips malformed rows.
+
+        ``billing_month_num`` (1-12) enables cross-year correction for the
+        labeled MM/DD format: a January bill listing December transactions
+        must roll the year back by one. ``0`` (default) disables the shift
+        for backward compatibility. The ROC path uses full 民國年 dates and
+        is unaffected.
         """
-        items = _extract_transactions_table(pages, billing_year)
+        items = _extract_transactions_table(pages, billing_year, billing_month_num)
         if items:
             return tuple(items)
 
@@ -300,6 +310,7 @@ def _extract_total_amount_labeled(text: str) -> int | None:
 def _extract_transactions_table(
     pages: list[pdfplumber.page.Page],
     billing_year: int,
+    billing_month_num: int = 0,
 ) -> list[TransactionItem]:
     """Extract transactions from tables (labeled/test format)."""
     items: list[TransactionItem] = []
@@ -308,7 +319,7 @@ def _extract_transactions_table(
             if not _is_transaction_table(table):
                 continue
             for row in table[1:]:
-                item = _parse_transaction_row(row, billing_year)
+                item = _parse_transaction_row(row, billing_year, billing_month_num)
                 if item is not None:
                     items.append(item)
     return items
@@ -336,6 +347,7 @@ def _is_transaction_table(table: list[list[str | None]]) -> bool:
 def _parse_transaction_row(
     row: list[str | None],
     year: int,
+    billing_month_num: int = 0,
 ) -> TransactionItem | None:
     """Parse a single labeled-format table row into a TransactionItem.
 
@@ -346,6 +358,8 @@ def _parse_transaction_row(
     Args:
         row: Raw table row cells (may contain None).
         year: Calendar year to combine with MM/DD dates.
+        billing_month_num: Billing month (1-12) for cross-year correction;
+            ``0`` disables the shift.
 
     Returns:
         TransactionItem on success, or None if the row should be skipped.
@@ -362,13 +376,13 @@ def _parse_transaction_row(
         merchant = cells[3]
         raw_amount = cells[4]
 
-        trans_date = _parse_mmdd(raw_trans_date, year)
+        trans_date = _parse_mmdd(raw_trans_date, year, billing_month_num)
         if trans_date is None:
             logger.warning("跳過無法解析交易日的行: %s", cells)
             return None
 
         amount = int(raw_amount.replace(",", ""))
-        posting_date = _parse_mmdd(raw_posting_date, year)
+        posting_date = _parse_mmdd(raw_posting_date, year, billing_month_num)
         is_valid_card = raw_card_last4.isdigit() and len(raw_card_last4) == 4
         card_last4 = raw_card_last4 if is_valid_card else None
 
@@ -384,12 +398,19 @@ def _parse_transaction_row(
         return None
 
 
-def _parse_mmdd(raw: str, year: int) -> date | None:
+def _parse_mmdd(raw: str, year: int, billing_month_num: int = 0) -> date | None:
     """Parse an 'MM/DD' string into a Python date using the given year.
+
+    When ``billing_month_num`` (1-12) is provided and the parsed month
+    exceeds it, the transaction belongs to the prior calendar year (a
+    January bill listing December purchases), so the year is rolled back by
+    one — matching the fubon/ubot cross-year convention. ``0`` (default)
+    keeps the supplied ``year`` unchanged for backward compatibility.
 
     Args:
         raw: Date string in 'MM/DD' format.
         year: Calendar year to use for the resulting date.
+        billing_month_num: Billing month (1-12) for cross-year correction.
 
     Returns:
         Parsed date, or None if the string does not match 'MM/DD'.
@@ -397,7 +418,10 @@ def _parse_mmdd(raw: str, year: int) -> date | None:
     match = _RE_DATE_MMDD.match(raw)
     if not match:
         return None
-    return date(year, int(match.group(1)), int(match.group(2)))
+    mm = int(match.group(1))
+    cross_year = billing_month_num > 0 and mm > billing_month_num
+    resolved_year = year - 1 if cross_year else year
+    return date(resolved_year, mm, int(match.group(2)))
 
 
 # -- ROC format helpers (real CTBC PDFs) --

@@ -225,7 +225,7 @@ async def test_notify_emits_started_total_for_unnotified_bills() -> None:
             "ccas.bot.job.fetch_bank_names",
             new=AsyncMock(return_value={"CTBC": "中國信託", "ESUN": "玉山"}),
         ),
-        patch("ccas.bot.job.send_message", new=AsyncMock(return_value=None)),
+        patch("ccas.bot.notifications.send_message", new=AsyncMock(return_value=None)),
     ):
         await run_notify_job(session, reporter=reporter)
 

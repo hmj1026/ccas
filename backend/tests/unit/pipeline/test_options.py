@@ -71,7 +71,7 @@ class TestDateRange:
         assert opts.date_range() == (date(2026, 1, 1), date(2027, 1, 1))
 
     def test_month_only_uses_current_year(self):
-        with patch("ccas.pipeline.options.date") as mock_date:
+        with patch("ccas.shared.pipeline_types.date") as mock_date:
             mock_date.today.return_value = date(2026, 4, 1)
             mock_date.side_effect = lambda *args, **kw: date(*args, **kw)
             opts = PipelineOptions(month=3)
@@ -98,7 +98,7 @@ class TestGmailDateFilter:
         assert result == "after:2025/12/31 before:2027/01/01"
 
     def test_month_only_uses_current_year(self):
-        with patch("ccas.pipeline.options.date") as mock_date:
+        with patch("ccas.shared.pipeline_types.date") as mock_date:
             mock_date.today.return_value = date(2026, 4, 1)
             mock_date.side_effect = lambda *args, **kw: date(*args, **kw)
             opts = PipelineOptions(month=3)

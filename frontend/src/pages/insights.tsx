@@ -31,6 +31,7 @@ import type {
 } from '@/lib/types'
 import { EmptyState } from '@/components/shared/states'
 import { QuerySection } from '@/components/shared/query-section'
+import { SelectField } from '@/components/ui/select-field'
 import {
   BankComparisonBarChart,
   YearComparisonLineChart,
@@ -196,18 +197,16 @@ function InsightsPage() {
       <section className="rounded-lg border border-border p-4">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-lg font-semibold">月消費趨勢</h2>
-          <select
-            value={trendMonths}
-            onChange={(e) => setSearchParam('trend_months', e.target.value)}
-            className="h-7 rounded border border-input bg-background px-2 text-sm"
+          <SelectField
             aria-label="趨勢回溯月數"
-          >
-            {TREND_MONTHS_OPTIONS.map((m) => (
-              <option key={m} value={m}>
-                近 {m} 個月
-              </option>
-            ))}
-          </select>
+            triggerClassName="h-7"
+            value={String(trendMonths)}
+            onValueChange={(v) => setSearchParam('trend_months', v)}
+            options={TREND_MONTHS_OPTIONS.map((m) => ({
+              value: String(m),
+              label: `近 ${m} 個月`,
+            }))}
+          />
         </div>
         <QuerySection query={trendQuery} onRetry={() => trendQuery.refetch()}>
           {(trend) =>
@@ -250,15 +249,16 @@ function InsightsPage() {
         <section className="rounded-lg border border-border p-4">
           <div className="mb-4 flex items-center justify-between">
             <h2 className="text-lg font-semibold">年度對比</h2>
-            <select
-              value={yearMetric}
-              onChange={(e) => setSearchParam('year_metric', e.target.value)}
-              className="h-7 rounded border border-input bg-background px-2 text-sm"
+            <SelectField
               aria-label="年度對比指標"
-            >
-              <option value="total">金額</option>
-              <option value="count">筆數</option>
-            </select>
+              triggerClassName="h-7"
+              value={yearMetric}
+              onValueChange={(v) => setSearchParam('year_metric', v)}
+              options={[
+                { value: 'total', label: '金額' },
+                { value: 'count', label: '筆數' },
+              ]}
+            />
           </div>
           <QuerySection
             query={yearsCompareQuery}
@@ -278,26 +278,28 @@ function InsightsPage() {
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-lg font-semibold">商家排行</h2>
           <div className="flex items-center gap-2 text-sm">
-            <select
-              value={merchantPeriod}
-              onChange={(e) => setSearchParam('merchant_period', e.target.value)}
-              className="h-7 rounded border border-input bg-background px-2"
+            <SelectField
               aria-label="商家排行期間"
-            >
-              <option value="all">全部</option>
-              <option value="month">當月</option>
-              <option value="year">當年</option>
-            </select>
-            <select
-              value={merchantLimit}
-              onChange={(e) => setSearchParam('merchant_limit', e.target.value)}
-              className="h-7 rounded border border-input bg-background px-2"
+              triggerClassName="h-7"
+              value={merchantPeriod}
+              onValueChange={(v) => setSearchParam('merchant_period', v)}
+              options={[
+                { value: 'all', label: '全部' },
+                { value: 'month', label: '當月' },
+                { value: 'year', label: '當年' },
+              ]}
+            />
+            <SelectField
               aria-label="商家排行筆數"
-            >
-              <option value="5">前 5</option>
-              <option value="10">前 10</option>
-              <option value="20">前 20</option>
-            </select>
+              triggerClassName="h-7"
+              value={String(merchantLimit)}
+              onValueChange={(v) => setSearchParam('merchant_limit', v)}
+              options={[
+                { value: '5', label: '前 5' },
+                { value: '10', label: '前 10' },
+                { value: '20', label: '前 20' },
+              ]}
+            />
           </div>
         </div>
         <QuerySection
@@ -308,22 +310,26 @@ function InsightsPage() {
         </QuerySection>
       </section>
 
-      {month && (
-        <section className="rounded-lg border border-border p-4">
-          <h2 className="mb-4 text-lg font-semibold">
-            類別 vs 上月
+      <section className="rounded-lg border border-border p-4">
+        <h2 className="mb-4 text-lg font-semibold">
+          類別 vs 上月
+          {month && (
             <span className="ml-2 text-sm font-normal text-muted-foreground">
               {month}
             </span>
-          </h2>
+          )}
+        </h2>
+        {month ? (
           <QuerySection
             query={categoriesCompareQuery}
             onRetry={() => categoriesCompareQuery.refetch()}
           >
             {(data) => <CategoryListWithCompare data={data} />}
           </QuerySection>
-        </section>
-      )}
+        ) : (
+          <EmptyState message="請先於上方選擇月份以比較類別" />
+        )}
+      </section>
 
       <ExportDialog isOpen={exportOpen} onClose={() => setExportOpen(false)} />
     </div>

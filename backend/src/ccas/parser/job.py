@@ -28,8 +28,8 @@ from ccas.parser.staging import (
     get_bank_config,
     update_attachment_status,
 )
-from ccas.pipeline.options import PipelineOptions
-from ccas.pipeline.progress import NoopProgressReporter, ProgressReporter
+from ccas.shared.pipeline_types import PipelineOptions
+from ccas.shared.progress import NoopProgressReporter, ProgressReporter
 from ccas.storage.models import BankConfig, StagedAttachment, StagedAttachmentStatus
 
 logger = logging.getLogger(__name__)

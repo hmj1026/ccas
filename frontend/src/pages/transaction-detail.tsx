@@ -17,13 +17,14 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { SelectField } from '@/components/ui/select-field'
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import { LoadingState, ErrorState } from '@/components/shared/states'
-import { apiDelete, apiGet, apiPut } from '@/lib/api-client'
+import { apiDelete, apiGet, apiPatch } from '@/lib/api-client'
 import type {
   ApiResponse,
   CategoryKeywordItem,
@@ -91,7 +92,7 @@ function TransactionDetailPage() {
 
   const updateMutation = useMutation({
     mutationFn: (body: TransactionUpdateRequest) =>
-      apiPut<ApiResponse<TransactionDetailItem>>(
+      apiPatch<ApiResponse<TransactionDetailItem>>(
         `/api/transactions/${transactionId}`,
         body,
       ),
@@ -276,23 +277,27 @@ function TransactionDetailPage() {
               </Button>
             )}
           </div>
-          <select
+          <SelectField
             id="category"
-            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-            value={
+            aria-label="分類"
+            triggerClassName="w-full rounded-md px-3 py-2"
+            value={String(
               uniqueCategories.find((c) => c.category === detail.category)?.id ??
-              ''
-            }
-            onChange={(e) => handleCategoryChange(Number(e.target.value))}
-            aria-label="分類選擇"
-          >
-            <option value="">{detail.category ?? '未分類'}</option>
-            {uniqueCategories.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.category}
-              </option>
-            ))}
-          </select>
+                '',
+            )}
+            onValueChange={(v) => {
+              // The placeholder item ('' = current category) is a no-op; only
+              // a real category id triggers the update mutation.
+              if (v) handleCategoryChange(Number(v))
+            }}
+            options={[
+              { value: '', label: detail.category ?? '未分類' },
+              ...uniqueCategories.map((c) => ({
+                value: String(c.id),
+                label: c.category,
+              })),
+            ]}
+          />
         </section>
 
         <section className="space-y-2">

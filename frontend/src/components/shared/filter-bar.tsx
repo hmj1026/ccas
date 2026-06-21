@@ -9,6 +9,7 @@ import { useQuery } from '@tanstack/react-query'
 import { Search } from 'lucide-react'
 import { memo, useEffect, useMemo, useRef, useState } from 'react'
 import { apiGet } from '@/lib/api-client'
+import { SelectField } from '@/components/ui/select-field'
 import type {
   ApiResponse,
   BankConfigItem,
@@ -89,14 +90,19 @@ function useCategories() {
  * 延遲提交的文字輸入。
  * 本地即時更新，blur 或 Enter 時才觸發 onCommit，避免每次 keystroke 觸發 API 查詢。
  * 外部 value 變更（例如 URL params 重置）時自動同步。
+ *
+ * `minCommitLength`：非空值需達此長度才提交，避免送出後端會以 422 拒絕的過短查詢
+ * （例如交易搜尋 q 的 min_length=2）。空字串永遠允許提交（用於清除篩選）。
  */
 function DebouncedInput({
   value: externalValue,
   onCommit,
+  minCommitLength = 0,
   ...rest
 }: Omit<React.ComponentProps<'input'>, 'onChange' | 'onBlur' | 'onKeyDown' | 'value'> & {
   readonly value: string
   readonly onCommit: (value: string) => void
+  readonly minCommitLength?: number
 }) {
   const [localValue, setLocalValue] = useState(externalValue)
   const [prevExternalValue, setPrevExternalValue] = useState(externalValue)
@@ -113,6 +119,8 @@ function DebouncedInput({
 
   function commit() {
     const trimmed = localValue.trim()
+    // 非空但未達門檻時不提交，避免觸發後端 422（空值放行以清除篩選）。
+    if (trimmed && trimmed.length < minCommitLength) return
     if (trimmed !== committedRef.current) {
       committedRef.current = trimmed
       onCommit(trimmed)
@@ -174,19 +182,16 @@ export const FilterBar = memo(function FilterBar({ show, values, onChange, extra
   return (
     <div className="flex flex-wrap items-center gap-2">
       {show.includes('year') && (
-        <select
-          value={values.year}
-          onChange={(e) => handleYear(e.target.value)}
-          className="h-8 rounded-lg border border-input bg-background px-3 text-sm"
+        <SelectField
           aria-label="年度篩選"
-        >
-          <option value="">全部年度</option>
-          {years.map((y) => (
-            <option key={y} value={String(y)}>
-              {y} 年
-            </option>
-          ))}
-        </select>
+          triggerClassName="h-8"
+          value={values.year}
+          onValueChange={handleYear}
+          options={[
+            { value: '', label: '全部年度' },
+            ...years.map((y) => ({ value: String(y), label: `${y} 年` })),
+          ]}
+        />
       )}
 
       {show.includes('month') && (
@@ -200,48 +205,43 @@ export const FilterBar = memo(function FilterBar({ show, values, onChange, extra
       )}
 
       {show.includes('bank') && (
-        <select
-          value={values.bank}
-          onChange={(e) => onChange('bank', e.target.value)}
-          className="h-8 rounded-lg border border-input bg-background px-3 text-sm"
+        <SelectField
           aria-label="銀行篩選"
-        >
-          <option value="">全部銀行</option>
-          {banks.map((b) => (
-            <option key={b.bank_code} value={b.bank_code}>
-              {b.bank_name}
-            </option>
-          ))}
-        </select>
+          triggerClassName="h-8"
+          value={values.bank}
+          onValueChange={(v) => onChange('bank', v)}
+          options={[
+            { value: '', label: '全部銀行' },
+            ...banks.map((b) => ({ value: b.bank_code, label: b.bank_name })),
+          ]}
+        />
       )}
 
       {show.includes('status') && (
-        <select
-          value={values.status}
-          onChange={(e) => onChange('status', e.target.value)}
-          className="h-8 rounded-lg border border-input bg-background px-3 text-sm"
+        <SelectField
           aria-label="付款狀態篩選"
-        >
-          <option value="">全部</option>
-          <option value="paid">已繳</option>
-          <option value="unpaid">未繳</option>
-        </select>
+          triggerClassName="h-8"
+          value={values.status}
+          onValueChange={(v) => onChange('status', v)}
+          options={[
+            { value: '', label: '全部' },
+            { value: 'paid', label: '已繳' },
+            { value: 'unpaid', label: '未繳' },
+          ]}
+        />
       )}
 
       {showCategory && (
-        <select
-          value={values.category}
-          onChange={(e) => onChange('category', e.target.value)}
-          className="h-8 rounded-lg border border-input bg-background px-3 text-sm"
+        <SelectField
           aria-label="分類篩選"
-        >
-          <option value="">全部分類</option>
-          {categories.map((c) => (
-            <option key={c} value={c}>
-              {c}
-            </option>
-          ))}
-        </select>
+          triggerClassName="h-8"
+          value={values.category}
+          onValueChange={(v) => onChange('category', v)}
+          options={[
+            { value: '', label: '全部分類' },
+            ...categories.map((c) => ({ value: c, label: c })),
+          ]}
+        />
       )}
 
       {show.includes('q') && (
@@ -252,6 +252,7 @@ export const FilterBar = memo(function FilterBar({ show, values, onChange, extra
             placeholder="搜尋商家..."
             value={values.q}
             onCommit={(v) => onChange('q', v)}
+            minCommitLength={2}
             className="h-8 w-44 rounded-lg border border-input bg-background pl-8 pr-3 text-sm"
             aria-label="商家搜尋"
           />

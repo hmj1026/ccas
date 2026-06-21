@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ccas.config import Settings, get_settings
 from ccas.ingestor.auth import load_credentials
+from ccas.ingestor.credentials import resolve_bank_credential
 from ccas.ingestor.filters import should_skip_attachment
 from ccas.ingestor.gmail_client import (
     GmailAttachmentMeta,
@@ -34,8 +35,8 @@ from ccas.ingestor.staging import (
     staged_path_for_storage,
     update_staged_record_failure,
 )
-from ccas.pipeline.options import PipelineOptions
-from ccas.pipeline.progress import NoopProgressReporter, ProgressReporter
+from ccas.shared.pipeline_types import PipelineOptions
+from ccas.shared.progress import NoopProgressReporter, ProgressReporter
 from ccas.storage.atomic import atomic_write_bytes
 from ccas.storage.models import BankConfig, BankSettings, StagedAttachmentStatus
 
@@ -253,7 +254,6 @@ async def _process_attachment(
         summary.errors.append(error_msg)
         logger.error(error_msg, exc_info=True)
 
-        # In force mode, preserve the existing good record
         if existing is None:
             await create_staged_record(
                 session,
@@ -266,6 +266,16 @@ async def _process_attachment(
                 status=StagedAttachmentStatus.FAILED,
                 error_reason=str(exc),
                 part_id=attachment.part_id,
+            )
+        else:
+            # Retry (is_failed_retry) or force re-run that failed again: update
+            # the existing record to the latest failure instead of leaving a
+            # stale error_reason behind (symmetric with _process_web_fetch).
+            await update_staged_record_failure(
+                session,
+                existing,
+                status=StagedAttachmentStatus.FAILED,
+                error_reason=str(exc),
             )
         return None
 
@@ -323,9 +333,16 @@ async def _process_web_fetch(
         else:
             logger.info("Force 模式：重新 web-fetch %s", message.message_id)
 
+    # DB-first（Fernet 解密）→ env legacy fallback；見 ccas.ingestor.credentials。
     credentials = {
-        "national_id": settings.get_bank_credential(bank_code, "NATIONAL_ID") or "",
-        "roc_birthday": settings.get_bank_credential(bank_code, "ROC_BIRTHDAY") or "",
+        "national_id": await resolve_bank_credential(
+            session, settings, bank_code, "NATIONAL_ID"
+        )
+        or "",
+        "roc_birthday": await resolve_bank_credential(
+            session, settings, bank_code, "ROC_BIRTHDAY"
+        )
+        or "",
     }
 
     staged_path = build_staged_path(

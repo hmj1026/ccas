@@ -179,7 +179,7 @@ class TestPushReminderTest:
         bill = await _seed_bill(db_session)
 
         with patch(
-            "ccas.api.routers.reminders_settings.send_message",
+            "ccas.bot.notifications.send_message",
             new=AsyncMock(return_value=None),
         ) as mock_send:
             resp = await client.post(
@@ -206,7 +206,7 @@ class TestPushReminderTest:
         await db_session.commit()
 
         with patch(
-            "ccas.api.routers.reminders_settings.send_message",
+            "ccas.bot.notifications.send_message",
             new=AsyncMock(return_value=None),
         ) as mock_send:
             resp = await client.post(

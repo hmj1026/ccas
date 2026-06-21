@@ -21,4 +21,6 @@ export const importSetupGmail = () => import('@/pages/setup/gmail')
 export const importSetupGmailCallback = () => import('@/pages/setup/gmail-callback')
 export const importSetupBanks = () => import('@/pages/setup/banks')
 export const importSetupSecrets = () => import('@/pages/setup/secrets')
+export const importSetupLoginCredentials = () =>
+  import('@/pages/setup/login-credentials')
 export const importSetupAdmin = () => import('@/pages/setup/admin')

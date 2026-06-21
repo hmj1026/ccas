@@ -15,6 +15,7 @@ import type {
   ExportFormat,
 } from '@/lib/types'
 import { Button } from '@/components/ui/button'
+import { SelectField } from '@/components/ui/select-field'
 import {
   Dialog,
   DialogContent,
@@ -108,17 +109,16 @@ export function ExportDialog({
           <DialogTitle>匯出交易</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-3">
-        <label className="flex flex-col text-sm">
-          <span className="text-muted-foreground">格式</span>
-          <select
-            className="rounded border border-input bg-background px-2 py-1"
-            value={format}
-            onChange={(e) => setFormat(e.target.value as ExportFormat)}
-          >
-            <option value="csv">CSV</option>
-            <option value="xlsx">Excel (xlsx)</option>
-          </select>
-        </label>
+        <SelectField
+          label="格式"
+          triggerClassName="h-auto rounded px-2 py-1"
+          value={format}
+          onValueChange={(v) => setFormat(v as ExportFormat)}
+          options={[
+            { value: 'csv', label: 'CSV' },
+            { value: 'xlsx', label: 'Excel (xlsx)' },
+          ]}
+        />
 
         <div className="grid grid-cols-2 gap-3">
           <label className="flex flex-col text-sm">
@@ -149,10 +149,10 @@ export function ExportDialog({
         </div>
 
         <div className="grid grid-cols-2 gap-3">
-          <label className="flex flex-col text-sm">
-            <span className="text-muted-foreground">銀行</span>
-            {banksQuery.isError ? (
-              // Fallback: keep export usable with manual bank code input.
+          {banksQuery.isError ? (
+            // Fallback: keep export usable with manual bank code input.
+            <label className="flex flex-col text-sm">
+              <span className="text-muted-foreground">銀行</span>
               <input
                 type="text"
                 className="rounded border border-input bg-background px-2 py-1"
@@ -161,25 +161,26 @@ export function ExportDialog({
                 placeholder="例：CTBC"
                 aria-label="銀行代碼（清單載入失敗，請手動輸入）"
               />
-            ) : (
-              <select
-                className="rounded border border-input bg-background px-2 py-1"
-                value={bank}
-                onChange={(e) => setBank(e.target.value)}
-              >
-                <option value="">全部銀行</option>
-                {banks.map((b) => (
-                  <option key={b.bank_code} value={b.bank_code}>
-                    {b.bank_name}（{b.bank_code}）
-                  </option>
-                ))}
-              </select>
-            )}
-          </label>
-          <label className="flex flex-col text-sm">
-            <span className="text-muted-foreground">類別</span>
-            {categoriesQuery.isError ? (
-              // Fallback: keep export usable with manual category input.
+            </label>
+          ) : (
+            <SelectField
+              label="銀行"
+              triggerClassName="h-auto rounded px-2 py-1"
+              value={bank}
+              onValueChange={setBank}
+              options={[
+                { value: '', label: '全部銀行' },
+                ...banks.map((b) => ({
+                  value: b.bank_code,
+                  label: `${b.bank_name}（${b.bank_code}）`,
+                })),
+              ]}
+            />
+          )}
+          {categoriesQuery.isError ? (
+            // Fallback: keep export usable with manual category input.
+            <label className="flex flex-col text-sm">
+              <span className="text-muted-foreground">類別</span>
               <input
                 type="text"
                 className="rounded border border-input bg-background px-2 py-1"
@@ -188,21 +189,19 @@ export function ExportDialog({
                 placeholder="例：餐飲"
                 aria-label="類別（清單載入失敗，請手動輸入）"
               />
-            ) : (
-              <select
-                className="rounded border border-input bg-background px-2 py-1"
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
-              >
-                <option value="">全部分類</option>
-                {categories.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </select>
-            )}
-          </label>
+            </label>
+          ) : (
+            <SelectField
+              label="類別"
+              triggerClassName="h-auto rounded px-2 py-1"
+              value={category}
+              onValueChange={setCategory}
+              options={[
+                { value: '', label: '全部分類' },
+                ...categories.map((c) => ({ value: c, label: c })),
+              ]}
+            />
+          )}
         </div>
 
         <label className="flex items-center gap-2 text-sm">

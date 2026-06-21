@@ -12,9 +12,20 @@
  * - dialog 建立規則
  */
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+/** Choose a SelectField (base-ui) option by trigger label + option text. */
+async function pickOption(
+  user: ReturnType<typeof userEvent.setup>,
+  triggerLabel: string,
+  optionName: string,
+) {
+  await user.click(screen.getByLabelText(triggerLabel))
+  const listbox = await screen.findByRole('listbox')
+  await user.click(await within(listbox).findByRole('option', { name: optionName }))
+}
 
 vi.mock('@/lib/api-client', () => ({
   apiGet: vi.fn(),
@@ -237,7 +248,7 @@ describe('SettingsRulesPage', () => {
     renderPage()
 
     await user.click(await screen.findByRole('button', { name: '新增規則' }))
-    await user.selectOptions(screen.getByLabelText('pattern_type'), 'regex')
+    await pickOption(user, '類型', '正規表達式 (regex)')
     await user.type(screen.getByLabelText('pattern'), '(a+)+')
 
     expect(
@@ -251,7 +262,7 @@ describe('SettingsRulesPage', () => {
     renderPage()
 
     await user.click(await screen.findByRole('button', { name: '新增規則' }))
-    await user.selectOptions(screen.getByLabelText('pattern_type'), 'regex')
+    await pickOption(user, '類型', '正規表達式 (regex)')
     // (a|b|ab)+ has no inner quantifier but still backtracks catastrophically;
     // the broadened detectComplexRegex must flag it, matching backend rejection.
     await user.type(screen.getByLabelText('pattern'), '(a|b|ab)+')
@@ -315,7 +326,7 @@ describe('SettingsRulesPage', () => {
 
     await user.click(await screen.findByRole('button', { name: '新增規則' }))
     await user.type(screen.getByLabelText('pattern'), '蝦皮')
-    await user.selectOptions(screen.getByLabelText('category'), '12')
+    await pickOption(user, '類別', '購物（蝦皮）')
     await user.clear(screen.getByLabelText('priority'))
     await user.type(screen.getByLabelText('priority'), '15')
     await user.click(screen.getByRole('button', { name: /建立規則/ }))

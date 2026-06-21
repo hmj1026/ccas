@@ -167,6 +167,73 @@ class TestRunPipelineSyncFailurePath:
         assert run.error_message is not None
         assert "RuntimeError" in run.error_message
 
+    def test_marks_run_failed_when_classify_batch_commit_fails(
+        self,
+        worker_db,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        """classify 整批 commit 失敗（orchestrator 吞成 failed 階段）時，
+        PipelineRun 必須是 FAILED，而非因 run_pipeline 正常回傳而誤標 SUCCEEDED。
+        """
+        asyncio.run(_insert_run(worker_db))
+
+        async def fake_run_pipeline(
+            session, options, progress_reporter=None, *, notify_job
+        ):
+            # 模擬 orchestrator._run_stage 捕捉 ClassifyError 後的階段摘要：
+            # classify 整批 rollback，counts 只剩 failed。
+            return PipelineSummary(
+                stages=(
+                    StageSummary(stage="ingest", counts={"staged": 2, "failed": 0}),
+                    StageSummary(
+                        stage="classify",
+                        counts={"failed": 1},
+                        errors=["ClassifyError: 分類結果寫入失敗"],
+                    ),
+                ),
+                total_seconds=0.1,
+            )
+
+        monkeypatch.setattr(
+            "ccas.pipeline.orchestrator.run_pipeline", fake_run_pipeline
+        )
+
+        result = run_pipeline_sync({}, run_id="run-1")
+
+        run = asyncio.run(_get_run(worker_db))
+        assert run.status == PipelineRunStatus.FAILED
+        assert run.error_message is not None
+        assert "classify" in run.error_message
+        # result 仍須回傳給 RQ job result（不 re-raise）
+        assert result["total_seconds"] == 0.1
+
+    def test_marks_run_succeeded_when_classify_has_zero_to_classify(
+        self,
+        worker_db,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        """classify 沒有可分類交易（成功路徑 counts={'classified': 0}）時，
+        不得誤判為失敗——必須維持 SUCCEEDED。"""
+        asyncio.run(_insert_run(worker_db))
+
+        async def fake_run_pipeline(
+            session, options, progress_reporter=None, *, notify_job
+        ):
+            return PipelineSummary(
+                stages=(StageSummary(stage="classify", counts={"classified": 0}),),
+                total_seconds=0.1,
+            )
+
+        monkeypatch.setattr(
+            "ccas.pipeline.orchestrator.run_pipeline", fake_run_pipeline
+        )
+
+        run_pipeline_sync({}, run_id="run-1")
+
+        run = asyncio.run(_get_run(worker_db))
+        assert run.status == PipelineRunStatus.SUCCEEDED
+        assert run.error_message is None
+
 
 class TestMarkManualReviewScope:
     def test_bank_code_scopes_update(self, worker_db):

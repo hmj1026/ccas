@@ -16,10 +16,12 @@ from ccas.parser.base import ParseError
 from .conftest import (
     EXPECTED_SINOPAC_BILLING_MONTH,
     EXPECTED_SINOPAC_DUE_DATE,
+    EXPECTED_SINOPAC_EXTRA_COLUMN_TOTAL_AMOUNT,
     EXPECTED_SINOPAC_REAL_BILLING_MONTH,
     EXPECTED_SINOPAC_REAL_DUE_DATE,
     EXPECTED_SINOPAC_REAL_TOTAL_AMOUNT,
     EXPECTED_SINOPAC_TOTAL_AMOUNT,
+    SINOPAC_EXTRA_COLUMN_FIRST_PAGE_TEXT,
     SINOPAC_FIRST_PAGE_TEXT,
     SINOPAC_NON_SINOPAC_PAGE_TEXT,
     SINOPAC_REAL_FIRST_PAGE_TEXT,
@@ -283,6 +285,25 @@ class TestRealPdfFormat:
         txn_with_card = next(t for t in txns if t.amount == 500)
         assert txn_with_card.card_last4 == "4300"
         assert txn_with_card.merchant.startswith("悠遊卡")
+
+    def test_extra_column_summary_falls_back_to_keyword(self, caplog):
+        """摘要列欄位數異動（8 欄）時拒用位置 group(6)，退化到 keyword 路徑。
+
+        韌性修補：未來帳單版本插入欄位會使 group(6) 抓到錯誤金額；偵測到欄位
+        數不符即 fallback 到 `本期應繳總額：NT$ ...` keyword，避免回報錯誤金額。
+        """
+        import logging
+
+        parser = _make_parser()
+        page = make_mock_page(SINOPAC_EXTRA_COLUMN_FIRST_PAGE_TEXT)
+
+        with caplog.at_level(logging.WARNING):
+            _, total_amount, _ = parser._extract_summary([page])
+
+        assert total_amount == EXPECTED_SINOPAC_EXTRA_COLUMN_TOTAL_AMOUNT
+        # 必須不是位置列 group(6)（12,579），證明沒被錯誤欄位污染。
+        assert total_amount != 12579
+        assert caplog.text  # 有 warning 記錄
 
     def test_cross_year_mmdd_real_text(self):
         """Jan statement with Dec transactions → previous calendar year.

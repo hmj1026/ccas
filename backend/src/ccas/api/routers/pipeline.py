@@ -99,9 +99,10 @@ async def trigger_pipeline(
             run.status = PipelineRunStatus.FAILED
             run.error_message = error_message
             await session.commit()
-        # Return the project's ApiResponse error envelope (success=false). A
-        # raised HTTPException would yield FastAPI's default {"detail": ...}
-        # without a `success` field, so build the JSONResponse explicitly.
+        # Return the project's ApiResponse error envelope (success=false)
+        # directly. A raised HTTPException would now also be wrapped into this
+        # envelope by the app-level handler, but building the JSONResponse here
+        # keeps the orphan-row FAILED bookkeeping above in the same code path.
         return JSONResponse(
             status_code=503,
             content={

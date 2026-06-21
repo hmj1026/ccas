@@ -10,6 +10,7 @@ import { useState } from 'react'
 import { apiDelete, apiGet, apiPost, apiPut } from '@/lib/api-client'
 import { BudgetProgressCard } from '@/components/budget-progress-card'
 import { Button } from '@/components/ui/button'
+import { SelectField } from '@/components/ui/select-field'
 import {
   Dialog,
   DialogClose,
@@ -119,20 +120,13 @@ function CreateBudgetDialog({
           取消
         </Button>
       </div>
-      <label className="flex flex-col text-sm">
-        <span className="text-muted-foreground">範圍</span>
-        <select
-          className="rounded border border-input bg-background px-2 py-1"
-          value={scope}
-          onChange={(e) => setScope(e.target.value as BudgetScope)}
-        >
-          {SCOPE_OPTIONS.map((opt) => (
-            <option key={opt.value} value={opt.value}>
-              {opt.label}
-            </option>
-          ))}
-        </select>
-      </label>
+      <SelectField
+        label="範圍"
+        triggerClassName="h-auto rounded px-2 py-1"
+        value={scope}
+        onValueChange={(v) => setScope(v as BudgetScope)}
+        options={SCOPE_OPTIONS}
+      />
       {scope !== 'monthly_total' && (
         <label className="flex flex-col text-sm">
           <span className="text-muted-foreground">

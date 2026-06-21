@@ -85,6 +85,7 @@ export function StagedAttachmentsWarning() {
         className="flex w-full items-center justify-between gap-3"
         onClick={() => setExpanded((v) => !v)}
         aria-expanded={expanded}
+        aria-controls="staged-attachments-panel"
       >
         <div className="flex items-center gap-2 text-sm font-medium text-orange-900 dark:text-orange-200">
           <AlertTriangle className="size-4" />
@@ -102,9 +103,15 @@ export function StagedAttachmentsWarning() {
         )}
       </button>
 
-      {expanded && (
-        <div className="mt-3 space-y-2">
-          {data.data.map((item) => {
+      {/* Panel is always present so the button's aria-controls always resolves
+          to a real node; the hidden attribute is the sole visibility mechanism
+          (no inner expanded guard, so [hidden] alone governs the panel). */}
+      <div
+        id="staged-attachments-panel"
+        hidden={!expanded}
+        className="mt-3 space-y-2"
+      >
+        {data.data.map((item) => {
             const badge = isWarnStatus(item.status)
               ? STATUS_BADGE[item.status]
               : undefined
@@ -147,8 +154,7 @@ export function StagedAttachmentsWarning() {
               </div>
             )
           })}
-        </div>
-      )}
+      </div>
     </div>
   )
 }

@@ -19,7 +19,7 @@ from ccas.api.schemas import (
 from ccas.storage.database import get_db_session
 from ccas.storage.models import Bill, Transaction
 
-router = APIRouter(prefix="/api", tags=["transactions"])
+router = APIRouter(prefix="/api/transactions", tags=["transactions"])
 
 
 def _build_filter_stmt(
@@ -64,7 +64,7 @@ def _to_item(row) -> TransactionItem:
     )
 
 
-@router.get("/transactions", response_model=PaginatedResponse[TransactionItem])
+@router.get("", response_model=PaginatedResponse[TransactionItem])
 async def list_transactions(
     month: str | None = Query(
         default=None,
@@ -75,7 +75,11 @@ async def list_transactions(
     pagination: PaginationParams = Depends(),
     bank_code: str | None = Query(default=None),
     category: str | None = Query(default=None),
-    q: str | None = Query(default=None, description="商家名稱搜尋"),
+    q: str | None = Query(
+        default=None,
+        min_length=2,
+        description="商家名稱搜尋（至少 2 字元，避免昂貴的全表掃描）",
+    ),
     sort: SortLiteral = Query(default="trans_date_desc", description="排序"),
     session: AsyncSession = Depends(get_db_session),
 ):

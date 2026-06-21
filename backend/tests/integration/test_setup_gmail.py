@@ -128,8 +128,8 @@ class TestUploadCredentials:
             headers=auth_headers(),
         )
         assert resp.status_code == 413
-        # HTTPException keeps FastAPI's default {"detail": ...} shape.
-        assert "1 MB" in resp.json()["detail"]
+        # HTTPException is wrapped into the unified {success, message, data} envelope.
+        assert "1 MB" in resp.json()["message"]
 
     async def test_upload_rejects_missing_client_secret(
         self,
@@ -231,8 +231,8 @@ class TestCallback:
             follow_redirects=False,
         )
         assert resp.status_code == 422
-        # Expired-state detail guides the user to retry the authorize flow.
-        assert "請重新點擊授權按鈕" in resp.json()["detail"]
+        # Expired-state message guides the user to retry the authorize flow.
+        assert "請重新點擊授權按鈕" in resp.json()["message"]
 
     @respx.mock
     async def test_callback_happy_path_writes_token_and_redirects(
@@ -257,6 +257,10 @@ class TestCallback:
                     "token_type": "Bearer",
                 },
             )
+        )
+        # Stub Gmail getProfile (best-effort mailbox-address lookup).
+        respx.get("https://gmail.googleapis.com/gmail/v1/users/me/profile").mock(
+            return_value=Response(200, json={"emailAddress": "alice@example.com"})
         )
 
         # Pre-insert state row (simulates prior /authorize call).
@@ -285,8 +289,56 @@ class TestCallback:
         assert "1//fake-refresh" not in on_disk
         token_data = _read_oauth_file(token_path)
         assert token_data["refresh_token"] == "1//fake-refresh"
+        # getProfile email persisted alongside the credential.
+        assert token_data["email"] == "alice@example.com"
         rows = (await db_session.execute(select(GmailOAuthState))).scalars().all()
         assert all(r.state != "happy-state-1" for r in rows)
+
+    @respx.mock
+    async def test_callback_succeeds_when_getprofile_fails(
+        self,
+        client: AsyncClient,
+        db_session: AsyncSession,
+        gmail_paths: tuple[Path, Path],
+    ) -> None:
+        """getProfile failure is non-blocking: token still written, email omitted."""
+        creds_path, token_path = gmail_paths
+        creds_path.write_text(json.dumps(_valid_credentials_payload()))
+        respx.post("https://oauth2.googleapis.com/token").mock(
+            return_value=Response(
+                200,
+                json={
+                    "access_token": "ya29.fake-access",
+                    "refresh_token": "1//fake-refresh",
+                    "scope": "https://www.googleapis.com/auth/gmail.readonly",
+                    "token_type": "Bearer",
+                },
+            )
+        )
+        respx.get("https://gmail.googleapis.com/gmail/v1/users/me/profile").mock(
+            return_value=Response(403, json={"error": "insufficient"})
+        )
+
+        live_state = GmailOAuthState(
+            state="noprofile-state",
+            code_verifier="verifier-noprofile",
+            created_at=datetime.now(UTC),
+        )
+        db_session.add(live_state)
+        await db_session.commit()
+
+        resp = await client.get(
+            "/api/setup/gmail/callback",
+            params={"code": "auth-code", "state": "noprofile-state"},
+            headers=auth_headers(),
+            follow_redirects=False,
+        )
+
+        assert resp.status_code in (302, 303, 307), resp.text
+        assert "status=connected" in resp.headers["location"]
+        assert token_path.exists()
+        token_data = _read_oauth_file(token_path)
+        assert "email" not in token_data
 
     async def test_callback_with_error_param_redirects_to_error_page(
         self,
@@ -398,9 +450,36 @@ class TestStatus:
         assert resp.status_code == 200
         data = resp.json()["data"]
         assert data["connected"] is True
+        # Legacy token.json (no ``email`` key) still reports connected, email None.
+        assert data["email"] is None
         assert (
             "https://www.googleapis.com/auth/gmail.readonly" in data["granted_scopes"]
         )
+
+    async def test_status_surfaces_persisted_email(
+        self,
+        client: AsyncClient,
+        gmail_paths: tuple[Path, Path],
+    ) -> None:
+        """token.json written with an ``email`` key (post getProfile) surfaces it."""
+        _, token_path = gmail_paths
+        token_path.write_text(
+            json.dumps(
+                {
+                    "token": "ya29.fake",
+                    "refresh_token": "1//fake",
+                    "scopes": ["https://www.googleapis.com/auth/gmail.readonly"],
+                    "email": "alice@example.com",
+                }
+            )
+        )
+
+        resp = await client.get(
+            "/api/setup/gmail/status",
+            headers=auth_headers(),
+        )
+        assert resp.status_code == 200
+        assert resp.json()["data"]["email"] == "alice@example.com"
 
     async def test_status_reads_legacy_plaintext_token(
         self,

@@ -183,6 +183,7 @@ class TestTaishinRegistryIntegration:
         import importlib
 
         import ccas.parser
+        import ccas.parser.banks.taishin_v1
 
         importlib.reload(ccas.parser.banks.taishin_v1)
         importlib.reload(ccas.parser.banks)

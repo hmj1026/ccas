@@ -16,6 +16,22 @@ import { apiGet, apiPost } from '@/lib/api-client'
 const mockApiGet = vi.mocked(apiGet)
 const mockApiPost = vi.mocked(apiPost)
 
+/**
+ * Pick an option from a SelectField (base-ui) by its trigger label and the
+ * visible option text. Replaces native `selectOptions`, which only works on
+ * <select>.
+ */
+async function pickOption(
+  user: ReturnType<typeof userEvent.setup>,
+  triggerLabel: string,
+  optionName: string,
+) {
+  await user.click(screen.getByLabelText(triggerLabel))
+  const listbox = await screen.findByRole('listbox')
+  // findByRole waits for async option data (e.g. banks query) to populate.
+  await user.click(await within(listbox).findByRole('option', { name: optionName }))
+}
+
 const BANKS = {
   success: true,
   data: [
@@ -97,15 +113,13 @@ describe('OperationsPage', () => {
 
     renderWithProviders(<OperationsPage />)
 
-    await waitFor(() => {
-      expect(screen.getByText('中國信託')).toBeInTheDocument()
-    })
+    await screen.findByLabelText('銀行')
 
-    await user.selectOptions(screen.getByLabelText('銀行'), 'CTBC')
-    await user.selectOptions(screen.getByLabelText('年度'), '2026')
-    await user.selectOptions(screen.getByLabelText('月份'), '3')
-    await user.selectOptions(screen.getByLabelText('起始階段'), 'parse')
-    await user.selectOptions(screen.getByLabelText('結束階段'), 'classify')
+    await pickOption(user, '銀行', '中國信託')
+    await pickOption(user, '年度', '2026')
+    await pickOption(user, '月份', '3')
+    await pickOption(user, '起始階段', '解析')
+    await pickOption(user, '結束階段', '分類')
     await user.click(screen.getByLabelText('強制重跑'))
     await user.click(screen.getByRole('button', { name: '開始執行' }))
 
@@ -122,26 +136,28 @@ describe('OperationsPage', () => {
     expect(Element.prototype.scrollIntoView).toHaveBeenCalled()
   })
 
-  it('renders stage options with Chinese labels but English values', async () => {
+  it('renders stage options with Chinese labels', async () => {
+    // SelectField (base-ui) items expose no value attribute; the Chinese
+    // label → English value mapping is verified functionally by the trigger
+    // test above (選「解析」→ from_stage: 'parse').
+    const user = userEvent.setup()
     setupMocks()
 
     renderWithProviders(<OperationsPage />)
 
-    await waitFor(() => {
-      expect(screen.getByText('中國信託')).toBeInTheDocument()
-    })
+    await screen.findByLabelText('銀行')
 
-    const fromStage = screen.getByLabelText('起始階段')
-    expect(within(fromStage).getByRole('option', { name: '擷取' })).toHaveValue(
-      'ingest',
-    )
-    expect(within(fromStage).getByRole('option', { name: '解析' })).toHaveValue(
-      'parse',
-    )
-    const toStage = screen.getByLabelText('結束階段')
-    expect(within(toStage).getByRole('option', { name: '通知' })).toHaveValue(
-      'notify',
-    )
+    await user.click(screen.getByLabelText('起始階段'))
+    const listbox = await screen.findByRole('listbox')
+    expect(
+      within(listbox).getByRole('option', { name: '擷取' }),
+    ).toBeInTheDocument()
+    expect(
+      within(listbox).getByRole('option', { name: '解析' }),
+    ).toBeInTheDocument()
+    expect(
+      within(listbox).getByRole('option', { name: '通知' }),
+    ).toBeInTheDocument()
   })
 
   it('blocks submit when from_stage is after to_stage', async () => {
@@ -150,11 +166,9 @@ describe('OperationsPage', () => {
 
     renderWithProviders(<OperationsPage />)
 
-    await waitFor(() => {
-      expect(screen.getByText('中國信託')).toBeInTheDocument()
-    })
-    await user.selectOptions(screen.getByLabelText('起始階段'), 'classify')
-    await user.selectOptions(screen.getByLabelText('結束階段'), 'parse')
+    await screen.findByLabelText('銀行')
+    await pickOption(user, '起始階段', '分類')
+    await pickOption(user, '結束階段', '解析')
     await user.click(screen.getByRole('button', { name: '開始執行' }))
 
     expect(screen.getByRole('alert')).toHaveTextContent(

@@ -1,7 +1,7 @@
 /**
  * ExportDialog 測試 -- 驗證銀行下拉選單、查詢失敗 fallback 與日期區間驗證。
  */
-import { fireEvent, screen, waitFor } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ExportDialog } from '../export-dialog'
@@ -49,11 +49,12 @@ describe('ExportDialog', () => {
   it('renders bank select fed by settings banks query with 全部銀行 first', async () => {
     renderWithProviders(<ExportDialog isOpen onClose={() => {}} />)
 
-    await screen.findByRole('option', { name: '中國信託（CTBC）' })
-    const select = screen.getByRole('combobox', { name: '銀行' })
-    const options = Array.from(select.querySelectorAll('option')).map(
-      (o) => o.textContent,
-    )
+    // SelectField (base-ui): options live in a portal listbox, rendered on open.
+    await userEvent.click(screen.getByRole('combobox', { name: '銀行' }))
+    const listbox = await screen.findByRole('listbox')
+    const options = within(listbox)
+      .getAllByRole('option')
+      .map((o) => o.textContent)
     expect(options[0]).toBe('全部銀行')
     expect(options).toContain('中國信託（CTBC）')
     expect(options).toContain('玉山（ESUN）')
@@ -70,7 +71,7 @@ describe('ExportDialog', () => {
 
   it('rejects end date earlier than start date without calling the API', async () => {
     renderWithProviders(<ExportDialog isOpen onClose={() => {}} />)
-    await screen.findByRole('option', { name: '中國信託（CTBC）' })
+    await screen.findByLabelText('起始日期')
 
     fireEvent.change(screen.getByLabelText('起始日期'), {
       target: { value: '2026-05-10' },
@@ -89,7 +90,7 @@ describe('ExportDialog', () => {
 
   it('sets end date min to the chosen start date', async () => {
     renderWithProviders(<ExportDialog isOpen onClose={() => {}} />)
-    await screen.findByRole('option', { name: '中國信託（CTBC）' })
+    await screen.findByLabelText('起始日期')
 
     const endInput = screen.getByLabelText('結束日期')
     expect(endInput).not.toHaveAttribute('min')
@@ -118,10 +119,12 @@ describe('ExportDialog', () => {
     }
     renderWithProviders(<ExportDialog isOpen onClose={onClose} />)
 
-    await screen.findByRole('option', { name: '中國信託（CTBC）' })
-    fireEvent.change(screen.getByRole('combobox', { name: '銀行' }), {
-      target: { value: 'CTBC' },
-    })
+    await screen.findByLabelText('起始日期')
+    // SelectField (base-ui): open listbox + click option to pick a bank.
+    await userEvent.click(screen.getByRole('combobox', { name: '銀行' }))
+    await userEvent.click(
+      await screen.findByRole('option', { name: '中國信託（CTBC）' }),
+    )
     await userEvent.click(screen.getByRole('button', { name: /下載/ }))
 
     await waitFor(() => {

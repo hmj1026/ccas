@@ -3,7 +3,7 @@
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ccas.storage.models import BankConfig, Category
+from ccas.storage.models import BankConfig, Category, UserClassificationRule
 from tests.integration.conftest import auth_headers, make_ctbc_bank_config
 
 # -- Banks --
@@ -165,3 +165,27 @@ async def test_delete_category_not_found(client: AsyncClient, db_session: AsyncS
         "/api/settings/categories/999", headers=auth_headers()
     )
     assert response.status_code == 404
+
+
+async def test_delete_category_with_rules_returns_409(
+    client: AsyncClient, db_session: AsyncSession
+):
+    """刪除仍被分類規則引用的分類回傳 409（FK 完整性）。"""
+    cat = Category(keyword="星巴克", category="餐飲")
+    db_session.add(cat)
+    await db_session.commit()
+    cat_id = cat.id
+
+    rule = UserClassificationRule(pattern="STARBUCKS", category_id=cat_id)
+    db_session.add(rule)
+    await db_session.commit()
+
+    response = await client.delete(
+        f"/api/settings/categories/{cat_id}", headers=auth_headers()
+    )
+    assert response.status_code == 409
+    assert response.json()["success"] is False
+
+    # 分類未被刪除，引用仍完整
+    response = await client.get("/api/settings/categories", headers=auth_headers())
+    assert len(response.json()["data"]) == 1

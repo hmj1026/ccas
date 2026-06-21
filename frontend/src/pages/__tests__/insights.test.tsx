@@ -110,8 +110,11 @@ describe('InsightsPage', () => {
     await waitFor(() => {
       expect(screen.getByLabelText('年度對比指標')).toBeInTheDocument()
     })
-    const select = screen.getByLabelText('年度對比指標')
-    await userEvent.selectOptions(select, 'count')
+    // SelectField (base-ui): open the listbox and pick the option.
+    await userEvent.click(screen.getByLabelText('年度對比指標'))
+    await userEvent.click(
+      await screen.findByRole('option', { name: '筆數' }),
+    )
     await waitFor(() => {
       expect(mockedGet).toHaveBeenCalledWith(
         '/api/analytics/compare/years',
@@ -127,6 +130,16 @@ describe('InsightsPage', () => {
     // Categories data loads asynchronously; wait for the row to appear.
     expect(await screen.findByText('餐飲')).toBeInTheDocument()
     expect(screen.getByText('▲50.0%')).toBeInTheDocument()
+  })
+
+  it('prompts to pick a month in the compare section when none selected', async () => {
+    defaultMockResponses()
+    renderPage()
+    // Heading always renders now; previously the whole section was hidden.
+    expect(screen.getByText('類別 vs 上月')).toBeInTheDocument()
+    expect(
+      await screen.findByText('請先於上方選擇月份以比較類別'),
+    ).toBeInTheDocument()
   })
 
   it('opens export dialog and triggers blob download', async () => {

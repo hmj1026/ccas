@@ -209,6 +209,23 @@ EXPECTED_SINOPAC_REAL_BILLING_MONTH = "2026-03"
 EXPECTED_SINOPAC_REAL_TOTAL_AMOUNT = 12579
 EXPECTED_SINOPAC_REAL_DUE_DATE = date(2026, 3, 27)
 
+# Future bill version that inserts an extra numeric column into the summary row,
+# making it 8 columns instead of 7. The positional group(6) would then capture
+# the wrong figure, so the parser must reject the row and fall back to the
+# keyword path (`本期應繳總額：NT$ ...`). The keyword amount (54,321) is distinct
+# from every number in the 8-column row so a mis-read is detectable.
+SINOPAC_EXTRA_COLUMN_FIRST_PAGE_TEXT = (
+    "2026年3月 信用卡電子帳單\n"
+    "親愛的卡友 您好\n"
+    "您的結帳日2026/03/12 您的繳款截止日2026/03/27\n"
+    "幣別 上期應繳總金額 - 已繳款金額 + 本期新增款項 + 循環利息 + 違約金 + 其他 "
+    "= 本期應繳總金額 本期最低應繳金額\n"
+    "臺幣 7,147 7,147 12,579 0 0 99 12,579 1,311\n"
+    "本期應繳總額：NT$ 54,321\n"
+    "永豐銀行 信用卡\n"
+)
+EXPECTED_SINOPAC_EXTRA_COLUMN_TOTAL_AMOUNT = 54321
+
 SINOPAC_ZERO_BALANCE_FIRST_PAGE_TEXT = (
     "2021年5月 信用卡電子帳單\n"
     "您的結帳日2021/05/12 您的繳款截止日臺幣金額無需繳款\n"
@@ -576,6 +593,20 @@ UBOT_REAL_SUMMARY_TEXT = (
     "聯邦銀行 信用卡帳單\n"
     "親愛的測試客戶卡友您好!\n"
     "以下為您01月份之信用卡消費帳單：\n"
+    "6,850 6,850 4,000,000 優惠注意事項\n"
+    "115/02/11 已申請自動轉帳\n"
+    "115/01/27 2.1% 起\n"
+    "5,839 8,000\n"
+    "5,839 3.19% 起\n"
+    "6,850 115/07/28 止\n"
+)
+
+# Marker-degraded real summary: missing the `以下為您XX月份` marker but still
+# carries the closing-date row (`115/01/27 2.1% 起`). The parser must fall back
+# to the closing-date month instead of raising an opaque ParseError.
+UBOT_REAL_SUMMARY_MISSING_MONTH_MARKER_TEXT = (
+    "聯邦銀行 信用卡帳單\n"
+    "親愛的測試客戶卡友您好!\n"
     "6,850 6,850 4,000,000 優惠注意事項\n"
     "115/02/11 已申請自動轉帳\n"
     "115/01/27 2.1% 起\n"

@@ -13,6 +13,7 @@ fi
 
 echo "=== SSOT Sync Checks ==="
 "$REPO_ROOT/scripts/check-env-sync.sh"
+"$REPO_ROOT/scripts/check-csp-sync.sh"
 "$REPO_ROOT/scripts/sync-docker-image-assets.sh" --check
 
 echo "=== Repo Hygiene Check ==="

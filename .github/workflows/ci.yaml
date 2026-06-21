@@ -106,8 +106,14 @@ jobs:
       - name: docker/example.env ⊆ .env.example sync
         run: ./scripts/check-env-sync.sh
 
+      - name: CSP nginx.conf == api/app.py sync
+        run: ./scripts/check-csp-sync.sh
+
       - name: backend/docker-image SSOT sync
         run: ./scripts/sync-docker-image-assets.sh --check
+
+      - name: check-env.sh unit tests
+        run: ./tests/scripts/test_check_env.sh
 
   frontend-lint-test:
     name: Frontend Lint & Test

@@ -40,6 +40,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import { ErrorState, LoadingState } from '@/components/shared/states'
+import { SelectField } from '@/components/ui/select-field'
 
 const STAGES: readonly PipelineStage[] = [
   'ingest',
@@ -239,55 +240,46 @@ function TriggerForm({
       }}
     >
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
-        <label className="space-y-1 text-sm">
-          <span className="font-medium">銀行</span>
-          <select
-            value={bankCode}
-            onChange={(event) => setBankCode(event.target.value)}
-            className="h-9 w-full rounded-lg border border-input bg-background px-3 text-sm"
-          >
-            <option value="">全部銀行</option>
-            {banks.map((bank) => (
-              <option key={bank.bank_code} value={bank.bank_code}>
-                {bank.bank_name}
-              </option>
-            ))}
-          </select>
-        </label>
+        <SelectField
+          label="銀行"
+          triggerClassName="w-full"
+          value={bankCode}
+          onValueChange={setBankCode}
+          options={[
+            { value: '', label: '全部銀行' },
+            ...banks.map((bank) => ({
+              value: bank.bank_code,
+              label: bank.bank_name,
+            })),
+          ]}
+        />
 
         <div className="grid grid-cols-2 gap-2">
-          <label className="space-y-1 text-sm">
-            <span className="font-medium">年度</span>
-            <select
-              value={year}
-              onChange={(event) => setYear(event.target.value)}
-              className="h-9 w-full rounded-lg border border-input bg-background px-3 text-sm"
-            >
-              <option value="">全部</option>
-              {years.map((item) => (
-                <option key={item} value={item}>
-                  {item}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="space-y-1 text-sm">
-            <span className="font-medium">月份</span>
-            <select
-              value={month}
-              onChange={(event) => setMonth(event.target.value)}
-              className="h-9 w-full rounded-lg border border-input bg-background px-3 text-sm"
-            >
-              <option value="">全部</option>
-              {Array.from({ length: 12 }, (_, index) => index + 1).map(
-                (item) => (
-                  <option key={item} value={item}>
-                    {item}
-                  </option>
-                ),
-              )}
-            </select>
-          </label>
+          <SelectField
+            label="年度"
+            triggerClassName="w-full"
+            value={year}
+            onValueChange={setYear}
+            options={[
+              { value: '', label: '全部' },
+              ...years.map((item) => ({
+                value: String(item),
+                label: String(item),
+              })),
+            ]}
+          />
+          <SelectField
+            label="月份"
+            triggerClassName="w-full"
+            value={month}
+            onValueChange={setMonth}
+            options={[
+              { value: '', label: '全部' },
+              ...Array.from({ length: 12 }, (_, index) => index + 1).map(
+                (item) => ({ value: String(item), label: String(item) }),
+              ),
+            ]}
+          />
         </div>
 
         <div className="grid grid-cols-2 gap-2">
@@ -579,20 +571,16 @@ function StageSelect({
   readonly onChange: (value: PipelineStage) => void
 }) {
   return (
-    <label className="space-y-1 text-sm">
-      <span className="font-medium">{label}</span>
-      <select
-        value={value}
-        onChange={(event) => onChange(event.target.value as PipelineStage)}
-        className="h-9 w-full rounded-lg border border-input bg-background px-3 text-sm"
-      >
-        {STAGES.map((stage) => (
-          <option key={stage} value={stage}>
-            {STAGE_LABELS[stage]}
-          </option>
-        ))}
-      </select>
-    </label>
+    <SelectField
+      label={label}
+      triggerClassName="w-full"
+      value={value}
+      onValueChange={(v) => onChange(v as PipelineStage)}
+      options={STAGES.map((stage) => ({
+        value: stage,
+        label: STAGE_LABELS[stage],
+      }))}
+    />
   )
 }
 

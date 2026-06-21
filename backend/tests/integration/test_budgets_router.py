@@ -229,6 +229,31 @@ class TestUpdateDeleteBudget:
         resp = await client.delete("/api/budgets/9999", headers=auth_headers())
         assert resp.status_code == 404
 
+    async def test_delete_budget_with_alerts_cascades(
+        self, client: AsyncClient, db_session: AsyncSession
+    ) -> None:
+        """刪除有歷史 BudgetAlert 的 budget：在 foreign_keys=ON 下不得 500，
+        應連同清除其 alert 並回 200（alert 為內部通知記錄，無保留價值）。"""
+        from sqlalchemy import select
+
+        b = await _seed_budget(db_session)
+        db_session.add(
+            BudgetAlert(
+                budget_id=b.id,
+                period_year_month="2026-03",
+                threshold_breached_percent=80,
+                current_amount_ntd=9000,
+                notified=True,
+            )
+        )
+        await db_session.commit()
+
+        resp = await client.delete(f"/api/budgets/{b.id}", headers=auth_headers())
+        assert resp.status_code == 200
+
+        remaining = (await db_session.execute(select(BudgetAlert))).scalars().all()
+        assert remaining == []
+
 
 class TestListWithCurrentPeriod:
     """R-budget-N+1：``?include_current_period=true`` 內聯當月累計，消除前端 1+N。"""

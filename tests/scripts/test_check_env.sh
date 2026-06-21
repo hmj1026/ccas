@@ -138,4 +138,45 @@ pass "API_TOKEN= 顯式空字串 → rc=1"
 run_check "$BASE_ENV" || fail "API_TOKEN 未提及不應 rc!=0; out=$LAST_OUT"
 pass "API_TOKEN 未提及 → rc=0 (entrypoint 自動產生)"
 
+# 14. PUBLIC_BASE_URL=https + REDIS_PASSWORD 未設定 → rc=1（production 阻斷）
+body="${BASE_ENV}PUBLIC_BASE_URL=https://ccas.example.com
+"
+if run_check "$body"; then
+  fail "https + 空 REDIS_PASSWORD 應 rc=1; out=$LAST_OUT"
+fi
+printf '%s' "$LAST_OUT" | grep -q "HTTPS production 部署必須設定 REDIS_PASSWORD" \
+  || fail "https + 空 REDIS_PASSWORD 訊息缺對應字樣; out=$LAST_OUT"
+pass "PUBLIC_BASE_URL=https + 空 REDIS_PASSWORD → rc=1（阻斷）"
+
+# 15. PUBLIC_BASE_URL=https + REDIS_PASSWORD 已設定 → rc=0
+body="${BASE_ENV}PUBLIC_BASE_URL=https://ccas.example.com
+REDIS_PASSWORD=strong-secret
+"
+run_check "$body" || fail "https + 有值 REDIS_PASSWORD 應 rc=0; out=$LAST_OUT"
+pass "PUBLIC_BASE_URL=https + 有值 REDIS_PASSWORD → rc=0"
+
+# 16. PUBLIC_BASE_URL=http（dev）+ REDIS_PASSWORD 未設定 → rc=0（僅 WARN 不阻斷）
+body="${BASE_ENV}PUBLIC_BASE_URL=http://localhost:8080
+"
+run_check "$body" || fail "http + 空 REDIS_PASSWORD 應 rc=0（dev 僅 WARN）; out=$LAST_OUT"
+printf '%s' "$LAST_OUT" | grep -q "REDIS_PASSWORD 未設定（dev 可接受）" \
+  || fail "http + 空 REDIS_PASSWORD 應保留 WARN 字樣; out=$LAST_OUT"
+pass "PUBLIC_BASE_URL=http + 空 REDIS_PASSWORD → rc=0（WARN 不阻斷）"
+
+# 17. PUBLIC_BASE_URL 未設定 + REDIS_PASSWORD 未設定 → rc=0（dev 預設 WARN）
+run_check "$BASE_ENV" || fail "未設 PUBLIC_BASE_URL + 空 REDIS_PASSWORD 應 rc=0; out=$LAST_OUT"
+printf '%s' "$LAST_OUT" | grep -q "REDIS_PASSWORD 未設定（dev 可接受）" \
+  || fail "未設 PUBLIC_BASE_URL 應保留 WARN 字樣; out=$LAST_OUT"
+pass "未設 PUBLIC_BASE_URL + 空 REDIS_PASSWORD → rc=0（WARN）"
+
+# 18. PUBLIC_BASE_URL=HTTPS（大寫）+ REDIS_PASSWORD 未設定 → rc=1（大小寫不敏感）
+body="${BASE_ENV}PUBLIC_BASE_URL=HTTPS://ccas.example.com
+"
+if run_check "$body"; then
+  fail "HTTPS（大寫）+ 空 REDIS_PASSWORD 應 rc=1; out=$LAST_OUT"
+fi
+printf '%s' "$LAST_OUT" | grep -q "HTTPS production 部署必須設定 REDIS_PASSWORD" \
+  || fail "大寫 HTTPS 阻斷訊息缺對應字樣; out=$LAST_OUT"
+pass "PUBLIC_BASE_URL=HTTPS（大寫）+ 空 REDIS_PASSWORD → rc=1（大小寫不敏感）"
+
 printf "\n${GREEN}All check-env tests passed.${NC}\n"

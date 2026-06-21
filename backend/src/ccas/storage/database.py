@@ -25,7 +25,7 @@ def _set_sqlite_wal(
     dbapi_connection: DBAPIConnection,
     connection_record: ConnectionPoolEntry,
 ) -> None:
-    """設定 SQLite WAL mode、synchronous=NORMAL 與 busy_timeout=30s。
+    """設定 SQLite WAL mode、synchronous=NORMAL、busy_timeout=30s 與 FK 強制。
 
     作為 SQLAlchemy ``connect`` 事件監聽器，在每次建立新的
     DBAPI 連線時自動執行 PRAGMA 設定。
@@ -35,11 +35,17 @@ def _set_sqlite_wal(
     ``data/ccas.db``，``stage_finished`` 的 read-modify-write 會在
     rolling 廣播 ingest 時撞 ``database is locked``。30 s 等待窗口涵蓋
     scheduler 30 s heartbeat 週期，且大幅超過正常 commit 延遲。
+
+    ``foreign_keys=ON``: SQLite 預設不強制外鍵約束，導致 ORM 層宣告的
+    ``ForeignKey`` (如 ``classification_rules.category_id`` →
+    ``categories.id``) 在 DELETE 父列時不會阻擋孤兒列。逐連線開啟後，
+    刪除仍被引用的 category 會拋 ``IntegrityError``，由 router 轉 409。
     """
     cursor = dbapi_connection.cursor()
     cursor.execute("PRAGMA journal_mode=WAL")
     cursor.execute("PRAGMA synchronous=NORMAL")
     cursor.execute("PRAGMA busy_timeout=30000")
+    cursor.execute("PRAGMA foreign_keys=ON")
     cursor.close()
 
 

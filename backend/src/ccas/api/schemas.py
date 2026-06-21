@@ -432,6 +432,45 @@ class ImportFromEnvResult(BaseModel):
     bank_codes_imported: list[str] = []
 
 
+# -- Setup: Bank login credentials (P3-7) --
+
+# 同 db/env/none 三態，但屬登入憑證網域（避免借用 PDF 密碼的 PdfSecretSource
+# 名稱造成語意混淆）。
+CredentialSource = Literal["db", "env", "none"]
+
+
+class BankLoginCredentialStatus(BaseModel):
+    """單一 ``(bank_code, credential_key)`` 登入憑證來源狀態（不含明文）。"""
+
+    bank_code: str
+    credential_key: str
+    has_db_value: bool
+    has_env_value: bool
+    effective_source: CredentialSource
+
+
+class BankLoginCredentialWriteRequest(BaseModel):
+    """``PUT /api/setup/login-credentials/{bank}/{key}`` request body。"""
+
+    value: str = Field(min_length=1)
+
+
+class BankLoginCredentialWriteResult(BaseModel):
+    """``PUT/DELETE`` login-credential 回應（不回明文）。"""
+
+    bank_code: str
+    credential_key: str
+    effective_source: CredentialSource
+
+
+class LoginCredentialImportResult(BaseModel):
+    """``POST /api/setup/login-credentials/import-from-env`` 結果摘要。"""
+
+    imported: int
+    skipped_already_in_db: int
+    credentials_imported: list[str] = []
+
+
 # -- Setup: Admin token rotate --
 
 

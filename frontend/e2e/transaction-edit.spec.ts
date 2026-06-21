@@ -6,6 +6,12 @@
  */
 import { test, expect, type Page } from '@playwright/test'
 
+/** Choose a SelectField (base-ui) option: open the listbox then click an item. */
+async function pickOption(page: Page, label: string, optionName: string) {
+  await page.getByLabel(label).click()
+  await page.getByRole('option', { name: optionName }).click()
+}
+
 type ApiEnvelope<T> = {
   success: true
   data: T
@@ -92,7 +98,8 @@ async function setupRoutes(page: Page, state: { detail: typeof BASE_DETAIL }) {
       await route.fulfill({ json: ok(state.detail) })
       return
     }
-    if (method === 'PUT') {
+    // P3-5：transaction-detail 改用 PATCH（RFC 5789 partial update）。
+    if (method === 'PATCH' || method === 'PUT') {
       const body = JSON.parse(route.request().postData() ?? '{}') as Record<
         string,
         unknown
@@ -144,14 +151,15 @@ test.describe('Transaction edit', () => {
     await page.goto('/transactions')
     await expect(page.getByText('Starbucks')).toBeVisible()
 
-    // 2. 點編輯 icon → /transactions/42
-    await page.getByLabel('編輯交易 Starbucks').click()
+    // 2. 點商家名連結 → /transactions/42（P3-6：商家名為鍵盤可達連結，
+    //    冗餘的編輯 icon 改 aria-hidden）
+    await page.getByRole('link', { name: 'Starbucks' }).click()
     await expect(page).toHaveURL(/\/transactions\/42/)
-    await expect(page.getByLabel('分類選擇')).toBeVisible()
+    await expect(page.getByLabel('分類')).toBeVisible()
     await expect(page.getByText('自動分類')).toBeVisible()
 
     // 3. 改 category 為 購物 → 出現 manual override 徽章
-    await page.getByLabel('分類選擇').selectOption('2')
+    await pickOption(page, '分類', '購物')
     await expect(page.getByText('手動覆寫')).toBeVisible()
     await expect(page.getByLabel('重置覆寫')).toBeVisible()
 
@@ -214,7 +222,7 @@ test.describe('Transaction edit', () => {
     })
 
     await page.goto('/transactions/42')
-    await page.getByLabel('分類選擇').selectOption('2')
+    await pickOption(page, '分類', '購物')
 
     // 錯誤 alert（role="alert"）出現，且頁面其餘內容仍可用
     await expect(page.getByRole('alert')).toBeVisible()

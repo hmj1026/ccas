@@ -74,6 +74,11 @@ def create_bot_app() -> Application:
     """
     settings = get_settings()
     allowed = load_allowed_chat_ids(settings.telegram_allowed_chat_ids)
+    if not allowed:
+        logger.warning(
+            "TELEGRAM_ALLOWED_CHAT_IDS 未設定或為空，bot 指令對所有人停用(含擁有者)；"
+            "請設定後重啟"
+        )
     sf = get_session_factory()
 
     app = Application.builder().token(settings.telegram_bot_token).build()
