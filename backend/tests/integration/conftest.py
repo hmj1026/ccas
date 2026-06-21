@@ -9,12 +9,14 @@ from collections.abc import AsyncGenerator
 
 import pytest
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import event
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
     async_sessionmaker,
     create_async_engine,
 )
 
+from ccas.storage.database import _set_sqlite_wal
 from ccas.storage.models import BankConfig, Base
 
 os.environ.setdefault("TELEGRAM_BOT_TOKEN", "test")
@@ -30,6 +32,11 @@ TEST_TOKEN = "test-token"
 async def db_session() -> AsyncGenerator[AsyncSession, None]:
     """提供 in-memory SQLite 的 AsyncSession，測試後清除所有資料表。"""
     engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    # Mirror production PRAGMA setup so FK constraints are actually enforced
+    # (SQLite defaults to foreign_keys=OFF). Without this, FK-violation tests
+    # would pass vacuously. The WAL pragma is silently ignored on :memory:
+    # (returns 'memory'); only the foreign_keys=ON enforcement matters here.
+    event.listen(engine.sync_engine, "connect", _set_sqlite_wal)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 

@@ -12,10 +12,10 @@ from sqlalchemy import update as sa_update
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ccas.bot.notifications import notify_new_bill
 from ccas.config import get_settings
-from ccas.messaging import render_new_bill_notification, send_message
-from ccas.pipeline.progress import NoopProgressReporter, ProgressReporter
 from ccas.pipeline.summary import NotifySummary
+from ccas.shared.progress import NoopProgressReporter, ProgressReporter
 from ccas.storage.models import Bill, PaymentReminder
 from ccas.storage.queries import fetch_bank_names
 
@@ -108,11 +108,14 @@ async def run_notify_job(
                 continue
 
             bank_name = bank_names.get(bill_code, bill_code)
-            text = render_new_bill_notification(
-                bank_name, bill_month, bill_total, bill_due
-            )
-            await send_message(
-                settings.telegram_bot_token, settings.telegram_chat_id, text
+            await notify_new_bill(
+                settings.telegram_bot_token,
+                settings.telegram_chat_id,
+                bank_name=bank_name,
+                billing_month=bill_month,
+                total_amount=bill_total,
+                due_date=bill_due,
+                bill_id=bill_id,
             )
             summary.sent_count += 1
             logger.info(

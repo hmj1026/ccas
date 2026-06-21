@@ -49,19 +49,21 @@ def classify(merchant: str, rule_set: RuleSet) -> str:
     normalized_merchant = normalize(merchant)
 
     best: ClassificationRule | None = None
+    best_len = 0  # 快取目前最佳關鍵字長度，避免每輪重複 normalize(best.keyword)
 
     for rule in rule_set.rules:
         normalized_keyword = normalize(rule.keyword)
         if normalized_keyword not in normalized_merchant:
             continue
+        curr_len = len(normalized_keyword)
         if best is None:
             best = rule
+            best_len = curr_len
             continue
         # 最長關鍵字優先；同長度取較小 id
-        best_len = len(normalize(best.keyword))
-        curr_len = len(normalized_keyword)
         if curr_len > best_len:
             best = rule
+            best_len = curr_len
         elif curr_len == best_len and rule.rule_id < best.rule_id:
             best = rule
 

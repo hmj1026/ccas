@@ -25,6 +25,7 @@ import {
   importSetupGmail,
   importSetupGmailCallback,
   importSetupLayout,
+  importSetupLoginCredentials,
   importSetupSecrets,
   importTransactionDetail,
   importTransactions,
@@ -45,6 +46,7 @@ const SetupGmailPage = lazy(importSetupGmail)
 const SetupGmailCallbackPage = lazy(importSetupGmailCallback)
 const SetupBanksPage = lazy(importSetupBanks)
 const SetupSecretsPage = lazy(importSetupSecrets)
+const SetupLoginCredentialsPage = lazy(importSetupLoginCredentials)
 const SetupAdminPage = lazy(importSetupAdmin)
 
 function createQueryClient() {
@@ -107,6 +109,10 @@ function App() {
               <Route
                 path="secrets"
                 element={<Suspense fallback={<LoadingState />}><SetupSecretsPage /></Suspense>}
+              />
+              <Route
+                path="login-credentials"
+                element={<Suspense fallback={<LoadingState />}><SetupLoginCredentialsPage /></Suspense>}
               />
               <Route
                 path="admin"

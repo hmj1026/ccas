@@ -20,7 +20,7 @@ from ccas.classifier.staging import (
 )
 from ccas.classifier.user_rules import UserRuleMatcher
 from ccas.errors import ClassifyError
-from ccas.pipeline.progress import NoopProgressReporter, ProgressReporter
+from ccas.shared.progress import NoopProgressReporter, ProgressReporter
 from ccas.storage.models import Transaction
 
 logger = logging.getLogger(__name__)

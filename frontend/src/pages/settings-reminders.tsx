@@ -16,6 +16,7 @@ import type {
   ReminderTestResult,
 } from '@/lib/types'
 import { Button } from '@/components/ui/button'
+import { SelectField } from '@/components/ui/select-field'
 import { EmptyState, ErrorState, LoadingState } from '@/components/shared/states'
 
 const CHANNEL_LABELS: Record<ReminderChannel, string> = {
@@ -92,23 +93,17 @@ function ReminderRow({
             目前：{formatDays(item.days_before)}
           </span>
         </label>
-        <label className="flex flex-col text-sm">
-          <span className="text-muted-foreground">通知管道</span>
-          <select
-            className="rounded border border-input bg-background px-2 py-1"
-            value={item.channel}
-            disabled={isPending}
-            onChange={(e) =>
-              onUpdate({ channel: e.target.value as ReminderChannel })
-            }
-          >
-            {Object.entries(CHANNEL_LABELS).map(([k, label]) => (
-              <option key={k} value={k}>
-                {label}
-              </option>
-            ))}
-          </select>
-        </label>
+        <SelectField
+          label="通知管道"
+          triggerClassName="h-auto rounded px-2 py-1"
+          value={item.channel}
+          disabled={isPending}
+          onValueChange={(v) => onUpdate({ channel: v as ReminderChannel })}
+          options={Object.entries(CHANNEL_LABELS).map(([k, label]) => ({
+            value: k,
+            label,
+          }))}
+        />
       </div>
 
       <div className="flex items-center gap-3">

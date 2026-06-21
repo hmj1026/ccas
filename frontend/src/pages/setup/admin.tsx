@@ -36,7 +36,7 @@ function formatCreatedAt(value: string | null): string {
   if (!value) return '未知'
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return '未知'
-  return date.toLocaleString()
+  return date.toLocaleString('zh-TW')
 }
 
 function SetupAdminPage() {

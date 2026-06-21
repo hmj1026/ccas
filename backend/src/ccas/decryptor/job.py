@@ -17,8 +17,8 @@ from ccas.decryptor.password import resolve_passwords
 from ccas.decryptor.staging import fetch_pending_attachments, update_attachment_status
 from ccas.errors import DecryptError
 from ccas.ingestor.staging import resolve_staged_path
-from ccas.pipeline.options import PipelineOptions
-from ccas.pipeline.progress import NoopProgressReporter, ProgressReporter
+from ccas.shared.pipeline_types import PipelineOptions
+from ccas.shared.progress import NoopProgressReporter, ProgressReporter
 from ccas.storage.models import StagedAttachment, StagedAttachmentStatus
 
 logger = logging.getLogger(__name__)

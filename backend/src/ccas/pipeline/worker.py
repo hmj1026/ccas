@@ -96,6 +96,23 @@ async def mark_pipeline_run_failed(
     )
 
 
+def _classify_batch_failed(summary: PipelineSummary) -> bool:
+    """偵測 classify 階段是否整批 commit 失敗。
+
+    classify 是 all-or-nothing：``_flush_commit_or_rollback`` 失敗時會 rollback
+    整批並拋 ``ClassifyError``，但 ``orchestrator._run_stage`` 將其捕捉成
+    ``StageSummary(counts={"failed": 1})`` 後 ``run_pipeline`` 仍正常回傳。
+    若不偵測，worker 會誤呼叫 ``mark_pipeline_run_succeeded``，導致分類結果已
+    全數 rollback 卻標記成功。成功路徑的 classify 摘要為
+    ``counts={"classified": N}``（無 ``failed`` 鍵），因此以 ``failed > 0``
+    作為整批失敗的判定訊號。
+    """
+    for stage in summary.stages:
+        if stage.stage == "classify" and stage.counts.get("failed", 0) > 0:
+            return True
+    return False
+
+
 def run_pipeline_sync(opts: dict | None = None, run_id: str | None = None) -> dict:
     """RQ worker 執行的同步入口。
 
@@ -159,8 +176,19 @@ def run_pipeline_sync(opts: dict | None = None, run_id: str | None = None) -> di
                 raise
 
             if run_id is not None:
-                async with session_factory() as session:
-                    await mark_pipeline_run_succeeded(session, run_id)
+                if _classify_batch_failed(result):
+                    # classify 整批 rollback：run_pipeline 雖正常回傳，但分類結果
+                    # 已全數遺失，必須標 FAILED 而非 SUCCEEDED。不 re-raise，
+                    # 仍回傳 result 作為 RQ job result（保留各階段摘要供查閱）。
+                    async with session_factory() as session:
+                        await mark_pipeline_run_failed(
+                            session,
+                            run_id,
+                            "classify 階段整批 commit 失敗，分類結果已 rollback",
+                        )
+                else:
+                    async with session_factory() as session:
+                        await mark_pipeline_run_succeeded(session, run_id)
             return result
         finally:
             await get_engine().dispose()

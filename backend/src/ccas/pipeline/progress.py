@@ -1,11 +1,13 @@
 """Pipeline 進度回報抽象（pipeline-operations-center §2）。
 
-提供 ``ProgressReporter`` Protocol，由 orchestrator / stage job 在不感知具體
-寫入媒介的前提下回報執行進度。本 module 內含兩個實作：
+寫入 DB 的 ``DbProgressReporter`` 實作。``ProgressReporter`` Protocol 與
+``NoopProgressReporter`` 自 P3-1 起定義於 ``ccas.shared.progress``（解除
+stage→pipeline 向上相依），本 module 於頂部 re-export 維持既有 import 路徑。
 
-- :class:`NoopProgressReporter` — CLI / scheduler 路徑使用，所有 hook 為空操作
+- :class:`ProgressReporter` / :class:`NoopProgressReporter` — 定義於
+  ``ccas.shared.progress``，此處 re-export
 - :class:`DbProgressReporter` — RQ worker 路徑使用，將進度寫入
-  ``pipeline_runs`` 對應 row
+  ``pipeline_runs`` 對應 row（依賴 storage 與 pipeline 執行語境，留在本層）
 
 設計約束（spec D2 / D3 / D4）：
 
@@ -27,13 +29,15 @@ import asyncio
 import logging
 import time
 from collections.abc import Callable, Mapping, Sequence
-from typing import Protocol
 
 from sqlalchemy import update
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ccas.shared.progress import NoopProgressReporter, ProgressReporter
 from ccas.storage.models import PipelineRun
+
+__all__ = ["NoopProgressReporter", "ProgressReporter", "DbProgressReporter"]
 
 #: Type alias for any callable that returns an :class:`AsyncSession` instance.
 #: ``async_sessionmaker[AsyncSession]`` from SQLAlchemy satisfies this protocol;
@@ -53,65 +57,10 @@ _STAGE_FINISHED_MAX_RETRIES: int = 3
 _STAGE_FINISHED_BACKOFF_SECONDS: tuple[float, ...] = (0.1, 0.5, 2.0)
 
 
-class ProgressReporter(Protocol):
-    """Pipeline 進度回報介面。
-
-    所有方法皆為 async，以便底層實作可使用 async DB / async pubsub 而不阻塞。
-    Protocol 不強制實作的 reporter 繼承本類別（structural typing）。
-    """
-
-    async def stage_started(self, stage: str, total: int) -> None:
-        """通知某階段開始，附上預期處理 item 總數。"""
-        ...
-
-    async def stage_item_done(self, stage: str, processed: int) -> None:
-        """通知某階段完成第 N 個 item（高頻、可被節流）。"""
-        ...
-
-    async def stage_finished(
-        self,
-        stage: str,
-        ok: int,
-        fail: int,
-        elapsed_ms: int,
-        *,
-        counts: Mapping[str, int] | None = None,
-        errors: Sequence[str] | None = None,
-    ) -> None:
-        """通知某階段結束（一律即時 flush，不受節流影響）。
-
-        ``ok`` / ``fail`` 是 UI 列表摘要用的相容欄位；``counts`` /
-        ``errors`` 保留原始 ``StageSummary`` 資訊，讓 PipelineRun history
-        能作為完整快照。
-        """
-        ...
-
-
-class NoopProgressReporter:
-    """空操作 reporter（CLI / scheduler 預設）。
-
-    所有 hook 不對外產生副作用；將 ``run_pipeline`` 的 ``progress_reporter``
-    參數預設為 None 時，``run_pipeline`` 內部 SHALL 自動包成本類別實例，
-    以便 stage job 可無條件呼叫 hook。
-    """
-
-    async def stage_started(self, stage: str, total: int) -> None:
-        return None
-
-    async def stage_item_done(self, stage: str, processed: int) -> None:
-        return None
-
-    async def stage_finished(
-        self,
-        stage: str,
-        ok: int,
-        fail: int,
-        elapsed_ms: int,
-        *,
-        counts: Mapping[str, int] | None = None,
-        errors: Sequence[str] | None = None,
-    ) -> None:
-        return None
+# ``ProgressReporter`` Protocol 與 ``NoopProgressReporter`` 已下移至
+# ``ccas.shared.progress``（P3-1，解除 stage→pipeline 向上相依），於本模組
+# 頂部 re-export 維持相容。``DbProgressReporter`` 因依賴 storage 與 pipeline
+# 執行語境，留在 pipeline 層。
 
 
 class DbProgressReporter:

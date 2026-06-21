@@ -21,6 +21,8 @@ function extractErrorMessage(body: unknown, status: number): string {
       const { message } = body as { message: unknown }
       if (typeof message === 'string' && message) return message
     }
+    // TODO: 下版移除 detail fallback（後端已統一改用 message 信封；
+    // 暫時保留以相容尚未升級的部署 / 快取的舊回應）。
     if ('detail' in body) {
       const { detail } = body as { detail: unknown }
       if (Array.isArray(detail)) {

@@ -353,6 +353,48 @@ class TestSearchMessagesPagination:
         assert any("CTBC" in r.message for r in caplog.records)
 
     @patch("ccas.ingestor.gmail_client.call_with_retry")
+    def test_per_message_failure_isolated(self, mock_retry, caplog):
+        """單封郵件擷取拋一般例外時，隔離該封並繼續處理其餘郵件。"""
+        from googleapiclient.errors import HttpError
+
+        mock_retry.side_effect = [
+            # listing page (two messages)
+            {"messages": [{"id": "msg-bad"}, {"id": "msg-ok"}]},
+            # msg-bad detail fetch fails
+            HttpError(MagicMock(status=500), b"Internal Server Error"),
+            # msg-ok detail succeeds
+            _make_message_payload("msg-ok", [_pdf_part("bill.pdf", "att-ok")]),
+        ]
+        partial_errors: list[str] = []
+
+        with caplog.at_level(logging.WARNING, logger="ccas.ingestor.gmail_client"):
+            result = search_messages(
+                MagicMock(),
+                "from:bank@example.com",
+                bank_code="CTBC",
+                partial_errors=partial_errors,
+            )
+
+        # The good message is still processed despite the bad one failing.
+        assert len(result) == 1
+        assert result[0].message_id == "msg-ok"
+        # Failure surfaced via warning + partial_errors with the failing msg id.
+        assert any("msg-bad" in r.message for r in caplog.records)
+        assert len(partial_errors) == 1
+        assert "msg-bad" in partial_errors[0]
+
+    @patch("ccas.ingestor.gmail_client.call_with_retry")
+    def test_per_message_runtime_error_propagates(self, mock_retry):
+        """單封擷取拋 RuntimeError（安全上限）時仍須向上傳播，不可吞。"""
+        mock_retry.side_effect = [
+            {"messages": [{"id": "msg-001"}]},
+            RuntimeError("安全上限"),
+        ]
+
+        with pytest.raises(RuntimeError, match="安全上限"):
+            search_messages(MagicMock(), "from:bank@example.com")
+
+    @patch("ccas.ingestor.gmail_client.call_with_retry")
     def test_first_page_failure_raises(self, mock_retry):
         """第一頁就失敗時，應直接拋出例外。"""
         from googleapiclient.errors import HttpError

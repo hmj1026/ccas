@@ -195,6 +195,7 @@ class TestFubonRegistryIntegration:
         import importlib
 
         import ccas.parser
+        import ccas.parser.banks.fubon_v1
 
         importlib.reload(ccas.parser.banks.fubon_v1)
         importlib.reload(ccas.parser.banks)

@@ -16,11 +16,13 @@ from typing import cast
 import pdfplumber.page
 
 from ccas.parser.banks.cathay_v1 import CathayV1Parser
+from ccas.parser.banks.ctbc_v1 import CtbcV1Parser
 from ccas.parser.banks.fubon_v1 import FubonV1Parser
 from ccas.parser.banks.taishin_v1 import TaishinV1Parser
 
 from .conftest import (
     CATHAY_TABLE_HEADER_ROW,
+    CTBC_TABLE_HEADER_ROW,
     FUBON_TABLE_HEADER_ROW,
     TAISHIN_TABLE_HEADER_ROW,
     make_mock_page,
@@ -85,6 +87,32 @@ class TestCrossYearMmdd:
             _pages_with_table(FUBON_TABLE_HEADER_ROW, rows), 2026, 1
         )
         assert txns[0].trans_date == date(2025, 12, 20)
+
+    def test_ctbc_january_bill_dec_transaction_is_prior_year(self) -> None:
+        parser = CtbcV1Parser()
+        rows = [["12/27", "12/28", "2345", "誠品書店", "980"]]
+        txns = parser._extract_transactions(
+            _pages_with_table(CTBC_TABLE_HEADER_ROW, rows), 2026, 1
+        )
+        assert len(txns) == 1
+        assert txns[0].trans_date == date(2025, 12, 27)
+
+    def test_ctbc_same_month_not_shifted(self) -> None:
+        parser = CtbcV1Parser()
+        rows = [["01/15", "01/17", "2345", "誠品書店", "980"]]
+        txns = parser._extract_transactions(
+            _pages_with_table(CTBC_TABLE_HEADER_ROW, rows), 2026, 1
+        )
+        assert txns[0].trans_date == date(2026, 1, 15)
+
+    def test_ctbc_no_billing_month_num_keeps_billing_year(self) -> None:
+        # 向下相容：未傳 billing_month_num（預設 0）時不做跨年調整。
+        parser = CtbcV1Parser()
+        rows = [["12/27", "12/28", "2345", "誠品書店", "980"]]
+        txns = parser._extract_transactions(
+            _pages_with_table(CTBC_TABLE_HEADER_ROW, rows), 2026
+        )
+        assert txns[0].trans_date == date(2026, 12, 27)
 
 
 # -- Refund negation --

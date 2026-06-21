@@ -5,7 +5,6 @@
 """
 
 from datetime import date
-from unittest.mock import MagicMock
 
 import httpx
 import pytest
@@ -131,17 +130,6 @@ class TestSendMessageRetry:
         assert transport.call_count == 4  # 1 initial + 3 retries
 
 
-def _make_bill(**kwargs) -> MagicMock:
-    bill = MagicMock()
-    bill.id = kwargs.get("id", 1)
-    bill.bank_code = kwargs.get("bank_code", "CTBC")
-    bill.billing_month = kwargs.get("billing_month", "2026-03")
-    bill.total_amount = kwargs.get("total_amount", 5000)
-    bill.due_date = kwargs.get("due_date", date(2026, 4, 15))
-    bill.is_paid = kwargs.get("is_paid", False)
-    return bill
-
-
 class TestRenderNewBillNotification:
     """新帳單通知 rendering 測試。"""
 
@@ -163,15 +151,25 @@ class TestRenderDueReminder:
     """到期提醒 rendering 測試。"""
 
     def test_3_days_reminder(self):
-        bill = _make_bill(id=7, total_amount=8000, due_date=date(2026, 4, 10))
-        result = render_due_reminder(bill, "國泰世華", days_until_due=3)
+        result = render_due_reminder(
+            "國泰世華",
+            total_amount=8000,
+            due_date=date(2026, 4, 10),
+            bill_id=7,
+            days_until_due=3,
+        )
         assert "3 天後到期" in result
         assert "$8,000" in result
         assert "/paid 7" in result
 
     def test_1_day_reminder(self):
-        bill = _make_bill(id=7, due_date=date(2026, 4, 10))
-        result = render_due_reminder(bill, "國泰世華", days_until_due=1)
+        result = render_due_reminder(
+            "國泰世華",
+            total_amount=8000,
+            due_date=date(2026, 4, 10),
+            bill_id=7,
+            days_until_due=1,
+        )
         assert "明天到期" in result
 
 

@@ -17,6 +17,7 @@ from redis.exceptions import RedisError
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from ccas.api.deps import verify_token
@@ -39,6 +40,7 @@ from ccas.api.routers import (
 from ccas.api.routers.setup import admin as setup_admin
 from ccas.api.routers.setup import banks as setup_banks
 from ccas.api.routers.setup import gmail as setup_gmail
+from ccas.api.routers.setup import login_credentials as setup_login_credentials
 from ccas.api.routers.setup import secrets as setup_secrets
 from ccas.config import get_settings
 from ccas.storage.database import get_db_session
@@ -113,7 +115,8 @@ def create_app() -> FastAPI:
     ) -> JSONResponse:
         """422 驗證錯誤改用專案統一信封格式。
 
-        HTTPException 不在此處理（維持 FastAPI 預設 ``{"detail": ...}``）。
+        一般 ``HTTPException`` 由下方 ``_http_exception_handler`` 處理（兩者註冊
+        不同例外型別，互不覆蓋）。
         """
         message = "; ".join(
             "{loc} -> {msg}".format(
@@ -125,6 +128,25 @@ def create_app() -> FastAPI:
         return JSONResponse(
             status_code=422,
             content={"success": False, "message": message, "data": None},
+        )
+
+    @app.exception_handler(StarletteHTTPException)
+    async def _http_exception_handler(
+        request: Request, exc: StarletteHTTPException
+    ) -> JSONResponse:
+        """HTTPException 統一改用專案信封格式 ``{success, message, data}``。
+
+        涵蓋業務路由拋出的 ``fastapi.HTTPException``（401/403/404/409/413/422…）
+        以及 Starlette 路由層錯誤（如未匹配路由的 404）。原 ``status_code`` 與既有
+        ``headers``（如 401 的 ``WWW-Authenticate``）皆完整保留。
+
+        422 ``RequestValidationError`` 不在此處理（已由上方專用 handler 攔截，
+        且兩者註冊的是不同例外型別，互不覆蓋）。
+        """
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={"success": False, "message": str(exc.detail), "data": None},
+            headers=exc.headers,
         )
 
     @app.get("/health")
@@ -141,6 +163,7 @@ def create_app() -> FastAPI:
         return {"status": "ok"}
 
     @app.get("/health/ready")
+    @app.get("/api/health/ready")
     async def health_ready(
         session: AsyncSession = Depends(get_db_session),
     ) -> JSONResponse:
@@ -148,6 +171,7 @@ def create_app() -> FastAPI:
 
         ``/health`` 維持純 liveness（process 起來即 200）；本端點供
         docker healthcheck / 部署驗證使用，任一依賴失敗回 503。
+        ``/api/health/ready`` 為反向代理 passthrough 別名（同 ``/api/health``）。
         """
         db_ok = True
         try:
@@ -201,6 +225,7 @@ def create_app() -> FastAPI:
     app.include_router(setup_gmail.router, dependencies=api_dependencies)
     app.include_router(setup_banks.router, dependencies=api_dependencies)
     app.include_router(setup_secrets.router, dependencies=api_dependencies)
+    app.include_router(setup_login_credentials.router, dependencies=api_dependencies)
     app.include_router(setup_admin.router, dependencies=api_dependencies)
 
     return app

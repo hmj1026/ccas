@@ -8,8 +8,8 @@ from collections.abc import Sequence
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ccas.pipeline.filters import apply_pipeline_filters
-from ccas.pipeline.options import PipelineOptions
+from ccas.shared.filters import apply_pipeline_filters
+from ccas.shared.pipeline_types import PipelineOptions
 from ccas.storage.models import StagedAttachment, StagedAttachmentStatus
 
 

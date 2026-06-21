@@ -1,5 +1,11 @@
 import { test, expect, type Page } from '@playwright/test'
 
+/** Choose a SelectField (base-ui) option: open the listbox then click an item. */
+async function pickOption(page: Page, label: string, optionName: string) {
+  await page.getByLabel(label).click()
+  await page.getByRole('option', { name: optionName }).click()
+}
+
 type ApiEnvelope<T> = {
   success: true
   data: T
@@ -74,11 +80,11 @@ test.describe('Operations center', () => {
     await page.goto('/operations')
     await expect(page.getByRole('heading', { name: '操作中心' })).toBeVisible()
 
-    await page.getByLabel('銀行').selectOption('CTBC')
-    await page.getByLabel('年度').selectOption('2026')
-    await page.getByLabel('月份').selectOption('3')
-    await page.getByLabel('起始階段').selectOption('parse')
-    await page.getByLabel('結束階段').selectOption('classify')
+    await pickOption(page, '銀行', '中國信託')
+    await pickOption(page, '年度', '2026')
+    await pickOption(page, '月份', '3')
+    await pickOption(page, '起始階段', '解析')
+    await pickOption(page, '結束階段', '分類')
     await page.getByLabel('強制重跑').check()
     await page.getByRole('button', { name: '開始執行' }).click()
 
@@ -132,9 +138,9 @@ test.describe('Operations center', () => {
     })
 
     await page.goto('/operations')
-    await page.getByLabel('銀行').selectOption('CTBC')
-    await page.getByLabel('年度').selectOption('2026')
-    await page.getByLabel('月份').selectOption('3')
+    await pickOption(page, '銀行', '中國信託')
+    await pickOption(page, '年度', '2026')
+    await pickOption(page, '月份', '3')
     await page.getByRole('button', { name: '開始執行' }).click()
 
     // 1) 失敗狀態在執行紀錄中可見

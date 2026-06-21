@@ -30,7 +30,7 @@ from ccas.storage.database import get_db_session
 from ccas.storage.models import Bill, Transaction
 from ccas.storage.queries import fetch_bank_names
 
-router = APIRouter(prefix="/api/analytics", tags=["analytics-v2"])
+router = APIRouter(prefix="/api/analytics", tags=["analytics"])
 
 
 @router.get(

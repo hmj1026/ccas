@@ -11,6 +11,12 @@
  */
 import { test, expect, type Page, type Route } from '@playwright/test'
 
+/** Choose a SelectField (base-ui) option: open the listbox then click an item. */
+async function pickOption(page: Page, label: string, optionName: string) {
+  await page.getByLabel(label).click()
+  await page.getByRole('option', { name: optionName }).click()
+}
+
 type ApiEnvelope<T> = {
   success: true
   data: T
@@ -150,9 +156,9 @@ test.describe('Classification rules settings page', () => {
     await page.getByRole('button', { name: '新增規則' }).click()
 
     await expect(page.getByRole('dialog')).toBeVisible()
-    // 用 textbox role 精準鎖定 pattern 輸入框，避開同樣 aria-label 前綴的 pattern_type select。
+    // 用 textbox role 精準鎖定 pattern 輸入框，避開同樣 aria-label 前綴的 pattern 欄位。
     await page.getByRole('textbox', { name: 'pattern' }).fill('蝦皮')
-    await page.getByLabel('category').selectOption('12')
+    await pickOption(page, '類別', '購物（蝦皮）')
 
     // 即時測試
     await page.getByLabel('sample_text').fill('蝦皮商城 #001')
@@ -171,7 +177,7 @@ test.describe('Classification rules settings page', () => {
     await page.goto('/settings/rules')
 
     await page.getByRole('button', { name: '新增規則' }).click()
-    await page.getByLabel('pattern_type').selectOption('regex')
+    await pickOption(page, '類型', '正規表達式 (regex)')
     await page.getByRole('textbox', { name: 'pattern' }).fill('(a+)+')
 
     await expect(page.getByText(/nested quantifier/i)).toBeVisible()

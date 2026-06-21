@@ -123,7 +123,7 @@ fi
 # A1：以 HTTPS 對外（PUBLIC_BASE_URL=https://…）卻顯式關閉 Secure cookie，
 # session cookie 可能在中間人攻擊下被竊。後端預設 API_COOKIE_SECURE=true（安全預設），
 # 故僅在「.env 顯式設為非 true」時阻斷啟動；未設定者沿用安全預設、不阻斷。
-if [[ "${PUBLIC_BASE_URL:-}" =~ ^https:// ]]; then
+if [[ "${PUBLIC_BASE_URL:-}" =~ ^[Hh][Tt][Tt][Pp][Ss]:// ]]; then
   if is_explicitly_set_in_env_file "API_COOKIE_SECURE" \
     && [[ "${API_COOKIE_SECURE:-}" != "true" ]]; then
     format_errors+=(
@@ -132,12 +132,19 @@ if [[ "${PUBLIC_BASE_URL:-}" =~ ^https:// ]]; then
   fi
 fi
 
-# A2：REDIS_PASSWORD 留空。dev / 單機（redis 綁 127.0.0.1）可接受；
-# production / redis 可被其他主機觸及時建議設定。
+# A2：REDIS_PASSWORD 留空。dev / 單機（redis 綁 127.0.0.1，http 對外）可接受、僅 WARN；
+# 但以 HTTPS 對外（PUBLIC_BASE_URL=https://…）代表 production 部署，redis 未設密碼風險升高，
+# 與 A1（Secure cookie）同樣的條件式阻斷邏輯——https 時升級為 format_errors（阻斷啟動）。
 if [[ -z "${REDIS_PASSWORD:-}" ]]; then
-  security_warnings+=(
-    "REDIS_PASSWORD 未設定（dev 可接受）；production 或 redis 可被其他主機觸及時建議設定 --requirepass 密碼並同步寫入 REDIS_URL"
-  )
+  if [[ "${PUBLIC_BASE_URL:-}" =~ ^[Hh][Tt][Tt][Pp][Ss]:// ]]; then
+    format_errors+=(
+      "PUBLIC_BASE_URL 為 https:// 但 REDIS_PASSWORD 未設定；HTTPS production 部署必須設定 REDIS_PASSWORD（--requirepass 密碼並同步寫入 REDIS_URL）"
+    )
+  else
+    security_warnings+=(
+      "REDIS_PASSWORD 未設定（dev 可接受）；production 或 redis 可被其他主機觸及時建議設定 --requirepass 密碼並同步寫入 REDIS_URL"
+    )
+  fi
 fi
 
 # 將 API_TOKEN 從 missing_required 移除（spec §3.3.1：未設定不視為 required）

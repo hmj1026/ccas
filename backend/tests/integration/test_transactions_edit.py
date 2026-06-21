@@ -2,7 +2,7 @@
 
 bills-management-and-insights §3：
 
-- ``PUT /api/transactions/{id}``：partial update（category/note/tags/merchant_alias）
+- ``PATCH /api/transactions/{id}``：partial update（category/note/tags/merchant_alias）
   改 category 同步設 manual_category_override=true
 - ``POST /api/transactions/{id}/note``：僅更新 note
 - ``DELETE /api/transactions/{id}/manual-override``：清除 flag 並重新走 classify
@@ -95,7 +95,7 @@ class TestPutTransaction:
         txn = await _seed_bill_and_txn(db_session, category="餐飲")
         new_cat = await _seed_category(db_session, "購物")
 
-        resp = await client.put(
+        resp = await client.patch(
             f"/api/transactions/{txn.id}",
             headers=auth_headers(),
             json={"category_id": new_cat.id},
@@ -109,7 +109,7 @@ class TestPutTransaction:
         self, client: AsyncClient, db_session: AsyncSession
     ) -> None:
         txn = await _seed_bill_and_txn(db_session, category="餐飲")
-        resp = await client.put(
+        resp = await client.patch(
             f"/api/transactions/{txn.id}",
             headers=auth_headers(),
             json={"note": "公司聚餐"},
@@ -124,7 +124,7 @@ class TestPutTransaction:
         self, client: AsyncClient, db_session: AsyncSession
     ) -> None:
         txn = await _seed_bill_and_txn(db_session)
-        resp = await client.put(
+        resp = await client.patch(
             f"/api/transactions/{txn.id}",
             headers=auth_headers(),
             json={"tags": ["業務", "可報銷"], "merchant_alias": "Starbucks 信義店"},
@@ -138,7 +138,7 @@ class TestPutTransaction:
         self, client: AsyncClient, db_session: AsyncSession
     ) -> None:
         txn = await _seed_bill_and_txn(db_session)
-        resp = await client.put(
+        resp = await client.patch(
             f"/api/transactions/{txn.id}",
             headers=auth_headers(),
             json={"category_id": 9999},
@@ -148,7 +148,7 @@ class TestPutTransaction:
     async def test_update_not_found(
         self, client: AsyncClient, db_session: AsyncSession
     ) -> None:
-        resp = await client.put(
+        resp = await client.patch(
             "/api/transactions/9999",
             headers=auth_headers(),
             json={"note": "x"},
@@ -159,7 +159,7 @@ class TestPutTransaction:
         self, client: AsyncClient, db_session: AsyncSession
     ) -> None:
         txn = await _seed_bill_and_txn(db_session, category="餐飲")
-        resp = await client.put(
+        resp = await client.patch(
             f"/api/transactions/{txn.id}",
             headers=auth_headers(),
             json={},
@@ -170,7 +170,7 @@ class TestPutTransaction:
     async def test_update_requires_auth(
         self, client: AsyncClient, db_session: AsyncSession
     ) -> None:
-        resp = await client.put("/api/transactions/1", json={"note": "x"})
+        resp = await client.patch("/api/transactions/1", json={"note": "x"})
         assert resp.status_code == 401
 
 
@@ -311,14 +311,14 @@ class TestUpdateTagsCanClear:
     ) -> None:
         txn = await _seed_bill_and_txn(db_session)
         # 先設一些 tags
-        resp1 = await client.put(
+        resp1 = await client.patch(
             f"/api/transactions/{txn.id}",
             headers=auth_headers(),
             json={"tags": ["A", "B"]},
         )
         assert resp1.json()["data"]["tags"] == ["A", "B"]
         # 再以空 list 清除
-        resp2 = await client.put(
+        resp2 = await client.patch(
             f"/api/transactions/{txn.id}",
             headers=auth_headers(),
             json={"tags": []},
@@ -375,7 +375,7 @@ class TestManualOverridePreservedAfterReclassify:
         assert txn.category == "餐飲"
 
         # 4. 編輯 category 為「購物」，manual_override=true
-        resp = await client.put(
+        resp = await client.patch(
             f"/api/transactions/{txn.id}",
             headers=auth_headers(),
             json={"category_id": purchase_cat.id},
@@ -435,7 +435,7 @@ class TestManualOverridePreservedAfterReclassify:
         await db_session.refresh(txn)
 
         # 編輯為「購物」
-        resp = await client.put(
+        resp = await client.patch(
             f"/api/transactions/{txn.id}",
             headers=auth_headers(),
             json={"category_id": purchase_cat.id},

@@ -184,7 +184,7 @@ class TestNotifyFailureIsolation:
 
         mock_send = AsyncMock(side_effect=ConnectionError("Telegram API timeout"))
 
-        with patch("ccas.bot.job.send_message", mock_send):
+        with patch("ccas.bot.notifications.send_message", mock_send):
             from ccas.bot.job import run_notify_job
 
             summary = await run_notify_job(db_session)

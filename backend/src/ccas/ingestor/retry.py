@@ -33,6 +33,7 @@ def call_with_retry[T](fn: Callable[[], T]) -> T:
         HttpError: 超過重試次數或非暫時性錯誤。
     """
     last_error: HttpError | None = None
+    max_attempts = len(_BACKOFF_SECONDS)
 
     for attempt, delay in enumerate(_BACKOFF_SECONDS):
         try:
@@ -41,12 +42,15 @@ def call_with_retry[T](fn: Callable[[], T]) -> T:
             if exc.resp.status not in _RETRYABLE_STATUS_CODES:
                 raise
             last_error = exc
+            # 最後一次嘗試失敗後直接放棄，省去無謂的等待（sleep 後立即拋出）。
+            if attempt == max_attempts - 1:
+                break
             logger.warning(
                 "Gmail API 呼叫失敗 (HTTP %d)，%ds 後重試 (%d/%d)",
                 exc.resp.status,
                 delay,
                 attempt + 1,
-                len(_BACKOFF_SECONDS),
+                max_attempts,
             )
             time.sleep(delay)
 

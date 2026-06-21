@@ -4,13 +4,14 @@
  * 左側固定 sub-nav 含 4 子頁（Gmail / 銀行 / PDF 密碼 / API Token），
  * 右側 outlet 載入子頁內容。Layout 本身不需驗證（外層 AuthGuard 已套）。
  */
-import { Mail, Building2, KeyRound, ShieldCheck } from 'lucide-react'
+import { Mail, Building2, KeyRound, Lock, ShieldCheck } from 'lucide-react'
 import { NavLink, Outlet } from 'react-router'
 
 const SETUP_NAV_ITEMS = [
   { to: '/setup/gmail', label: 'Gmail 連線', icon: Mail },
   { to: '/setup/banks', label: '銀行啟用', icon: Building2 },
   { to: '/setup/secrets', label: 'PDF 密碼', icon: KeyRound },
+  { to: '/setup/login-credentials', label: '登入憑證', icon: Lock },
   { to: '/setup/admin', label: 'API Token', icon: ShieldCheck },
 ] as const
 

@@ -7,7 +7,6 @@
 """
 
 import logging
-from collections.abc import Sequence
 from datetime import date
 
 from ccas.messaging import (
@@ -16,7 +15,6 @@ from ccas.messaging import (
     render_parse_failure_notification,
     send_message,
 )
-from ccas.storage.models import Bill
 
 logger = logging.getLogger(__name__)
 
@@ -24,28 +22,47 @@ logger = logging.getLogger(__name__)
 async def notify_new_bill(
     bot_token: str,
     chat_id: str,
-    bill: Bill,
+    *,
     bank_name: str,
+    billing_month: str,
+    total_amount: int,
+    due_date: date | None,
+    bill_id: int,
 ) -> None:
-    """發送新帳單解析完成通知。"""
+    """發送新帳單解析完成通知。
+
+    接收純量參數（非 ``Bill`` ORM 物件），讓 ``session.commit()`` /
+    ``rollback()`` 後 ORM 已 expire 的呼叫端（pipeline notify stage）也能安全
+    共用，不觸發 lazy-load MissingGreenlet。
+    """
     text = render_new_bill_notification(
-        bank_name, bill.billing_month, bill.total_amount, bill.due_date
+        bank_name, billing_month, total_amount, due_date
     )
     await send_message(bot_token, chat_id, text)
-    logger.info("Sent new bill notification for bill #%d", bill.id)
+    logger.info("Sent new bill notification for bill #%d", bill_id)
 
 
 async def notify_due_reminder(
     bot_token: str,
     chat_id: str,
-    bill: Bill,
+    *,
     bank_name: str,
+    total_amount: int,
+    due_date: date | None,
+    bill_id: int,
     days_until_due: int,
+    prefix: str = "",
 ) -> None:
-    """發送到期提醒通知。"""
-    text = render_due_reminder(bill, bank_name, days_until_due)
+    """發送到期提醒通知。
+
+    接收純量參數（非 ``Bill`` ORM 物件）。``prefix`` 供測試推播端點在訊息前
+    加上 ``[測試] `` 標記，預設為空字串（正式提醒不加前綴）。
+    """
+    text = prefix + render_due_reminder(
+        bank_name, total_amount, due_date, bill_id, days_until_due
+    )
     await send_message(bot_token, chat_id, text)
-    logger.info("Sent due reminder for bill #%d (%d days)", bill.id, days_until_due)
+    logger.info("Sent due reminder for bill #%d (%d days)", bill_id, days_until_due)
 
 
 async def notify_parse_failure(
@@ -59,39 +76,3 @@ async def notify_parse_failure(
     text = render_parse_failure_notification(bank_name, filename, error_reason)
     await send_message(bot_token, chat_id, text)
     logger.info("Sent parse failure notification for %s", filename)
-
-
-async def send_due_reminders(
-    bot_token: str,
-    chat_id: str,
-    bills: Sequence[Bill],
-    bank_names: dict[str, str],
-    *,
-    today: date | None = None,
-) -> int:
-    """批次發送到期提醒。
-
-    Args:
-        bot_token: Bot API 權杖。
-        chat_id: 目標聊天室。
-        bills: 需要提醒的帳單清單。
-        bank_names: bank_code → bank_name 對照。
-        today: 基準日。
-
-    Returns:
-        成功發送的通知數量。
-    """
-    if today is None:
-        today = date.today()
-
-    sent_count = 0
-    for bill in bills:
-        days_left = (bill.due_date - today).days
-        bank_name = bank_names.get(bill.bank_code, bill.bank_code)
-        try:
-            await notify_due_reminder(bot_token, chat_id, bill, bank_name, days_left)
-            sent_count += 1
-        except Exception:
-            logger.exception("Failed to send reminder for bill #%d", bill.id)
-
-    return sent_count

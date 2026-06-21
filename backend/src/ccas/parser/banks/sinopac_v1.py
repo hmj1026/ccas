@@ -271,7 +271,23 @@ class SinopacV1Parser(BankParser):
         """
         row_match = _RE_SUMMARY_ROW.search(text)
         if row_match:
-            return int(row_match.group(6).replace(",", ""))
+            # Guard against bill-version column drift: the positional group(6)
+            # only points at 本期應繳總金額 when the row has exactly 7 numeric
+            # columns. If a future layout inserts/removes a column, the matched
+            # 臺幣 line carries a different number of figures — trust the keyword
+            # path instead of returning a silently wrong amount.
+            line_start = text.rfind("\n", 0, row_match.start()) + 1
+            line_end = text.find("\n", row_match.end())
+            matched_line = (
+                text[line_start:] if line_end == -1 else text[line_start:line_end]
+            )
+            numeric_cols = re.findall(r"[\d,]+", matched_line)
+            if len(numeric_cols) == 7:
+                return int(row_match.group(6).replace(",", ""))
+            logger.warning(
+                "SINOPAC 摘要列欄位數異常（預期 7、實得 %d），改用 keyword 取金額。",
+                len(numeric_cols),
+            )
 
         keyword_match = _RE_TOTAL_AMOUNT.search(text)
         if keyword_match:

@@ -195,6 +195,7 @@ class TestUbotRegistryIntegration:
         import importlib
 
         import ccas.parser
+        import ccas.parser.banks.ubot_v1
 
         importlib.reload(ccas.parser.banks.ubot_v1)
         importlib.reload(ccas.parser.banks)

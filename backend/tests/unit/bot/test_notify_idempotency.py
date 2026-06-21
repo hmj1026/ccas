@@ -59,7 +59,7 @@ class TestNotifyIdempotency:
 
         with (
             patch("ccas.bot.job.get_settings", return_value=_fake_settings()),
-            patch("ccas.bot.job.send_message", mock_send),
+            patch("ccas.bot.notifications.send_message", mock_send),
         ):
             first = await run_notify_job(session)
 
@@ -103,7 +103,7 @@ class TestNotifyIdempotency:
 
         with (
             patch("ccas.bot.job.get_settings", return_value=_fake_settings()),
-            patch("ccas.bot.job.send_message", mock_send),
+            patch("ccas.bot.notifications.send_message", mock_send),
         ):
             summary = await run_notify_job(session)
 

@@ -23,6 +23,7 @@ import type {
   PatternType,
 } from '@/lib/types'
 import { Button } from '@/components/ui/button'
+import { SelectField } from '@/components/ui/select-field'
 import {
   Dialog,
   DialogClose,
@@ -138,24 +139,20 @@ function RuleDialog({
           <DialogTitle>新增規則</DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-3">
-        <label className="flex flex-col text-sm">
-          <span className="text-muted-foreground">類型</span>
-          <select
-            className="rounded border border-input bg-background px-2 py-1"
+        <div className="flex flex-col text-sm">
+          <SelectField
+            label="類型"
+            triggerClassName="h-auto rounded px-2 py-1"
             value={patternType}
-            onChange={(e) => setPatternType(e.target.value as PatternType)}
-            aria-label="pattern_type"
-          >
-            {(Object.keys(PATTERN_TYPE_LABELS) as PatternType[]).map((t) => (
-              <option key={t} value={t}>
-                {PATTERN_TYPE_LABELS[t]}
-              </option>
-            ))}
-          </select>
+            onValueChange={(v) => setPatternType(v as PatternType)}
+            options={(Object.keys(PATTERN_TYPE_LABELS) as PatternType[]).map(
+              (t) => ({ value: t, label: PATTERN_TYPE_LABELS[t] }),
+            )}
+          />
           <span className="mt-1 text-xs text-muted-foreground">
             {PATTERN_TYPE_HELP[patternType]}
           </span>
-        </label>
+        </div>
 
         <label className="flex flex-col text-sm">
           <span className="text-muted-foreground">Pattern</span>
@@ -189,25 +186,22 @@ function RuleDialog({
         )}
 
         <div className="grid grid-cols-2 gap-3">
-          <label className="flex flex-col text-sm">
-            <span className="text-muted-foreground">類別</span>
-            <select
-              className="rounded border border-input bg-background px-2 py-1"
-              value={categoryId === '' ? '' : String(categoryId)}
-              onChange={(e) =>
-                setCategoryId(e.target.value === '' ? '' : Number(e.target.value))
-              }
-              aria-label="category"
-              required
-            >
-              <option value="">— 請選擇 —</option>
-              {categories.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.category}（{c.keyword}）
-                </option>
-              ))}
-            </select>
-          </label>
+          <SelectField
+            label="類別"
+            triggerClassName="h-auto rounded px-2 py-1"
+            value={categoryId === '' ? '' : String(categoryId)}
+            onValueChange={(v) =>
+              setCategoryId(v === '' ? '' : Number(v))
+            }
+            required
+            options={[
+              { value: '', label: '— 請選擇 —' },
+              ...categories.map((c) => ({
+                value: String(c.id),
+                label: `${c.category}（${c.keyword}）`,
+              })),
+            ]}
+          />
           <label className="flex flex-col text-sm">
             <span className="text-muted-foreground">priority</span>
             <input

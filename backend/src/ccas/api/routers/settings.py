@@ -140,10 +140,22 @@ async def delete_category(
     category_id: int,
     session: AsyncSession = Depends(get_db_session),
 ):
-    """刪除分類關鍵字，回傳統一信封格式。"""
+    """刪除分類關鍵字，回傳統一信封格式。
+
+    若該 category 仍被進階分類規則 (``classification_rules.category_id``)
+    引用，SQLite 的 ``foreign_keys=ON`` 會在 commit 時拋
+    ``IntegrityError``，轉為 409 阻止產生孤兒規則。
+    """
     cat = await _get_category_or_404(session, category_id)
     await session.delete(cat)
-    await session.commit()
+    try:
+        await session.commit()
+    except IntegrityError:
+        await session.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail=f"分類 #{category_id} 仍被分類規則引用，無法刪除",
+        ) from None
     return ApiResponse(data={"deleted_id": category_id})
 
 
