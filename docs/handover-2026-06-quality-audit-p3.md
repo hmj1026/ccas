@@ -91,7 +91,7 @@
 - **殘留（非本次範疇）**：settings 各表單的純文字/日期 `<input>` 仍為 label-wrap 隱式關聯（原本即無障礙，未強制改顯式 htmlFor/id）；settings-rules 類型 help text 未加 aria-describedby（原碼即無，屬既有狀態非回歸）。
 
 ### P3-7 FUBON 登入憑證加密儲存（安全，M）— ✅ 已完成（後端 `50b8017`,`bb5c11e`；前端 UI `8efd893`）
-- **檔案**：storage/models.py, ingestor/credentials.py（新）, ingestor/job.py, api/routers/setup/login_credentials.py（新）, api/app.py, api/schemas.py, alembic 7f3ae66246a3, tests/integration/test_setup_login_credentials_router.py（新）
+- **檔案**：storage/models.py, ingestor/credentials.py（新）, ingestor/job.py, api/routers/setup/login_credentials.py（新）, api/app.py, api/schemas.py, alembic 7f3ae66246a3, backend/tests/integration/test_setup_login_credentials_router.py（新）
 - **原規劃**：FUBON_NATIONAL_ID/FUBON_ROC_BIRTHDAY env 明文 → 新增 BankLoginCredential 表(複合主鍵, Fernet)，DB 優先 + env legacy fallback。勿混入 bank_secrets。
 - **實作結果**：
   - 新表 `BankLoginCredential`（複合 PK `bank_code`+`credential_key`、`encrypted_value` Fernet 密文、updated_at trigger）；migration 剔除 autogenerate 對表達式索引/`payment_reminders.sent_at` 的誤判 diff（皆早於本次、非真 drift）。
