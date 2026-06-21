@@ -8,8 +8,18 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from ccas.ingestor.gmail_client import GmailAttachmentMeta, GmailMessage
-from ccas.ingestor.job import run_ingestion_job
-from ccas.storage.models import BankConfig, Base, StagedAttachment
+from ccas.ingestor.job import (
+    IngestionSummary,
+    _process_attachment,
+    run_ingestion_job,
+)
+from ccas.ingestor.staging import create_staged_record
+from ccas.storage.models import (
+    BankConfig,
+    Base,
+    StagedAttachment,
+    StagedAttachmentStatus,
+)
 
 os.environ.setdefault("TELEGRAM_BOT_TOKEN", "test")
 os.environ.setdefault("TELEGRAM_CHAT_ID", "12345")
@@ -274,5 +284,70 @@ class TestFaultTolerance:
             result = await session.execute(stmt)
             ok_records = result.scalars().all()
             assert len(ok_records) == 1
+
+        await engine.dispose()
+
+
+class TestRetryFailureUpdatesErrorReason:
+    """重試 failed 附件再失敗時，須更新既有紀錄的 error_reason（與 web-fetch 對稱）。"""
+
+    async def test_retry_failure_overwrites_stale_error_reason(self):
+        engine, session_factory = await _create_test_session()
+        async with session_factory() as session:
+            # 既有 failed 紀錄，帶舊的 error_reason。
+            existing = await create_staged_record(
+                session,
+                bank_code="UBOT",
+                message_id="msg-retry",
+                attachment_id="att-old",
+                message_date=datetime(2026, 3, 10),
+                original_filename="bill.pdf",
+                staged_path=None,
+                status=StagedAttachmentStatus.FAILED,
+                error_reason="OLD stale reason",
+                part_id="1",
+            )
+            await session.commit()
+            existing_id = existing.id
+
+            attachment = GmailAttachmentMeta(
+                message_id="msg-retry",
+                attachment_id="att-new",
+                filename="bill.pdf",
+                message_date=datetime(2026, 3, 10),
+                size=1024,
+                part_id="1",
+            )
+            summary = IngestionSummary()
+
+            # 重試下載再次失敗。
+            async def fail_to_thread(fn, *args, **kwargs):
+                raise RuntimeError("NEW download timeout")
+
+            with patch(
+                "ccas.ingestor.job.asyncio.to_thread", side_effect=fail_to_thread
+            ):
+                ret = await _process_attachment(
+                    session,
+                    MagicMock(),
+                    "UBOT",
+                    attachment,
+                    "/tmp/test_staging",
+                    summary,
+                )
+
+            assert ret is None
+            assert summary.failed_count == 1
+
+            stmt = select(StagedAttachment).where(StagedAttachment.id == existing_id)
+            record = (await session.execute(stmt)).scalar_one()
+            # 不殘留舊原因；更新為最新失敗原因。
+            assert record.status == StagedAttachmentStatus.FAILED
+            assert "NEW download timeout" in (record.error_reason or "")
+            assert "OLD stale reason" not in (record.error_reason or "")
+
+            # 未新增重複紀錄。
+            all_rows = (await session.execute(select(StagedAttachment))).scalars().all()
+            assert len(all_rows) == 1
 
         await engine.dispose()

@@ -65,22 +65,24 @@ def _format_aggregated_message(
     return "\n".join(lines)
 
 
-async def _existing_thresholds_map(
+async def _existing_alerts_map(
     session: AsyncSession, budget_ids: list[int], period_ym: str
-) -> dict[int, set[int]]:
-    """一次查出多個 budget 在當期已觸發的 thresholds，避免迴圈內 N+1。"""
-    result: dict[int, set[int]] = {}
+) -> dict[tuple[int, int], BudgetAlert]:
+    """一次查出多個 budget 在當期既有的 alert rows，避免迴圈內 N+1。
+
+    回傳 ``{(budget_id, threshold_breached_percent): BudgetAlert}``。同時涵蓋
+    notified=True（已完成）與 notified=False（已建立但推播未成功，待補推）兩
+    種狀態，由呼叫端依 ``notified`` 判定是否略過或重用。
+    """
+    result: dict[tuple[int, int], BudgetAlert] = {}
     if not budget_ids:
         return result
-    stmt = select(
-        BudgetAlert.budget_id,
-        BudgetAlert.threshold_breached_percent,
-    ).where(
+    stmt = select(BudgetAlert).where(
         BudgetAlert.budget_id.in_(budget_ids),
         BudgetAlert.period_year_month == period_ym,
     )
-    for budget_id, pct in (await session.execute(stmt)).all():
-        result.setdefault(budget_id, set()).add(pct)
+    for alert in (await session.execute(stmt)).scalars().all():
+        result[(alert.budget_id, alert.threshold_breached_percent)] = alert
     return result
 
 
@@ -105,7 +107,7 @@ async def evaluate_budgets(
     # 兩者皆批次查詢（R28 + R-budget-N+1：消除迴圈內 N+1）。
     active_budgets = [b for b in budgets if b.amount_ntd > 0]
     active_ids = [b.id for b in active_budgets]
-    existing_map = await _existing_thresholds_map(session, active_ids, period)
+    existing_map = await _existing_alerts_map(session, active_ids, period)
     current_map = await aggregate_current_periods(session, active_budgets, period)
 
     for budget in budgets:
@@ -114,30 +116,39 @@ async def evaluate_budgets(
             continue
 
         current = current_map.get(budget.id, 0)
-        existing = existing_map.get(budget.id, set())
 
         # Two-tier ladder: configured threshold + 100% (over-budget)
         thresholds: list[int] = sorted({budget.alert_threshold_percent, 100})
         for tier in thresholds:
-            if tier in existing:
+            existing_alert = existing_map.get((budget.id, tier))
+            # 已完成（notified=True）才算已通知 → 跳過。notified=False 代表
+            # 「已建立但推播未成功」，需重用該 row 補推（不重複建立）。
+            if existing_alert is not None and existing_alert.notified:
                 continue
             tier_amount = budget.amount_ntd * tier // 100
             if current < tier_amount:
                 continue
-            alert = BudgetAlert(
-                budget_id=budget.id,
-                period_year_month=period,
-                threshold_breached_percent=tier,
-                current_amount_ntd=current,
-                triggered_at=datetime.now(UTC),
-            )
-            session.add(alert)
-            await session.flush()
-            triggered.append((budget, alert))
+            if existing_alert is not None:
+                # 補推：重用既有未通知 row，刷新累計金額。
+                existing_alert.current_amount_ntd = current
+                triggered.append((budget, existing_alert))
+            else:
+                alert = BudgetAlert(
+                    budget_id=budget.id,
+                    period_year_month=period,
+                    threshold_breached_percent=tier,
+                    current_amount_ntd=current,
+                    triggered_at=datetime.now(UTC),
+                    notified=False,
+                )
+                session.add(alert)
+                await session.flush()
+                triggered.append((budget, alert))
 
     if not triggered:
         return {"alerts_triggered": 0, "skipped": skipped}
 
+    # 先 commit alert rows（notified 仍為 False）以保證持久化，再嘗試推播。
     await session.commit()
 
     settings_obj = get_settings()
@@ -155,8 +166,15 @@ async def evaluate_budgets(
             settings_obj.telegram_chat_id,
             text,
         )
-        logger.info("Sent aggregated budget alert message (%d alerts)", len(triggered))
     except Exception as exc:  # noqa: BLE001
+        # 推播失敗：notified 留 False，alert rows 已持久化，下次重跑會補推。
         logger.warning("Failed to send budget alert message: %s", exc)
+        return {"alerts_triggered": len(triggered), "skipped": skipped}
+
+    # 推播成功才標記 notified=True（補推時亦同），並 commit。
+    for _budget, alert in triggered:
+        alert.notified = True
+    await session.commit()
+    logger.info("Sent aggregated budget alert message (%d alerts)", len(triggered))
 
     return {"alerts_triggered": len(triggered), "skipped": skipped}

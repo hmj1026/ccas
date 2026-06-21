@@ -281,6 +281,21 @@ class UbotV1Parser(BankParser):
             month = int(match.group(2))
             ad_year = roc_year + _ROC_OFFSET
             return f"{ad_year}-{month:02d}"
+
+        if close_match:
+            # Degraded path: every month marker is missing (layout drift) but
+            # the closing-date row is present. Derive the billing month from the
+            # closing date's month rather than failing the whole bill with an
+            # opaque "找不到帳單月份" ParseError. group(1)=ROC year, group(2)=month.
+            roc_year = int(close_match.group(1))
+            month = int(close_match.group(2))
+            ad_year = roc_year + _ROC_OFFSET if roc_year < 200 else roc_year
+            logger.warning(
+                "UBOT 帳單缺月份 marker，退化以結帳日月份推導帳單月份：%d-%02d",
+                ad_year,
+                month,
+            )
+            return f"{ad_year}-{month:02d}"
         return None
 
     def _extract_due_date(self, text: str) -> date | None:

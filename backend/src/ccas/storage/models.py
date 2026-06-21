@@ -607,4 +607,11 @@ class BudgetAlert(Base):
     triggered_at: Mapped[datetime] = mapped_column(
         DateTime, default=_utcnow, nullable=False
     )
+    # 推播狀態：僅在 Telegram send_message 成功後才設為 True。
+    # notified=False 的 alert 代表「已建立但推播未成功」，下次 evaluator
+    # 重跑會補推（避免推播失敗就永遠不再通知）。去重判定只把 notified=True
+    # 視為已完成。
+    notified: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("0")
+    )
     acknowledged_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

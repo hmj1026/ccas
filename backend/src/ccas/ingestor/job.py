@@ -253,7 +253,6 @@ async def _process_attachment(
         summary.errors.append(error_msg)
         logger.error(error_msg, exc_info=True)
 
-        # In force mode, preserve the existing good record
         if existing is None:
             await create_staged_record(
                 session,
@@ -266,6 +265,16 @@ async def _process_attachment(
                 status=StagedAttachmentStatus.FAILED,
                 error_reason=str(exc),
                 part_id=attachment.part_id,
+            )
+        else:
+            # Retry (is_failed_retry) or force re-run that failed again: update
+            # the existing record to the latest failure instead of leaving a
+            # stale error_reason behind (symmetric with _process_web_fetch).
+            await update_staged_record_failure(
+                session,
+                existing,
+                status=StagedAttachmentStatus.FAILED,
+                error_reason=str(exc),
             )
         return None
 

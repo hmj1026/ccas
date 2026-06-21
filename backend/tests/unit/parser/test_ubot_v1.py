@@ -24,6 +24,7 @@ from .conftest import (
     EXPECTED_UBOT_TOTAL_AMOUNT,
     UBOT_FIRST_PAGE_TEXT,
     UBOT_NON_UBOT_PAGE_TEXT,
+    UBOT_REAL_SUMMARY_MISSING_MONTH_MARKER_TEXT,
     UBOT_REAL_SUMMARY_TEXT,
     UBOT_REAL_TRANSACTIONS_TEXT,
     UBOT_REAL_ZERO_BALANCE_TEXT,
@@ -478,6 +479,25 @@ class TestRealPdfFormat:
         assert billing_month == EXPECTED_UBOT_REAL_BILLING_MONTH
         assert total_amount == EXPECTED_UBOT_REAL_TOTAL_AMOUNT
         assert due_date == EXPECTED_UBOT_REAL_DUE_DATE
+
+    def test_degrades_to_close_date_month_when_marker_missing(self, caplog):
+        """缺『以下為您XX月份』marker 但有結帳日列時，退化以結帳日月份取帳單月份。
+
+        韌性修補：避免整張帳單僅因 month marker 缺失就 ParseError 且原因不明。
+        """
+        import logging
+
+        parser = _make_parser()
+        page = make_mock_page(UBOT_REAL_SUMMARY_MISSING_MONTH_MARKER_TEXT)
+
+        with caplog.at_level(logging.WARNING):
+            billing_month, total_amount, due_date = parser._extract_summary([page])
+
+        # close date 115/01/27 → ROC 115=2026, month=01
+        assert billing_month == "2026-01"
+        assert total_amount == EXPECTED_UBOT_REAL_TOTAL_AMOUNT
+        assert due_date == EXPECTED_UBOT_REAL_DUE_DATE
+        assert "marker" in caplog.text.lower() or "月份" in caplog.text
 
     def test_zero_balance_raises_parse_error(self):
         parser = _make_parser()

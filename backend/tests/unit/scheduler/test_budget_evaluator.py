@@ -341,6 +341,10 @@ async def test_does_not_raise_when_telegram_disabled(
     out = await evaluate_budgets(session, today=today)
     assert out["alerts_triggered"] == 1
     mock_send.assert_not_called()
+    # Telegram disabled = push skipped → alert stays notified=False so a later
+    # run (after Telegram is configured) re-pushes it.
+    rows = (await session.execute(BudgetAlert.__table__.select())).all()
+    assert all(r.notified is False for r in rows)
 
 
 @patch(
@@ -367,6 +371,95 @@ async def test_swallows_telegram_send_errors(mock_send, session: AsyncSession):
     out = await evaluate_budgets(session, today=today)
     assert out["alerts_triggered"] == 1
     mock_send.assert_called_once()
+
+
+@patch(
+    "ccas.scheduler.budget_evaluator.send_message",
+    new_callable=AsyncMock,
+    side_effect=RuntimeError("boom"),
+)
+async def test_send_failure_leaves_notified_false_and_reattempts(
+    mock_send, session: AsyncSession
+):
+    """推播失敗 → notified 留 False → 下次重跑會補推（不再永久跳過）。"""
+    today, period = _today_period()
+    bill = await _seed_bill_with_txns(session, period_ym=period, txns=[(9000, "餐飲")])
+
+    session.add(
+        Budget(
+            scope=BudgetScope.MONTHLY_TOTAL,
+            scope_ref=None,
+            amount_ntd=10000,
+            alert_threshold_percent=80,
+            enabled=True,
+        )
+    )
+    await session.commit()
+
+    # First run: alert created but send fails → notified stays False
+    out1 = await evaluate_budgets(session, today=today)
+    assert out1["alerts_triggered"] == 1
+    rows = (await session.execute(BudgetAlert.__table__.select())).all()
+    assert len(rows) == 1
+    assert all(r.notified is False for r in rows)
+    assert rows[0].current_amount_ntd == 9000
+
+    # Spend grows before the re-attempt → re-push must refresh current amount.
+    session.add(
+        Transaction(
+            bill_id=bill.id,
+            trans_date=today,
+            merchant="more",
+            amount=500,
+            currency="TWD",
+            category="餐飲",
+        )
+    )
+    await session.commit()
+
+    # Second run: send now succeeds → the un-notified alert is re-pushed
+    # (no duplicate row), its current_amount_ntd is refreshed, and it is
+    # marked notified=True.
+    mock_send.side_effect = None
+    out2 = await evaluate_budgets(session, today=today)
+    assert out2["alerts_triggered"] == 1
+    rows = (await session.execute(BudgetAlert.__table__.select())).all()
+    assert len(rows) == 1
+    assert all(r.notified is True for r in rows)
+    assert rows[0].current_amount_ntd == 9500
+
+
+@patch("ccas.scheduler.budget_evaluator.send_message", new_callable=AsyncMock)
+async def test_send_success_marks_notified_and_no_redispatch(
+    mock_send, session: AsyncSession
+):
+    """推播成功 → notified=True → 下次不重推。"""
+    today, period = _today_period()
+    await _seed_bill_with_txns(session, period_ym=period, txns=[(9000, "餐飲")])
+
+    session.add(
+        Budget(
+            scope=BudgetScope.MONTHLY_TOTAL,
+            scope_ref=None,
+            amount_ntd=10000,
+            alert_threshold_percent=80,
+            enabled=True,
+        )
+    )
+    await session.commit()
+
+    out1 = await evaluate_budgets(session, today=today)
+    assert out1["alerts_triggered"] == 1
+    rows = (await session.execute(BudgetAlert.__table__.select())).all()
+    assert len(rows) == 1
+    assert all(r.notified is True for r in rows)
+
+    # Second run: already notified → nothing new, no extra send.
+    out2 = await evaluate_budgets(session, today=today)
+    assert out2["alerts_triggered"] == 0
+    assert mock_send.call_count == 1
+    rows = (await session.execute(BudgetAlert.__table__.select())).all()
+    assert len(rows) == 1
 
 
 @patch("ccas.scheduler.budget_evaluator.send_message", new_callable=AsyncMock)
