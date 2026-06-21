@@ -27,6 +27,17 @@
 
 ---
 
+## P3 進度
+
+| 項目 | 狀態 | Commit |
+|---|---|---|
+| P3-8 REDIS_PASSWORD https prod 阻斷 | ✅ 已完成 | `7fdca20` |
+| P3-3 CSP SSOT 比對 + parser 動態探索 | ✅ 已完成 | `34fa532` |
+| P3-2 通知呼叫端統一 bot.notifications | ✅ 已完成 | `17b9745` |
+| P3-1 / P3-4 / P3-5 / P3-6 / P3-7 | ⬜ 待辦 | — |
+
+> P3-2 已順帶解決 `defensive_only_findings.md` #2（render_due_reminder 接 Bill ORM 不一致）——該項已改純量、不再是「純防禦勿修」。
+
 ## P3 Backlog（待辦，建議獨立 PR 逐項處理）
 
 > 工作量：S=小 / M=中 / L=大。每項修改前依專案規則跑 `gitnexus_impact`，遵循 TDD，最後過 reviewer。
