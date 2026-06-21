@@ -22,7 +22,7 @@ from datetime import UTC, date, datetime
 from typing import cast, get_args
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ccas.api.schemas import (
@@ -200,6 +200,11 @@ async def delete_budget(
     b = await session.get(Budget, budget_id)
     if b is None:
         raise HTTPException(status_code=404, detail=f"budget_id={budget_id} 不存在")
+    # 先清除子表 BudgetAlert（FK 無 ON DELETE CASCADE，且 foreign_keys=ON 會
+    # 阻擋帶子列的刪除）。alert 為內部通知去重記錄，無獨立保留價值，隨 budget
+    # 一併清除。以 bulk DELETE 取代 ORM relationship cascade，避免 async 下
+    # lazy-load 子集合觸發 MissingGreenlet。
+    await session.execute(delete(BudgetAlert).where(BudgetAlert.budget_id == budget_id))
     await session.delete(b)
     await session.commit()
     return ApiResponse(data={"deleted_id": budget_id})
@@ -233,7 +238,13 @@ def _to_current_period(
 async def list_active_alerts(
     session: AsyncSession = Depends(get_db_session),
 ) -> ApiResponse[list[BudgetAlertItem]]:
-    """回傳當月與最近 7 天內未確認的 alert。"""
+    """回傳當月與最近 7 天內未確認的 alert。
+
+    刻意不以 ``notified`` 過濾：banner 反映「門檻已超支」這個事實，與
+    Telegram 是否成功推播無關。``notified=False`` 代表「已超支但推播尚未
+    成功」，仍應在 dashboard 顯示（請勿加上 ``notified.is_(True)`` 過濾，
+    否則推播失敗的超支警示會在 UI 消失）。
+    """
     period = _current_year_month()
     stmt = (
         select(BudgetAlert, Budget)

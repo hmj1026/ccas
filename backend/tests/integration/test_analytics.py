@@ -1,12 +1,27 @@
 """Analytics API 測試。"""
 
+import datetime
 from datetime import date
+from unittest.mock import patch
 
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ccas.storage.models import BankConfig, Bill, Transaction
 from tests.integration.conftest import auth_headers
+
+
+class _FixedDate(datetime.date):
+    """``date`` 子類，僅固定 ``today()``，保留正常構造能力。
+
+    ``get_trend`` 內以 ``from datetime import date`` 在執行期讀
+    ``datetime.date``，故 patch ``datetime.date`` 為本子類即可固定
+    月份視窗，而 ``date(y, m, d)`` 構造仍正常運作。
+    """
+
+    @classmethod
+    def today(cls) -> "datetime.date":
+        return datetime.date(2026, 3, 15)
 
 
 async def _seed_analytics_data(session: AsyncSession):
@@ -65,16 +80,39 @@ async def _seed_analytics_data(session: AsyncSession):
 
 
 async def test_trend(client: AsyncClient, db_session: AsyncSession):
-    """回傳最近 N 月趨勢。"""
+    """回傳最近 N 月趨勢，並斷言實際金額。
+
+    fixture：2026-03 total = 10000 + 5000 = 15000；2026-02 total = 8000。
+    固定 today = 2026-03-15，months=6 → 視窗 2025-10 ~ 2026-03，其中
+    2026-01 等月份無帳單應回 0。``date.today()`` 以 context manager
+    僅在本測試內 patch，不影響同檔其他測試。
+    """
     await _seed_analytics_data(db_session)
 
-    response = await client.get("/api/analytics/trend?months=6", headers=auth_headers())
+    with patch("datetime.date", _FixedDate):
+        response = await client.get(
+            "/api/analytics/trend?months=6", headers=auth_headers()
+        )
     assert response.status_code == 200
     data = response.json()["data"]
     assert len(data) == 6
-    # 確認有 month 和 total 欄位
-    months = [item["month"] for item in data]
-    assert "2026-03" in months
+
+    totals_by_month = {item["month"]: item["total"] for item in data}
+    # 視窗應為 2025-10 ~ 2026-03（升冪）
+    assert [item["month"] for item in data] == [
+        "2025-10",
+        "2025-11",
+        "2025-12",
+        "2026-01",
+        "2026-02",
+        "2026-03",
+    ]
+    # 有資料月份斷言實際金額
+    assert totals_by_month["2026-03"] == 15000
+    assert totals_by_month["2026-02"] == 8000
+    # 空月份回 0
+    assert totals_by_month["2026-01"] == 0
+    assert totals_by_month["2025-10"] == 0
 
 
 async def test_trend_default_months_is_six(
