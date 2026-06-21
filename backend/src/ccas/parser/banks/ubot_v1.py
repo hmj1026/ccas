@@ -404,6 +404,9 @@ def _parse_transaction_row(
                 return None
 
             amount = int(raw_amount.replace(",", ""))
+            # 回饋 / 退款 / 沖銷：保留為負數明細（R26），與 real/text 路徑一致。
+            if _is_cashback_row(raw_amount, merchant, amount):
+                amount = -abs(amount)
             posting_date = _parse_mmdd(raw_posting_date, year, billing_month_num)
             if posting_date is None:
                 posting_date = _parse_date(raw_posting_date, year, billing_month_num)
@@ -430,6 +433,9 @@ def _parse_transaction_row(
                 return None
 
             amount = int(raw_amount.replace(",", ""))
+            # 回饋 / 退款 / 沖銷：保留為負數明細（R26），與 real/text 路徑一致。
+            if _is_cashback_row(raw_amount, merchant, amount):
+                amount = -abs(amount)
             return TransactionItem(
                 trans_date=trans_date,
                 merchant=merchant,
@@ -568,6 +574,10 @@ def _parse_text_transaction(
         if trans_date is None:
             return None
 
+        # 回饋 / 退款 / 沖銷：保留為負數明細（R26），與 real-format 路徑一致。
+        if _is_cashback_row(match.group(0), merchant, amount):
+            amount = -abs(amount)
+
         return TransactionItem(
             trans_date=trans_date,
             merchant=merchant,
@@ -592,6 +602,10 @@ def _parse_simple_text_transaction(
 
         if trans_date is None:
             return None
+
+        # 回饋 / 退款 / 沖銷：保留為負數明細（R26），與 real-format 路徑一致。
+        if _is_cashback_row(match.group(0), merchant, amount):
+            amount = -abs(amount)
 
         return TransactionItem(
             trans_date=trans_date,

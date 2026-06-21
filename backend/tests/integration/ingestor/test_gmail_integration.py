@@ -102,7 +102,7 @@ class TestSuccessfulDownload:
             # mock asyncio.to_thread for search/download/write
             call_count = {"n": 0}
 
-            async def fake_to_thread(fn, *args):
+            async def fake_to_thread(fn, *args, **kwargs):
                 call_count["n"] += 1
                 if call_count["n"] == 1:
                     # search_messages
@@ -163,7 +163,7 @@ class TestDownloadFailure:
 
             call_count = {"n": 0}
 
-            async def fake_to_thread(fn, *args):
+            async def fake_to_thread(fn, *args, **kwargs):
                 call_count["n"] += 1
                 if call_count["n"] == 1:
                     return [_sample_message()]

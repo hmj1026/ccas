@@ -471,7 +471,8 @@ class PatternType(StrEnum):
 
     keyword: 子字串比對（case-insensitive，正規化後）
     exact: 完全相等（normalize 後）
-    regex: 正規表示式（含 100ms timeout 保護，避免 catastrophic backtracking）
+    regex: 正規表示式（load 期 ReDoS burn-in + API 層拒收危險 pattern，
+        避免 catastrophic backtracking）
     """
 
     KEYWORD = "keyword"

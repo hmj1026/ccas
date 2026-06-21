@@ -178,4 +178,51 @@ describe('InsightsPage', () => {
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     })
   })
+
+  it('isolates a failed section with a retry button; others render; retry recovers', async () => {
+    let banksCalls = 0
+    mockedGet.mockImplementation((path: string) => {
+      if (path === '/api/analytics/compare/banks') {
+        banksCalls += 1
+        if (banksCalls === 1) {
+          return Promise.reject(new Error('銀行對比載入失敗'))
+        }
+        return Promise.resolve({
+          success: true,
+          message: '',
+          data: [{ bank_code: 'CTBC', bank_name: '中國信託', total: 12000 }],
+        })
+      }
+      if (path === '/api/analytics/top-merchants') {
+        return Promise.resolve({
+          success: true,
+          message: '',
+          data: [{ merchant: 'STARBUCKS', total: 5000, count: 12 }],
+        })
+      }
+      // 其餘區段成功（trend / years / 其他）
+      return Promise.resolve({ success: true, message: '', data: [] })
+    })
+
+    renderPage()
+
+    // 其餘成功區段正常渲染，未被失敗區段牽連
+    expect(await screen.findByText('STARBUCKS')).toBeInTheDocument()
+
+    // 失敗區段顯示錯誤訊息與重試按鈕（其餘成功區段不應出現重試）
+    expect(await screen.findByText('銀行對比載入失敗')).toBeInTheDocument()
+    const retryBtn = screen.getByRole('button', { name: /重試/ })
+    expect(banksCalls).toBe(1)
+
+    // 點擊重試 → refetch → 成功後錯誤清除、重試按鈕消失
+    await userEvent.click(retryBtn)
+    await waitFor(() => {
+      expect(banksCalls).toBeGreaterThanOrEqual(2)
+    })
+    await waitFor(() => {
+      expect(
+        screen.queryByRole('button', { name: /重試/ }),
+      ).not.toBeInTheDocument()
+    })
+  })
 })

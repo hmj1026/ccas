@@ -16,6 +16,7 @@ import { apiGet, apiPost } from '@/lib/api-client'
 import type {
   ApiResponse,
   BankConfigItem,
+  PaginatedResponse,
   PipelineRunDetail,
   PipelineRunStatus,
   PipelineRunSummary,
@@ -84,7 +85,8 @@ function OperationsPage() {
   const runsQuery = useQuery({
     queryKey: ['pipeline-runs'],
     queryFn: () =>
-      apiGet<ApiResponse<readonly PipelineRunSummary[]>>('/api/pipeline/runs'),
+      // /runs 採統一 PaginatedResponse 信封；此頁僅讀 data，pagination 暫未使用。
+      apiGet<PaginatedResponse<PipelineRunSummary>>('/api/pipeline/runs'),
     staleTime: 30_000,
     refetchInterval: (query) => {
       const active = query.state.data?.data.find((run) =>

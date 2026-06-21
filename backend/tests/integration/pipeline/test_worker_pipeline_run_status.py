@@ -81,7 +81,7 @@ class TestRunPipelineSyncPipelineRunStatus:
         seen = {}
 
         async def fake_run_pipeline(
-            session, options, progress_reporter=None, notify_job=None
+            session, options, progress_reporter=None, *, notify_job
         ):
             assert progress_reporter is not None
             seen["progress_reporter"] = progress_reporter
@@ -154,7 +154,7 @@ class TestRunPipelineSyncFailurePath:
         """run_pipeline 拋例外時 PipelineRun 必須是 FAILED 而非 RUNNING。"""
         asyncio.run(_insert_run(worker_db))
 
-        async def boom(session, options, progress_reporter=None, notify_job=None):
+        async def boom(session, options, progress_reporter=None, *, notify_job):
             raise RuntimeError("pipeline exploded")
 
         monkeypatch.setattr("ccas.pipeline.orchestrator.run_pipeline", boom)

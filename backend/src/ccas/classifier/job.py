@@ -19,6 +19,7 @@ from ccas.classifier.staging import (
     fetch_unclassified_transactions,
 )
 from ccas.classifier.user_rules import UserRuleMatcher
+from ccas.errors import ClassifyError
 from ccas.pipeline.progress import NoopProgressReporter, ProgressReporter
 from ccas.storage.models import Transaction
 
@@ -48,6 +49,35 @@ async def _flush_category_updates(
         await session.execute(stmt)
         for txn in txns:
             set_committed_value(txn, "category", category)
+
+
+async def _flush_commit_or_rollback(
+    session: AsyncSession,
+    pending: dict[str, list[Transaction]],
+) -> None:
+    """Flush accumulated category updates and commit, rolling back on failure.
+
+    The batch is all-or-nothing: any flush/commit error rolls the whole batch
+    back and raises ``ClassifyError`` so the pipeline stage is marked failed
+    instead of leaving a polluted session for the downstream notify stage. The
+    number of affected (un-written) transactions is logged for diagnosis.
+    """
+    if not pending:
+        # Nothing changed (e.g. all rows manual_override / already correct);
+        # skip the no-op commit so a commit error can't misreport 0 rows.
+        return
+    try:
+        await _flush_category_updates(session, pending)
+        await session.commit()
+    except Exception as exc:
+        affected = sum(len(txns) for txns in pending.values())
+        logger.error(
+            "classify flush 失敗，%d 筆交易分類結果未寫入，將 rollback",
+            affected,
+            exc_info=True,
+        )
+        await session.rollback()
+        raise ClassifyError("分類結果寫入失敗", reason="flush/commit error") from exc
 
 
 @dataclass(frozen=True)
@@ -140,8 +170,7 @@ async def run_classify_job(
             processed += 1
             await reporter.stage_item_done("classify", processed=processed)
 
-    await _flush_category_updates(session, pending_updates)
-    await session.commit()
+    await _flush_commit_or_rollback(session, pending_updates)
 
     # 與既有契約相容：classified_count 含所有寫入 category 的 row（即使是
     # DEFAULT_CATEGORY 也算，與 manual_override 的 skip 區分）
@@ -211,8 +240,7 @@ async def run_reclassify_job(session: AsyncSession) -> ClassifySummary:
         pending_updates[new_category].append(txn)
         classified_count += 1
 
-    await _flush_category_updates(session, pending_updates)
-    await session.commit()
+    await _flush_commit_or_rollback(session, pending_updates)
 
     logger.info(
         "重跑分類完成：%d 筆更新, %d 筆未變動（含 %d 筆 manual_override 跳過）",

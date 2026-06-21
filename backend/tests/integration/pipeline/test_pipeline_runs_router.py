@@ -169,6 +169,36 @@ async def test_list_pipeline_runs_offset_pagination_and_total_header(
 
 
 @pytest.mark.asyncio
+async def test_list_pipeline_runs_returns_pagination_envelope(
+    client: AsyncClient, db_session: AsyncSession
+):
+    """R-api-pagination：/runs 改用統一 PaginatedResponse 信封；
+
+    ``pagination`` 由 limit/offset 換算，``X-Total-Count`` header 仍保留（向下相容）。
+    """
+    now = datetime.now(UTC)
+    db_session.add_all(
+        [_make_run(f"r-{i}", created_at=now + timedelta(seconds=i)) for i in range(5)]
+    )
+    await db_session.commit()
+
+    resp = await client.get(
+        "/api/pipeline/runs?limit=2&offset=2", headers=auth_headers()
+    )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["pagination"] == {
+        "page": 2,
+        "page_size": 2,
+        "total": 5,
+        "total_pages": 3,
+    }
+    # 既有消費者（讀 data / header）不受影響。
+    assert [item["id"] for item in body["data"]] == ["r-2", "r-1"]
+    assert resp.headers["X-Total-Count"] == "5"
+
+
+@pytest.mark.asyncio
 async def test_list_pipeline_runs_rejects_negative_offset(client: AsyncClient):
     """offset < 0 回 422（統一信封格式）。"""
     response = await client.get("/api/pipeline/runs?offset=-1", headers=auth_headers())

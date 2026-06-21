@@ -55,6 +55,9 @@ class Settings(BaseSettings):
     gmail_credentials_path: str = "./data/credentials.json"
     gmail_token_path: str = "./data/token.json"
     staging_dir: str = "./data/staging"
+    # 單筆 PDF 解析逾時（秒）。毒藥 PDF 觸發 pdfplumber 無限阻塞時，
+    # asyncio.wait_for 逾時讓 worker 標記 PARSE_FAILED 並繼續下一筆。
+    pdf_parse_timeout_seconds: float = 60.0
     log_level: str = "INFO"
     log_format: str = "json"
     log_dir: str = ""
@@ -75,7 +78,10 @@ class Settings(BaseSettings):
     frontend_origins: str = "http://127.0.0.1:5173,http://localhost:5173"
     api_session_cookie_name: str = "ccas_session"
     api_session_max_age: int = 43200
-    api_cookie_secure: bool = False
+    # Secure-by-default: the session cookie carries the Secure flag (TLS-only)
+    # unless an HTTP-only local dev explicitly opts out with
+    # API_COOKIE_SECURE=false. check-env.sh blocks an HTTPS deploy that opts out.
+    api_cookie_secure: bool = True
     redis_url: str = "redis://localhost:6379/0"
     scheduler_api_base_url: str = ""
     telegram_allowed_chat_ids: str = ""

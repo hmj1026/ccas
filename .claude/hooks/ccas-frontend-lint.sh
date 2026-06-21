@@ -1,7 +1,10 @@
 #!/bin/bash
 # CCAS Frontend Check Hook
 # Shared hook for PostToolUse (Edit + Write) on TypeScript/React files
-# Runs: eslint, plus a Vitest smoke check when test config changes
+# Runs: a Vitest-scope smoke check when test config changes + a Playwright reminder.
+# NOTE: eslint is now handled by the dhpk `js` module (batched at Stop + pre-commit
+# gate); removed here to avoid double-linting. This hook keeps the ccas-specific
+# vitest-config smoke check and the e2e Playwright reminder.
 set -o pipefail
 
 FILE="${1:-}"
@@ -34,11 +37,7 @@ FRONTEND_DIR="$PROJECT_ROOT/frontend"
 # Check pnpm is available
 command -v pnpm >/dev/null 2>&1 || { echo "[frontend-lint] pnpm not found, skipping"; exit 0; }
 
-# 1. ESLint
-echo "[eslint]"
-(cd "$FRONTEND_DIR" && pnpm exec eslint "$FILE" 2>&1 | head -20) || true
-
-# 2. Vitest smoke check when test collection config changes
+# 1. Vitest smoke check when test collection config changes
 if [ "$IS_VITEST_CONFIG" = "1" ]; then
     echo "[vitest-smoke]"
     echo "[Hook] Verifying pnpm test stays scoped to Vitest unit tests only"

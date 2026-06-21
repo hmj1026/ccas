@@ -328,6 +328,31 @@ class TestSearchMessagesPagination:
         assert any("分頁中途失敗" in r.message for r in caplog.records)
 
     @patch("ccas.ingestor.gmail_client.call_with_retry")
+    def test_mid_page_failure_surfaces_to_partial_errors(self, mock_retry, caplog):
+        """Partial pagination failure is attributed to bank_code and surfaced."""
+        from googleapiclient.errors import HttpError
+
+        mock_retry.side_effect = [
+            {"messages": [{"id": "msg-001"}], "nextPageToken": "token-2"},
+            HttpError(MagicMock(status=503), b"Service Unavailable"),
+            _make_message_payload("msg-001", [_pdf_part("bill1.pdf", "att-1")]),
+        ]
+        partial_errors: list[str] = []
+
+        with caplog.at_level(logging.WARNING, logger="ccas.ingestor.gmail_client"):
+            result = search_messages(
+                MagicMock(),
+                "from:bank@example.com",
+                bank_code="CTBC",
+                partial_errors=partial_errors,
+            )
+
+        assert len(result) == 1
+        assert len(partial_errors) == 1
+        assert "CTBC" in partial_errors[0]
+        assert any("CTBC" in r.message for r in caplog.records)
+
+    @patch("ccas.ingestor.gmail_client.call_with_retry")
     def test_first_page_failure_raises(self, mock_retry):
         """第一頁就失敗時，應直接拋出例外。"""
         from googleapiclient.errors import HttpError

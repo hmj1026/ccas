@@ -204,10 +204,38 @@ async def _process_attachment(
         )
         return
 
-    # 在 thread 中執行同步 parse 邏輯
-    success, parse_result, error_detail = await asyncio.to_thread(
-        _try_parse, candidates, staged_path
-    )
+    # 在 thread 中執行同步 parse 邏輯，並以逾時隔離毒藥 PDF（單筆無限阻塞時，
+    # event loop 不會被卡住）。注意：wait_for 逾時後背景 thread 仍會跑到
+    # pdfplumber 自然返回（Python thread 無法強制中止），thread 會短暫洩漏，
+    # 但 worker 可立即繼續處理下一筆——已達隔離目的。
+    try:
+        success, parse_result, error_detail = await asyncio.wait_for(
+            asyncio.to_thread(_try_parse, candidates, staged_path),
+            timeout=settings.pdf_parse_timeout_seconds,
+        )
+    except TimeoutError:
+        pdf_filename = attachment.original_filename or "unknown"
+        error_msg = (
+            f"PDF 解析逾時 (>{settings.pdf_parse_timeout_seconds:.0f}s)，"
+            f"疑似毒藥 PDF: {bank_code}/{pdf_filename}"
+        )
+        summary.failed_count += 1
+        summary.errors.append(error_msg)
+        logger.error(
+            error_msg,
+            extra={
+                "pdf_filename": pdf_filename,
+                "bank_code": bank_code,
+                "error_type": "ParseTimeout",
+            },
+        )
+        await update_attachment_status(
+            session,
+            attachment,
+            status=StagedAttachmentStatus.PARSE_FAILED,
+            error_reason=error_msg,
+        )
+        return
 
     if not success:
         pdf_filename = attachment.original_filename or "unknown"

@@ -267,7 +267,13 @@ async def test_ingest_emits_per_bank_started_with_attachment_total() -> None:
 
     bank_messages = {"from:ctbc": [msg_a1], "from:esun": [msg_b1, msg_b2]}
 
-    def _search(_service: Any, query: str) -> list[Any]:
+    def _search(
+        _service: Any,
+        query: str,
+        *,
+        bank_code: str | None = None,
+        partial_errors: Any = None,
+    ) -> list[Any]:
         return bank_messages[query]
 
     with (

@@ -5,7 +5,6 @@
 """
 
 import logging
-from dataclasses import dataclass, field
 from typing import Any, cast
 
 from sqlalchemy import CursorResult, select
@@ -16,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ccas.config import get_settings
 from ccas.messaging import render_new_bill_notification, send_message
 from ccas.pipeline.progress import NoopProgressReporter, ProgressReporter
+from ccas.pipeline.summary import NotifySummary
 from ccas.storage.models import Bill, PaymentReminder
 from ccas.storage.queries import fetch_bank_names
 
@@ -25,20 +25,9 @@ logger = logging.getLogger(__name__)
 # scheduler reminder types ("3day" / "1day") in scheduler/reminders.py.
 NEW_BILL_REMINDER_TYPE = "new_bill"
 
-
-@dataclass
-class NotifySummary:
-    """通知階段的統計摘要。
-
-    Attributes:
-        sent_count: 成功發送的通知數。
-        failed_count: 發送失敗的數量。
-        errors: 錯誤訊息清單。
-    """
-
-    sent_count: int = 0
-    failed_count: int = 0
-    errors: list[str] = field(default_factory=list)
+# NotifySummary 已移至 ccas.pipeline.summary（解除 pipeline→bot 反向相依）；
+# 此處 re-export 維持既有 ``from ccas.bot.job import NotifySummary`` 路徑。
+__all__ = ["NEW_BILL_REMINDER_TYPE", "NotifySummary", "run_notify_job"]
 
 
 async def run_notify_job(
@@ -157,6 +146,13 @@ async def run_notify_job(
                 )
         finally:
             processed += 1
-            await reporter.stage_item_done("notify", processed=processed)
+            try:
+                await reporter.stage_item_done("notify", processed=processed)
+            except Exception:
+                logger.warning(
+                    "notify progress reporting failed (processed=%d); continuing",
+                    processed,
+                    exc_info=True,
+                )
 
     return summary

@@ -230,7 +230,14 @@ async def run_decryption_job(
             )
         finally:
             processed += 1
-            await reporter.stage_item_done("decrypt", processed=processed)
+            try:
+                await reporter.stage_item_done("decrypt", processed=processed)
+            except Exception:
+                logger.warning(
+                    "decrypt progress reporting failed (processed=%d); continuing",
+                    processed,
+                    exc_info=True,
+                )
 
     logger.info(
         "Decryption 完成：%d 解密, %d 透通, %d 略過, %d 失敗",

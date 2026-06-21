@@ -61,7 +61,7 @@ const NAV_GROUPS = [
       { to: '/settings/budgets', label: '預算', icon: Wallet, prefetch: importSettingsBudgets },
       { to: '/settings/rules', label: '分類規則', icon: Tags, prefetch: importSettingsRules },
       { to: '/settings', label: '分類關鍵字', icon: Settings, prefetch: importSettings },
-      { to: '/setup/gmail', label: '設定中心', icon: Settings2, prefetch: importSetupGmail },
+      { to: '/setup', label: '設定中心', icon: Settings2, prefetch: importSetupGmail },
     ],
   },
 ] as const

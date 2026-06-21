@@ -209,7 +209,7 @@ function InsightsPage() {
             ))}
           </select>
         </div>
-        <QuerySection query={trendQuery}>
+        <QuerySection query={trendQuery} onRetry={() => trendQuery.refetch()}>
           {(trend) =>
             trend.length === 0 ? (
               <EmptyState message="尚無趨勢資料" />
@@ -239,7 +239,10 @@ function InsightsPage() {
       <div className="grid gap-6 lg:grid-cols-2">
         <section className="rounded-lg border border-border p-4">
           <h2 className="mb-4 text-lg font-semibold">銀行對比</h2>
-          <QuerySection query={banksCompareQuery}>
+          <QuerySection
+            query={banksCompareQuery}
+            onRetry={() => banksCompareQuery.refetch()}
+          >
             {(data) => <BankComparisonBarChart data={data} />}
           </QuerySection>
         </section>
@@ -257,7 +260,10 @@ function InsightsPage() {
               <option value="count">筆數</option>
             </select>
           </div>
-          <QuerySection query={yearsCompareQuery}>
+          <QuerySection
+            query={yearsCompareQuery}
+            onRetry={() => yearsCompareQuery.refetch()}
+          >
             {(data) => (
               <YearComparisonLineChart
                 data={data}
@@ -294,7 +300,10 @@ function InsightsPage() {
             </select>
           </div>
         </div>
-        <QuerySection query={merchantsQuery}>
+        <QuerySection
+          query={merchantsQuery}
+          onRetry={() => merchantsQuery.refetch()}
+        >
           {(data) => <TopMerchantsTable data={data} />}
         </QuerySection>
       </section>
@@ -307,7 +316,10 @@ function InsightsPage() {
               {month}
             </span>
           </h2>
-          <QuerySection query={categoriesCompareQuery}>
+          <QuerySection
+            query={categoriesCompareQuery}
+            onRetry={() => categoriesCompareQuery.refetch()}
+          >
             {(data) => <CategoryListWithCompare data={data} />}
           </QuerySection>
         </section>

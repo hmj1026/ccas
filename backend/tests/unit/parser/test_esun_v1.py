@@ -216,6 +216,51 @@ class TestExtractTransactions:
         assert txns[0].merchant == "全家便利商店"
         assert txns[0].posting_date is None
 
+    def test_real_format_refund_by_merchant_keyword_is_negative(self):
+        """Refund row keyed only by merchant wording (no minus sign) → negative.
+
+        Regression: 退款/沖銷 rows posted as positive amounts were recorded as
+        expenses instead of credits.
+        """
+        parser = _make_parser()
+        text = "03/09 退款-某連鎖商店 TWD 500\n"
+        page = make_mock_page(text)
+
+        txns = parser._extract_transactions(
+            cast(list[pdfplumber.page.Page], [page]), 2026
+        )
+
+        assert len(txns) == 1
+        assert txns[0].amount == -500
+
+    def test_table_parenthesized_amount_is_negative(self):
+        """Accounting-style (500) amount cell → -500 (was silently dropped)."""
+        parser = _make_parser()
+        header = ["交易日", "交易說明", "金額"]
+        rows = [["03/01", "某商店退貨沖銷", "(500)"]]
+        table = [header, *rows]
+        page = make_mock_page("", tables=[table])
+
+        txns = parser._extract_transactions(
+            cast(list[pdfplumber.page.Page], [page]), 2026
+        )
+
+        assert len(txns) == 1
+        assert txns[0].amount == -500
+
+    def test_payment_negative_row_not_double_negated(self):
+        """Already-negative payment rows (non-refund merchant) stay as-is."""
+        parser = _make_parser()
+        text = "03/09 感謝您辦理本行自動轉帳繳款 TWD -10,615\n"
+        page = make_mock_page(text)
+
+        txns = parser._extract_transactions(
+            cast(list[pdfplumber.page.Page], [page]), 2026
+        )
+
+        assert len(txns) == 1
+        assert txns[0].amount == -10615
+
 
 # -- ROC date support tests --
 

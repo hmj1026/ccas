@@ -1,7 +1,8 @@
 /**
  * 共用 loading、error、empty state 元件。
  */
-import { AlertCircle, Inbox, Loader2 } from 'lucide-react'
+import { AlertCircle, Inbox, Loader2, RefreshCw } from 'lucide-react'
+import { cn } from '@/lib/utils'
 
 /**
  * 資料載入中狀態，顯示旋轉圖示與提示文字。
@@ -22,11 +23,21 @@ export function LoadingState({ message = '載入中...' }: { readonly message?: 
 }
 
 /**
- * 錯誤狀態，以紅色顯示錯誤訊息。
+ * 錯誤狀態，以紅色顯示錯誤訊息，並可選擇性提供「重試」按鈕。
  *
  * @param message - 錯誤說明文字，預設為「發生錯誤」
+ * @param onRetry - 提供時於訊息下方渲染重試按鈕；省略則維持純錯誤顯示
+ * @param isRetrying - 重試進行中（按鈕停用並顯示旋轉圖示），避免重複觸發
  */
-export function ErrorState({ message = '發生錯誤' }: { readonly message?: string }) {
+export function ErrorState({
+  message = '發生錯誤',
+  onRetry,
+  isRetrying = false,
+}: {
+  readonly message?: string
+  readonly onRetry?: () => void
+  readonly isRetrying?: boolean
+}) {
   return (
     <div
       role="alert"
@@ -34,6 +45,20 @@ export function ErrorState({ message = '發生錯誤' }: { readonly message?: st
     >
       <AlertCircle className="size-8" aria-hidden="true" />
       <p className="mt-3 text-sm">{message}</p>
+      {onRetry && (
+        <button
+          type="button"
+          onClick={onRetry}
+          disabled={isRetrying}
+          className="mt-3 inline-flex items-center gap-1.5 rounded border border-destructive/40 px-3 py-1 text-xs hover:bg-destructive/10 disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          <RefreshCw
+            className={cn('size-3.5', isRetrying && 'animate-spin')}
+            aria-hidden="true"
+          />
+          {isRetrying ? '重試中...' : '重試'}
+        </button>
+      )}
     </div>
   )
 }

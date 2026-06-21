@@ -286,6 +286,31 @@ class TestExtractSummaryRoc:
         assert estimated is False
 
 
+class TestDueDateRocWindow:
+    """_extract_due_date_roc 候選範圍驗證（取代脆弱的 matches[-1]）。"""
+
+    def test_single_date_still_resolves(self):
+        from ccas.parser.banks.ctbc_v1 import _extract_due_date_roc
+
+        text = "$1,000 115/03/28\n"
+        assert _extract_due_date_roc(text, "2026-03") == date(2026, 3, 28)
+
+    def test_trailing_out_of_window_noise_is_ignored(self):
+        """A noise ROC date after the cutoff must not be taken as the due date."""
+        from ccas.parser.banks.ctbc_v1 import _extract_due_date_roc
+
+        # Cutoff 115/03/28 then a stray date two months later (outside window).
+        text = "$1,000 115/03/28\n備註 115/05/20\n"
+        assert _extract_due_date_roc(text, "2026-03") == date(2026, 3, 28)
+
+    def test_returns_none_when_no_candidate_in_window(self):
+        """All candidates out of window → None, so caller falls back to page 1."""
+        from ccas.parser.banks.ctbc_v1 import _extract_due_date_roc
+
+        text = "115/01/05\n"
+        assert _extract_due_date_roc(text, "2026-03") is None
+
+
 class TestExtractTransactionsRoc:
     def test_extracts_roc_transactions(self):
         parser = _make_parser()

@@ -10,30 +10,13 @@ import { renderWithProviders } from '@/test-utils'
 vi.mock('@/lib/api-client', () => ({
   apiGet: vi.fn(),
   apiPost: vi.fn(),
-  apiPatch: vi.fn(),
   apiDelete: vi.fn(),
 }))
 
-import { apiGet, apiPost, apiPatch, apiDelete } from '@/lib/api-client'
+import { apiGet, apiPost, apiDelete } from '@/lib/api-client'
 const mockApiGet = vi.mocked(apiGet)
 const mockApiPost = vi.mocked(apiPost)
-const mockApiPatch = vi.mocked(apiPatch)
 const mockApiDelete = vi.mocked(apiDelete)
-
-const MOCK_BANKS = {
-  success: true,
-  data: [
-    {
-      id: 1,
-      bank_code: 'CTBC',
-      bank_name: '中國信託',
-      gmail_filter: 'from:ctbc',
-      active_parser_version: 'v1',
-      is_active: true,
-    },
-  ],
-  message: '',
-}
 
 const MOCK_CATEGORIES = {
   success: true,
@@ -45,42 +28,17 @@ const MOCK_CATEGORIES = {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  mockApiGet.mockImplementation((path: string) => {
-    if (path.includes('banks')) return Promise.resolve(MOCK_BANKS)
-    return Promise.resolve(MOCK_CATEGORIES)
-  })
+  mockApiGet.mockResolvedValue(MOCK_CATEGORIES)
 })
 
 describe('SettingsPage', () => {
-  it('renders bank config and category sections', async () => {
+  it('renders the category keyword section', async () => {
     renderWithProviders(<SettingsPage />)
 
     await waitFor(() => {
-      expect(screen.getByText('中國信託')).toBeInTheDocument()
+      expect(screen.getByText('starbucks')).toBeInTheDocument()
     })
-    expect(screen.getByText('starbucks')).toBeInTheDocument()
     expect(screen.getByText('餐飲')).toBeInTheDocument()
-  })
-
-  it('toggles bank active status', async () => {
-    const user = userEvent.setup()
-    mockApiPatch.mockResolvedValue({
-      success: true,
-      data: { ...MOCK_BANKS.data[0], is_active: false },
-      message: '',
-    })
-
-    renderWithProviders(<SettingsPage />)
-
-    await waitFor(() => {
-      expect(screen.getByText('啟用中')).toBeInTheDocument()
-    })
-
-    await user.click(screen.getByLabelText('停用銀行'))
-
-    expect(mockApiPatch).toHaveBeenCalledWith('/api/settings/banks/1', {
-      is_active: false,
-    })
   })
 
   it('creates a new category keyword', async () => {
@@ -168,10 +126,7 @@ describe('SettingsPage', () => {
   })
 
   it('shows empty state when no categories', async () => {
-    mockApiGet.mockImplementation((path: string) => {
-      if (path.includes('banks')) return Promise.resolve(MOCK_BANKS)
-      return Promise.resolve({ success: true, data: [], message: '' })
-    })
+    mockApiGet.mockResolvedValue({ success: true, data: [], message: '' })
 
     renderWithProviders(<SettingsPage />)
 

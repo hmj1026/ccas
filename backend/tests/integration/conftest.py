@@ -58,7 +58,10 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
     app.dependency_overrides[get_db_session] = _override_db
 
     transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+    # https scheme: the session cookie defaults to Secure=True (api_cookie_secure),
+    # so httpx only stores/returns it over a secure-context base_url. http:// would
+    # silently drop the cookie and break session-auth round-trips in tests.
+    async with AsyncClient(transport=transport, base_url="https://test") as ac:
         yield ac
 
 

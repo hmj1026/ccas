@@ -470,11 +470,20 @@ async def run_ingestion_job(
         gmail_query = _build_gmail_query(bank.gmail_filter, options)
 
         try:
-            messages = await asyncio.to_thread(search_messages, service, gmail_query)
+            # summary.errors is mutated inside the worker thread; safe because
+            # the per-bank loop is sequential and we await this call (no other
+            # coroutine touches summary.errors during the thread's window).
+            messages = await asyncio.to_thread(
+                search_messages,
+                service,
+                gmail_query,
+                bank_code=bank.bank_code,
+                partial_errors=summary.errors,
+            )
         except Exception as exc:
             error_msg = f"銀行 {bank.bank_code} Gmail 搜尋失敗: {exc}"
             summary.errors.append(error_msg)
-            logger.error(error_msg)
+            logger.error(error_msg, exc_info=True)
             continue
 
         summary.messages_found += len(messages)

@@ -115,9 +115,8 @@ class TestPipelineStageOrder:
             patch(
                 "ccas.pipeline.orchestrator.run_classify_job", side_effect=mock_classify
             ),
-            patch("ccas.bot.job.run_notify_job", side_effect=mock_notify),
         ):
-            await run_pipeline(mock_session)
+            await run_pipeline(mock_session, notify_job=mock_notify)
 
         assert call_order == ["ingest", "decrypt", "parse", "classify", "notify"]
 
@@ -140,12 +139,10 @@ class TestPipelineStageOrder:
                 "ccas.pipeline.orchestrator.run_classify_job",
                 return_value=_make_classify_summary(),
             ),
-            patch(
-                "ccas.bot.job.run_notify_job",
-                return_value=_make_notify_summary(),
-            ),
         ):
-            summary = await run_pipeline(mock_session)
+            summary = await run_pipeline(
+                mock_session, notify_job=AsyncMock(return_value=_make_notify_summary())
+            )
 
         stage_names = [s.stage for s in summary.stages]
         assert stage_names == ["ingest", "decrypt", "parse", "classify", "notify"]
@@ -179,12 +176,8 @@ class TestNotifyJobInjection:
                 "ccas.pipeline.orchestrator.run_classify_job",
                 return_value=_make_classify_summary(),
             ),
-            # Default notify job must NOT be touched when one is injected.
-            patch(
-                "ccas.bot.job.run_notify_job",
-                side_effect=AssertionError("default notify job must not be called"),
-            ),
         ):
+            # orchestrator 已不 import bot；注入的 custom_notify 為唯一通知實作。
             summary = await run_pipeline(mock_session, notify_job=custom_notify)
 
         assert called["custom"] == 1
@@ -233,9 +226,8 @@ class TestFaultTolerance:
             patch(
                 "ccas.pipeline.orchestrator.run_classify_job", side_effect=mock_classify
             ),
-            patch("ccas.bot.job.run_notify_job", side_effect=mock_notify),
         ):
-            summary = await run_pipeline(mock_session)
+            summary = await run_pipeline(mock_session, notify_job=mock_notify)
 
         assert len(stages_called) == 5
         # Ingest failures appear in summary
@@ -265,12 +257,10 @@ class TestFaultTolerance:
                 "ccas.pipeline.orchestrator.run_classify_job",
                 return_value=_make_classify_summary(classified_count=0, total_count=0),
             ),
-            patch(
-                "ccas.bot.job.run_notify_job",
-                return_value=_make_notify_summary(),
-            ),
         ):
-            summary = await run_pipeline(mock_session)
+            summary = await run_pipeline(
+                mock_session, notify_job=AsyncMock(return_value=_make_notify_summary())
+            )
 
         # All 5 stages still present
         assert len(summary.stages) == 5
@@ -317,9 +307,8 @@ class TestFaultTolerance:
             patch(
                 "ccas.pipeline.orchestrator.run_classify_job", side_effect=mock_classify
             ),
-            patch("ccas.bot.job.run_notify_job", side_effect=mock_notify),
         ):
-            summary = await run_pipeline(mock_session)
+            summary = await run_pipeline(mock_session, notify_job=mock_notify)
 
         assert len(stages_called) == 5
         assert summary.stages[0].stage == "ingest"
@@ -353,14 +342,15 @@ class TestSummaryAggregation:
                 "ccas.pipeline.orchestrator.run_classify_job",
                 return_value=_make_classify_summary(classified_count=15),
             ),
-            patch(
-                "ccas.bot.job.run_notify_job",
-                return_value=_make_notify_summary(
-                    sent_count=2, failed_count=1, errors=["notify err"]
-                ),
-            ),
         ):
-            summary = await run_pipeline(mock_session)
+            summary = await run_pipeline(
+                mock_session,
+                notify_job=AsyncMock(
+                    return_value=_make_notify_summary(
+                        sent_count=2, failed_count=1, errors=["notify err"]
+                    )
+                ),
+            )
 
         assert summary.stages[0].counts == {"staged": 3, "skipped": 1, "failed": 1}
         assert summary.stages[1].counts == {
@@ -391,12 +381,10 @@ class TestSummaryAggregation:
                 "ccas.pipeline.orchestrator.run_classify_job",
                 return_value=_make_classify_summary(),
             ),
-            patch(
-                "ccas.bot.job.run_notify_job",
-                return_value=_make_notify_summary(),
-            ),
         ):
-            summary = await run_pipeline(mock_session)
+            summary = await run_pipeline(
+                mock_session, notify_job=AsyncMock(return_value=_make_notify_summary())
+            )
 
         assert summary.total_seconds >= 0
 
@@ -419,12 +407,13 @@ class TestSummaryAggregation:
                 "ccas.pipeline.orchestrator.run_classify_job",
                 return_value=_make_classify_summary(),
             ),
-            patch(
-                "ccas.bot.job.run_notify_job",
-                return_value=_make_notify_summary(errors=["notify err"]),
-            ),
         ):
-            summary = await run_pipeline(mock_session)
+            summary = await run_pipeline(
+                mock_session,
+                notify_job=AsyncMock(
+                    return_value=_make_notify_summary(errors=["notify err"])
+                ),
+            )
 
         assert len(summary.failures) == 4
         stages_in_failures = {f.item_id.split(":")[0] for f in summary.failures}
@@ -450,12 +439,10 @@ class TestSummaryAggregation:
                 "ccas.pipeline.orchestrator.run_classify_job",
                 return_value=_make_classify_summary(classified_count=0, total_count=0),
             ),
-            patch(
-                "ccas.bot.job.run_notify_job",
-                return_value=_make_notify_summary(),
-            ),
         ):
-            summary = await run_pipeline(mock_session)
+            summary = await run_pipeline(
+                mock_session, notify_job=AsyncMock(return_value=_make_notify_summary())
+            )
 
         assert len(summary.stages) == 5
         assert summary.failures == ()

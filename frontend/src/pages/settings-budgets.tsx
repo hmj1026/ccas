@@ -4,12 +4,7 @@
  * 列出所有預算 + 每筆當月進度卡。提供新增 / 編輯 / 刪除。
  * 預算 scope：monthly_total / monthly_category / monthly_bank。
  */
-import {
-  useMutation,
-  useQueries,
-  useQuery,
-  useQueryClient,
-} from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Plus, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import { apiDelete, apiGet, apiPost, apiPut } from '@/lib/api-client'
@@ -242,19 +237,10 @@ function SettingsBudgetsPage() {
   const { data, isLoading, error } = useQuery({
     queryKey: ['budgets', 'list'],
     queryFn: () =>
-      apiGet<ApiResponse<readonly BudgetItem[]>>('/api/budgets'),
-  })
-
-  const budgetIds = (data?.data ?? []).map((b) => b.id)
-  const currentQueries = useQueries({
-    queries: budgetIds.map((id) => ({
-      queryKey: ['budgets', 'current', id] as const,
-      queryFn: () =>
-        apiGet<ApiResponse<BudgetCurrentPeriod>>(
-          `/api/budgets/${id}/current-period`,
-        ),
-      enabled: budgetIds.length > 0,
-    })),
+      apiGet<ApiResponse<readonly BudgetItem[]>>(
+        // include_current_period：後端單次批次聚合內聯各筆當月累計，免逐筆 1+N。
+        '/api/budgets?include_current_period=true',
+      ),
   })
 
   const createMutation = useMutation({
@@ -291,10 +277,6 @@ function SettingsBudgetsPage() {
   if (error) return <ErrorState message={error.message} />
 
   const budgets = data?.data ?? []
-  const currentByBudgetId: Record<number, BudgetCurrentPeriod | null> = {}
-  budgetIds.forEach((id, idx) => {
-    currentByBudgetId[id] = currentQueries[idx]?.data?.data ?? null
-  })
 
   const isPending =
     createMutation.isPending ||
@@ -329,7 +311,7 @@ function SettingsBudgetsPage() {
             <BudgetCard
               key={b.id}
               budget={b}
-              current={currentByBudgetId[b.id] ?? null}
+              current={b.current_period ?? null}
               onUpdate={(body) =>
                 updateMutation.mutate({ id: b.id, body })
               }

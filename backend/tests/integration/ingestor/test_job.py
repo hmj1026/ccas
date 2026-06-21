@@ -88,7 +88,7 @@ class TestMultiBankProcessing:
 
             # Per bank: search(1) + download(1) + mkdir(1) + write(1) = 4
             # Bank1: calls 1-4, Bank2: calls 5-8
-            async def fake_to_thread(fn, *args):
+            async def fake_to_thread(fn, *args, **kwargs):
                 call_count["n"] += 1
                 n = call_count["n"]
                 if n in (1, 5):
@@ -182,7 +182,7 @@ class TestBatchSummary:
 
             call_count = {"n": 0}
 
-            async def fake_to_thread(fn, *args):
+            async def fake_to_thread(fn, *args, **kwargs):
                 call_count["n"] += 1
                 if call_count["n"] == 1:
                     # search_messages: 3 messages, 1 existing + 1 success + 1 fail
@@ -247,7 +247,7 @@ class TestFaultTolerance:
 
             call_count = {"n": 0}
 
-            async def fake_to_thread(fn, *args):
+            async def fake_to_thread(fn, *args, **kwargs):
                 call_count["n"] += 1
                 if call_count["n"] == 1:
                     # FAIL_BANK search fails

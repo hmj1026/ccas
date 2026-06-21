@@ -197,8 +197,10 @@ async def test_rule(
 ) -> ApiResponse[ClassificationRuleTestResponse]:
     """以給定 pattern + pattern_type 測試 sample_text 是否命中（不寫 DB）。
 
-    重用 ``UserRuleMatcher`` 的 match 邏輯（含 100ms regex timeout 與 fail-soft），
-    確保預覽結果與 pipeline classify 完全一致。
+    重用 ``UserRuleMatcher`` 的同步 match 邏輯（fail-soft），確保預覽結果與 pipeline
+    classify 一致。此端點直接建構 matcher、不經 ``load()`` 期 burn-in；ReDoS 防護改由
+    request schema 把關（``schemas._NESTED_QUANTIFIER_RE`` 拒收危險 pattern、並對
+    pattern / sample_text 設長度上限）。
     """
     probe = UserRule(
         id=0,

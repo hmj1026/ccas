@@ -202,7 +202,13 @@ def _iter_message_refs(
     raise RuntimeError(f"Gmail 搜尋分頁超過安全上限 ({_MAX_PAGES_SAFETY} 頁)")
 
 
-def search_messages(service, gmail_filter: str) -> list[GmailMessage]:
+def search_messages(
+    service,
+    gmail_filter: str,
+    *,
+    bank_code: str | None = None,
+    partial_errors: list[str] | None = None,
+) -> list[GmailMessage]:
     """依 gmail_filter 搜尋 Gmail 郵件，並解析每封郵件的 PDF 附件。
 
     含 PDF 附件的郵件以 pdf_attachments 回傳；不含 PDF 附件的郵件
@@ -211,6 +217,9 @@ def search_messages(service, gmail_filter: str) -> list[GmailMessage]:
     Args:
         service: Gmail API service 物件。
         gmail_filter: Gmail 搜尋語法字串。
+        bank_code: 觸發此次搜尋的銀行代碼，用於分頁中途失敗時的可觀察性歸因。
+        partial_errors: 若提供，分頁中途失敗（部分成功）時會 append 一筆說明，
+            讓呼叫端（pipeline summary）得以揭露「有郵件因分頁失敗未處理」。
 
     Returns:
         符合條件的 GmailMessage 清單。
@@ -224,10 +233,18 @@ def search_messages(service, gmail_filter: str) -> list[GmailMessage]:
     except Exception:
         if not all_message_refs:
             raise
+        bank_label = bank_code or "?"
         logger.warning(
-            "Gmail 分頁中途失敗，已取得 %d 筆訊息，繼續處理",
+            "銀行 %s Gmail 分頁中途失敗，已取得 %d 筆訊息，繼續處理",
+            bank_label,
             len(all_message_refs),
+            exc_info=True,
         )
+        if partial_errors is not None:
+            partial_errors.append(
+                f"銀行 {bank_label} Gmail 分頁中途失敗，"
+                f"已取得 {len(all_message_refs)} 筆訊息，繼續處理"
+            )
 
     if not all_message_refs:
         return []

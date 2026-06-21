@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import logging
 import re
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 
 import pdfplumber
@@ -211,7 +211,7 @@ class CtbcV1Parser(BankParser):
             # payment slip (identified by the presence of a $AMOUNT marker).
             # For 2-page bills the last page is a transaction page — skip it.
             if _extract_total_amount_dollar(last_page_text) is not None:
-                due_date = _extract_due_date_roc(last_page_text)
+                due_date = _extract_due_date_roc(last_page_text, billing_month)
         if due_date is None:
             page1_due = _extract_due_date_page1(first_page_text)
             if page1_due is not None:
@@ -414,17 +414,36 @@ def _extract_billing_month_roc(first_page_text: str) -> str | None:
     return f"{ad_year}-{month:02d}"
 
 
-def _extract_due_date_roc(text: str) -> date | None:
-    """Extract due date from ROC date format: '115/03/28'.
+def _extract_due_date_roc(text: str, billing_month: str) -> date | None:
+    """Extract the due date from ROC date format on the payment-slip page.
 
-    Expects text from the payment slip page (last page). Uses the last
-    ROC date found on that page to avoid matching transaction dates.
+    The slip can carry stray ROC dates (e.g. a posting/print date) besides the
+    cutoff, so blindly taking the last match is fragile. Candidates are filtered
+    to the plausible due-date window — within the billing month through ~mid of
+    the following month (CTBC's nominal cutoff is day 28 of the billing month) —
+    and the last in-window match is returned. Returns None when no candidate
+    fits, so the caller falls back to the page-1 day-28 estimate.
     """
     matches = _RE_ROC_DATE.findall(text)
     if not matches:
         return None
-    roc_year, month, day = matches[-1]
-    return _roc_to_date(int(roc_year), int(month), int(day))
+    try:
+        billing_year, billing_month_num = (int(p) for p in billing_month.split("-"))
+        window_start = date(billing_year, billing_month_num, 1)
+    except (ValueError, IndexError):
+        # Malformed billing_month — preserve the legacy last-match behaviour.
+        roc_year, month, day = matches[-1]
+        return _roc_to_date(int(roc_year), int(month), int(day))
+    window_end = window_start + timedelta(days=45)
+    candidate: date | None = None
+    for roc_year, month, day in matches:
+        try:
+            parsed = _roc_to_date(int(roc_year), int(month), int(day))
+        except ValueError:
+            continue
+        if window_start <= parsed <= window_end:
+            candidate = parsed  # keep the last in-window match
+    return candidate
 
 
 def _extract_total_amount_dollar(text: str) -> int | None:

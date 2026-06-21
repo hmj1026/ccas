@@ -10,12 +10,15 @@ from __future__ import annotations
 from typing import Any
 from unittest.mock import AsyncMock, patch
 
+import pytest
+
 from ccas.classifier.job import (
     _flush_category_updates,
     run_classify_job,
     run_reclassify_job,
 )
 from ccas.classifier.user_rules import UserRuleMatcher
+from ccas.errors import ClassifyError
 from ccas.storage.models import Transaction
 
 _EMPTY_MATCHER = UserRuleMatcher([])
@@ -157,3 +160,54 @@ async def test_reclassify_batches_and_preserves_skip_logic() -> None:
     assert summary.skipped_count == 2
     assert summary.manual_override_count == 1
     session.commit.assert_awaited_once()
+
+
+async def test_classify_flush_failure_rolls_back_and_raises(caplog) -> None:
+    """A commit failure rolls back, logs the affected count, raises ClassifyError."""
+    session = AsyncMock()
+    session.commit.side_effect = RuntimeError("database is locked")
+
+    txns = [_txn(1, "星巴克"), _txn(2, "路易莎")]
+    with (
+        patch(
+            "ccas.classifier.job.UserRuleMatcher.load",
+            new=AsyncMock(return_value=_EMPTY_MATCHER),
+        ),
+        patch("ccas.classifier.job.load_rules", new=AsyncMock(return_value={})),
+        patch(
+            "ccas.classifier.job.fetch_unclassified_transactions",
+            new=AsyncMock(return_value=txns),
+        ),
+        patch("ccas.classifier.job.classify", new=lambda _m, _r: "餐飲"),
+        pytest.raises(ClassifyError),
+    ):
+        await run_classify_job(session)
+
+    session.rollback.assert_awaited_once()
+    # affected count (2 pending) appears in the error log
+    assert "2 筆" in caplog.text
+
+
+async def test_reclassify_flush_failure_rolls_back_and_raises(caplog) -> None:
+    """reclassify path has the same rollback boundary as classify."""
+    session = AsyncMock()
+    session.commit.side_effect = RuntimeError("database is locked")
+
+    txns = [_txn(1, "台灣大哥大", category="餐飲")]
+    with (
+        patch(
+            "ccas.classifier.job.UserRuleMatcher.load",
+            new=AsyncMock(return_value=_EMPTY_MATCHER),
+        ),
+        patch("ccas.classifier.job.load_rules", new=AsyncMock(return_value={})),
+        patch(
+            "ccas.classifier.job.fetch_all_transactions",
+            new=AsyncMock(return_value=txns),
+        ),
+        patch("ccas.classifier.job.classify", new=lambda _m, _r: "通訊"),
+        pytest.raises(ClassifyError),
+    ):
+        await run_reclassify_job(session)
+
+    session.rollback.assert_awaited_once()
+    assert "1 筆" in caplog.text

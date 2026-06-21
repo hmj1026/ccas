@@ -214,12 +214,34 @@ async def authorize(
 
 @router.get("/callback")
 async def callback(
-    code: str,
-    state: str,
+    code: str | None = None,
+    state: str | None = None,
+    error: str | None = None,
     settings: Settings = Depends(get_settings),
     session: AsyncSession = Depends(get_db_session),
 ) -> RedirectResponse:
-    """Exchange ``code`` + stored verifier for tokens; write token.json."""
+    """Exchange ``code`` + stored verifier for tokens; write token.json.
+
+    ``code`` / ``state`` are optional so the user-denied redirect (which carries
+    ``error`` instead of ``code``) reaches this handler rather than tripping
+    FastAPI's required-parameter validation (422).
+    """
+    # User denied consent / Google returned an error: redirect to a friendly
+    # result page. Do NOT echo Google's raw error string into the URL.
+    if error:
+        # Strip CRLF to prevent log injection in plain-text log mode; cap length.
+        safe_error = error.replace("\r", "").replace("\n", "")[:200]
+        logger.warning("OAuth error from Google: %s", safe_error)
+        return RedirectResponse(
+            url=f"{_FRONTEND_RESULT_PATH}?status=error",
+            status_code=303,
+        )
+    if not code or not state:
+        raise HTTPException(
+            status_code=400,
+            detail="OAuth callback 缺少 code 或 state",
+        )
+
     row = await session.get(GmailOAuthState, state)
     if row is None:
         raise HTTPException(status_code=422, detail="未知或已使用的 OAuth state")
@@ -239,29 +261,47 @@ async def callback(
     payload = _load_credentials_payload(settings)
     client_id, client_secret = _extract_oauth_client(payload)
 
-    async with httpx.AsyncClient(timeout=30.0) as http:
-        resp = await http.post(
-            _GOOGLE_TOKEN_URL,
-            data={
-                "code": code,
-                "client_id": client_id,
-                "client_secret": client_secret,
-                "code_verifier": verifier,
-                "grant_type": "authorization_code",
-                "redirect_uri": _redirect_uri(settings),
-            },
-        )
+    # Consume the state before the (slow) network exchange so it cannot be
+    # replayed concurrently while the token exchange is in flight. PKCE
+    # (code_verifier) remains the primary protection; a failed exchange then
+    # requires the user to restart authorization.
+    await session.delete(row)
+    await session.commit()
+
+    # The state is already consumed, so any failure below redirects the browser
+    # to the frontend error screen (a raw 4xx/5xx page would strand the user).
+    error_redirect = RedirectResponse(
+        url=f"{_FRONTEND_RESULT_PATH}?status=error", status_code=303
+    )
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as http:
+            resp = await http.post(
+                _GOOGLE_TOKEN_URL,
+                data={
+                    "code": code,
+                    "client_id": client_id,
+                    "client_secret": client_secret,
+                    "code_verifier": verifier,
+                    "grant_type": "authorization_code",
+                    "redirect_uri": _redirect_uri(settings),
+                },
+            )
+    except httpx.HTTPError:
+        logger.warning("Gmail token exchange request failed", exc_info=True)
+        return error_redirect
     if resp.status_code != 200:
         logger.warning(
             "Gmail token exchange failed: status=%d body_len=%d",
             resp.status_code,
             len(resp.text),
         )
-        raise HTTPException(
-            status_code=400,
-            detail=f"Google token exchange 失敗（HTTP {resp.status_code}）",
-        )
+        return error_redirect
     token = resp.json()
+
+    if not token.get("refresh_token"):
+        # Without a refresh token the ingestor cannot renew access later; surface
+        # it for operators (prompt=consent should normally guarantee one).
+        logger.warning("Google 未回傳 refresh_token；token 將無法自動更新，請重新授權")
 
     # Persist token.json in the format google-auth's
     # Credentials.from_authorized_user_info / from_authorized_user_file expect.
@@ -275,12 +315,15 @@ async def callback(
     }
     token_path = Path(settings.gmail_token_path)
     token_path.parent.mkdir(parents=True, exist_ok=True)
-    write_encrypted_token_file(
-        token_path, json.dumps(token_record, indent=2), settings.master_key_manager
-    )
-
-    await session.delete(row)
-    await session.commit()
+    try:
+        write_encrypted_token_file(
+            token_path,
+            json.dumps(token_record, indent=2),
+            settings.master_key_manager,
+        )
+    except (MasterKeyMismatchError, OSError):
+        logger.error("寫入 Gmail token 檔失敗", exc_info=True)
+        return error_redirect
 
     return RedirectResponse(
         url=f"{_FRONTEND_RESULT_PATH}?status=connected",

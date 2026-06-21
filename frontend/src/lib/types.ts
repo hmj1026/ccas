@@ -325,6 +325,8 @@ export interface BudgetItem {
   readonly enabled: boolean
   readonly created_at: string
   readonly updated_at: string
+  /** 列表 `?include_current_period=true` 時內聯當月累計；其餘情境為 null。 */
+  readonly current_period?: BudgetCurrentPeriod | null
 }
 
 /** Create budget request。 */
