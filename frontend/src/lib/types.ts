@@ -513,3 +513,22 @@ export interface ImportFromEnvResult {
   readonly skipped_already_in_db: number
   readonly bank_codes_imported: readonly string[]
 }
+
+/** 登入憑證來源優先序：db > env > none。 */
+export type CredentialSource = 'db' | 'env' | 'none'
+
+/** 單一登入憑證狀態（`GET /api/setup/login-credentials`）。 */
+export interface BankLoginCredentialStatus {
+  readonly bank_code: string
+  readonly credential_key: string
+  readonly has_db_value: boolean
+  readonly has_env_value: boolean
+  readonly effective_source: CredentialSource
+}
+
+/** 由 env 匯入 DB 登入憑證的結果。 */
+export interface LoginCredentialImportResult {
+  readonly imported: number
+  readonly skipped_already_in_db: number
+  readonly credentials_imported: readonly string[]
+}
