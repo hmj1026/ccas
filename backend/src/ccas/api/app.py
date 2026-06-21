@@ -162,6 +162,7 @@ def create_app() -> FastAPI:
         return {"status": "ok"}
 
     @app.get("/health/ready")
+    @app.get("/api/health/ready")
     async def health_ready(
         session: AsyncSession = Depends(get_db_session),
     ) -> JSONResponse:
@@ -169,6 +170,7 @@ def create_app() -> FastAPI:
 
         ``/health`` 維持純 liveness（process 起來即 200）；本端點供
         docker healthcheck / 部署驗證使用，任一依賴失敗回 503。
+        ``/api/health/ready`` 為反向代理 passthrough 別名（同 ``/api/health``）。
         """
         db_ok = True
         try:

@@ -3,7 +3,8 @@
 對單筆 ``transactions`` row 提供：
 
 - ``GET /api/transactions/{id}``：詳情頁讀取（含使用者編輯欄位）
-- ``PUT /api/transactions/{id}``：partial update（category/note/tags/merchant_alias）；
+- ``PATCH /api/transactions/{id}``：partial update
+  （category/note/tags/merchant_alias）；
   若 body 包含 ``category_id``，同步將 ``manual_category_override`` 設為 ``True``，
   使後續 ``run_classify_job`` 自動跳過該筆，保留使用者編輯結果。
 - ``POST /api/transactions/{id}/note``：簡化常用 note 編輯（不影響 manual_override）。
@@ -31,7 +32,7 @@ from ccas.classifier.user_rules import UserRuleMatcher
 from ccas.storage.database import get_db_session
 from ccas.storage.models import Bill, Category, Transaction
 
-router = APIRouter(prefix="/api", tags=["transactions-edit"])
+router = APIRouter(prefix="/api/transactions", tags=["transactions-edit"])
 
 
 def _to_detail(txn: Transaction, bill: Bill) -> TransactionDetailItem:
@@ -72,7 +73,7 @@ async def _load_with_bill(
 
 
 @router.get(
-    "/transactions/{transaction_id}",
+    "/{transaction_id}",
     response_model=ApiResponse[TransactionDetailItem],
 )
 async def get_transaction(
@@ -84,8 +85,8 @@ async def get_transaction(
     return ApiResponse(data=_to_detail(txn, bill))
 
 
-@router.put(
-    "/transactions/{transaction_id}",
+@router.patch(
+    "/{transaction_id}",
     response_model=ApiResponse[TransactionDetailItem],
 )
 async def update_transaction(
@@ -121,7 +122,7 @@ async def update_transaction(
 
 
 @router.post(
-    "/transactions/{transaction_id}/note",
+    "/{transaction_id}/note",
     response_model=ApiResponse[TransactionDetailItem],
 )
 async def set_transaction_note(
@@ -138,7 +139,7 @@ async def set_transaction_note(
 
 
 @router.delete(
-    "/transactions/{transaction_id}/manual-override",
+    "/{transaction_id}/manual-override",
     response_model=ApiResponse[TransactionDetailItem],
 )
 async def clear_manual_override(

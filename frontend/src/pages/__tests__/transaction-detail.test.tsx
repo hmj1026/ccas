@@ -29,14 +29,14 @@ function renderDetail(initialEntry: string) {
 
 vi.mock('@/lib/api-client', () => ({
   apiGet: vi.fn(),
-  apiPut: vi.fn(),
+  apiPatch: vi.fn(),
   apiDelete: vi.fn(),
 }))
 
-import { apiDelete, apiGet, apiPut } from '@/lib/api-client'
+import { apiDelete, apiGet, apiPatch } from '@/lib/api-client'
 
 const mockApiGet = vi.mocked(apiGet)
-const mockApiPut = vi.mocked(apiPut)
+const mockApiPatch = vi.mocked(apiPatch)
 const mockApiDelete = vi.mocked(apiDelete)
 
 const BASE_DETAIL = {
@@ -78,7 +78,7 @@ function setupApi(detailOverrides: Partial<typeof BASE_DETAIL> = {}) {
     }
     return Promise.reject(new Error(`unexpected GET ${path}`))
   })
-  mockApiPut.mockImplementation((_path: string, body: unknown) => {
+  mockApiPatch.mockImplementation((_path: string, body: unknown) => {
     void _path
     const merged = { ...BASE_DETAIL, ...detailOverrides, ...(body as object) }
     return Promise.resolve({ success: true, data: merged, message: '' })
@@ -120,7 +120,7 @@ describe('TransactionDetailPage', () => {
 
     await user.selectOptions(screen.getByLabelText('分類選擇'), '2')
     await waitFor(() => {
-      expect(mockApiPut).toHaveBeenCalledWith('/api/transactions/42', {
+      expect(mockApiPatch).toHaveBeenCalledWith('/api/transactions/42', {
         category_id: 2,
       })
     })
@@ -136,10 +136,10 @@ describe('TransactionDetailPage', () => {
     const note = screen.getByLabelText('備註')
     await user.type(note, '公司聚餐')
     // before debounce window — no PUT yet
-    expect(mockApiPut).not.toHaveBeenCalled()
+    expect(mockApiPatch).not.toHaveBeenCalled()
     vi.advanceTimersByTime(600)
     await waitFor(() => {
-      expect(mockApiPut).toHaveBeenCalledWith('/api/transactions/42', {
+      expect(mockApiPatch).toHaveBeenCalledWith('/api/transactions/42', {
         note: '公司聚餐',
       })
     })
@@ -178,14 +178,14 @@ describe('TransactionDetailPage', () => {
     })
     await user.type(screen.getByLabelText('新增標籤'), '業務{Enter}')
     await waitFor(() => {
-      expect(mockApiPut).toHaveBeenCalledWith('/api/transactions/42', {
+      expect(mockApiPatch).toHaveBeenCalledWith('/api/transactions/42', {
         tags: ['業務'],
       })
     })
   })
 
   it('shows error and revert link when PUT fails', async () => {
-    mockApiPut.mockRejectedValueOnce(new Error('boom'))
+    mockApiPatch.mockRejectedValueOnce(new Error('boom'))
     const user = userEvent.setup()
     renderDetail('/transactions/42')
     await waitFor(() => {

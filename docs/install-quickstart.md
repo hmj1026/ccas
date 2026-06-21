@@ -31,11 +31,12 @@ mkdir ~/ccas && cd ~/ccas
 `docker-compose.yml` 與 `example.env`：
 
 ```bash
-RELEASE=v0.4.0   # 改為要安裝的精確版號
+REPO_OWNER=<owner>   # GHCR namespace / GitHub owner（即 release 連結中的 <owner>）
+RELEASE=v0.4.0       # 改為要安裝的精確版號
 curl -fsSL -o docker-compose.yml \
-  "https://github.com/<owner>/ccas/releases/download/${RELEASE}/docker-compose.yml"
+  "https://github.com/${REPO_OWNER}/ccas/releases/download/${RELEASE}/docker-compose.yml"
 curl -fsSL -o example.env \
-  "https://github.com/<owner>/ccas/releases/download/${RELEASE}/example.env"
+  "https://github.com/${REPO_OWNER}/ccas/releases/download/${RELEASE}/example.env"
 
 cp example.env .env
 ```

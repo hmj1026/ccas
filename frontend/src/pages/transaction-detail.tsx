@@ -23,7 +23,7 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import { LoadingState, ErrorState } from '@/components/shared/states'
-import { apiDelete, apiGet, apiPut } from '@/lib/api-client'
+import { apiDelete, apiGet, apiPatch } from '@/lib/api-client'
 import type {
   ApiResponse,
   CategoryKeywordItem,
@@ -91,7 +91,7 @@ function TransactionDetailPage() {
 
   const updateMutation = useMutation({
     mutationFn: (body: TransactionUpdateRequest) =>
-      apiPut<ApiResponse<TransactionDetailItem>>(
+      apiPatch<ApiResponse<TransactionDetailItem>>(
         `/api/transactions/${transactionId}`,
         body,
       ),

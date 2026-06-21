@@ -35,8 +35,9 @@
 | P3-3 CSP SSOT 比對 + parser 動態探索 | ✅ 已完成 | `34fa532` |
 | P3-2 通知呼叫端統一 bot.notifications | ✅ 已完成 | `17b9745` |
 | P3-1 stage→pipeline 層解耦（建 ccas.shared） | ✅ 已完成 | `87e096e` |
-| P3-4 效能預防性優化（5 子項） | ✅ 已完成 | （本批） |
-| P3-5 / P3-6 / P3-7 | ⬜ 待辦 | — |
+| P3-4 效能預防性優化（5 子項） | ✅ 已完成 | `50e5dbf` |
+| P3-5 API 一致性批次（6 子項） | ✅ 已完成 | `8d5029b` |
+| P3-6 / P3-7 | ⬜ 待辦 | — |
 
 > P3-2 已順帶解決 `defensive_only_findings.md` #2（render_due_reminder 接 Bill ORM 不一致）——該項已改純量、不再是「純防禦勿修」。
 
@@ -70,10 +71,11 @@
 - **實作結果**：(1) overview 三摘要改單一 SQL 聚合，unpaid 取「非 paid」補集（else_）確保 paid+unpaid==spending 不變量、對應舊碼 `not b.is_paid` 語意。(3) q min_length=2 並同步前端 FilterBar.DebouncedInput 新增 minCommitLength={2}（空值放行清除、非空未達門檻不提交），避免單字元觸發 422。(4) retry 最後一次失敗後 break，3 次嘗試僅 2 段 backoff(1s,2s)。(5) build 驗證產出 query/router/ui chunk。全套件 1705 passed、ruff+pyright strict 0 errors、frontend eslint 0、python/database/frontend reviewer 全 APPROVE。
 - **風險（已驗證消解）**：overview 空月份回 0（test_overview_empty_db 已覆蓋）；q 單字元 422 + 雙字元正常（新增兩測試）；retry sleep 斷言已同步 test_retries_on_5xx。
 
-### P3-5 API 一致性批次（易用性，M）
+### P3-5 API 一致性批次（易用性，M） — ✅ 已完成（`8d5029b`）
 - **檔案**：api/routers/analytics_v2.py, api/routers/transactions.py, api/routers/transactions_edit.py, api/app.py, api/routers/setup/gmail.py, `README.md`, `README.zh-TW.md`, `docs/install-quickstart.md`
 - **做法**：(1) analytics_v2 tag 改 ['analytics']。(2) transactions/transactions_edit prefix 由裸 '/api' 改 '/api/transactions'。(3) app.py 加 /api/health/ready 別名。(4) transactions PUT→PATCH（前後端同步）。(5) gmail callback 取 userinfo email。(6) README curl 加 REPO_OWNER。
-- **風險**：prefix 改名 + PUT→PATCH 須前後端同步否則 405；gmail userinfo 多一次外部 HTTP 須 timeout + 失敗不阻斷。
+- **實作結果**：(2) prefix 改後內部 path 去掉重複 '/transactions' 段、對外 URL 完全不變（exports 仍註冊於 transactions_edit 之前，static /transactions/export 先於 {id} 不受影響）。(4) PATCH 為 RFC 5789 partial-update 正確語意；前端 transaction-detail apiPut→apiPatch。(5) **改用 Gmail users.getProfile（gmail.readonly 即可取 emailAddress），非 OAuth2 userinfo 端點** — 免擴 scope、免重新授權、不影響 ingestor 憑證；best-effort 寫入加密 token.json['email']、status 回傳、失敗不阻斷。全套件 1708 passed、ruff+pyright strict 0、frontend eslint 0 + vitest 8 passed、security-reviewer PASS、python-reviewer APPROVE。
+- **風險（已驗證消解）**：URL 不變故無 405；getProfile 失敗（含 UnicodeDecodeError 邊界）皆回 None 不阻斷 callback（test_callback_succeeds_when_getprofile_fails 覆蓋）。
 
 ### P3-6 前端設計系統與無障礙一致性（UI/UX，L）★最大
 - **檔案**（皆相對於 `frontend/src/`）：components/shared/filter-bar.tsx, pages/transactions.tsx, pages/insights.tsx, pages/setup/admin.tsx, pages/settings-budgets.tsx, pages/settings-rules.tsx, pages/settings-reminders.tsx, components/staged-attachments-warning.tsx, components/budget-alert-banner.tsx, pages/bills.tsx, lib/utils.ts（實際路徑以稽核結果為準，必要時用 `cx`/grep 定位）

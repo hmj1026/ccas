@@ -19,7 +19,7 @@ from ccas.api.schemas import (
 from ccas.storage.database import get_db_session
 from ccas.storage.models import Bill, Transaction
 
-router = APIRouter(prefix="/api", tags=["transactions"])
+router = APIRouter(prefix="/api/transactions", tags=["transactions"])
 
 
 def _build_filter_stmt(
@@ -64,7 +64,7 @@ def _to_item(row) -> TransactionItem:
     )
 
 
-@router.get("/transactions", response_model=PaginatedResponse[TransactionItem])
+@router.get("", response_model=PaginatedResponse[TransactionItem])
 async def list_transactions(
     month: str | None = Query(
         default=None,

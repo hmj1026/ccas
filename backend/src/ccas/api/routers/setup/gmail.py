@@ -63,6 +63,11 @@ router = APIRouter(prefix="/api/setup/gmail", tags=["setup-gmail"])
 _GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 _GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"  # noqa: S105
 _GOOGLE_REVOKE_URL = "https://oauth2.googleapis.com/revoke"
+# Gmail's own getProfile returns ``emailAddress`` under the existing
+# ``gmail.readonly`` scope, so no extra OAuth scope / re-consent is needed
+# (unlike the generic Google userinfo endpoint, which requires
+# ``userinfo.email``). See setup/gmail callback for the non-blocking call.
+_GMAIL_PROFILE_URL = "https://gmail.googleapis.com/gmail/v1/users/me/profile"
 _STATE_TTL = timedelta(minutes=10)
 _CALLBACK_PATH = "/setup/gmail/callback"
 _FRONTEND_RESULT_PATH = "/setup/gmail"
@@ -129,6 +134,34 @@ def _gen_pkce() -> tuple[str, str]:
     digest = hashlib.sha256(verifier.encode("ascii")).digest()
     challenge = base64.urlsafe_b64encode(digest).rstrip(b"=").decode("ascii")
     return verifier, challenge
+
+
+async def _fetch_gmail_email(access_token: str) -> str | None:
+    """Best-effort fetch of the connected mailbox address via Gmail getProfile.
+
+    Uses the existing ``gmail.readonly`` scope (no extra consent). Any failure
+    (network, non-200, malformed body) is swallowed and returns ``None`` — the
+    address is advisory and must never block the OAuth callback.
+    """
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as http:
+            resp = await http.get(
+                _GMAIL_PROFILE_URL,
+                headers={"Authorization": f"Bearer {access_token}"},
+            )
+    except httpx.HTTPError:
+        logger.warning("Gmail getProfile request failed", exc_info=True)
+        return None
+    if resp.status_code != 200:
+        logger.warning("Gmail getProfile returned status=%d", resp.status_code)
+        return None
+    try:
+        email = resp.json().get("emailAddress")
+    except (ValueError, UnicodeDecodeError):
+        # Malformed/odd-encoding body — advisory only, never block the callback.
+        logger.warning("Gmail getProfile returned non-JSON body")
+        return None
+    return email if isinstance(email, str) and email else None
 
 
 # ---------------------------------------------------------------------------
@@ -303,16 +336,24 @@ async def callback(
         # it for operators (prompt=consent should normally guarantee one).
         logger.warning("Google 未回傳 refresh_token；token 將無法自動更新，請重新授權")
 
+    # Best-effort: record the connected mailbox address so the status endpoint
+    # can surface it. google-auth's from_authorized_user_info ignores the extra
+    # ``email`` key, so persisting it alongside the credential is safe.
+    access_token = token.get("access_token")
+    email = await _fetch_gmail_email(access_token) if access_token else None
+
     # Persist token.json in the format google-auth's
     # Credentials.from_authorized_user_info / from_authorized_user_file expect.
-    token_record = {
-        "token": token.get("access_token"),
+    token_record: dict[str, Any] = {
+        "token": access_token,
         "refresh_token": token.get("refresh_token"),
         "token_uri": _GOOGLE_TOKEN_URL,
         "client_id": client_id,
         "client_secret": client_secret,
         "scopes": token.get("scope", "").split() or list(GMAIL_SCOPES),
     }
+    if email:
+        token_record["email"] = email
     token_path = Path(settings.gmail_token_path)
     token_path.parent.mkdir(parents=True, exist_ok=True)
     try:
@@ -354,12 +395,14 @@ async def status(
     scopes = token_data.get("scopes")
     if not isinstance(scopes, list):
         scopes = []
-    # Email is not in token.json — it is fetchable via Google userinfo but
-    # would require an extra network call; left None for PR-C2 (front-end
-    # surfaces "connected" without email yet).
+    # ``email`` is persisted by the callback via Gmail getProfile (best-effort);
+    # legacy token.json written before this change simply lacks the key → None.
+    email = token_data.get("email")
+    if not isinstance(email, str) or not email:
+        email = None
     return ApiResponse(
         data=GmailConnectionStatus(
-            connected=True, email=None, granted_scopes=list(scopes)
+            connected=True, email=email, granted_scopes=list(scopes)
         )
     )
 
