@@ -1,0 +1,9 @@
+{
+  "_comment": "dhpk plugin version pin for ccas. Read by dhpk's SessionStart check-plugin-version.sh advisory (≥0.10.0). Ranges are prefix-matched: '0.11' / '0.11.x' cover every 0.11.* patch. The advisory flags the running dhpk version when it falls outside every verified range or inside an incompatible one. Update deliberately after verifying a new plugin version against this project.",
+  "verified": [
+    { "range": "0.11.x", "note": "verified 2026-06-21 — python/fastapi/pytest/js modules (python-fullstack profile); ruff 0.15.10 via `uv run`, pyright on PATH; post-edit + pre-commit python lint/typecheck gate wired" }
+  ],
+  "incompatible": [
+    { "range": "0.9", "note": "stale-cache `declare -A`/arithmetic-trap bash errors in session-start.sh; fixed in 0.10.0 (a9490b2). Repin/reinstall to ≥0.10.0." }
+  ]
+}
