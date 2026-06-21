@@ -183,6 +183,7 @@ class TestCtbcRegistryIntegration:
         import importlib
 
         import ccas.parser
+        import ccas.parser.banks.ctbc_v1
 
         importlib.reload(ccas.parser.banks.ctbc_v1)
         importlib.reload(ccas.parser.banks)

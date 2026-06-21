@@ -11,7 +11,7 @@ paths:
 - **Registry Pattern**: global `registry` singleton (`parser/registry.py`); each parser calls `registry.register(XxxV1Parser())` at module bottom for automatic registration
 - **ABC**: inherit `BankParser` (`parser/base.py`), implement `can_parse(pdf_path) -> bool` and `parse(pdf_path) -> ParseResult`
 - **Naming**: `banks/<bank_code>_v<N>.py` (e.g., `ctbc_v1.py`), class is `<Bank>V<N>Parser`
-- **Import**: add new module import to `banks/__init__.py` to trigger auto-registration
+- **Auto-discovery**: `banks/__init__.py` 以 `pkgutil.iter_modules` + regex `^[a-z]+_v\d+$` 動態探索並 import 所有符合命名的模組；新增 parser **無須**手動加 import（命名正確即自動載入）。非 parser 輔助子套件（如 `ctbc/`）因不符命名而排除。
 
 ## ParseResult Contract
 
@@ -25,9 +25,8 @@ paths:
 2. Implement `can_parse()`: use pdfplumber to check first-page signature text
 3. Implement `parse()`: extract billing summary + transaction details, return `ParseResult`
 4. Add `registry.register(<Bank>V1Parser())` at module bottom
-5. Add import to `banks/__init__.py`
-6. Add bank config to `config/banks.yaml`
-7. Tests: unit test with fixture PDF, integration test through full parse job
+5. Add bank config to `config/banks.yaml`（命名正確即被 `banks/__init__.py` 自動探索載入，無須手動加 import）
+6. Tests: unit test with fixture PDF, integration test through full parse job
 
 ## Common Parser Tools
 
