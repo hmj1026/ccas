@@ -51,12 +51,12 @@
 - **做法**：建 `ccas.shared.progress`（ProgressReporter Protocol + Noop）與 `ccas.shared.pipeline_types`（PipelineOptions）；`ccas.pipeline.progress/options` re-export 維持相容；`apply_pipeline_filters` 移至 shared（依賴方向 shared→storage）；測試通過後逐步改 stage import。DbProgressReporter 留 pipeline 層。
 - **風險**：純結構重構、爆炸半徑大；用 re-export 相容層降風險，用 `gitnexus_rename` 而非 find-replace；重跑全測試 + gitnexus 重新索引。
 
-### P3-2 三處通知呼叫端統一改用 bot.notifications 高階層（架構，S）
+### P3-2 三處通知呼叫端統一改用 bot.notifications 高階層（架構，S） — ✅ 已完成（`17b9745`）
 - **檔案**：api/routers/reminders_settings.py, scheduler/reminders.py, bot/job.py
 - **做法**：bot/notifications.py 已有 notify_due_reminder/notify_new_bill/notify_parse_failure 但無呼叫端使用。三處改用之，移除散落的 render+send_message。
 - **風險**：notify_new_bill 接受 Bill ORM 物件，job.py 已萃取純量避 MissingGreenlet——須先確認簽章相容（見 defensive_only_findings #2）。
 
-### P3-3 CSP SSOT 整合 + bank parser 動態探索（架構，S）
+### P3-3 CSP SSOT 整合 + bank parser 動態探索（架構，S） — ✅ 已完成（`34fa532`）
 - **檔案**：api/app.py, `frontend/nginx.conf`, parser/banks/__init__.py, `.claude/rules/parser-development.md`
 - **做法**：(a) CSP 真實重複點為 api/app.py 與 frontend/nginx.conf；最低風險＝新增 CI 腳本 grep 比對兩者一致（仿 `scripts/check-env-sync.sh`）。(b) banks/__init__.py 改 pkgutil.iter_modules + `^[a-z]+_v\d+$` 過濾自動載入，刪 `.claude/rules/parser-development.md` 步驟 5。
 - **風險**：動態探索須加測試斷言 registry 含全部 7 家 parser，避免漏載。
@@ -81,7 +81,7 @@
 - **做法**：FUBON_NATIONAL_ID/FUBON_ROC_BIRTHDAY 目前 env 明文。新增 BankLoginCredential 表(複合主鍵, Fernet 加密)，擴充掃描支援 {BANK}_{KEY}，get_bank_credential 優先查 DB、env 作 legacy fallback。勿混入既有 bank_secrets 表。
 - **風險**：新表需 migration + setup UI；屬架構完整性非即時漏洞（log RedactingFilter 已遮蔽），可排靠後。
 
-### P3-8 REDIS_PASSWORD 空值在 prod 升級為阻斷（安全，S）
+### P3-8 REDIS_PASSWORD 空值在 prod 升級為阻斷（安全，S） — ✅ 已完成（`7fdca20`）
 - **檔案**：scripts/check-env.sh, .env.example
 - **做法**：check-env.sh 若 PUBLIC_BASE_URL 為 https:// 且 REDIS_PASSWORD 空，升級為 format_errors（阻斷），與 API_COOKIE_SECURE 條件式阻斷一致；dev(http) 維持 WARN。
 - **風險**：升級阻斷可能影響誤用 https 但故意不設密碼的部署（預期應阻斷）。

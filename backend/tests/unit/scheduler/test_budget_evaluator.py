@@ -188,6 +188,11 @@ async def _seed_bill_with_txns(
     return bill
 
 
+# NOTE: budget_evaluator 刻意直連 `ccas.messaging.send_message`（未走 P3-2 的
+# bot.notifications 高階層），故 patch target 為本模組內查找的名字
+# `ccas.scheduler.budget_evaluator.send_message`。若日後 budget 通知也遷入
+# bot.notifications，此處 target 須同步改為 `ccas.bot.notifications.send_message`，
+# 否則 patch 會指向已不存在的引用而靜默失效。
 @patch("ccas.scheduler.budget_evaluator.send_message", new_callable=AsyncMock)
 async def test_triggers_alert_at_80_percent(mock_send, session: AsyncSession):
     today, period = _today_period()
