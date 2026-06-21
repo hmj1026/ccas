@@ -59,8 +59,6 @@ class TestIngestStage:
                 return_value=staged_file,
             ),
             patch("ccas.ingestor.job.get_settings", return_value=mock_settings),
-            patch("pathlib.Path.mkdir"),
-            patch("pathlib.Path.write_bytes"),
         ):
             mock_creds.return_value = MagicMock()
             mock_svc.return_value = MagicMock()
