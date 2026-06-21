@@ -146,8 +146,10 @@ describe('TransactionsPage', () => {
     })
 
     // useFilterParams maps the `bank` FilterKey to the `bank_code` URL param,
-    // which the page reads back to drive the API query.
-    await user.selectOptions(screen.getByLabelText('銀行篩選'), 'CTBC')
+    // which the page reads back to drive the API query. The filter is a
+    // SelectField (base-ui), so choose via open-listbox + option click.
+    await user.click(screen.getByLabelText('銀行篩選'))
+    await user.click(await screen.findByRole('option', { name: '中信' }))
 
     await waitFor(() => {
       expect(mockApiGet).toHaveBeenCalledWith(
@@ -182,8 +184,9 @@ describe('TransactionsPage', () => {
     )
 
     // Changing a filter must drop the `page` param (resetPage=true), so the
-    // next query falls back to page 1.
-    await user.selectOptions(screen.getByLabelText('分類篩選'), '餐飲')
+    // next query falls back to page 1. Category filter is a SelectField.
+    await user.click(screen.getByLabelText('分類篩選'))
+    await user.click(await screen.findByRole('option', { name: '餐飲' }))
 
     await waitFor(() => {
       expect(mockApiGet).toHaveBeenCalledWith(
