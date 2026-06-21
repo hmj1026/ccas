@@ -366,6 +366,30 @@ class BankSecret(Base):
     )
 
 
+class BankLoginCredential(Base):
+    """銀行網銀登入憑證密文儲存（P3-7）。
+
+    與 ``bank_secrets``（PDF 解密密碼）刻意分離：本表存登入網銀所需的
+    多欄位憑證（如 FUBON 的 ``NATIONAL_ID`` / ``ROC_BIRTHDAY``），以複合
+    主鍵 ``(bank_code, credential_key)`` 區分。``encrypted_value`` 為
+    ``MasterKeyManager.encrypt`` 產生的 base64 Fernet ciphertext；明文絕不
+    入庫。master.key 必須與密文同備份還原，否則解密將失敗
+    （``MasterKeyMismatchError``）。
+    """
+
+    __tablename__ = "bank_login_credentials"
+
+    bank_code: Mapped[str] = mapped_column(String(32), primary_key=True)
+    credential_key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    encrypted_value: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=_utcnow, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=_utcnow, onupdate=_utcnow, nullable=False
+    )
+
+
 class GmailOAuthState(Base):
     """Gmail OAuth Web flow 一次性 PKCE state（oauth-onboarding-ui §2.3）。
 

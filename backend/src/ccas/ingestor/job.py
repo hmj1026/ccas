@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ccas.config import Settings, get_settings
 from ccas.ingestor.auth import load_credentials
+from ccas.ingestor.credentials import resolve_bank_credential
 from ccas.ingestor.filters import should_skip_attachment
 from ccas.ingestor.gmail_client import (
     GmailAttachmentMeta,
@@ -332,9 +333,16 @@ async def _process_web_fetch(
         else:
             logger.info("Force 模式：重新 web-fetch %s", message.message_id)
 
+    # DB-first（Fernet 解密）→ env legacy fallback；見 ccas.ingestor.credentials。
     credentials = {
-        "national_id": settings.get_bank_credential(bank_code, "NATIONAL_ID") or "",
-        "roc_birthday": settings.get_bank_credential(bank_code, "ROC_BIRTHDAY") or "",
+        "national_id": await resolve_bank_credential(
+            session, settings, bank_code, "NATIONAL_ID"
+        )
+        or "",
+        "roc_birthday": await resolve_bank_credential(
+            session, settings, bank_code, "ROC_BIRTHDAY"
+        )
+        or "",
     }
 
     staged_path = build_staged_path(
