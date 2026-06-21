@@ -110,8 +110,11 @@ describe('InsightsPage', () => {
     await waitFor(() => {
       expect(screen.getByLabelText('年度對比指標')).toBeInTheDocument()
     })
-    const select = screen.getByLabelText('年度對比指標')
-    await userEvent.selectOptions(select, 'count')
+    // SelectField (base-ui): open the listbox and pick the option.
+    await userEvent.click(screen.getByLabelText('年度對比指標'))
+    await userEvent.click(
+      await screen.findByRole('option', { name: '筆數' }),
+    )
     await waitFor(() => {
       expect(mockedGet).toHaveBeenCalledWith(
         '/api/analytics/compare/years',
