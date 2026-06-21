@@ -1,7 +1,12 @@
 #!/bin/bash
 # CCAS Python Lint & Security Checks
 # Shared hook for PostToolUse (Edit + Write)
-# Runs: ruff check, pyright, print detection, format check, security scan, secret scan
+# Runs: pyright, print detection, security scan, secret scan.
+# NOTE: ruff check + ruff format are now handled by the dhpk `python` module
+# (post-edit ruff batched at Stop + pre-commit ruff/format/type-check gate) once
+# modules=python is enabled in .claude/settings.local.json — removed here to
+# avoid double-linting. This hook keeps the ccas-specific pyright-on-edit feedback
+# plus the print / unsafe-op / secret greps that the dhpk module does not provide.
 set -o pipefail
 
 # PostToolUse hook input: Claude Code delivers tool context as JSON on stdin;
@@ -19,11 +24,7 @@ fi
 BACKEND_DIR=$(git -C "$(dirname "$FILE")" rev-parse --show-toplevel 2>/dev/null)/backend
 [ -d "$BACKEND_DIR" ] || exit 0
 
-# 1. Ruff lint
-echo "[ruff-check]"
-(cd "$BACKEND_DIR" && uv run ruff check "$FILE" 2>&1 | head -20) || true
-
-# 2. Pyright type check
+# 1. Pyright type check
 echo "[pyright]"
 (cd "$BACKEND_DIR" && uv run pyright "$FILE" 2>&1 | tail -5) || true
 
@@ -37,15 +38,7 @@ if [[ "$FILE" != *test* ]]; then
     fi
 fi
 
-# 4. Format check + suggestion
-FORMAT_OUT=$((cd "$BACKEND_DIR" && uv run ruff format --check "$FILE") 2>&1)
-if echo "$FORMAT_OUT" | grep -q "would reformat"; then
-    echo "[format-check]"
-    echo "[Hook] CI also runs uv run ruff format --check ."
-    echo "[Hook] SUGGESTION: Run uv run ruff format $FILE"
-fi
-
-# 5. Security scan (skip test files)
+# 4. Security scan (skip test files)
 # Detects unsafe operations: eval, exec, unsafe deserialization, shell injection, dynamic import
 if [[ "$FILE" != *test* ]]; then
     SECURITY=$(grep -nE "(eval\(|exec\(|subprocess\.call|os\.system\(|__import__)" "$FILE" 2>/dev/null | head -5)
