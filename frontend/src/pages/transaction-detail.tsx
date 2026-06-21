@@ -279,6 +279,7 @@ function TransactionDetailPage() {
           </div>
           <SelectField
             id="category"
+            aria-label="分類"
             triggerClassName="w-full rounded-md px-3 py-2"
             value={String(
               uniqueCategories.find((c) => c.category === detail.category)?.id ??

@@ -10,7 +10,7 @@
  */
 import { Select as SelectPrimitive } from '@base-ui/react/select'
 import { Check, ChevronsUpDown } from 'lucide-react'
-import { useId } from 'react'
+import { useId, useMemo } from 'react'
 import { cn } from '@/lib/utils'
 
 export interface SelectOption {
@@ -61,7 +61,12 @@ export function SelectField({
 }: SelectFieldProps) {
   const generatedId = useId()
   const fieldId = id ?? generatedId
-  const items = Object.fromEntries(options.map((o) => [o.value, o.label]))
+  // Maps value → label so SelectPrimitive.Value renders the selected label
+  // text. Memoised so SelectRoot does not see a new items reference each render.
+  const items = useMemo(
+    () => Object.fromEntries(options.map((o) => [o.value, o.label])),
+    [options],
+  )
 
   const trigger = (
     <SelectPrimitive.Trigger
@@ -82,16 +87,19 @@ export function SelectField({
     <SelectPrimitive.Root
       items={items}
       value={value}
-      onValueChange={(next) => onValueChange((next ?? '') as string)}
+      onValueChange={(next) => onValueChange(next ?? '')}
       name={name}
       disabled={disabled}
       required={required}
     >
       {label ? (
         <div className={cn('flex flex-col gap-1 text-sm', className)}>
-          <label htmlFor={fieldId} className="text-muted-foreground">
+          {/* SelectPrimitive.Label registers its id into the select context so
+              the trigger gets aria-labelledby automatically (robust accessible
+              name, unlike a plain <label htmlFor> on a role=combobox button). */}
+          <SelectPrimitive.Label className="text-muted-foreground">
             {label}
-          </label>
+          </SelectPrimitive.Label>
           {trigger}
         </div>
       ) : (
