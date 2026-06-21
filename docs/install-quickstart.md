@@ -32,7 +32,7 @@ mkdir ~/ccas && cd ~/ccas
 
 ```bash
 REPO_OWNER=<owner>   # GHCR namespace / GitHub owner（即 release 連結中的 <owner>）
-RELEASE=v0.4.0       # 改為要安裝的精確版號
+RELEASE=v0.5.0       # 改為要安裝的精確版號
 curl -fsSL -o docker-compose.yml \
   "https://github.com/${REPO_OWNER}/ccas/releases/download/${RELEASE}/docker-compose.yml"
 curl -fsSL -o example.env \

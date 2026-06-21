@@ -13,7 +13,7 @@
 cd ~/ccas    # 你 docker-compose.yml 所在的目錄
 
 # 1) 修改 .env 的版本
-sed -i 's/^CCAS_VERSION=.*/CCAS_VERSION=v0.4.0/' .env
+sed -i 's/^CCAS_VERSION=.*/CCAS_VERSION=v0.5.0/' .env
 
 # 2) 拉新 image 並重啟
 docker compose -f docker-compose.yml pull
@@ -38,6 +38,42 @@ CCAS 採 [SemVer](https://semver.org/)：
 | Major（`v0.x.x` → `v1.0.0`） | 可能 breaking change；release notes 會明示 | 升級前**閱讀 release notes**、備份 |
 
 每次 release 的詳細 changelog 見 [GitHub Releases](https://github.com/<owner>/ccas/releases)。
+
+---
+
+## v0.5.0（Minor）— 品質稽核修復（資料正確性、安全、架構、效能、無障礙）
+
+**適用對象**：v0.4.x 升級至 v0.5.0。
+
+**資料正確性（重要）**：
+- 修正 classify 整批 commit 失敗時誤標 SUCCEEDED 並遺失資料
+- 修正 CTBC labeled 格式跨年交易的年份判定
+
+**新增功能**：
+- **銀行網銀登入憑證可加密儲存**：FUBON `NATIONAL_ID` / `ROC_BIRTHDAY` 等可改存
+  DB（Fernet + `master.key`），不再僅依賴明文環境變數；新增「設定中心 → 登入憑證」
+  頁，支援一鍵將既有 env 憑證加密匯入（env 仍為 legacy fallback）
+- 前端設計系統與無障礙強化：統一下拉元件（SelectField）、鍵盤可達性、表單標籤、
+  展開區 aria 屬性
+- 通知可靠性：預算告警補推、Gmail 逐封失敗隔離；staged 重試韌性
+
+**安全強化**：
+- `REDIS_PASSWORD` 空值在 **https 正式部署**升級為阻斷（dev http 維持警告）
+- Telegram 空允許名單告警、redis-commander 加上 Basic Auth、Dockerfile `--frozen`
+- SQLite 外鍵強制（`foreign_keys=ON`）+ delete 路由級聯／409 完整性
+
+**Database 異動**：
+- 新表：`bank_login_credentials`（複合主鍵 `bank_code`+`credential_key`、Fernet 密文）
+- 新欄位：`budget_alerts.notified`（補推用）
+
+**Migration 自動執行**：Alembic migration 會在 backend 容器啟動時自動執行，**無需手動操作**。
+
+**安全相關注意**：
+- **登入憑證／master.key 備份**：DB 登入憑證以 `master.key` 加密；遺失 `master.key`
+  = 既有 DB 憑證無法解密。沿用 v0.4.0 的備份建議：完整備份 `${CCAS_DATA_LOCATION}`
+  並**單獨保管 `master.key`**（見 [secrets-management.md](secrets-management.md)）
+- **https 部署需設 `REDIS_PASSWORD`**：若 `PUBLIC_BASE_URL` 為 https 而 `REDIS_PASSWORD`
+  留空，`check-env.sh` 將阻斷啟動；升級前請確認已設定
 
 ---
 
