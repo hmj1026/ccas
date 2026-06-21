@@ -37,7 +37,8 @@
 | P3-1 stage→pipeline 層解耦（建 ccas.shared） | ✅ 已完成 | `87e096e` |
 | P3-4 效能預防性優化（5 子項） | ✅ 已完成 | `50e5dbf` |
 | P3-5 API 一致性批次（6 子項） | ✅ 已完成 | `a8e0bbb` |
-| P3-6 / P3-7 | ⬜ 待辦 | — |
+| P3-6 前端設計系統與無障礙（A11y + SelectField 收斂 20 select） | ✅ 已完成 | `377b938`→`f0aa6e4`（9 commit） |
+| P3-7 FUBON 登入憑證加密儲存 | ⬜ 待辦 | — |
 
 > P3-2 已順帶解決 `defensive_only_findings.md` #2（render_due_reminder 接 Bill ORM 不一致）——該項已改純量、不再是「純防禦勿修」。
 
@@ -77,10 +78,17 @@
 - **實作結果**：(2) prefix 改後內部 path 去掉重複 '/transactions' 段、對外 URL 完全不變（exports 仍註冊於 transactions_edit 之前，static /transactions/export 先於 {id} 不受影響）。(4) PATCH 為 RFC 5789 partial-update 正確語意；前端 transaction-detail apiPut→apiPatch。(5) **改用 Gmail users.getProfile（gmail.readonly 即可取 emailAddress），非 OAuth2 userinfo 端點** — 免擴 scope、免重新授權、不影響 ingestor 憑證；best-effort 寫入加密 token.json['email']、status 回傳、失敗不阻斷。全套件 1708 passed、ruff+pyright strict 0、frontend eslint 0 + vitest 8 passed、security-reviewer PASS、python-reviewer APPROVE。
 - **風險（已驗證消解）**：URL 不變故無 405；getProfile 失敗（含 UnicodeDecodeError 邊界）皆回 None 不阻斷 callback（test_callback_succeeds_when_getprofile_fails 覆蓋）。
 
-### P3-6 前端設計系統與無障礙一致性（UI/UX，L）★最大
-- **檔案**（皆相對於 `frontend/src/`）：components/shared/filter-bar.tsx, pages/transactions.tsx, pages/insights.tsx, pages/setup/admin.tsx, pages/settings-budgets.tsx, pages/settings-rules.tsx, pages/settings-reminders.tsx, components/staged-attachments-warning.tsx, components/budget-alert-banner.tsx, pages/bills.tsx, lib/utils.ts（實際路徑以稽核結果為準，必要時用 `cx`/grep 定位）
-- **做法**：建 SelectField wrapper 收斂 17 處原生 select（待 `shadcn add select`）；交易列商家名改 Link 提升鍵盤可達；類別比較區段未選月顯示 EmptyState；admin toLocaleString 加 'zh-TW'；表單補 htmlFor/id；展開區加 aria-controls；分頁守門統一。
-- **風險**：select 遷移 17 處範圍大、須逐頁回歸；Playwright e2e 若依賴原生 select DOM 須同步。**建議拆多個小 PR**。
+### P3-6 前端設計系統與無障礙一致性（UI/UX，L）★最大 — ✅ 已完成（`377b938`→`f0aa6e4`，9 commit）
+- **檔案**（皆相對於 `frontend/src/`）：components/shared/filter-bar.tsx, pages/transactions.tsx, pages/insights.tsx, pages/setup/admin.tsx, pages/settings-budgets.tsx, pages/settings-rules.tsx, pages/settings-reminders.tsx, pages/operations.tsx, pages/transaction-detail.tsx, components/staged-attachments-warning.tsx, components/export-dialog.tsx, **新增** components/ui/select-field.tsx
+- **做法（原規劃）**：建 SelectField wrapper 收斂原生 select；交易列商家名改 Link；類別比較未選月顯示 EmptyState；admin toLocaleString 加 'zh-TW'；展開區加 aria-controls。
+- **實作結果**：分 9 個 commit（呼應「拆多 PR」精神、逐組 vitest 回歸）：
+  - **commit 1（`377b938`）A11y 組**：transactions 商家名改 Link（冗餘 Pencil 改 aria-hidden+tabIndex=-1 消除同列雙 tab stop，補 focus-visible outline-offset-2）；insights 未選月份顯示 EmptyState；admin `toLocaleString('zh-TW')`；staged-attachments 補 aria-controls + 面板恆渲染以 hidden 表收合。
+  - **commit 2（`a7ce31a`）SelectField 元件**：包 **@base-ui/react Select**（專案用 base-ui 非 radix；shadcn 假設不適用）。label 模式用 `SelectPrimitive.Label`（context→aria-labelledby）、no-label 用 aria-label；`items` Record 顯示選中 label。
+  - **commit 3–8**：逐檔遷移 **20 處原生 select** → SelectField（filter-bar 4 / insights 4 / operations 4 / settings 4 / transaction-detail 1 / export-dialog 3）。number 值於邊界 String/Number 轉換；export-dialog 保留查詢失敗的手動輸入 fallback；移除散落英文 aria-label，可見中文 label 即無障礙名稱。
+  - **commit 9（`f0aa6e4`）reviewer follow-ups**：label 模式改 SelectPrimitive.Label、transaction-detail 補 aria-label、items useMemo。
+- **測試遷移慣例**：base-ui 非原生 select，`userEvent.selectOptions`/`findByDisplayValue`/「option 當載入 gate」皆不適用 → 改 `pickOption`（開 listbox + 點 option）；options 僅在開啟時渲染，ready gate 改等待 trigger/其他穩定元素。
+- **驗證**：全套件 vitest **120 passed**、tsc strict + eslint 0、production build 通過（select-field 自成 chunk gzip 23.7kB）；frontend-reviewer **APPROVE**（2 HIGH + 4 MEDIUM 全消解）。
+- **殘留（非本次範疇）**：settings 各表單的純文字/日期 `<input>` 仍為 label-wrap 隱式關聯（原本即無障礙，未強制改顯式 htmlFor/id）；settings-rules 類型 help text 未加 aria-describedby（原碼即無，屬既有狀態非回歸）。
 
 ### P3-7 FUBON 登入憑證加密儲存（安全，M）
 - **檔案**：config.py, ingestor/job.py, storage/models.py, api/routers/setup/（目錄）
