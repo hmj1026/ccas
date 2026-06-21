@@ -38,7 +38,7 @@
 | P3-4 效能預防性優化（5 子項） | ✅ 已完成 | `50e5dbf` |
 | P3-5 API 一致性批次（6 子項） | ✅ 已完成 | `a8e0bbb` |
 | P3-6 前端設計系統與無障礙（A11y + SelectField 收斂 20 select） | ✅ 已完成 | `377b938`→`f0aa6e4`（9 commit） |
-| P3-7 FUBON 登入憑證加密儲存（後端） | ✅ 後端完成 | `50b8017`,`bb5c11e`（前端 setup UI 待後續） |
+| P3-7 FUBON 登入憑證加密儲存（後端 + 前端 UI） | ✅ 已完成 | `50b8017`,`bb5c11e`（後端）, `8efd893`（前端 UI） |
 
 > P3-2 已順帶解決 `defensive_only_findings.md` #2（render_due_reminder 接 Bill ORM 不一致）——該項已改純量、不再是「純防禦勿修」。
 
@@ -90,7 +90,7 @@
 - **驗證**：全套件 vitest **120 passed**、tsc strict + eslint 0、production build 通過（select-field 自成 chunk gzip 23.7kB）；frontend-reviewer **APPROVE**（2 HIGH + 4 MEDIUM 全消解）。
 - **殘留（非本次範疇）**：settings 各表單的純文字/日期 `<input>` 仍為 label-wrap 隱式關聯（原本即無障礙，未強制改顯式 htmlFor/id）；settings-rules 類型 help text 未加 aria-describedby（原碼即無，屬既有狀態非回歸）。
 
-### P3-7 FUBON 登入憑證加密儲存（安全，M）— ✅ 後端完成（`50b8017`,`bb5c11e`）
+### P3-7 FUBON 登入憑證加密儲存（安全，M）— ✅ 已完成（後端 `50b8017`,`bb5c11e`；前端 UI `8efd893`）
 - **檔案**：storage/models.py, ingestor/credentials.py（新）, ingestor/job.py, api/routers/setup/login_credentials.py（新）, api/app.py, api/schemas.py, alembic 7f3ae66246a3, tests/integration/test_setup_login_credentials_router.py（新）
 - **原規劃**：FUBON_NATIONAL_ID/FUBON_ROC_BIRTHDAY env 明文 → 新增 BankLoginCredential 表(複合主鍵, Fernet)，DB 優先 + env legacy fallback。勿混入 bank_secrets。
 - **實作結果**：
@@ -100,10 +100,10 @@
   - setup 路由 `/api/setup/login-credentials`（GET/PUT/DELETE/import-from-env，鏡像 secrets.py；PUT 加註冊表守衛拒未知組合；明文/密文絕不回傳）。
   - 整合測試 16 項。三審：database **APPROVE**、security/python **WARNING→ 已採納可改項**（註冊表守衛 / known_credentials 命名 / CredentialSource 型別）。
   - 全套件 1724 passed、ruff + pyright strict 0、migration upgrade/downgrade 來回驗證。
-- **殘留（後續 PR）**：
-  - **前端 setup UI**（依本項風險註記「可排靠後」）：可仿 settings-secrets 頁，呼叫 `/api/setup/login-credentials/*`。後端 + import-from-env 已使功能可用（設 env 後一鍵加密入庫），UI 僅為便利。
+- **前端 UI（`8efd893`）**：新增 `/setup/登入憑證` 頁，鏡像 PDF 密碼頁（master.key banner、來源 badge、設定/刪除 dialog、env 一鍵匯入；值 type=password、明文不顯示）。layout nav 增至 5 項。frontend-reviewer APPROVE（MEDIUM/LOW 皆為忠實鏡像 secrets.tsx 的既有模式、無回歸）。
+- **殘留（與 P3-7 無直接關係，建議獨立處理）**：
   - 既有 `payment_reminders.sent_at` ORM(NOT NULL)/DB(nullable) drift（早於 P3-7，建議獨立 migration 修正）。
-  - 觀測性：import-from-env 對「無 env 值」的註冊憑證未計入 skipped（與 secrets.py 一致）。
+  - 觀測性：import-from-env 對「無 env 值」的註冊憑證未計入 skipped（與 secrets.py 一致；已於 docstring 註明三態）。
 
 ### P3-8 REDIS_PASSWORD 空值在 prod 升級為阻斷（安全，S） — ✅ 已完成（`7fdca20`）
 - **檔案**：scripts/check-env.sh, .env.example
