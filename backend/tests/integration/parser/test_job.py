@@ -156,6 +156,7 @@ class TestSuccessfulParse:
                 patch("ccas.parser.job.get_settings") as mock_get_settings,
             ):
                 mock_get_settings.return_value.staging_dir = TEST_STAGING_DIR
+                mock_get_settings.return_value.pdf_parse_timeout_seconds = 30.0
                 summary = await run_parse_job(session)
 
             assert summary.parsed_count == 1

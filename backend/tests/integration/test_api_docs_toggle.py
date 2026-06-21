@@ -26,7 +26,9 @@ def _settings_cache():
 async def _build_client() -> AsyncGenerator[AsyncClient, None]:
     app = create_app()
     transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+    # https scheme for parity with the shared client fixture: Secure session
+    # cookies only round-trip over a secure-context base_url.
+    async with AsyncClient(transport=transport, base_url="https://test") as ac:
         yield ac
 
 
