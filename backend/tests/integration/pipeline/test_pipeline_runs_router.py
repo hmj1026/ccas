@@ -242,8 +242,8 @@ async def test_pipeline_run_detail_not_found(client: AsyncClient):
     response = await client.get("/api/pipeline/runs/missing", headers=auth_headers())
 
     assert response.status_code == 404
-    # 404 detail is Traditional Chinese and echoes the requested run_id.
-    assert response.json()["detail"] == "找不到執行紀錄 #missing"
+    # 404 message is Traditional Chinese and echoes the requested run_id.
+    assert response.json()["message"] == "找不到執行紀錄 #missing"
 
 
 @pytest.mark.asyncio

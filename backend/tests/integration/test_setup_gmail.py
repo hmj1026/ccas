@@ -128,8 +128,8 @@ class TestUploadCredentials:
             headers=auth_headers(),
         )
         assert resp.status_code == 413
-        # HTTPException keeps FastAPI's default {"detail": ...} shape.
-        assert "1 MB" in resp.json()["detail"]
+        # HTTPException is wrapped into the unified {success, message, data} envelope.
+        assert "1 MB" in resp.json()["message"]
 
     async def test_upload_rejects_missing_client_secret(
         self,
@@ -231,8 +231,8 @@ class TestCallback:
             follow_redirects=False,
         )
         assert resp.status_code == 422
-        # Expired-state detail guides the user to retry the authorize flow.
-        assert "請重新點擊授權按鈕" in resp.json()["detail"]
+        # Expired-state message guides the user to retry the authorize flow.
+        assert "請重新點擊授權按鈕" in resp.json()["message"]
 
     @respx.mock
     async def test_callback_happy_path_writes_token_and_redirects(

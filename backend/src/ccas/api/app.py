@@ -17,6 +17,7 @@ from redis.exceptions import RedisError
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from ccas.api.deps import verify_token
@@ -113,7 +114,8 @@ def create_app() -> FastAPI:
     ) -> JSONResponse:
         """422 驗證錯誤改用專案統一信封格式。
 
-        HTTPException 不在此處理（維持 FastAPI 預設 ``{"detail": ...}``）。
+        一般 ``HTTPException`` 由下方 ``_http_exception_handler`` 處理（兩者註冊
+        不同例外型別，互不覆蓋）。
         """
         message = "; ".join(
             "{loc} -> {msg}".format(
@@ -125,6 +127,25 @@ def create_app() -> FastAPI:
         return JSONResponse(
             status_code=422,
             content={"success": False, "message": message, "data": None},
+        )
+
+    @app.exception_handler(StarletteHTTPException)
+    async def _http_exception_handler(
+        request: Request, exc: StarletteHTTPException
+    ) -> JSONResponse:
+        """HTTPException 統一改用專案信封格式 ``{success, message, data}``。
+
+        涵蓋業務路由拋出的 ``fastapi.HTTPException``（401/403/404/409/413/422…）
+        以及 Starlette 路由層錯誤（如未匹配路由的 404）。原 ``status_code`` 與既有
+        ``headers``（如 401 的 ``WWW-Authenticate``）皆完整保留。
+
+        422 ``RequestValidationError`` 不在此處理（已由上方專用 handler 攔截，
+        且兩者註冊的是不同例外型別，互不覆蓋）。
+        """
+        return JSONResponse(
+            status_code=exc.status_code,
+            content={"success": False, "message": str(exc.detail), "data": None},
+            headers=exc.headers,
         )
 
     @app.get("/health")
