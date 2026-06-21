@@ -81,7 +81,10 @@ class TestValidationRejects:
     async def test_tampered_hmac(self):
         cookie = encode_session_cookie(_TOKEN, current_api_token_version())
         version, ts, mac = cookie.split(".")
-        flipped = ("0" if mac[-1] != "0" else "1") + mac[1:]
+        # Flip the LAST hex char deterministically so the mac always changes
+        # (the previous form keyed off mac[-1] but rewrote mac[0], making it a
+        # no-op ~6% of the time when mac[0] == "0" — a flaky false pass).
+        flipped = mac[:-1] + ("1" if mac[-1] == "0" else "0")
         assert not is_valid_session_cookie(f"{version}.{ts}.{flipped}")
 
     async def test_tampered_timestamp(self):
