@@ -11,6 +11,12 @@
  */
 import { test, expect, type Page, type Route } from '@playwright/test'
 
+/** Choose a SelectField (base-ui) option: open the listbox then click an item. */
+async function pickOption(page: Page, label: string, optionName: string) {
+  await page.getByLabel(label).click()
+  await page.getByRole('option', { name: optionName }).click()
+}
+
 type ApiEnvelope<T> = {
   success: true
   data: T
@@ -136,8 +142,11 @@ test.describe('Insights page', () => {
     await expect(
       page.getByRole('heading', { name: '商家排行' }),
     ).toBeVisible()
-    // Compare 區塊預設不顯示（沒有 month query）
-    await expect(page.getByText('類別 vs 上月')).toHaveCount(0)
+    // Compare 區塊恆顯示；未帶 month query 時顯示提示 EmptyState（P3-6）
+    await expect(page.getByText('類別 vs 上月')).toBeVisible()
+    await expect(
+      page.getByText('請先於上方選擇月份以比較類別'),
+    ).toBeVisible()
   })
 
   test('switching year metric refetches with metric=count', async ({
@@ -154,7 +163,7 @@ test.describe('Insights page', () => {
     // 預設 metric=total
     await expect(seen).toContain('total')
 
-    await page.getByLabel('年度對比指標').selectOption('count')
+    await pickOption(page, '年度對比指標', '筆數')
     await expect.poll(() => seen.includes('count')).toBe(true)
   })
 
