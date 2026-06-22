@@ -9,6 +9,7 @@ from datetime import date
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from pydantic import SecretStr
 from sqlalchemy import select
 from sqlalchemy import update as sa_update
 from sqlalchemy.ext.asyncio import (
@@ -34,7 +35,7 @@ async def session():
 
 def _fake_settings() -> MagicMock:
     settings = MagicMock()
-    settings.telegram_bot_token = "test-token"
+    settings.telegram_bot_token = SecretStr("test-token")
     settings.telegram_chat_id = "12345"
     return settings
 

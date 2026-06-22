@@ -54,7 +54,10 @@ async def run_notify_job(
     summary = NotifySummary()
 
     settings = get_settings()
-    if not settings.telegram_bot_token or not settings.telegram_chat_id:
+    if (
+        not settings.telegram_bot_token.get_secret_value()
+        or not settings.telegram_chat_id
+    ):
         logger.info("TELEGRAM_BOT_TOKEN 或 TELEGRAM_CHAT_ID 未設定，跳過 notify stage")
         await reporter.stage_started("notify", total=0)
         return summary
@@ -109,7 +112,7 @@ async def run_notify_job(
 
             bank_name = bank_names.get(bill_code, bill_code)
             await notify_new_bill(
-                settings.telegram_bot_token,
+                settings.telegram_bot_token.get_secret_value(),
                 settings.telegram_chat_id,
                 bank_name=bank_name,
                 billing_month=bill_month,

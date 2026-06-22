@@ -214,7 +214,10 @@ async def push_reminder_test(
         )
 
     settings = get_settings()
-    if not settings.telegram_bot_token or not settings.telegram_chat_id:
+    if (
+        not settings.telegram_bot_token.get_secret_value()
+        or not settings.telegram_chat_id
+    ):
         return ApiResponse(
             data=ReminderTestResult(
                 sent=False,
@@ -227,7 +230,7 @@ async def push_reminder_test(
     bank_name = bank_names.get(bill.bank_code, bill.bank_code)
     try:
         await notify_due_reminder(
-            settings.telegram_bot_token,
+            settings.telegram_bot_token.get_secret_value(),
             settings.telegram_chat_id,
             bank_name=bank_name,
             total_amount=bill.total_amount,

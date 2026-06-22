@@ -113,7 +113,10 @@ async def send_payment_reminders(
         today = date.today()
 
     settings = get_settings()
-    if not settings.telegram_bot_token or not settings.telegram_chat_id:
+    if (
+        not settings.telegram_bot_token.get_secret_value()
+        or not settings.telegram_chat_id
+    ):
         logger.info("TELEGRAM_BOT_TOKEN 或 TELEGRAM_CHAT_ID 未設定，跳過付款提醒")
         return {"sent": 0, "skipped": 0}
 
@@ -135,7 +138,7 @@ async def send_payment_reminders(
             bank_name = bank_names.get(bill.bank_code, bill.bank_code)
             try:
                 await notify_due_reminder(
-                    settings.telegram_bot_token,
+                    settings.telegram_bot_token.get_secret_value(),
                     settings.telegram_chat_id,
                     bank_name=bank_name,
                     total_amount=bill.total_amount,

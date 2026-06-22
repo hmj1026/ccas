@@ -16,6 +16,7 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from pydantic import SecretStr
 
 from ccas.bot.job import run_notify_job
 from ccas.classifier.job import run_classify_job
@@ -239,7 +240,7 @@ async def test_notify_disabled_settings_emits_started_zero() -> None:
     session = AsyncMock()
 
     fake_settings = MagicMock()
-    fake_settings.telegram_bot_token = ""
+    fake_settings.telegram_bot_token = SecretStr("")
     fake_settings.telegram_chat_id = ""
 
     with patch("ccas.bot.job.get_settings", return_value=fake_settings):
