@@ -19,6 +19,7 @@ import pdfplumber.page
 from ccas.parser.banks.ctbc.ocr_postprocess import normalize_ocr_merchant
 from ccas.parser.base import BankParser, ParseError
 from ccas.parser.ocr import extract_text_from_image, is_ocr_available
+from ccas.parser.refund_utils import is_refund_merchant, parse_amount_cell
 from ccas.parser.registry import registry
 from ccas.parser.result import ParseResult, TransactionItem
 
@@ -381,14 +382,19 @@ def _parse_transaction_row(
             logger.warning("跳過無法解析交易日的行: %s", cells)
             return None
 
-        amount = int(raw_amount.replace(",", ""))
+        # 退款保留為負數明細（與 refund_policy 一致）：parse_amount_cell 先處理
+        # 會計括號 / 負號編碼，再依商戶名是否為退款措辭強制負數（-abs 防重複負數化）。
+        merchant_name = normalize_ocr_merchant(merchant)
+        amount = parse_amount_cell(raw_amount)
+        if is_refund_merchant(merchant_name):
+            amount = -abs(amount)
         posting_date = _parse_mmdd(raw_posting_date, year, billing_month_num)
         is_valid_card = raw_card_last4.isdigit() and len(raw_card_last4) == 4
         card_last4 = raw_card_last4 if is_valid_card else None
 
         return TransactionItem(
             trans_date=trans_date,
-            merchant=normalize_ocr_merchant(merchant),
+            merchant=merchant_name,
             amount=amount,
             posting_date=posting_date,
             card_last4=card_last4,
@@ -698,11 +704,16 @@ def _parse_roc_transaction(
         py_, pm, pd = raw_posting.split("/")
         posting_date = _roc_to_date(int(py_), int(pm), int(pd))
 
-        amount = int(raw_amount.replace(",", ""))
+        # 退款保留為負數明細（與 refund_policy 一致）。ROC 行 regex 的金額僅含
+        # 數字，故負數化完全依 OCR 商戶名是否為退款措辭判定（-abs 防重複負數化）。
+        merchant_name = normalize_ocr_merchant(merchant)
+        amount = parse_amount_cell(raw_amount)
+        if is_refund_merchant(merchant_name):
+            amount = -abs(amount)
 
         return TransactionItem(
             trans_date=trans_date,
-            merchant=normalize_ocr_merchant(merchant),
+            merchant=merchant_name,
             amount=amount,
             posting_date=posting_date,
             card_last4=card_last4,
