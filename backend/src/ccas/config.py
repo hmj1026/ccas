@@ -50,7 +50,10 @@ class Settings(BaseSettings):
     )
 
     database_url: str = "sqlite+aiosqlite:///./data/ccas.db"
-    telegram_bot_token: str = ""
+    # SecretStr so pydantic repr / model_dump masks the token and the log
+    # RedactingFilter never sees it via accidental Settings dumps. Callers
+    # read the plain value with ``.get_secret_value()``.
+    telegram_bot_token: SecretStr = SecretStr("")
     telegram_chat_id: str = ""
     gmail_credentials_path: str = "./data/credentials.json"
     gmail_token_path: str = "./data/token.json"
@@ -69,7 +72,10 @@ class Settings(BaseSettings):
     # Swagger UI / ReDoc / openapi.json are disabled by default; opt-in via
     # ENABLE_API_DOCS=true for development or internal debugging only.
     enable_api_docs: bool = False
-    api_token: str
+    # Required (no default): preserves fail-fast at startup when API_TOKEN is
+    # unset. SecretStr masks it in pydantic repr / model_dump; callers read the
+    # plain value with ``.get_secret_value()``.
+    api_token: SecretStr
     # 由 entrypoint 寫入的 token / version 檔；rotate API 直接讀寫此處避免
     # 受 lru_cache 鎖住。檔案缺席時 fallback 為 ``api_token`` 與 version=1，
     # 不破壞 dev/test 的純 env 設定路徑（oauth-onboarding-ui §6）。

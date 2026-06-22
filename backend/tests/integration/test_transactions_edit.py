@@ -75,6 +75,30 @@ class TestGetTransactionDetail:
         assert body["merchant_alias"] == ""
         assert "updated_at" in body
 
+    async def test_get_exposes_installment_fields(
+        self, client: AsyncClient, db_session: AsyncSession
+    ) -> None:
+        """分期欄位（已由 parser 持久化）須出現在 API 回應。"""
+        txn = await _seed_bill_and_txn(db_session)
+        txn.installment_current = 3
+        txn.installment_total = 12
+        await db_session.commit()
+
+        resp = await client.get(f"/api/transactions/{txn.id}", headers=auth_headers())
+        assert resp.status_code == 200, resp.text
+        body = resp.json()["data"]
+        assert body["installment_current"] == 3
+        assert body["installment_total"] == 12
+
+    async def test_get_installment_fields_null_when_absent(
+        self, client: AsyncClient, db_session: AsyncSession
+    ) -> None:
+        txn = await _seed_bill_and_txn(db_session)
+        resp = await client.get(f"/api/transactions/{txn.id}", headers=auth_headers())
+        body = resp.json()["data"]
+        assert body["installment_current"] is None
+        assert body["installment_total"] is None
+
     async def test_get_not_found(
         self, client: AsyncClient, db_session: AsyncSession
     ) -> None:
@@ -142,6 +166,18 @@ class TestPutTransaction:
             f"/api/transactions/{txn.id}",
             headers=auth_headers(),
             json={"category_id": 9999},
+        )
+        assert resp.status_code == 422
+
+    async def test_update_rejects_oversized_tag_element(
+        self, client: AsyncClient, db_session: AsyncSession
+    ) -> None:
+        """單一 tag 超過 100 字元應回 422（防元素級長度繞過）。"""
+        txn = await _seed_bill_and_txn(db_session)
+        resp = await client.patch(
+            f"/api/transactions/{txn.id}",
+            headers=auth_headers(),
+            json={"tags": ["x" * 101]},
         )
         assert resp.status_code == 422
 

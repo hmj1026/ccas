@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 def main() -> None:
     settings = get_settings()
     configure_logging(settings)
-    if not settings.telegram_bot_token:
+    if not settings.telegram_bot_token.get_secret_value():
         logger.warning("TELEGRAM_BOT_TOKEN 未設定，Bot 無法啟動")
         sys.exit(0)
 

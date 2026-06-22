@@ -88,8 +88,8 @@ test.describe('Operations center', () => {
     await page.getByLabel('強制重跑').check()
     await page.getByRole('button', { name: '開始執行' }).click()
 
-    await expect(page.getByText('parse 47 / 120 (39%)')).toBeVisible()
-    await expect(page.getByText('running').first()).toBeVisible()
+    await expect(page.getByText('解析 47 / 120 (39%)')).toBeVisible()
+    await expect(page.getByText('執行中').first()).toBeVisible()
   })
 
   test('pipeline run 失敗時顯示錯誤訊息 (R08)', async ({ page }) => {
@@ -144,9 +144,9 @@ test.describe('Operations center', () => {
     await page.getByRole('button', { name: '開始執行' }).click()
 
     // 1) 失敗狀態在執行紀錄中可見
-    const failedRow = page.locator('tr', { hasText: 'failed' }).first()
+    const failedRow = page.locator('tr', { hasText: '失敗' }).first()
     await expect(failedRow).toBeVisible()
-    await expect(page.getByText('failed').first()).toBeVisible()
+    await expect(page.getByText('失敗').first()).toBeVisible()
 
     // 2) 點開該列詳情 → 錯誤訊息呈現給使用者
     await failedRow.getByRole('button').first().click()

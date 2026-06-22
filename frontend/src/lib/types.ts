@@ -70,6 +70,8 @@ export interface TransactionItem {
   readonly category: string | null
   readonly bank_code: string
   readonly billing_month: string
+  readonly installment_current: number | null
+  readonly installment_total: number | null
 }
 
 /**

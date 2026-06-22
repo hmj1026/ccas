@@ -61,6 +61,8 @@ def _to_item(row) -> TransactionItem:
         category=txn.category,
         bank_code=bank_code,
         billing_month=billing_month,
+        installment_current=txn.installment_current,
+        installment_total=txn.installment_total,
     )
 
 

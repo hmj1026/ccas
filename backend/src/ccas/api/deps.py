@@ -42,7 +42,7 @@ def current_api_token() -> str:
                 return value
     except OSError as exc:
         logger.warning("api_token_path read failed: %s", exc)
-    return settings.api_token
+    return settings.api_token.get_secret_value()
 
 
 def current_api_token_version() -> int:

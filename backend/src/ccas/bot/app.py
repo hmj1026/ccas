@@ -81,7 +81,8 @@ def create_bot_app() -> Application:
         )
     sf = get_session_factory()
 
-    app = Application.builder().token(settings.telegram_bot_token).build()
+    bot_token = settings.telegram_bot_token.get_secret_value()
+    app = Application.builder().token(bot_token).build()
 
     commands = {
         "status": handle_status,

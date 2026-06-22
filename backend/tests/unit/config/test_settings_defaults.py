@@ -79,7 +79,7 @@ class TestOptionalFieldsEmpty:
         monkeypatch.setenv("API_TOKEN", "test-token")
         monkeypatch.delenv("TELEGRAM_BOT_TOKEN", raising=False)
         s = Settings(_env_file=None)
-        assert s.telegram_bot_token == ""
+        assert s.telegram_bot_token.get_secret_value() == ""
 
     def test_telegram_chat_id_defaults_empty(self, monkeypatch):
         monkeypatch.setenv("API_TOKEN", "test-token")

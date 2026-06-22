@@ -30,6 +30,15 @@ _REDACT_PATTERNS: list[re.Pattern[str]] = [
         r'"?\s*[:=]\s*"?)\S+',
         re.IGNORECASE,
     ),
+    # API / bot token values. Defence-in-depth in addition to
+    # ``Settings.api_token`` / ``Settings.telegram_bot_token`` being
+    # ``SecretStr``: masks ``api_token=...`` / ``API_TOKEN=...`` /
+    # ``bot_token=...`` / ``telegram_bot_token=...`` if they ever reach a
+    # log line (e.g. a Settings dump or an env echo).
+    re.compile(
+        r'("?(?:api_token|telegram_bot_token|bot_token)"?\s*[:=]\s*"?)\S+',
+        re.IGNORECASE,
+    ),
     # credentials file paths
     re.compile(
         r'("?(?:credentials_path|token_path|gmail_credentials_path'

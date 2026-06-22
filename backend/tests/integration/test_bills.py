@@ -101,14 +101,23 @@ async def test_list_bills_unpaid(client: AsyncClient, db_session: AsyncSession):
 
 
 async def test_list_bills_paid(client: AsyncClient, db_session: AsyncSession):
-    """篩選已繳帳單。"""
-    await _seed_bills(db_session)
+    """篩選已繳帳單：須實際回傳 paid 帳單（非空集合假通過）。"""
+    _unpaid_id, paid_id = await _seed_bills(db_session)
 
+    # 2026-02 有一筆 paid 帳單 → status=paid 應回傳它
     response = await client.get(
-        "/api/bills?month=2026-03&status=paid", headers=auth_headers()
+        "/api/bills?month=2026-02&status=paid", headers=auth_headers()
     )
     data = response.json()["data"]
-    assert len(data) == 0  # 2026-03 only has unpaid
+    assert len(data) == 1
+    assert data[0]["id"] == paid_id
+    assert data[0]["is_paid"] is True
+
+    # 反向：2026-03 僅有 unpaid → status=paid 應為空
+    empty = await client.get(
+        "/api/bills?month=2026-03&status=paid", headers=auth_headers()
+    )
+    assert len(empty.json()["data"]) == 0
 
 
 async def test_list_bills_pagination(client: AsyncClient, db_session: AsyncSession):
