@@ -41,6 +41,23 @@ router = APIRouter(prefix="/api/setup/secrets", tags=["setup-secrets"])
 
 _PDF_PASSWORD_KEY = re.compile(r"^PDF_PASSWORD_([A-Z][A-Z0-9_]*?)$")
 
+# Bank-code whitelist (mirrors storage.paths._BANK_CODE_RE). The path param is
+# attacker-controllable by any valid-token holder; without this an arbitrary
+# Unicode / whitespace / control string could be written into BankSecret.bank_code
+# (String(32) PK), breaking downstream key comparison silently.
+_BANK_CODE_RE = re.compile(r"^[A-Z0-9_-]+$")
+
+
+def _normalize_bank_code(code: str) -> str:
+    """Normalize + validate a bank-code path param, or raise HTTP 422."""
+    normalized = code.strip().upper()
+    if not _BANK_CODE_RE.fullmatch(normalized):
+        raise HTTPException(
+            status_code=422,
+            detail="bank code 格式無效，僅允許 A-Z、0-9、_、-",
+        )
+    return normalized
+
 
 def _scan_env_codes(settings: Settings) -> set[str]:
     """Collect bank codes that have a ``PDF_PASSWORD_<CODE>`` env entry.
@@ -111,9 +128,7 @@ async def upsert_secret(
     settings: Settings = Depends(get_settings),
 ) -> ApiResponse[BankSecretWriteResult]:
     """Encrypt + UPSERT a per-bank PDF password."""
-    normalized = code.strip().upper()
-    if not normalized:
-        raise HTTPException(status_code=422, detail="bank code 不可為空")
+    normalized = _normalize_bank_code(code)
 
     cipher = settings.master_key_manager.encrypt(payload.password)
     # Race-safe UPSERT — see banks.py rationale.
@@ -141,7 +156,7 @@ async def delete_secret(
     settings: Settings = Depends(get_settings),
 ) -> ApiResponse[BankSecretWriteResult]:
     """Remove the DB-stored secret. Env fallback (if any) remains active."""
-    normalized = code.strip().upper()
+    normalized = _normalize_bank_code(code)
     row = await session.get(BankSecret, normalized)
     if row is not None:
         await session.delete(row)

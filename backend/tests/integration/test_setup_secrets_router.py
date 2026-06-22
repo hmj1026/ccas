@@ -185,6 +185,19 @@ class TestUpsertSecret:
         resp = await client.put("/api/setup/secrets/CTBC", json={"password": "pw"})
         assert resp.status_code == 401
 
+    async def test_rejects_invalid_bank_code(
+        self, client: AsyncClient, db_session: AsyncSession, secrets_env: Path
+    ) -> None:
+        """格式白名單：非 [A-Z0-9_-] 的 code 應回 422，不得寫入任意 Unicode。"""
+        resp = await client.put(
+            "/api/setup/secrets/CT.BC",
+            json={"password": "pw"},
+            headers=auth_headers(),
+        )
+        assert resp.status_code == 422
+        # 不得有任何 BankSecret 列被寫入
+        assert (await db_session.get(BankSecret, "CT.BC")) is None
+
 
 class TestDeleteSecret:
     async def test_deletes_existing_row(

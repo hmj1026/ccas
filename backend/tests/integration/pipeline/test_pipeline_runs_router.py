@@ -126,7 +126,7 @@ async def test_list_pipeline_runs_filters_status_and_orders_desc(
     await db_session.commit()
 
     response = await client.get(
-        "/api/pipeline/runs?status=failed&limit=10", headers=auth_headers()
+        "/api/pipeline/runs?status=failed&page_size=10", headers=auth_headers()
     )
 
     assert response.status_code == 200
@@ -136,10 +136,10 @@ async def test_list_pipeline_runs_filters_status_and_orders_desc(
 
 
 @pytest.mark.asyncio
-async def test_list_pipeline_runs_offset_pagination_and_total_header(
+async def test_list_pipeline_runs_page_pagination_and_total_header(
     client: AsyncClient, db_session: AsyncSession
 ):
-    """offset 分頁取下一頁；X-Total-Count 回未分頁的總筆數。"""
+    """page/page_size 分頁取下一頁；X-Total-Count 回未分頁的總筆數。"""
     now = datetime.now(UTC)
     # 5 runs, created_at strictly increasing so DESC order is deterministic.
     db_session.add_all(
@@ -147,18 +147,18 @@ async def test_list_pipeline_runs_offset_pagination_and_total_header(
     )
     await db_session.commit()
 
-    # Page 1: limit=2 → newest two (run-4, run-3); header reports full count 5.
+    # Page 1: page_size=2 → newest two (run-4, run-3); header reports full count 5.
     page1 = await client.get(
-        "/api/pipeline/runs?limit=2&offset=0", headers=auth_headers()
+        "/api/pipeline/runs?page=1&page_size=2", headers=auth_headers()
     )
     assert page1.status_code == 200
     assert page1.headers["X-Total-Count"] == "5"
     page1_ids = [item["id"] for item in page1.json()["data"]]
     assert page1_ids == ["run-4", "run-3"]
 
-    # Page 2: same limit, offset=2 → next two (run-2, run-1); count unchanged.
+    # Page 2: same page_size, page=2 → next two (run-2, run-1); count unchanged.
     page2 = await client.get(
-        "/api/pipeline/runs?limit=2&offset=2", headers=auth_headers()
+        "/api/pipeline/runs?page=2&page_size=2", headers=auth_headers()
     )
     assert page2.status_code == 200
     assert page2.headers["X-Total-Count"] == "5"
@@ -174,7 +174,7 @@ async def test_list_pipeline_runs_returns_pagination_envelope(
 ):
     """R-api-pagination：/runs 改用統一 PaginatedResponse 信封；
 
-    ``pagination`` 由 limit/offset 換算，``X-Total-Count`` header 仍保留（向下相容）。
+    ``pagination`` 直接採用 page/page_size；``X-Total-Count`` header 保留。
     """
     now = datetime.now(UTC)
     db_session.add_all(
@@ -183,7 +183,7 @@ async def test_list_pipeline_runs_returns_pagination_envelope(
     await db_session.commit()
 
     resp = await client.get(
-        "/api/pipeline/runs?limit=2&offset=2", headers=auth_headers()
+        "/api/pipeline/runs?page=2&page_size=2", headers=auth_headers()
     )
     assert resp.status_code == 200
     body = resp.json()
@@ -199,13 +199,13 @@ async def test_list_pipeline_runs_returns_pagination_envelope(
 
 
 @pytest.mark.asyncio
-async def test_list_pipeline_runs_rejects_negative_offset(client: AsyncClient):
-    """offset < 0 回 422（統一信封格式）。"""
-    response = await client.get("/api/pipeline/runs?offset=-1", headers=auth_headers())
+async def test_list_pipeline_runs_rejects_invalid_page(client: AsyncClient):
+    """page < 1 回 422（統一信封格式）。"""
+    response = await client.get("/api/pipeline/runs?page=0", headers=auth_headers())
     assert response.status_code == 422
     body = response.json()
     assert body["success"] is False
-    assert "offset" in body["message"]
+    assert "page" in body["message"]
 
 
 @pytest.mark.asyncio
@@ -247,25 +247,29 @@ async def test_pipeline_run_detail_not_found(client: AsyncClient):
 
 
 @pytest.mark.asyncio
-async def test_pipeline_runs_list_limit_over_max_returns_422(client: AsyncClient):
-    """limit 超出上限不再靜默截斷，直接回 422（統一信封格式）。"""
-    response = await client.get("/api/pipeline/runs?limit=500", headers=auth_headers())
+async def test_pipeline_runs_list_page_size_over_max_returns_422(client: AsyncClient):
+    """page_size 超出上限不再靜默截斷，直接回 422（統一信封格式）。"""
+    response = await client.get(
+        "/api/pipeline/runs?page_size=500", headers=auth_headers()
+    )
 
     assert response.status_code == 422
     body = response.json()
     assert body["success"] is False
-    assert "limit" in body["message"]
+    assert "page_size" in body["message"]
     assert body["data"] is None
 
 
 @pytest.mark.asyncio
-async def test_pipeline_runs_list_limit_max_100_allowed(
+async def test_pipeline_runs_list_page_size_max_100_allowed(
     client: AsyncClient, db_session: AsyncSession
 ):
     db_session.add_all([_make_run(str(i)) for i in range(105)])
     await db_session.commit()
 
-    response = await client.get("/api/pipeline/runs?limit=100", headers=auth_headers())
+    response = await client.get(
+        "/api/pipeline/runs?page_size=100", headers=auth_headers()
+    )
 
     assert response.status_code == 200
     assert len(response.json()["data"]) == 100

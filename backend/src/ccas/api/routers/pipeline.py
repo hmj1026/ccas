@@ -7,13 +7,14 @@ import logging
 from typing import cast
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi import APIRouter, Depends, HTTPException, Response
 from fastapi.responses import JSONResponse
 from redis import Redis
 from rq import Queue
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ccas.api.deps import PaginationParams
 from ccas.api.schemas import (
     ApiResponse,
     PaginatedResponse,
@@ -152,20 +153,17 @@ def _run_summary(row: PipelineRun) -> PipelineRunSummary:
 async def list_pipeline_runs(
     response: Response,
     status: PipelineRunStatus | None = None,
-    limit: int = Query(default=20, ge=1, le=100),
-    offset: int = Query(default=0, ge=0),
+    pagination: PaginationParams = Depends(),
     session: AsyncSession = Depends(get_db_session),
 ) -> PaginatedResponse[PipelineRunSummary]:
-    """列出最近的 pipeline 執行紀錄（支援 offset 分頁）。
+    """列出最近的 pipeline 執行紀錄（page/page_size 分頁）。
 
-    回應採統一 ``PaginatedResponse`` 信封（與 /api/bills 等列表一致），``pagination``
-    由 limit/offset 換算。為向下相容仍保留 ``X-Total-Count`` header（未過濾的總筆數）。
-    limit 超出 1-100 或 offset < 0 回 422。
-
-    註：``pagination.page`` 以 ``floor(offset/limit)+1`` 計，僅在 offset 為 limit
-    倍數時精確；本端點以 limit/offset 為分頁真值，``page`` 為便利欄位。
+    分頁參數與 /api/bills、/api/transactions 等列表一致，統一走
+    ``PaginationParams``（``page``/``page_size``，預設 1/20，page_size 上限 100），
+    回應採統一 ``PaginatedResponse`` 信封。為向下相容仍保留 ``X-Total-Count``
+    header（未過濾的總筆數）。page < 1 或 page_size 超出 1-100 回 422。
     """
-    # Total over the SAME status filter but ignoring limit/offset, so the
+    # Total over the SAME status filter but ignoring pagination, so the
     # frontend knows when it has paged through every matching run.
     count_stmt = select(func.count()).select_from(PipelineRun)
     page_stmt = select(PipelineRun)
@@ -173,7 +171,9 @@ async def list_pipeline_runs(
         count_stmt = count_stmt.where(PipelineRun.status == status)
         page_stmt = page_stmt.where(PipelineRun.status == status)
     page_stmt = (
-        page_stmt.order_by(PipelineRun.created_at.desc()).offset(offset).limit(limit)
+        page_stmt.order_by(PipelineRun.created_at.desc())
+        .offset(pagination.offset)
+        .limit(pagination.page_size)
     )
 
     total = (await session.execute(count_stmt)).scalar_one()
@@ -182,11 +182,12 @@ async def list_pipeline_runs(
     return PaginatedResponse(
         data=[_run_summary(row) for row in rows],
         pagination=PaginationMeta(
-            # limit≥1（Query 約束）故無除零風險；offset 為 limit 倍數時頁碼精確。
-            page=(offset // limit) + 1,
-            page_size=limit,
+            page=pagination.page,
+            page_size=pagination.page_size,
             total=total,
-            total_pages=max(1, (total + limit - 1) // limit),
+            total_pages=max(
+                1, (total + pagination.page_size - 1) // pagination.page_size
+            ),
         ),
     )
 
