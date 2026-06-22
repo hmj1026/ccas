@@ -112,6 +112,12 @@ fi
 if is_explicitly_set_in_env_file "API_TOKEN"; then
   if [[ -z "${API_TOKEN:-}" ]]; then
     format_errors+=("API_TOKEN 已在 .env 顯式設為空字串；請註解該行讓 entrypoint 自動產生，或填入實際 token")
+  elif [[ "${#API_TOKEN}" -lt 32 ]]; then
+    # SOFT check（非阻斷）：短 token 易被暴力猜測。不影響 exit_code，避免既有
+    # 短 token 部署無法開機；entrypoint 自動產生的 token 長度遠超 32。
+    security_warnings+=(
+      "API_TOKEN 長度為 ${#API_TOKEN}（< 32 字元）；建議改用至少 32 字元的高熵 token（或註解該行讓 entrypoint 自動產生）"
+    )
   fi
 fi
 

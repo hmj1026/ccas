@@ -27,7 +27,7 @@ function OverviewPage() {
 
   const handleFilterChange = useFilterParams()
 
-  const { data, isLoading, error } = useQuery({
+  const { data, isLoading, error, refetch, isFetching } = useQuery({
     queryKey: ['overview', month],
     queryFn: () =>
       apiGet<ApiResponse<OverviewData>>('/api/overview', {
@@ -36,7 +36,14 @@ function OverviewPage() {
   })
 
   if (isLoading) return <LoadingState />
-  if (error) return <ErrorState message={error.message} />
+  if (error)
+    return (
+      <ErrorState
+        message={error.message}
+        onRetry={() => refetch()}
+        isRetrying={isFetching}
+      />
+    )
   if (!data?.data) return <EmptyState message="尚無本月資料" />
 
   const overview = data.data

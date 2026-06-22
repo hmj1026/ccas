@@ -338,6 +338,83 @@ class TestDeduplication:
 
         await engine.dispose()
 
+    async def test_force_reparse_existing_bill_with_transactions(self) -> None:
+        """force 模式重解析「已含交易」的帳單應成功刪舊建新（FK cascade）。
+
+        回歸測試：delete_existing_bill 未 eager-load transactions 時，async
+        ORM cascade 無法刪除子集合，flush 觸發錯誤，使 force 重解析對任何
+        非空帳單完全失效。
+        """
+        from sqlalchemy import event
+
+        from ccas.shared.pipeline_types import PipelineOptions
+
+        test_registry = _ParserRegistry()
+        test_registry.register(FakeSuccessParser())
+
+        # Enforce foreign_keys=ON like production (database.py::_set_sqlite_wal);
+        # without it SQLite never raises the FK violation this regression guards.
+        engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+
+        def _fk_on(dbapi_conn, _record):
+            cur = dbapi_conn.cursor()
+            cur.execute("PRAGMA foreign_keys=ON")
+            cur.close()
+
+        event.listen(engine.sync_engine, "connect", _fk_on)
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        session_factory = async_sessionmaker(
+            engine, class_=AsyncSession, expire_on_commit=False
+        )
+        # Seed in a SEPARATE session so the existing bill+transactions are NOT
+        # in the job session's identity map — mirrors production where the bill
+        # was persisted by a prior run. This forces the cascade-delete path to
+        # resolve the child collection itself (the actual regression scenario).
+        async with session_factory() as seed:
+            seed.add(_make_bank_config("CTBC"))
+            old_bill = Bill(
+                bank_code="CTBC",
+                billing_month="2026-03",
+                total_amount=999,
+                due_date=date(2026, 4, 15),
+            )
+            seed.add(old_bill)
+            await seed.flush()
+            seed.add(
+                Transaction(
+                    bill_id=old_bill.id,
+                    trans_date=date(2026, 3, 2),
+                    merchant="舊交易",
+                    amount=111,
+                )
+            )
+            seed.add(
+                _make_attachment("CTBC", "msg-1", "att-1", staged_path="/tmp/ctbc.pdf")
+            )
+            await seed.commit()
+
+        async with session_factory() as session:
+            with patch("ccas.parser.job.registry", test_registry):
+                summary = await run_parse_job(
+                    session, options=PipelineOptions(force=True)
+                )
+
+            assert summary.failed_count == 0
+            assert summary.parsed_count == 1
+
+            # 舊帳單與舊交易被刪，新帳單以解析結果重建
+            bills = (await session.execute(select(Bill))).scalars().all()
+            assert len(bills) == 1
+            assert bills[0].total_amount == 5000
+
+            txns = (await session.execute(select(Transaction))).scalars().all()
+            assert len(txns) == 2
+            assert all(t.bill_id == bills[0].id for t in txns)
+            assert "舊交易" not in {t.merchant for t in txns}
+
+        await engine.dispose()
+
     async def test_already_parsed_attachment_not_reprocessed(self) -> None:
         """已為 parsed 狀態的附件不會再次被查詢到。"""
         test_registry = _ParserRegistry()

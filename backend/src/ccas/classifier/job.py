@@ -168,7 +168,18 @@ async def run_classify_job(
                 engine_hits += 1
         finally:
             processed += 1
-            await reporter.stage_item_done("classify", processed=processed)
+            # Progress reporting is pure UI and non-business-critical: a reporter
+            # failure (e.g. SQLite busy) must not abort the classify batch or
+            # truncate it mid-loop. Swallow-with-log, consistent with the
+            # ingest/decrypt/parse/bot stages.
+            try:
+                await reporter.stage_item_done("classify", processed=processed)
+            except Exception:
+                logger.warning(
+                    "classify progress reporting failed (processed=%d); continuing",
+                    processed,
+                    exc_info=True,
+                )
 
     await _flush_commit_or_rollback(session, pending_updates)
 

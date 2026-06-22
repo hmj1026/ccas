@@ -207,3 +207,36 @@ class TestRunReclassifyJob:
         summary = await run_reclassify_job(db_session)
         assert summary.classified_count == 0
         assert summary.total_count == 0
+
+
+class TestClassifyProgressReporterGuard:
+    """progress reporter 失敗不得中止 classify 批次（與其他四階段一致）。"""
+
+    @pytest.mark.asyncio
+    async def test_reporter_failure_does_not_abort_batch(
+        self, db_session: AsyncSession
+    ) -> None:
+        await _seed_categories(db_session)
+        await _seed_bill_with_transactions(
+            db_session, ["星巴克", "台灣大哥大", "AMAZON"]
+        )
+        await db_session.commit()
+
+        class _BoomReporter:
+            """每次 stage_item_done 都拋例外，模擬 SQLite busy 等暫時故障。"""
+
+            async def stage_started(self, stage: str, total: int) -> None: ...
+
+            async def stage_item_done(self, stage: str, processed: int) -> None:
+                raise RuntimeError("progress reporter 暫時故障")
+
+            async def stage_finished(
+                self, stage, ok, fail, elapsed_ms, **kw
+            ) -> None: ...
+
+        await run_classify_job(db_session, reporter=_BoomReporter())
+
+        # reporter 持續失敗，但所有交易仍應被分類並 commit（progress 純 UI）。
+        txns = (await db_session.execute(select(Transaction))).scalars().all()
+        assert len(txns) == 3
+        assert all(t.category is not None for t in txns)

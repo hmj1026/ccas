@@ -37,7 +37,7 @@ function BillsPage() {
 
   const handleFilterChange = useFilterParams(true)
 
-  const { data, isLoading, error } = useQuery({
+  const { data, isLoading, error, refetch, isFetching } = useQuery({
     queryKey: ['bills', year, month, bankCode, status, page],
     queryFn: () =>
       apiGet<PaginatedResponse<BillItem>>('/api/bills', {
@@ -101,7 +101,11 @@ function BillsPage() {
       {isLoading ? (
         <LoadingState />
       ) : error ? (
-        <ErrorState message={error.message} />
+        <ErrorState
+          message={error.message}
+          onRetry={() => refetch()}
+          isRetrying={isFetching}
+        />
       ) : !data?.data.length ? (
         <EmptyState message="沒有符合條件的帳單" />
       ) : (

@@ -207,6 +207,73 @@ class TestRunPipelineSyncFailurePath:
         # result 仍須回傳給 RQ job result（不 re-raise）
         assert result["total_seconds"] == 0.1
 
+    def test_marks_run_failed_when_non_classify_stage_has_errors(
+        self,
+        worker_db,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        """非 classify 階段（如 ingest 分頁中途失敗）僅以 errors 記錄、
+        counts['failed']=0 時，PipelineRun 仍須 FAILED，而非靜默 SUCCEEDED
+        導致 N 封郵件遺漏卻顯示綠燈。"""
+        asyncio.run(_insert_run(worker_db))
+
+        async def fake_run_pipeline(
+            session, options, progress_reporter=None, *, notify_job
+        ):
+            return PipelineSummary(
+                stages=(
+                    StageSummary(
+                        stage="ingest",
+                        counts={"downloaded": 3, "failed": 0},
+                        errors=["Gmail 分頁中途失敗：page token 503"],
+                    ),
+                ),
+                total_seconds=0.1,
+            )
+
+        monkeypatch.setattr(
+            "ccas.pipeline.orchestrator.run_pipeline", fake_run_pipeline
+        )
+
+        run_pipeline_sync({}, run_id="run-1")
+
+        run = asyncio.run(_get_run(worker_db))
+        assert run.status == PipelineRunStatus.FAILED
+        assert run.error_message is not None
+
+    def test_notify_stage_errors_do_not_fail_run(
+        self,
+        worker_db,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        """notify 為盡力而為通道：單筆通知失敗（stage errors）不得使整個 run
+        FAILED——帳單資料已持久化，通知自身冪等重試。"""
+        asyncio.run(_insert_run(worker_db))
+
+        async def fake_run_pipeline(
+            session, options, progress_reporter=None, *, notify_job
+        ):
+            return PipelineSummary(
+                stages=(
+                    StageSummary(stage="parse", counts={"parsed": 2}),
+                    StageSummary(
+                        stage="notify",
+                        counts={"sent": 1, "failed": 1},
+                        errors=["Telegram send 逾時：bill 42"],
+                    ),
+                ),
+                total_seconds=0.1,
+            )
+
+        monkeypatch.setattr(
+            "ccas.pipeline.orchestrator.run_pipeline", fake_run_pipeline
+        )
+
+        run_pipeline_sync({}, run_id="run-1")
+
+        run = asyncio.run(_get_run(worker_db))
+        assert run.status == PipelineRunStatus.SUCCEEDED
+
     def test_marks_run_succeeded_when_classify_has_zero_to_classify(
         self,
         worker_db,

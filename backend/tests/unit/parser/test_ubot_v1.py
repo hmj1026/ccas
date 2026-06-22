@@ -101,6 +101,24 @@ class TestExtractSummary:
             parser._extract_summary([page])
 
 
+class TestTotalAmountMinimumDueGuard:
+    """fallback 不得把『本期最低應繳金額』誤判為應繳總額（無優惠 anchor 時）。"""
+
+    def test_minimum_due_not_mistaken_for_total(self):
+        parser = _make_parser()
+        text = "本期最低應繳金額 1,000\n本期應繳總額：NT$ 8,500\n"
+        assert parser._extract_total_amount(text) == 8500
+
+    def test_minimum_due_alone_returns_none(self):
+        parser = _make_parser()
+        # 只有最低應繳、無真實應繳總額 → 不得回傳最低應繳值。
+        assert parser._extract_total_amount("本期最低應繳金額 1,000\n") is None
+
+    def test_plain_total_still_parsed(self):
+        parser = _make_parser()
+        assert parser._extract_total_amount("本期應繳總額：NT$ 6,530\n") == 6530
+
+
 # -- _extract_transactions tests --
 
 

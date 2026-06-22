@@ -84,6 +84,15 @@ export default defineConfig({
       reporter: ['text', 'text-summary'],
       include: ['src/**/*.{ts,tsx}'],
       exclude: ['src/**/*.test.{ts,tsx}', 'src/test-*.ts'],
+      // Floors pinned below measured coverage (lines ~83 / funcs ~77 /
+      // stmts ~80 / branches ~71) with headroom so a small unrelated
+      // regression doesn't redden CI. Raise these as coverage grows.
+      thresholds: {
+        lines: 70,
+        functions: 65,
+        statements: 70,
+        branches: 60,
+      },
     },
   },
 })

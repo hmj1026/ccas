@@ -3,6 +3,7 @@
 from unittest.mock import MagicMock, patch
 
 import pytest
+from pydantic import SecretStr
 
 from ccas.bot.__main__ import main
 
@@ -10,7 +11,7 @@ from ccas.bot.__main__ import main
 class TestMainConfiguresLogging:
     def test_main_configures_logging_before_token_warning(self):
         """缺少 token 時，warning 前必須先完成 configure_logging(settings)。"""
-        settings = MagicMock(telegram_bot_token="")
+        settings = MagicMock(telegram_bot_token=SecretStr(""))
 
         with (
             patch("ccas.bot.__main__.get_settings", return_value=settings),
@@ -24,7 +25,7 @@ class TestMainConfiguresLogging:
 
     def test_main_configures_logging_then_starts_polling(self):
         """token 存在時，configure_logging 後啟動 polling。"""
-        settings = MagicMock(telegram_bot_token="test-token")
+        settings = MagicMock(telegram_bot_token=SecretStr("test-token"))
         bot_app = MagicMock()
 
         with (

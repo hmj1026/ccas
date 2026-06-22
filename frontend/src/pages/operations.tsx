@@ -58,6 +58,14 @@ const STAGE_LABELS: Record<PipelineStage, string> = {
   notify: '通知',
 }
 
+const STATUS_LABELS: Record<PipelineRunStatus, string> = {
+  queued: '排隊中',
+  running: '執行中',
+  succeeded: '成功',
+  failed: '失敗',
+  cancelled: '已取消',
+}
+
 /**
  * Polling backoff: fast at first, then slow down for long-running runs.
  * <1min → baseMs, 1-5min → 5s, >5min → 15s.
@@ -350,7 +358,8 @@ function ActiveRunCard({ run }: { readonly run: PipelineRunDetail }) {
         <div className="flex justify-between text-sm">
           <span>{currentStage ? STAGE_LABELS[currentStage] : '等待中'}</span>
           <span>
-            {run.current_stage ?? 'queued'} {processed} / {total} ({progress}%)
+            {currentStage ? STAGE_LABELS[currentStage] : STATUS_LABELS.queued}{' '}
+            {processed} / {total} ({progress}%)
           </span>
         </div>
         <Progress value={progress} />
@@ -493,7 +502,7 @@ function RunDetailContent({ run }: { readonly run: PipelineRunSummary }) {
       <div className="grid gap-2 text-sm sm:grid-cols-2">
         <DetailRow label="Run ID" value={run.id} />
         <DetailRow label="Job ID" value={run.job_id} />
-        <DetailRow label="狀態" value={run.status} />
+        <DetailRow label="狀態" value={STATUS_LABELS[run.status]} />
         <DetailRow label="觸發者" value={run.triggered_by} />
       </div>
       <table className="w-full text-sm">
@@ -510,7 +519,7 @@ function RunDetailContent({ run }: { readonly run: PipelineRunSummary }) {
         <tbody className="divide-y divide-border">
           {run.stage_summary.map((entry) => (
             <tr key={entry.stage} className="align-top">
-              <td className="py-2 pr-3">{entry.stage}</td>
+              <td className="py-2 pr-3">{stageLabel(entry.stage)}</td>
               <td className="py-2 pr-3">{entry.ok}</td>
               <td className="py-2 pr-3">{entry.fail}</td>
               <td className="py-2 pr-3">{formatDurationMs(entry.elapsed_ms)}</td>
@@ -558,7 +567,7 @@ function StatusBadge({ status }: { readonly status: PipelineRunStatus }) {
           ? 'info'
           : 'outline'
 
-  return <Badge variant={variant}>{status}</Badge>
+  return <Badge variant={variant}>{STATUS_LABELS[status]}</Badge>
 }
 
 function StageSelect({
@@ -625,6 +634,11 @@ function isActiveStatus(status: PipelineRunStatus) {
 
 function isKnownStage(stage: string | null): stage is PipelineStage {
   return Boolean(stage && STAGES.includes(stage as PipelineStage))
+}
+
+/** Map a stage key to its Chinese label; fall back to the raw key if unknown. */
+function stageLabel(stage: PipelineStage | string): string {
+  return isKnownStage(stage) ? STAGE_LABELS[stage] : stage
 }
 
 function formatDateTime(value: string) {

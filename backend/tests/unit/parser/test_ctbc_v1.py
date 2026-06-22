@@ -394,6 +394,60 @@ class TestExtractTransactionsRoc:
         assert txns[1].merchant == "統一超商"
 
 
+class TestRefundNegation:
+    """CTBC 退款 / 貸方明細應保留為負數（與 refund_policy 一致）。
+
+    兩條交易路徑（labeled 表格、ROC 文字行）此前完全不做負數化，退款被
+    記為正數消費，造成對帳金額膨脹。
+    """
+
+    def _make_pages_with_table(
+        self, rows: list[list[str]]
+    ) -> list[pdfplumber.page.Page]:
+        table = [CTBC_TABLE_HEADER_ROW, *rows]
+        page = make_mock_page("", tables=[table])
+        return cast(list[pdfplumber.page.Page], [page])
+
+    def test_labeled_refund_merchant_negated(self):
+        parser = _make_parser()
+        pages = self._make_pages_with_table(
+            [["03/01", "03/03", "1234", "退款-某商店", "500"]]
+        )
+        txns = parser._extract_transactions(pages, 2026)
+        assert len(txns) == 1
+        assert txns[0].amount == -500
+
+    def test_labeled_accounting_parentheses_negated(self):
+        parser = _make_parser()
+        pages = self._make_pages_with_table(
+            [["03/01", "03/03", "1234", "一般消費", "(500)"]]
+        )
+        txns = parser._extract_transactions(pages, 2026)
+        assert len(txns) == 1
+        assert txns[0].amount == -500
+
+    def test_labeled_normal_purchase_stays_positive(self):
+        parser = _make_parser()
+        pages = self._make_pages_with_table(
+            [["03/01", "03/03", "1234", "全聯福利中心", "350"]]
+        )
+        txns = parser._extract_transactions(pages, 2026)
+        assert txns[0].amount == 350
+
+    def test_roc_refund_merchant_negated(self):
+        parser = _make_parser()
+        page = make_mock_page("115/02/09 115/02/11 28 6713 TW\n")
+        with patch(
+            "ccas.parser.banks.ctbc_v1._match_merchant_to_transaction",
+            return_value="退款-某商店",
+        ):
+            txns = parser._extract_transactions(
+                cast(list[pdfplumber.page.Page], [page]), 2026
+            )
+        assert len(txns) == 1
+        assert txns[0].amount == -28
+
+
 class TestIsNonTransactionMerchant:
     """Tests for the _is_non_transaction_merchant helper."""
 

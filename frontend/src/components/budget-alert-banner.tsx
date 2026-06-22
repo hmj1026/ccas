@@ -73,7 +73,7 @@ export function BudgetAlertBanner() {
               size="sm"
               onClick={() => ackMutation.mutate(alert.id)}
               disabled={ackMutation.isPending}
-              aria-label={`acknowledge alert ${alert.id}`}
+              aria-label={`確認已知曉：${describeAlert(alert)}`}
             >
               <X className="size-4" data-icon="inline-start" />
               已知曉

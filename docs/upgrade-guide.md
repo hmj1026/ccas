@@ -13,7 +13,7 @@
 cd ~/ccas    # 你 docker-compose.yml 所在的目錄
 
 # 1) 修改 .env 的版本
-sed -i 's/^CCAS_VERSION=.*/CCAS_VERSION=v0.5.0/' .env
+sed -i 's/^CCAS_VERSION=.*/CCAS_VERSION=v0.6.0/' .env
 
 # 2) 拉新 image 並重啟
 docker compose -f docker-compose.yml pull
@@ -38,6 +38,42 @@ CCAS 採 [SemVer](https://semver.org/)：
 | Major（`v0.x.x` → `v1.0.0`） | 可能 breaking change；release notes 會明示 | 升級前**閱讀 release notes**、備份 |
 
 每次 release 的詳細 changelog 見 [GitHub Releases](https://github.com/<owner>/ccas/releases)。
+
+---
+
+## v0.6.0（Minor）— 品質稽核修復（解析正確性、靜默失敗、SecretStr、API 契約）
+
+**適用對象**：v0.5.x 升級至 v0.6.0。alembic schema 不變，但含 **API 契約變更**，
+若你有自寫的 API 消費端請先閱讀下方破壞性變更。
+
+**資料正確性（重要）**：
+- 修正 **CTBC 退款記為正數消費**：兩條解析路徑此前完全不做退款負數化，退款金額
+  被當成消費累加，造成對帳膨脹。升級後新解析的 CTBC 帳單退款明細會正確保留為負數
+  （既有資料需 force 重解析才會更新）。
+- 修正 **UBOT 應繳總額誤抓「本期最低應繳金額」**：當帳單缺特定排版錨點時 fallback
+  會回傳最低應繳值而非應繳總額。
+- 修正 **pipeline 靜默成功**：Gmail 分頁中途失敗等資料階段錯誤此前仍被標 SUCCEEDED、
+  儀表板綠燈，導致郵件靜默遺漏。升級後任一資料階段（ingest/decrypt/parse）失敗即
+  正確標 FAILED（notify 通知為盡力而為通道，單筆失敗不影響 run 狀態）。
+
+**安全強化**：
+- `TELEGRAM_BOT_TOKEN` / `API_TOKEN` 改以 `SecretStr` 處理，避免在 DEBUG repr / log
+  意外洩漏；日誌 RedactingFilter 一併遮蔽。**無需改設定**。
+- `API_TOKEN` 長度 < 32 時 entrypoint 會輸出**非阻斷警告**（不影響啟動）；建議改用
+  ≥32 字元的高熵 token。
+- 銀行密碼 API 的 `bank_code` 路徑參數加格式白名單（`^[A-Z0-9_-]{1,32}$`）。
+
+**API 契約變更（破壞性，僅影響自寫消費端；前端不受影響）**：
+- `GET /api/pipeline/runs` 分頁參數由 `limit` / `offset` 改為 `page` / `page_size`
+  （與 `/api/bills`、`/api/transactions` 一致）。請改用 `?page=N&page_size=M`。
+- 交易 API 新增 `installment_current` / `installment_total` 欄位（分期資訊，無分期時為
+  `null`）；為新增欄位，既有消費端可忽略。
+- `POST /api/transactions/{id}/note` 標記為 **deprecated**（行為不變），請改用
+  `PATCH /api/transactions/{id}`；將於下個 major 移除。
+- 交易 `tags` 單一元素長度上限 100 字元（超出回 422）。
+
+**升級後**：無額外手動步驟；如需讓既有 CTBC 帳單套用退款負數化，可對該帳單執行
+force 重新解析。
 
 ---
 

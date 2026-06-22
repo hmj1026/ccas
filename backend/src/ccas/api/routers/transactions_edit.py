@@ -49,6 +49,8 @@ def _to_detail(txn: Transaction, bill: Bill) -> TransactionDetailItem:
         category=txn.category,
         bank_code=bill.bank_code,
         billing_month=bill.billing_month,
+        installment_current=txn.installment_current,
+        installment_total=txn.installment_total,
         note=txn.note,
         manual_category_override=txn.manual_category_override,
         tags=list(txn.tags or []),
@@ -124,13 +126,20 @@ async def update_transaction(
 @router.post(
     "/{transaction_id}/note",
     response_model=ApiResponse[TransactionDetailItem],
+    deprecated=True,
 )
 async def set_transaction_note(
     transaction_id: int,
     body: TransactionNoteRequest,
     session: AsyncSession = Depends(get_db_session),
 ) -> ApiResponse[TransactionDetailItem]:
-    """僅更新 note 欄位（不影響 manual_category_override）。"""
+    """僅更新 note 欄位（不影響 manual_category_override）。
+
+    .. deprecated::
+        與 ``PATCH /api/transactions/{id}``（只給 ``note`` 時）行為等價，
+        前端已統一改用 PATCH。本端點保留相容性，將於下個 major 版本移除
+        （屆時一併清除 ``TransactionNoteRequest`` schema）。
+    """
     txn, bill = await _load_with_bill(session, transaction_id)
     txn.note = body.note
     await session.commit()

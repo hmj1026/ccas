@@ -6,9 +6,15 @@
 
 import re
 from datetime import date, datetime
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StringConstraints,
+    model_validator,
+)
 
 # NOTE: 下列 Literal 的 SSOT 為 ccas.storage.models 的對應 StrEnum
 # （StagedAttachmentStatus / PipelineRunStatus / PatternType / ReminderChannel /
@@ -133,6 +139,9 @@ class TransactionItem(BaseModel):
     category: str | None
     bank_code: str
     billing_month: str
+    # 分期資訊：由 parser（如 fubon）解析後持久化於 ORM，預設 None 維持向後相容。
+    installment_current: int | None = None
+    installment_total: int | None = None
 
 
 class TransactionDetailItem(TransactionItem):
@@ -145,6 +154,13 @@ class TransactionDetailItem(TransactionItem):
     updated_at: datetime
 
 
+# Single tag: 1–100 chars, surrounding whitespace stripped (prevents both empty
+# strings and pure-whitespace bypass of the length cap).
+_TagStr = Annotated[
+    str, StringConstraints(min_length=1, max_length=100, strip_whitespace=True)
+]
+
+
 class TransactionUpdateRequest(BaseModel):
     """``PUT /api/transactions/{id}`` request body（所有欄位皆可選）。
 
@@ -155,7 +171,9 @@ class TransactionUpdateRequest(BaseModel):
 
     category_id: int | None = Field(default=None, ge=1)
     note: str | None = Field(default=None, max_length=2000)
-    tags: list[str] | None = Field(default=None, max_length=50)
+    # ``max_length`` on a list limits the element count; per-element length is
+    # capped via TagStr so a single huge tag cannot bypass the DB/UI guard.
+    tags: list[_TagStr] | None = Field(default=None, max_length=50)
     merchant_alias: str | None = Field(default=None, max_length=200)
 
 

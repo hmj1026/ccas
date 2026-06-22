@@ -152,7 +152,10 @@ async def evaluate_budgets(
     await session.commit()
 
     settings_obj = get_settings()
-    if not settings_obj.telegram_bot_token or not settings_obj.telegram_chat_id:
+    if (
+        not settings_obj.telegram_bot_token.get_secret_value()
+        or not settings_obj.telegram_chat_id
+    ):
         logger.info(
             "Telegram disabled; %d budget alert(s) recorded without push",
             len(triggered),
@@ -162,7 +165,7 @@ async def evaluate_budgets(
     text = _format_aggregated_message(period, triggered)
     try:
         await send_message(
-            settings_obj.telegram_bot_token,
+            settings_obj.telegram_bot_token.get_secret_value(),
             settings_obj.telegram_chat_id,
             text,
         )

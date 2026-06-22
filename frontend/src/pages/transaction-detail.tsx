@@ -69,7 +69,7 @@ function TransactionDetailPage() {
 
   const detailQueryKey = ['transactions', transactionId, 'detail'] as const
 
-  const { data, isLoading, error, refetch } = useQuery({
+  const { data, isLoading, error, refetch, isFetching } = useQuery({
     queryKey: detailQueryKey,
     queryFn: () =>
       apiGet<ApiResponse<TransactionDetailItem>>(
@@ -209,8 +209,22 @@ function TransactionDetailPage() {
     return <ErrorState message="無效的交易 ID" />
   }
   if (isLoading) return <LoadingState />
-  if (error) return <ErrorState message={error.message} />
-  if (!detail) return <ErrorState message="交易不存在" />
+  if (error)
+    return (
+      <ErrorState
+        message={error.message}
+        onRetry={() => refetch()}
+        isRetrying={isFetching}
+      />
+    )
+  if (!detail)
+    return (
+      <ErrorState
+        message="交易不存在"
+        onRetry={() => refetch()}
+        isRetrying={isFetching}
+      />
+    )
 
   const source = classificationSourceLabel(detail)
   const categoryOptions = categoriesData?.data ?? []
@@ -251,6 +265,12 @@ function TransactionDetailPage() {
             {formatDate(detail.trans_date)} · {detail.bank_code} ·{' '}
             {formatDate(detail.billing_month)}
           </div>
+          {detail.installment_current !== null &&
+            detail.installment_total !== null && (
+              <div className="text-sm text-muted-foreground">
+                分期 {detail.installment_current}/{detail.installment_total}
+              </div>
+            )}
         </section>
 
         <section className="space-y-2">
