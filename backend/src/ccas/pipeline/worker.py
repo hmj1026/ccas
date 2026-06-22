@@ -113,6 +113,34 @@ def _classify_batch_failed(summary: PipelineSummary) -> bool:
     return False
 
 
+def _run_failure_reason(summary: PipelineSummary) -> str | None:
+    """回傳應將 run 標記為 FAILED 的原因字串，否則 None（成功）。
+
+    兩類失敗訊號：
+    - classify 整批 rollback：以 ``counts['failed']`` 表示（無 errors），
+      由 ``_classify_batch_failed`` 偵測，優先回傳明確訊息。
+    - 其他階段（ingest/decrypt/parse/notify）的錯誤：以 stage.errors 記錄並
+      聚合進 ``summary.failures``。此前 worker 只看 classify counts，使得
+      Gmail 分頁中途失敗等情形 failed_count 維持 0 卻仍被標 SUCCEEDED，
+      N 封郵件靜默遺漏。改為只要有任一階段失敗即標 FAILED（對齊 CLI 以
+      ``summary.failures`` 非空 exit 1 的語意）。
+    """
+    if _classify_batch_failed(summary):
+        return "classify 階段整批 commit 失敗，分類結果已 rollback"
+    # 直接掃各階段 errors（不依賴 orchestrator 是否已聚合進 summary.failures），
+    # 涵蓋 ingest 分頁中途失敗等「counts.failed=0 但有錯誤字串」的靜默失敗。
+    stage_errors = [
+        (stage.stage, err) for stage in summary.stages for err in stage.errors
+    ]
+    if stage_errors:
+        first_stage, first_err = stage_errors[0]
+        return (
+            f"pipeline 有 {len(stage_errors)} 項階段失敗"
+            f"（首例 {first_stage}：{first_err}）"
+        )
+    return None
+
+
 def run_pipeline_sync(opts: dict | None = None, run_id: str | None = None) -> dict:
     """RQ worker 執行的同步入口。
 
@@ -176,16 +204,14 @@ def run_pipeline_sync(opts: dict | None = None, run_id: str | None = None) -> di
                 raise
 
             if run_id is not None:
-                if _classify_batch_failed(result):
-                    # classify 整批 rollback：run_pipeline 雖正常回傳，但分類結果
-                    # 已全數遺失，必須標 FAILED 而非 SUCCEEDED。不 re-raise，
+                failure_reason = _run_failure_reason(result)
+                if failure_reason is not None:
+                    # 任一階段失敗（classify 整批 rollback，或 ingest/decrypt/
+                    # parse/notify 的 stage errors）：run_pipeline 雖正常回傳，但
+                    # 有資料遺漏/未處理，必須標 FAILED 而非 SUCCEEDED。不 re-raise，
                     # 仍回傳 result 作為 RQ job result（保留各階段摘要供查閱）。
                     async with session_factory() as session:
-                        await mark_pipeline_run_failed(
-                            session,
-                            run_id,
-                            "classify 階段整批 commit 失敗，分類結果已 rollback",
-                        )
+                        await mark_pipeline_run_failed(session, run_id, failure_reason)
                 else:
                     async with session_factory() as session:
                         await mark_pipeline_run_succeeded(session, run_id)
