@@ -241,6 +241,39 @@ class TestRunPipelineSyncFailurePath:
         assert run.status == PipelineRunStatus.FAILED
         assert run.error_message is not None
 
+    def test_notify_stage_errors_do_not_fail_run(
+        self,
+        worker_db,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        """notify 為盡力而為通道：單筆通知失敗（stage errors）不得使整個 run
+        FAILED——帳單資料已持久化，通知自身冪等重試。"""
+        asyncio.run(_insert_run(worker_db))
+
+        async def fake_run_pipeline(
+            session, options, progress_reporter=None, *, notify_job
+        ):
+            return PipelineSummary(
+                stages=(
+                    StageSummary(stage="parse", counts={"parsed": 2}),
+                    StageSummary(
+                        stage="notify",
+                        counts={"sent": 1, "failed": 1},
+                        errors=["Telegram send 逾時：bill 42"],
+                    ),
+                ),
+                total_seconds=0.1,
+            )
+
+        monkeypatch.setattr(
+            "ccas.pipeline.orchestrator.run_pipeline", fake_run_pipeline
+        )
+
+        run_pipeline_sync({}, run_id="run-1")
+
+        run = asyncio.run(_get_run(worker_db))
+        assert run.status == PipelineRunStatus.SUCCEEDED
+
     def test_marks_run_succeeded_when_classify_has_zero_to_classify(
         self,
         worker_db,

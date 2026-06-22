@@ -44,8 +44,10 @@ _PDF_PASSWORD_KEY = re.compile(r"^PDF_PASSWORD_([A-Z][A-Z0-9_]*?)$")
 # Bank-code whitelist (mirrors storage.paths._BANK_CODE_RE). The path param is
 # attacker-controllable by any valid-token holder; without this an arbitrary
 # Unicode / whitespace / control string could be written into BankSecret.bank_code
-# (String(32) PK), breaking downstream key comparison silently.
-_BANK_CODE_RE = re.compile(r"^[A-Z0-9_-]+$")
+# (String(32) PK), breaking downstream key comparison silently. The {1,32} bound
+# matches the column width so an over-long code is rejected (422) rather than
+# silently truncated / 500-ing on write.
+_BANK_CODE_RE = re.compile(r"^[A-Z0-9_-]{1,32}$")
 
 
 def _normalize_bank_code(code: str) -> str:

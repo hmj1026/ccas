@@ -198,6 +198,17 @@ class TestUpsertSecret:
         # 不得有任何 BankSecret 列被寫入
         assert (await db_session.get(BankSecret, "CT.BC")) is None
 
+    async def test_rejects_oversized_bank_code(
+        self, client: AsyncClient, secrets_env: Path
+    ) -> None:
+        """超過 bank_code 欄位寬度（32）應回 422，不得靜默截斷。"""
+        resp = await client.put(
+            f"/api/setup/secrets/{'A' * 33}",
+            json={"password": "pw"},
+            headers=auth_headers(),
+        )
+        assert resp.status_code == 422
+
 
 class TestDeleteSecret:
     async def test_deletes_existing_row(

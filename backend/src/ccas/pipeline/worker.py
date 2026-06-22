@@ -127,10 +127,16 @@ def _run_failure_reason(summary: PipelineSummary) -> str | None:
     """
     if _classify_batch_failed(summary):
         return "classify 階段整批 commit 失敗，分類結果已 rollback"
-    # 直接掃各階段 errors（不依賴 orchestrator 是否已聚合進 summary.failures），
-    # 涵蓋 ingest 分頁中途失敗等「counts.failed=0 但有錯誤字串」的靜默失敗。
+    # 直接掃資料階段 errors（不依賴 orchestrator 是否已聚合進 summary.failures），
+    # 涵蓋 ingest 分頁中途失敗等「counts.failed=0 但有錯誤字串」的靜默資料遺漏。
+    # 排除 ``notify``：通知為盡力而為通道（Telegram 單筆逾時等），帳單資料此時
+    # 已完整持久化，且 notify 自身以 PaymentReminder 唯一鍵冪等重試——單筆通知
+    # 失敗不應讓整個 run 在儀表板顯示 FAILED（誤導操作員以為資料管線壞了）。
     stage_errors = [
-        (stage.stage, err) for stage in summary.stages for err in stage.errors
+        (stage.stage, err)
+        for stage in summary.stages
+        if stage.stage != "notify"
+        for err in stage.errors
     ]
     if stage_errors:
         first_stage, first_err = stage_errors[0]
