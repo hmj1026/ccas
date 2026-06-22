@@ -183,7 +183,7 @@ describe('OperationsPage', () => {
     renderWithProviders(<OperationsPage />)
 
     await waitFor(() => {
-      expect(screen.getByText('parse 47 / 120 (39%)')).toBeInTheDocument()
+      expect(screen.getByText('解析 47 / 120 (39%)')).toBeInTheDocument()
     })
     // Stage labels also appear in the stage select options now.
     expect(screen.getAllByText('擷取').length).toBeGreaterThan(0)
@@ -196,7 +196,7 @@ describe('OperationsPage', () => {
     renderWithProviders(<OperationsPage />)
 
     await waitFor(() => {
-      expect(screen.getByText('failed')).toBeInTheDocument()
+      expect(screen.getByText('失敗')).toBeInTheDocument()
     })
     expect(screen.getByText('api')).toBeInTheDocument()
     expect(

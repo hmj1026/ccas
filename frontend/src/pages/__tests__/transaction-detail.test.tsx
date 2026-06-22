@@ -52,6 +52,8 @@ const BASE_DETAIL = {
   category: '餐飲',
   bank_code: 'CTBC',
   billing_month: '2026-03',
+  installment_current: null as number | null,
+  installment_total: null as number | null,
   note: null,
   manual_category_override: false,
   tags: [],
@@ -204,5 +206,22 @@ describe('TransactionDetailPage', () => {
   it('rejects invalid id', () => {
     renderDetail('/transactions/abc')
     expect(screen.getByText('無效的交易 ID')).toBeInTheDocument()
+  })
+
+  it('shows installment info when present', async () => {
+    setupApi({ installment_current: 3, installment_total: 12 })
+    renderDetail('/transactions/42')
+    await waitFor(() => {
+      expect(screen.getByText('Starbucks')).toBeInTheDocument()
+    })
+    expect(screen.getByText('分期 3/12')).toBeInTheDocument()
+  })
+
+  it('hides installment info when absent', async () => {
+    renderDetail('/transactions/42')
+    await waitFor(() => {
+      expect(screen.getByText('Starbucks')).toBeInTheDocument()
+    })
+    expect(screen.queryByText(/^分期 /)).not.toBeInTheDocument()
   })
 })

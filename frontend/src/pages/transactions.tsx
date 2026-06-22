@@ -37,7 +37,7 @@ function TransactionsPage() {
   const [isExporting, setIsExporting] = useState(false)
   const [exportError, setExportError] = useState<string | null>(null)
 
-  const { data, isLoading, error } = useQuery({
+  const { data, isLoading, error, refetch, isFetching } = useQuery({
     queryKey: ['transactions', year, month, bankCode, category, q, page],
     queryFn: () =>
       apiGet<PaginatedResponse<TransactionItem>>('/api/transactions', {
@@ -124,7 +124,11 @@ function TransactionsPage() {
       {isLoading ? (
         <LoadingState />
       ) : error ? (
-        <ErrorState message={error.message} />
+        <ErrorState
+          message={error.message}
+          onRetry={() => refetch()}
+          isRetrying={isFetching}
+        />
       ) : !data?.data.length ? (
         <EmptyState message="找不到符合條件的交易" />
       ) : (
