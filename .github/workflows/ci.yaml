@@ -92,6 +92,13 @@ jobs:
           uv run pytest tests/integration/ --timeout=120
           --cov=src/ccas/api/routers --cov-report=term-missing --cov-fail-under=50
 
+      # E2E full-pipeline state-machine tests (ingest→decrypt→parse→notify).
+      # Run as a separate step (no coverage gate) so the integration router
+      # coverage measurement above is not diluted by e2e runs. Shares this
+      # job's uv sync + CJK fonts; Gmail/Telegram are mocked in e2e conftest.
+      - name: Run e2e tests
+        run: uv run pytest tests/e2e/ -v --timeout=120
+
       - name: docker-entrypoint.sh unit tests
         working-directory: ${{ github.workspace }}
         run: ./tests/scripts/test_entrypoint.sh
@@ -144,8 +151,8 @@ jobs:
       - name: Build (includes TypeScript check)
         run: pnpm run build
 
-      - name: Test
-        run: pnpm run test
+      - name: Test (with coverage gate)
+        run: pnpm run test --coverage --coverage.reporter=text-summary
 
   frontend-e2e:
     name: Frontend E2E (Playwright, mock specs)
