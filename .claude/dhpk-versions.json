@@ -1,7 +1,9 @@
 {
   "_comment": "dhpk plugin version pin for ccas. Read by dhpk's SessionStart check-plugin-version.sh advisory (≥0.10.0). Ranges are prefix-matched: '0.11' / '0.11.x' cover every 0.11.* patch. The advisory flags the running dhpk version when it falls outside every verified range or inside an incompatible one. Update deliberately after verifying a new plugin version against this project.",
   "verified": [
-    { "range": "0.11.x", "note": "verified 2026-06-21 — python/fastapi/pytest/js modules (python-fullstack profile); ruff 0.15.10 via `uv run`, pyright on PATH; post-edit + pre-commit python lint/typecheck gate wired" }
+    { "range": "0.16.x", "note": "verified 2026-06-27 — 0.16.1 (statusline 1M-context fix, not applicable to CCAS's 200k Sonnet 4.6); 0.16.0 breaking: harness-optimizer removed (not referenced by CCAS), context-budget→harness-budget rename (not referenced by CCAS); module-catalog.json and userConfig keys unchanged from 0.15.x baseline" },
+    { "range": "0.15.x", "note": "verified 2026-06-27 — 0.15.0 diff vs 0.11/0.12 baseline: module-catalog.json IDENTICAL (python/fastapi/pytest/js resolve unchanged); all CCAS userConfig keys still read (python_runner/python_project_roots/python_typechecker/reap_stale_mcp_processes/hook_profile/docker_containers); only hooks.json event-level change is additive SessionEnd (session-end.sh, exit-0 advisory, reap moved off SessionStart); breaking skill rename goal-ex→harness-fill not referenced by CCAS; hooks _lib refactor carries no logic change" },
+    { "range": "0.11.x", "note": "verified 2026-06-21 (superseded baseline) — python/fastapi/pytest/js modules (python-fullstack profile); ruff 0.15.10 via `uv run`, pyright on PATH; post-edit + pre-commit python lint/typecheck gate wired" }
   ],
   "incompatible": [
     { "range": "0.9", "note": "stale-cache `declare -A`/arithmetic-trap bash errors in session-start.sh; fixed in 0.10.0 (a9490b2). Repin/reinstall to ≥0.10.0." }

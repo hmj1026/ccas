@@ -28,16 +28,16 @@ Default: execute directly toward user's goal without over-planning. All flows en
 
 | Trigger | Must Launch Agent | Timing |
 |---------|--------------|---------|
-| Any Edit/Write | `python-reviewer` (ECC) | Last step |
-| Bug fix or new feature | `dhpk:tdd-guide` | Before python-reviewer |
-| SQL / Alembic operation | `dhpk:database-reviewer` | Before python-reviewer |
-| Auth / input validation / secrets | `dhpk:security-reviewer` | Before python-reviewer |
+| Any Edit/Write | `dhpk:code-reviewer` | Last step |
+| Bug fix or new feature | `dhpk:tdd-guide` | Before dhpk:code-reviewer |
+| SQL / Alembic operation | `dhpk:database-reviewer` | Before dhpk:code-reviewer |
+| Auth / input validation / secrets | `dhpk:security-reviewer` | Before dhpk:code-reviewer |
 
-**Order** (when multiple trigger): dhpk:tdd-guide → dhpk:database-reviewer → dhpk:security-reviewer → python-reviewer
+**Order** (when multiple trigger): dhpk:tdd-guide → dhpk:database-reviewer → dhpk:security-reviewer → dhpk:code-reviewer
 
 **Exemptions:**
-- Pure research/planning (no Edit/Write) → skip python-reviewer
-- **Small change (inspect → patch, non-bug-fix, non-feature) → PostToolUse hooks static analysis is sufficient; python-reviewer not required**
+- Pure research/planning (no Edit/Write) → skip dhpk:code-reviewer
+- **Small change (inspect → patch, non-bug-fix, non-feature) → PostToolUse hooks static analysis is sufficient; dhpk:code-reviewer not required**
 
 ## Output Contract
 
@@ -63,29 +63,27 @@ Artifacts directory: `openspec/changes/<name>/` (proposal → specs → design �
 
 ## Agent Roster
 
-> Generic agents prefer dhpk variants (globally enabled, v0.6.1+). `python-reviewer` is ECC-only (no dhpk equivalent). ECC skills (`python-patterns`, `backend-patterns`, etc.) remain in use.
+> Generic agents use dhpk variants (globally enabled, v0.6.1+). Code review uses `dhpk:code-reviewer` (stack-aware — auto-consults the active python/fastapi modules). Skills (`python-patterns`, `backend-patterns`, etc.) come from `.agents/skills` (npx).
 
 | Phase | Agent | Slash Command | When |
 |-------|-------|--------------|------|
-| Planning | `planner` (ECC) | `/plan` | Complex features, multi-file changes |
+| Planning | `Plan` (built-in) | plan mode | Complex features, multi-file changes |
 | Architecture | `dhpk:architect` | -- | System design decisions |
 | TDD | `dhpk:tdd-guide` | `/tdd` | Before writing implementation code |
-| Code Review | `python-reviewer` (ECC) | `/python-review` | After Python code changes |
-| Code Review | `dhpk:code-reviewer` | `/code-review` | After any code changes |
+| Code Review | `dhpk:code-reviewer` | `/code-review` | After any code changes (stack-aware: Python/FastAPI) |
 | Security | `dhpk:security-reviewer` | -- | Auth, user input, API endpoints, secrets |
 | Database | `dhpk:database-reviewer` | -- | SQLAlchemy queries, schema design, migrations |
-| Build Fix | `build-error-resolver` (ECC) | `/build-fix` | Build or type errors |
 | Docs | `dhpk:doc-updater` | `/update-docs` | Documentation updates |
 | Refactor | `dhpk:refactor-cleaner` | -- | Dead code removal, file splits |
 
-Relevant ECC skills: `python-patterns`, `python-testing`, `backend-patterns`, `api-design`, `database-migrations`, `tdd-workflow`, `security-review`, `docker-patterns`
+Relevant skills (npx `.agents/skills`): `python-patterns`, `python-testing`, `backend-patterns`, `api-design`, `database-migrations`, `tdd-workflow`, `security-review`, `docker-patterns`
 
 ## Self-Check Checklist (before each task reply)
 
 | # | Trigger | Check | Rule |
 |---|---|---|---|
 | 0 | **Is this a small change?** (inspect → patch; non-bug-fix; non-feature; **and no SSOT file touched**) | Handle hook warnings; skip 1–7 | This file "Task Modes" |
-| 1 | After Edit/Write to Python feature | Was `python-reviewer` run? | This file "Mandatory Post-steps" |
+| 1 | After Edit/Write to Python feature | Was `dhpk:code-reviewer` run? | This file "Mandatory Post-steps" |
 | 2 | Bug fix or new feature | Was `dhpk:tdd-guide` run? | This file "Mandatory Post-steps" |
 | 3 | SQL / Alembic change | Was `dhpk:database-reviewer` run? Was `alembic upgrade head` applied? | `python-db.md` |
 | 4 | Any Python file changed | Did both `ruff check` + **`ruff format --check`** pass? (avoid CI format failure) | `python.md` |

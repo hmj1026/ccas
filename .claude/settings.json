@@ -2,7 +2,6 @@
   "enableAllProjectMcpServers": true,
   "enabledPlugins": {
     "codex@openai-codex": true,
-    "ecc@ecc": true,
     "pyright-lsp@claude-plugins-official": true
   },
   "env": {
@@ -94,9 +93,16 @@
       }
     ]
   },
+  "pluginConfigs": {
+    "dhpk@dhpk": {
+      "options": {
+        "modules": "python,fastapi,pytest,js"
+      }
+    }
+  },
   "permissions": {
     "allow": [
-      "Bash(openspec *)",
+      "Bash(openspec:*)",
       "Bash(uv sync*)",
       "Bash(uv add *)",
       "Bash(uv run:*)",

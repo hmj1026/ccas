@@ -40,7 +40,7 @@ Skill sources: (1) `npx skills` CLI → `.agents/skills/`; (2) Claude plugin man
 
 CCAS custom skills: `ccas-dev-commands`, `ccas-env-config`, `ccas-qa-acceptance`, `ccas-tech-stack`.
 
-Do not vendor or manually sync: `everything-claude-code`, `openspec`, `codex`, `pyright-lsp` — managed by their own manifests/lock files.
+Do not vendor or manually sync: `openspec`, `codex`, `pyright-lsp` — managed by their own manifests/lock files.
 
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence

@@ -32,7 +32,7 @@ async def client(app, db_session):
 
 ## TDD Workflow
 
-`ccas-tdd-red-check.sh` auto-runs `test_*.py` on Write to confirm RED. Coverage gate: `uv run pytest --cov --cov-report=term-missing`. For deeper TDD guidance use ECC `tdd-workflow` skill.
+`ccas-tdd-red-check.sh` auto-runs `test_*.py` on Write to confirm RED. Coverage gate: `uv run pytest --cov --cov-report=term-missing`. For deeper TDD guidance use the `tdd-workflow` skill (npx `.agents/skills`).
 
 ## Type Safety in Tests
 
