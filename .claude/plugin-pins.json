@@ -1,6 +1,6 @@
 {
   "description": "Pinned commits for Claude Code marketplaces to ensure clone parity. Update via scripts/verify-claude-plugins.sh --update.",
   "marketplaces": {
-    "openai-codex": "807e03ac9d5aa23bc395fdec8c3767500a86b3cf"
+    "openai-codex": "80c31f99570876c3ef40327838b0a2ca1ae2cd9c"
   }
 }
