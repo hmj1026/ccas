@@ -12,9 +12,10 @@ Thumbs.db
 openspec/.cache/
 openspec/*.log
 
-# Playwright snapshots (local testing artifacts)
+# Playwright snapshots & reports (local testing artifacts)
 .playwright-cli/
 test-results/
+playwright-report/
 
 # Logs
 *.log
@@ -61,8 +62,9 @@ backend/data/*.db-wal
 backend/data/*.db-shm
 *.db-journal
 
-# Staging data (user downloads, contains PII)
+# Staging data (user downloads / manual processing, contains PII)
 backend/data/staging/
+backend/data/manual-staging/
 
 # Scheduler runtime heartbeat（容器啟動時生成，內含 timestamp）
 backend/data/scheduler-heartbeat
@@ -124,3 +126,6 @@ backend/data/captcha-archive/
 
 # Working plan file (per-user CLAUDE.md convention: deleted on completion)
 IMPLEMENTATION_PLAN.md
+
+# Eval run outputs (fixtures + README tracked; results are transient)
+evals/results/
