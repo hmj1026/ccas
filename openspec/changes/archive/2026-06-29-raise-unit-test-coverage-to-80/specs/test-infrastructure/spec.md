@@ -12,6 +12,7 @@ unit 覆蓋率量測的 omit list SHALL 包含下列模組（這些模組皆由 
 - `src/ccas/api/routers/pipeline.py`
 - `src/ccas/api/routers/transactions.py`
 - `src/ccas/api/routers/settings.py`
+- `src/ccas/api/routers/setup/admin.py`
 - `src/ccas/api/routers/setup/banks.py`
 - `src/ccas/api/routers/setup/gmail.py`
 - `src/ccas/api/routers/setup/login_credentials.py`
@@ -37,8 +38,10 @@ unit 覆蓋率量測的 omit list SHALL 包含下列模組（這些模組皆由 
 
 ## ADDED Requirements
 
-### Requirement: 非 omit 核心模組 unit 覆蓋率 ≥ 80%
-所有未列入 omit list 的 `src/ccas/` 模組（包含 pipeline、classifier、decryptor、ingestor、parser、scheduler、storage、tools、bot 子模組）SHALL 個別達到 ≥ 80% 的 unit statement 覆蓋率。
+### Requirement: 核心子系統模組 unit 覆蓋率 ≥ 80%
+下列核心子系統的 `src/ccas/` 模組——pipeline、classifier、decryptor、ingestor、parser、scheduler、storage、tools、bot——其每個非 omit 模組 SHALL 個別達到 ≥ 80% 的 unit statement 覆蓋率。
+
+> 範圍註記：`api/` 層（routers 與 `deps.py` / `ratelimit.py`）不在本要求範圍內。該層的 router 由 CI 獨立的 router-coverage job（`--cov=src/ccas/api/routers --cov-fail-under=50`）與 `tests/integration/` 管轄；純 integration-tested 的 router 另列入上方 omit list。整體 unit 閘門（`fail_under = 80`）仍涵蓋所有未 omit 模組的合計覆蓋率。
 
 #### Scenario: pipeline/worker 覆蓋率達標
 - **WHEN** 執行 `pytest tests/unit/pipeline/ --cov=ccas.pipeline.worker`

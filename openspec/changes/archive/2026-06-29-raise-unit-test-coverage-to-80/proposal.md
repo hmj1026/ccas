@@ -8,7 +8,7 @@ CCAS 的單元測試覆蓋率目前為 71.4%，高於 CI 閘門 70% 但低於既
 - 為 `tools/categories.py`、`tools/reclassify.py` 新增 unit tests（目前 0%，無任何測試）
 - 補強 `pipeline/progress.py`（32%）、`pipeline/worker.py`（41%）、`bot/queries.py`（35%）、`scheduler/jobs.py`（45%）、`classifier/staging.py`（47%）、`classifier/user_rules.py`（47%）、`decryptor/job.py`（47%）、`ingestor/credentials.py`（47%）、`ingestor/job.py`（54%）、`parser/staging.py`（47%）的 unit tests
 - 補強 `parser/job.py`（62%）、`parser/banks/sinopac_v1.py`（68%）、`parser/banks/taishin_v1.py`（75%）、`storage/database.py`（68%）、`classifier/rules.py`（77%）、`tools/seed_bank_settings.py`（56%）的 unit tests
-- 為 0% 的 setup routers（`setup/banks.py`、`setup/gmail.py`、`setup/login_credentials.py`、`setup/secrets.py`、`staged_attachments.py`、`transactions_edit.py`）制定策略：這些 router 已有完整 integration tests，加入 `pyproject.toml` omit list 排除於 unit 測量，與現行 omit pattern 一致
+- 為 0% 的 setup routers（`setup/admin.py`、`setup/banks.py`、`setup/gmail.py`、`setup/login_credentials.py`、`setup/secrets.py`、`staged_attachments.py`、`transactions_edit.py`，共 7 個）制定策略：這些 router 已有完整 integration tests，加入 `pyproject.toml` omit list 排除於 unit 測量，與現行 omit pattern 一致
 
 ## Capabilities
 

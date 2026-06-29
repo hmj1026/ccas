@@ -68,13 +68,21 @@ addopts = "-m 'not live_fubon'"
 [tool.coverage.run]
 source = ["ccas"]
 # 覆蓋率閘門（CI backend-test 與 pre-push hook）執行的是 *unit-only* 量測：
-# ``pytest tests/unit/ --cov --cov-fail-under=70``。整合測試另在無覆蓋的 job 跑。
+# ``pytest tests/unit/ --cov --cov-fail-under=80``。整合測試另在無覆蓋的 job 跑。
 # 以下模組「刻意只以整合測試覆蓋」（需 FastAPI app / DB session / Telegram
 # 客戶端，不適合純 unit 測），故從 *unit 覆蓋率量測* 排除，否則會以 ~0%
 # unit 覆蓋率把閘門拉到 70% 以下。這不是隱藏未測程式碼——它們在
 # tests/integration/ 有對應測試（analytics 66% / overview 58% / settings 51% /
 # transactions 88% / pipeline 80% / reminders 90%，實測於整合套件）。
 # app.py / __main__.py 為入口樣板，兩種測試都不覆蓋。
+#
+# 第二批排除（setup/transaction-edit router，2026-06）：以下 7 個 router 同屬
+# 「需 FastAPI app / DB session，行為以整合測試驗證」的類別，已有對應
+# tests/integration/ 覆蓋（test_setup_admin_router / test_setup_banks_router /
+# test_setup_gmail / test_setup_login_credentials_router /
+# test_setup_secrets_router / test_staged_attachments / test_transactions_edit），
+# 故一併排除於 unit 量測，與既有 router→integration 慣例一致；否則其 ~0%
+# unit 覆蓋會把閘門壓低。
 omit = [
     "src/ccas/*/app.py",
     "src/ccas/*/__main__.py",
@@ -84,16 +92,23 @@ omit = [
     "src/ccas/api/routers/pipeline.py",
     "src/ccas/api/routers/transactions.py",
     "src/ccas/api/routers/settings.py",
+    "src/ccas/api/routers/setup/admin.py",
+    "src/ccas/api/routers/setup/banks.py",
+    "src/ccas/api/routers/setup/gmail.py",
+    "src/ccas/api/routers/setup/login_credentials.py",
+    "src/ccas/api/routers/setup/secrets.py",
+    "src/ccas/api/routers/staged_attachments.py",
+    "src/ccas/api/routers/transactions_edit.py",
 ]
 
 [tool.coverage.report]
 show_missing = true
 # SSOT for the unit-only coverage gate. Measured unit coverage (with the omit
-# list below) is ~72%; the floor is pinned at 70 — at/just below measured so a
-# small unrelated regression doesn't redden CI, and equal to the
-# ``--cov-fail-under=70`` flags in ci.yaml / pre-push.sh so all three agree.
+# list above) is ~89%; the floor is pinned at 80 — comfortably below measured so
+# a small unrelated regression doesn't redden CI, and equal to the
+# ``--cov-fail-under=80`` flags in ci.yaml / pre-push.sh so all three agree.
 # Raising this requires adding tests, not just bumping the number.
-fail_under = 70
+fail_under = 80
 
 [tool.ruff]
 target-version = "py312"

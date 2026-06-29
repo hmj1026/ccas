@@ -11,6 +11,13 @@ from unittest.mock import MagicMock, patch
 import pdfplumber.page
 import pytest
 
+from ccas.parser.banks.sinopac_v1 import (
+    _is_refund_row,
+    _is_transaction_table,
+    _parse_date,
+    _parse_mmdd,
+    _parse_transaction_row,
+)
 from ccas.parser.base import ParseError
 
 from .conftest import (
@@ -334,3 +341,204 @@ class TestRealPdfFormat:
         assert _parse_mmdd("01/05", 2026, 1) == date(2026, 1, 5)
         # Default (billing_month_num=0) keeps the legacy no-shift behaviour.
         assert _parse_mmdd("12/28", 2026) == date(2026, 12, 28)
+
+
+# -- Helper-function unit tests (added for branch coverage) --
+
+
+class TestParseDateHelper:
+    """Direct tests of the module-level _parse_date helper."""
+
+    def test_parses_mmdd(self):
+        assert _parse_date("03/01", 2026) == date(2026, 3, 1)
+
+    def test_mmdd_cross_year_shifts_back(self):
+        assert _parse_date("12/28", 2026, 1) == date(2025, 12, 28)
+
+    def test_parses_western_full_date(self):
+        assert _parse_date("2026/03/01", 2026) == date(2026, 3, 1)
+
+    def test_converts_roc_full_date(self):
+        # 民國 115 + 1911 = 西元 2026
+        assert _parse_date("115/03/01", 2026) == date(2026, 3, 1)
+
+    def test_returns_none_for_wrong_part_count(self):
+        assert _parse_date("2026", 2026) is None
+
+    def test_returns_none_for_invalid_values(self):
+        assert _parse_date("2026/13/45", 2026) is None
+        assert _parse_date("xx/yy", 2026) is None
+
+
+class TestParseMmddNoMatch:
+    def test_returns_none_for_non_mmdd_string(self):
+        assert _parse_mmdd("not-a-date", 2026) is None
+
+
+class TestIsRefundRow:
+    def test_negative_amount_is_refund(self):
+        assert _is_refund_row("", "全聯福利中心", -100) is True
+
+    def test_refund_line_prefix_is_refund(self):
+        assert _is_refund_row("(-) 沖正 100", "某商店", 100) is True
+
+    def test_refund_merchant_keyword_is_refund(self):
+        assert _is_refund_row("", "退款－某商店", 100) is True
+
+    def test_normal_row_is_not_refund(self):
+        assert _is_refund_row("", "全聯福利中心", 100) is False
+
+
+class TestCanParseEmptyPdf:
+    def test_returns_false_for_pdf_without_pages(self, tmp_path):
+        parser = _make_parser()
+        pdf_path = tmp_path / "empty.pdf"
+
+        with patch("pdfplumber.open") as mock_open:
+            mock_pdf = MagicMock()
+            mock_pdf.pages = []
+            mock_pdf.__enter__ = MagicMock(return_value=mock_pdf)
+            mock_pdf.__exit__ = MagicMock(return_value=False)
+            mock_open.return_value = mock_pdf
+
+            assert parser.can_parse(pdf_path) is False
+
+
+class TestRocSummaryHelpers:
+    def test_extract_billing_month_roc_year(self):
+        parser = _make_parser()
+        assert parser._extract_billing_month("115年03月") == "2026-03"
+
+    def test_extract_due_date_roc_year(self):
+        parser = _make_parser()
+        assert parser._extract_due_date("繳款截止日：115/03/27") == date(2026, 3, 27)
+
+
+class TestIsTransactionTable:
+    def test_empty_table_returns_false(self):
+        assert _is_transaction_table([]) is False
+
+    def test_real_header_keywords_match(self):
+        # 入帳 + 臺幣金額 (production header) without the legacy 交易日 keyword.
+        assert _is_transaction_table([["入帳日", "卡號末四碼", "臺幣金額"]]) is True
+
+
+class TestExtractTransactionsSkipNonTxnTable:
+    def test_skips_table_without_keywords(self):
+        parser = _make_parser()
+        page = make_mock_page("", tables=[[["欄位A", "欄位B"], ["1", "2"]]])
+        txns = parser._extract_transactions(
+            cast(list[pdfplumber.page.Page], [page]), 2026
+        )
+        assert txns == ()
+
+
+class TestParseTransactionRow:
+    def test_five_col_full_date_fallback(self):
+        row: list[str | None] = ["2026/03/01", "2026/03/05", "5678", "商店", "100"]
+        item = _parse_transaction_row(row, 2026)
+        assert item is not None
+        assert item.trans_date == date(2026, 3, 1)
+        assert item.posting_date == date(2026, 3, 5)
+        assert item.card_last4 == "5678"
+        assert item.amount == 100
+
+    def test_five_col_unparseable_date_returns_none(self):
+        assert _parse_transaction_row(["xx/yy", "", "", "商店", "100"], 2026) is None
+
+    def test_five_col_refund_merchant_negated(self):
+        row: list[str | None] = ["03/01", "03/05", "5678", "退款－某商店", "100"]
+        item = _parse_transaction_row(row, 2026)
+        assert item is not None
+        assert item.amount == -100
+
+    def test_three_col_basic(self):
+        item = _parse_transaction_row(["03/01", "商店", "100"], 2026)
+        assert item is not None
+        assert item.amount == 100
+        assert item.trans_date == date(2026, 3, 1)
+        assert item.posting_date is None
+
+    def test_three_col_full_date_fallback(self):
+        item = _parse_transaction_row(["2026/03/01", "商店", "100"], 2026)
+        assert item is not None
+        assert item.trans_date == date(2026, 3, 1)
+
+    def test_three_col_unparseable_date_returns_none(self):
+        assert _parse_transaction_row(["xx/yy", "商店", "100"], 2026) is None
+
+    def test_three_col_refund_merchant_negated(self):
+        item = _parse_transaction_row(["03/01", "退款－某店", "100"], 2026)
+        assert item is not None
+        assert item.amount == -100
+
+    def test_too_few_columns_returns_none(self):
+        assert _parse_transaction_row(["03/01", "100"], 2026) is None
+
+
+class TestTextTransactionTiers:
+    """Drive the legacy tier-2/tier-3 text fallbacks via _extract_transactions."""
+
+    def _pages(self, text: str) -> list[pdfplumber.page.Page]:
+        return cast(list[pdfplumber.page.Page], [make_mock_page(text)])
+
+    def test_tier2_legacy_full_format(self):
+        parser = _make_parser()
+        text = (
+            "2026/03/01 2026/03/05 商店一 100\n2026/03/02 2026/03/06 退款－商店二 50\n"
+        )
+        txns = parser._extract_transactions(self._pages(text), 2026)
+        assert len(txns) == 2
+        # 退款保留為負數明細（R26）。
+        assert sorted(t.amount for t in txns) == [-50, 100]
+
+    def test_tier2_invalid_date_skipped(self):
+        parser = _make_parser()
+        txns = parser._extract_transactions(
+            self._pages("2026/13/45 2026/03/05 商店 100\n"), 2026
+        )
+        assert txns == ()
+
+    def test_tier2_non_numeric_amount_skipped(self):
+        parser = _make_parser()
+        txns = parser._extract_transactions(
+            self._pages("2026/03/01 2026/03/05 商店 ,\n"), 2026
+        )
+        assert txns == ()
+
+    def test_tier3_simple_format(self):
+        parser = _make_parser()
+        text = "2026/03/01 商店一 100\n2026/03/02 退款－商店二 50\n"
+        txns = parser._extract_transactions(self._pages(text), 2026)
+        assert len(txns) == 2
+        assert sorted(t.amount for t in txns) == [-50, 100]
+
+    def test_tier3_invalid_date_skipped(self):
+        parser = _make_parser()
+        txns = parser._extract_transactions(self._pages("2026/13/45 商店 100\n"), 2026)
+        assert txns == ()
+
+
+class TestRealTextEdges:
+    """Edge branches inside the tier-1 real MM/DD text parser."""
+
+    def _pages(self, text: str) -> list[pdfplumber.page.Page]:
+        return cast(list[pdfplumber.page.Page], [make_mock_page(text)])
+
+    def test_trans_date_none_skipped(self):
+        # group(1) "1/2" fails the strict 2-digit MM/DD regex → trans_date None.
+        parser = _make_parser()
+        txns = parser._extract_transactions(self._pages("1/2 1/2 商店 100\n"), 2026)
+        assert txns == ()
+
+    def test_summary_total_row_skipped(self):
+        parser = _make_parser()
+        text = "03/05 03/05 本期應繳金額合計 12,579\n03/06 03/06 小計 100\n"
+        txns = parser._extract_transactions(self._pages(text), 2026)
+        assert txns == ()
+
+    def test_invalid_mmdd_value_caught(self):
+        # group(1) "13/45" matches the regex but date() raises → swallowed.
+        parser = _make_parser()
+        txns = parser._extract_transactions(self._pages("13/45 03/05 商店 100\n"), 2026)
+        assert txns == ()
