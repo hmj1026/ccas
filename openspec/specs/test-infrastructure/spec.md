@@ -111,9 +111,19 @@ unit 覆蓋率量測的 omit list SHALL 包含下列模組（這些模組皆由 
 ### Requirement: 前端 vitest 設定
 系統 SHALL 透過 `vite.config.ts` 為前端設定 vitest。測試檔命名 SHALL 採用 `*.test.tsx` 或 `*.test.ts`。
 
+系統 SHALL 在 `vite.config.ts` 的 `test.coverage` 啟用 v8 provider 的覆蓋率量測，`include` SHALL 為 `src/**/*.{ts,tsx}` 並排除測試檔與 `test-*` 輔助檔。覆蓋率門檻 SHALL 為四項指標皆 ≥ **80**：`lines: 80`、`functions: 80`、`statements: 80`、`branches: 80`。
+
 #### Scenario: vitest 可發現並執行測試
 - **WHEN** 在 `frontend/` 目錄執行 `pnpm test`
 - **THEN** vitest 會找到並執行所有符合命名慣例的測試檔
+
+#### Scenario: 覆蓋率達標時通過
+- **WHEN** 在 `frontend/` 目錄執行 `pnpm test --coverage`
+- **THEN** lines / functions / statements / branches 四項覆蓋率皆 ≥ 80，指令 exit code 為 0
+
+#### Scenario: 覆蓋率不足時 CI 失敗
+- **WHEN** 四項覆蓋率指標中任一項低於 80
+- **THEN** `vitest` 以非零 exit code 結束，CI `frontend-lint-test` job 標記為 FAIL
 
 ### Requirement: 提供前端 smoke test
 系統 SHALL 包含一個 smoke test，驗證 React App component 可正常 render。
@@ -136,4 +146,19 @@ Parser integration tests SHALL use a shared `cjk_font_path` fixture that resolve
 #### Scenario: No CJK font available
 - **WHEN** no candidate CJK font path exists
 - **THEN** the fixture SHALL call `pytest.skip()` and tests SHALL be marked as skipped (not failed)
+
+### Requirement: 前端覆蓋率閘門於 CI 與 pre-push 雙重強制
+前端覆蓋率閘門 SHALL 同時於 CI 與本地 pre-push 強制，且兩者 SHALL 等價（皆執行帶覆蓋率的 vitest）。`scripts/pre-push.sh` 的前端步驟 SHALL 以 `--coverage` 執行 vitest，使覆蓋率不足在本地推送前即被攔截。
+
+#### Scenario: CI 以覆蓋率閘門執行前端測試
+- **WHEN** CI `frontend-lint-test` job 執行 `pnpm run test --coverage`
+- **THEN** 任一覆蓋率指標 < 80 時 job 以非零 exit code 失敗
+
+#### Scenario: pre-push 本地強制前端覆蓋率
+- **WHEN** 開發者執行 `scripts/pre-push.sh`（且未以 `RUN_FRONTEND=0` 略過前端）
+- **THEN** 前端步驟以 `--coverage` 執行 vitest，覆蓋率不足時 pre-push 失敗並阻止 push
+
+#### Scenario: pre-push 與 CI 等價
+- **WHEN** 比對 `scripts/pre-push.sh` 前端步驟與 CI `frontend-lint-test` 的測試指令
+- **THEN** 兩者皆執行帶 `--coverage` 的 vitest，套用相同的 `vite.config.ts` 門檻（SSOT）
 
