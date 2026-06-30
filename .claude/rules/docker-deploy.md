@@ -84,7 +84,7 @@ Four-layer gate responsibility table (any new check must be added to exactly one
 |---|---|---|---|
 | **PostToolUse hooks** | Every Edit/Write | Real-time lint / typecheck / TDD red / SQLAlchemy / Alembic / Docker / frontend lint (**warning layer, non-blocking**) | `.claude/settings.json` + `.claude/hooks/ccas-*.sh` (8 scripts) |
 | **`scripts/pre-commit.sh`** (→ `.git/hooks/pre-commit`) | git commit | gitleaks secret scan + `ruff check --fix` + `ruff format` on staged Python + `pyright` + `eslint` on staged TS | `scripts/pre-commit.sh` (versioned SSOT) |
-| **`scripts/pre-push.sh`** (→ `.git/hooks/pre-push`) | git push | `verify-claude-plugins.sh` + `check-env-sync.sh` + `sync-docker-image-assets.sh --check` + full repo `ruff check` / `ruff format --check` / `pyright` / `pytest --cov-fail-under=70` + `eslint` / `pnpm build` / `pnpm test` (vitest) | `scripts/pre-push.sh` (versioned SSOT) |
+| **`scripts/pre-push.sh`** (→ `.git/hooks/pre-push`) | git push | `verify-claude-plugins.sh` + `check-env-sync.sh` + `sync-docker-image-assets.sh --check` + full repo `ruff check` / `ruff format --check` / `pyright` / `pytest --cov-fail-under=80` + `eslint` / `pnpm build` / `pnpm test --coverage` (vitest) | `scripts/pre-push.sh` (versioned SSOT) |
 | **CI** (`.github/workflows/ci.yaml`) | push / PR | Last-resort gate; equivalent to pre-push plus e2e tests | `.github/workflows/ci.yaml` |
 
 **Design principles**:

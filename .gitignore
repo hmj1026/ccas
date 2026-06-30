@@ -8,9 +8,10 @@ Thumbs.db
 *.swp
 *.swo
 
-# OpenSpec runtime output (keep changes/ tracked, ignore temp files)
-openspec/.cache/
-openspec/*.log
+# OpenSpec: only synced specs are version-controlled; changes/ is transient work
+openspec/*
+!openspec/specs/
+!openspec/config.yaml
 
 # Playwright snapshots & reports (local testing artifacts)
 .playwright-cli/
@@ -129,3 +130,8 @@ IMPLEMENTATION_PLAN.md
 
 # Eval run outputs (fixtures + README tracked; results are transient)
 evals/results/
+
+# Tool-generated directories (auto-managed by npx/tooling, not version-controlled)
+.agents/
+.hyperweave/
+.reports/
