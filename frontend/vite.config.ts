@@ -84,14 +84,16 @@ export default defineConfig({
       reporter: ['text', 'text-summary'],
       include: ['src/**/*.{ts,tsx}'],
       exclude: ['src/**/*.test.{ts,tsx}', 'src/test-*.ts'],
-      // Floors pinned below measured coverage (lines ~83 / funcs ~77 /
-      // stmts ~80 / branches ~71) with headroom so a small unrelated
-      // regression doesn't redden CI. Raise these as coverage grows.
+      // Four-metric floor pinned at 80, aligned with the backend coverage
+      // gate (pyproject `fail_under=80`). Measured well above (lines ~95 /
+      // stmts ~94 / funcs ~93 / branches ~87), so the floor leaves headroom
+      // while still catching meaningful regressions. Enforced in CI and in
+      // `scripts/pre-push.sh` (both run `pnpm test --coverage`).
       thresholds: {
-        lines: 70,
-        functions: 65,
-        statements: 70,
-        branches: 60,
+        lines: 80,
+        functions: 80,
+        statements: 80,
+        branches: 80,
       },
     },
   },

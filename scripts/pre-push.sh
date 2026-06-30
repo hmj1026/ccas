@@ -54,8 +54,8 @@ if [ "$RUN_FRONTEND" = "1" ]; then
     pnpm run lint
     echo "-> build (tsc + vite)"
     pnpm run build
-    echo "-> vitest"
-    pnpm run test
+    echo "-> vitest (coverage)"
+    pnpm run test --coverage
 fi
 
 echo "=== All checks passed ==="
