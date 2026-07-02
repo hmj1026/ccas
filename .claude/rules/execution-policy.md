@@ -107,3 +107,9 @@ The following hooks run automatically after Edit/Write via `.claude/settings.jso
 | `ccas-docker-check.sh` | Dockerfile / compose: real-time convention validation | `docker-deploy.md` |
 | `ccas-pre-push-stop.sh` (Stop event) | Session end: run full pre-push quality gate | `docker-deploy.md` "Repo-level Process Gates" |
 | `ccas-session-retrospective.sh` (Stop) | Write session log | — |
+
+## Review & Interaction Conventions
+
+- **Sentinel-driven review depends on the external dhpk plugin (F5).** The `.pending-*` sentinels under `.claude/artifacts/sessions/` that gate `dhpk:code-reviewer` / `dhpk:doc-reviewer` are written by the **dhpk plugin's** PostToolUse hooks — this repo's own hooks (`.claude/hooks/`, `.claude/settings.json`) do **not** write sentinels (verify: `grep -rln 'pending-review' .claude/hooks .claude/settings.json` is empty). If the dhpk plugin is absent, launch the mandatory post-step reviews manually.
+- **Final review is incremental (P1).** The stop-time / final `dhpk:code-reviewer` pass SHALL be scoped to the incremental change set — only the files changed this turn — not a full-repo re-review. Full-scope 增量 (incremental) discipline avoids the long-running sweeps that were interrupted twice in session history.
+- **Context-heavy decisions prefer 建議+文字確認 (P3).** For decisions needing full context (e.g. when to tag / cut a release), give a recommendation and confirm in prose rather than an `AskUserQuestion` menu — a menu was abandoned mid-selection once in session history.
