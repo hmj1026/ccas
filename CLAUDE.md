@@ -41,7 +41,7 @@ Do not vendor or manually sync: `openspec`, `codex`, `pyright-lsp` — managed b
 
 This project is indexed by GitNexus as **ccas** (symbol, relationship, and execution-flow graph). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely. Exact counts live in `.gitnexus/meta.json` — query the graph rather than trusting numbers written here.
 
-> If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
+> If any GitNexus tool warns the index is stale, refresh with `npx gitnexus analyze --no-stats --skip-agents-md` (plain `analyze` re-injects volatile stats and MUST-wording into this block).
 
 ## Recommended (advisory — no hook enforces these)
 

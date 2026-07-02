@@ -31,6 +31,8 @@ auto-memory read  →  cx  →  GitNexus MCP  →  Read tool (full file)
 ## gitnexus_impact Exemption Boundary
 
 > Advisory conventions — no PostToolUse hook enforces `gitnexus_impact` / `gitnexus_detect_changes` (consistent with CLAUDE.md's GitNexus section, which is SSOT for this policy). "Recommended" = do it by default; "Exempt" = skip.
+>
+> **Refreshing the index:** run `npx gitnexus analyze --no-stats --skip-agents-md`. A plain `npx gitnexus analyze` re-injects volatile symbol/edge counts and restores `MUST`/`NEVER` wording into the CLAUDE.md `<!-- gitnexus:start -->` block — the exact drift `fix-harness-doc-drift` removed. The block is auto-managed by gitnexus, so those two flags are required to keep it de-drifted.
 
 | Change Type | Impact analysis |
 |----------|----------------|
