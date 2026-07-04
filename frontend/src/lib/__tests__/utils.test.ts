@@ -14,11 +14,13 @@ describe('cn', () => {
   })
 
   it('drops falsey conditional arguments', () => {
-    expect(cn('a', false && 'b', null, undefined, 'c')).toBe('a c')
+    const isHidden = false
+    expect(cn('a', isHidden && 'b', null, undefined, 'c')).toBe('a c')
   })
 
   it('keeps truthy conditional arguments', () => {
-    expect(cn('px-2', true && 'py-1')).toBe('px-2 py-1')
+    const isVisible = true
+    expect(cn('px-2', isVisible && 'py-1')).toBe('px-2 py-1')
   })
 })
 
