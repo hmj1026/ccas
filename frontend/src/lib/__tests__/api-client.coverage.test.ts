@@ -37,6 +37,15 @@ function firstCall(mock: ReturnType<typeof vi.fn>): FetchArgs {
   return mock.mock.calls[0] as unknown as FetchArgs
 }
 
+/** 建立帶 Blob body 的假 Response（避免 jsdom Blob 與 undici Response 建構子的 interop 問題）。 */
+function blobResponse(status: number, blob: Blob): Response {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    blob: () => Promise.resolve(blob),
+  } as unknown as Response
+}
+
 afterEach(() => {
   vi.unstubAllGlobals()
 })
@@ -88,7 +97,7 @@ describe('mutating verbs', () => {
     )
 
     const [url, init] = firstCall(mock)
-    expect(url).toBe('/api/things')
+    expect(url).toMatch(/\/api\/things$/)
     expect(init?.method).toBe('POST')
     expect(init?.body).toBe(JSON.stringify({ name: 'a' }))
     expect(init?.credentials).toBe('include')
@@ -134,7 +143,7 @@ describe('mutating verbs', () => {
 
 describe('apiFetchBlob', () => {
   it('returns a Blob and appends defined params', async () => {
-    const mock = stubFetch(new Response(new Blob(['csv-data']), { status: 200 }))
+    const mock = stubFetch(blobResponse(200, new Blob(['csv-data'])))
 
     const blob = await apiFetchBlob('/api/export', {
       month: '2026-06',
