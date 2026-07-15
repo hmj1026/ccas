@@ -5,20 +5,20 @@
 """
 
 from ccas.parser.base import BankParser, ParseError
+from ccas.parser.intake import ParserIntake, build_parser_intake
 from ccas.parser.job import ParseSummary, run_parse_job
 from ccas.parser.registry import ParserNotFoundError, registry
 from ccas.parser.result import ParseResult, TransactionItem
-
-from . import banks
 
 __all__ = [
     "BankParser",
     "ParseError",
     "ParseResult",
     "ParseSummary",
+    "ParserIntake",
     "ParserNotFoundError",
     "TransactionItem",
-    "banks",
+    "build_parser_intake",
     "registry",
     "run_parse_job",
 ]

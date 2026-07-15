@@ -37,4 +37,4 @@ paths:
 - User-facing text in **Traditional Chinese** (正體中文); code/comments in English
 - Avoid `any`; use `unknown` + type guards. Prefer `interface` for object shapes
 
-> For generic React/Vite patterns, see ECC `frontend-patterns` skill.
+> For generic React/Vite patterns, see the `frontend-patterns` skill (npx `.agents/skills`).

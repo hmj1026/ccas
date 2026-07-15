@@ -143,7 +143,7 @@ class TestParseFailureIsolation:
         mock_parser.parse = mock_parse
 
         with patch(
-            "ccas.parser.job.registry.resolve",
+            "ccas.parser.intake.registry.resolve",
             return_value=[mock_parser],
         ):
             from ccas.parser.job import run_parse_job

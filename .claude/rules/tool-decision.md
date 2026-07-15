@@ -22,20 +22,24 @@ auto-memory read  →  cx  →  GitNexus MCP  →  Read tool (full file)
 | Explore directory structure (have path intuition) | `cx overview DIR` | Compatible with gitnexus_query, can combine |
 | Full symbol context (caller + callee + flow membership) | `gitnexus_context` | Deeper than cx references |
 | Re-orient after context compression | `cx overview` / `cx definition` | Never re-read full files |
-| Before editing a function / class / method | `gitnexus_impact` (MUST) | See exemption table below |
-| Rename a symbol | `gitnexus_rename` | Never use find-and-replace |
-| Verify scope before committing | `gitnexus_detect_changes` (MUST) | No exemptions |
+| Before editing a function / class / method | `gitnexus_impact` (recommended) | See exemption table below |
+| Rename a symbol | `gitnexus_rename` | Prefer over find-and-replace |
+| Verify scope before committing | `gitnexus_detect_changes` (recommended) | Advisory — no hook enforces |
 
 ---
 
 ## gitnexus_impact Exemption Boundary
 
-| Change Type | Requires impact? |
+> Advisory conventions — no PostToolUse hook enforces `gitnexus_impact` / `gitnexus_detect_changes` (consistent with CLAUDE.md's GitNexus section, which is SSOT for this policy). "Recommended" = do it by default; "Exempt" = skip.
+>
+> **Refreshing the index:** run `npx gitnexus analyze --no-stats --skip-agents-md`. A plain `npx gitnexus analyze` re-injects volatile symbol/edge counts and restores `MUST`/`NEVER` wording into the CLAUDE.md `<!-- gitnexus:start -->` block — the exact drift `fix-harness-doc-drift` removed. The block is auto-managed by gitnexus, so those two flags are required to keep it de-drifted.
+
+| Change Type | Impact analysis |
 |----------|----------------|
-| Function / class / method (any size) | **MUST** (no exemption) |
+| Function / class / method (any size) | Recommended (advisory) |
 | Config / Markdown / .env (non-symbol) | Exempt |
 | Test file assertion tweak (no signature change) | Exempt |
-| Docstring / type annotation only | Exempt (but public API types need impact) |
+| Docstring / type annotation only | Exempt (but public API types warrant impact) |
 
 ---
 

@@ -21,19 +21,22 @@ PKCE (RFC 7636) 強制啟用，避免授權 code 攔截攻擊。State 條目儲�
   見 ``ccas.storage.oauth_secrets``）。讀取時自動解密，並向後相容既有 plaintext
   檔（legacy fallback），下一次寫入時升級為密文。client_secret / refresh_token
   不再以明文存放於 ``data/``。
+
+架構取捨（deepen-codebase-architecture）：
+- 本檔案只負責「HTTP 轉譯」：建立 production adapters（DB session / 檔案系統 /
+  httpx）並把 ``GmailConnectionService`` 的 outcome dataclasses 映射成
+  FastAPI response（狀態碼、redirect、錯誤訊息）。所有決策邏輯（PKCE/state
+  處理、TTL 檢查、payload 驗證）都在 ``ccas.ingestor.gmail_connection`` 之中，
+  該模組framework-free、可脫離 FastAPI/httpx/DB 單元測試。
 """
 
 from __future__ import annotations
 
-import base64
-import hashlib
 import json
 import logging
-import secrets
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlencode
 
 import httpx
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
@@ -48,6 +51,15 @@ from ccas.api.schemas import (
 )
 from ccas.config import Settings, get_settings
 from ccas.ingestor.auth import GMAIL_SCOPES
+from ccas.ingestor.gmail_connection import (
+    AuthorizeError,
+    CallbackKind,
+    GmailConnectionService,
+    GmailOAuthConfig,
+    OAuthStateRecord,
+    TokenExchange,
+    UploadError,
+)
 from ccas.storage.database import get_db_session
 from ccas.storage.models import GmailOAuthState
 from ccas.storage.oauth_secrets import (
@@ -60,7 +72,6 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/setup/gmail", tags=["setup-gmail"])
 
-_GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
 _GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"  # noqa: S105
 _GOOGLE_REVOKE_URL = "https://oauth2.googleapis.com/revoke"
 # Gmail's own getProfile returns ``emailAddress`` under the existing
@@ -68,100 +79,232 @@ _GOOGLE_REVOKE_URL = "https://oauth2.googleapis.com/revoke"
 # (unlike the generic Google userinfo endpoint, which requires
 # ``userinfo.email``). See setup/gmail callback for the non-blocking call.
 _GMAIL_PROFILE_URL = "https://gmail.googleapis.com/gmail/v1/users/me/profile"
-_STATE_TTL = timedelta(minutes=10)
+_STATE_TTL_MINUTES = 10
 _CALLBACK_PATH = "/setup/gmail/callback"
 _FRONTEND_RESULT_PATH = "/setup/gmail"
 
 
 # ---------------------------------------------------------------------------
-# Helpers
+# Production adapters (ports implemented against real settings/DB/httpx)
 # ---------------------------------------------------------------------------
 
 
-def _load_credentials_payload(settings: Settings) -> dict[str, Any]:
-    """Load (decrypt) credentials.json from disk, or raise 400.
+class _CredentialFileAdapter:
+    """``CredentialFilePort`` backed by the on-disk encrypted credentials.json."""
 
-    Tolerates legacy plaintext credentials.json via ``read_token_payload``'s
-    fallback; an encrypted file that the current master.key cannot decrypt
-    surfaces as 500 (fail-loud) rather than a misleading parse error.
-    """
-    creds_path = Path(settings.gmail_credentials_path)
-    if not creds_path.exists():
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                "Gmail credentials.json 尚未上傳；"
-                "請先呼叫 POST /api/setup/gmail/credentials"
-            ),
+    def __init__(self, settings: Settings) -> None:
+        self._settings = settings
+        self._path = Path(settings.gmail_credentials_path)
+
+    def exists(self) -> bool:
+        return self._path.exists()
+
+    def load(self) -> dict[str, Any]:
+        return read_token_payload(self._path, self._settings.master_key_manager)
+
+    def save(self, payload: dict[str, Any]) -> str:
+        self._path.parent.mkdir(parents=True, exist_ok=True)
+        write_encrypted_token_file(
+            self._path, json.dumps(payload, indent=2), self._settings.master_key_manager
         )
-    try:
-        return read_token_payload(creds_path, settings.master_key_manager)
-    except json.JSONDecodeError as exc:
-        # Don't interpolate ``exc``: JSONDecodeError.__str__ embeds the offending
-        # document fragment, which could echo stored credential bytes back to the
-        # caller (security-reviewer H2).
-        raise HTTPException(
-            status_code=422,
-            detail="credentials.json 解析失敗（格式不正確）",
-        ) from exc
+        return str(self._path)
 
 
-def _extract_oauth_client(payload: dict[str, Any]) -> tuple[str, str]:
-    """Pull (client_id, client_secret) from web/installed credentials block."""
-    block = payload.get("web") or payload.get("installed")
-    if not isinstance(block, dict):
-        raise HTTPException(
-            status_code=422,
-            detail="credentials.json 必須包含 'web' 或 'installed' 物件",
+class _TokenStoreAdapter:
+    """``TokenStorePort`` backed by the on-disk encrypted token.json."""
+
+    def __init__(self, settings: Settings) -> None:
+        self._settings = settings
+        self._path = Path(settings.gmail_token_path)
+
+    def exists(self) -> bool:
+        return self._path.exists()
+
+    def read(self) -> dict[str, Any] | None:
+        if not self._path.exists():
+            return None
+        try:
+            return read_token_payload(self._path, self._settings.master_key_manager)
+        except (json.JSONDecodeError, MasterKeyMismatchError):
+            # Unreadable/undecryptable token.json is treated as "not
+            # connected" (status is advisory; the user can re-run the OAuth
+            # flow). A master.key mismatch is logged so operators can spot a
+            # botched data/ restore.
+            logger.warning("Gmail token.json unreadable; reporting disconnected")
+            return None
+
+    def write(self, payload: dict[str, Any]) -> None:
+        self._path.parent.mkdir(parents=True, exist_ok=True)
+        write_encrypted_token_file(
+            self._path, json.dumps(payload, indent=2), self._settings.master_key_manager
         )
-    client_id = block.get("client_id")
-    client_secret = block.get("client_secret")
-    if not isinstance(client_id, str) or not isinstance(client_secret, str):
-        raise HTTPException(
-            status_code=422,
-            detail="credentials.json 缺少 client_id 或 client_secret",
-        )
-    return client_id, client_secret
+
+    def delete(self) -> None:
+        self._path.unlink(missing_ok=True)
 
 
-def _redirect_uri(settings: Settings) -> str:
-    return f"{settings.get_public_base_url()}{_CALLBACK_PATH}"
+class _DbOAuthStateStore:
+    """``OAuthStateStorePort`` backed by the ``gmail_oauth_state`` table."""
 
+    def __init__(self, session: AsyncSession) -> None:
+        self._session = session
 
-def _gen_pkce() -> tuple[str, str]:
-    """Return (code_verifier, code_challenge) per RFC 7636 S256."""
-    verifier = secrets.token_urlsafe(64)  # 86 url-safe chars, well within RFC bounds
-    digest = hashlib.sha256(verifier.encode("ascii")).digest()
-    challenge = base64.urlsafe_b64encode(digest).rstrip(b"=").decode("ascii")
-    return verifier, challenge
-
-
-async def _fetch_gmail_email(access_token: str) -> str | None:
-    """Best-effort fetch of the connected mailbox address via Gmail getProfile.
-
-    Uses the existing ``gmail.readonly`` scope (no extra consent). Any failure
-    (network, non-200, malformed body) is swallowed and returns ``None`` — the
-    address is advisory and must never block the OAuth callback.
-    """
-    try:
-        async with httpx.AsyncClient(timeout=10.0) as http:
-            resp = await http.get(
-                _GMAIL_PROFILE_URL,
-                headers={"Authorization": f"Bearer {access_token}"},
+    async def add(self, record: OAuthStateRecord) -> None:
+        self._session.add(
+            GmailOAuthState(
+                state=record.state,
+                code_verifier=record.code_verifier,
+                created_at=record.created_at,
             )
-    except httpx.HTTPError:
-        logger.warning("Gmail getProfile request failed", exc_info=True)
-        return None
-    if resp.status_code != 200:
-        logger.warning("Gmail getProfile returned status=%d", resp.status_code)
-        return None
-    try:
-        email = resp.json().get("emailAddress")
-    except (ValueError, UnicodeDecodeError):
-        # Malformed/odd-encoding body — advisory only, never block the callback.
-        logger.warning("Gmail getProfile returned non-JSON body")
-        return None
-    return email if isinstance(email, str) and email else None
+        )
+        await self._session.commit()
+
+    async def get(self, state: str) -> OAuthStateRecord | None:
+        row = await self._session.get(GmailOAuthState, state)
+        if row is None:
+            return None
+        return OAuthStateRecord(
+            state=row.state, code_verifier=row.code_verifier, created_at=row.created_at
+        )
+
+    async def delete(self, state: str) -> None:
+        row = await self._session.get(GmailOAuthState, state)
+        if row is None:
+            return
+        await self._session.delete(row)
+        await self._session.commit()
+
+
+class _HttpxGoogleOAuth:
+    """``GoogleOAuthPort`` backed by ``httpx.AsyncClient`` calls to Google."""
+
+    async def exchange_code(
+        self,
+        code: str,
+        client_id: str,
+        client_secret: str,
+        verifier: str,
+        redirect_uri: str,
+    ) -> TokenExchange:
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as http:
+                resp = await http.post(
+                    _GOOGLE_TOKEN_URL,
+                    data={
+                        "code": code,
+                        "client_id": client_id,
+                        "client_secret": client_secret,
+                        "code_verifier": verifier,
+                        "grant_type": "authorization_code",
+                        "redirect_uri": redirect_uri,
+                    },
+                )
+        except httpx.HTTPError:
+            logger.warning("Gmail token exchange request failed", exc_info=True)
+            return TokenExchange(ok=False)
+        if resp.status_code != 200:
+            logger.warning(
+                "Gmail token exchange failed: status=%d body_len=%d",
+                resp.status_code,
+                len(resp.text),
+            )
+            return TokenExchange(ok=False)
+        return TokenExchange(ok=True, token=resp.json())
+
+    async def fetch_email(self, access_token: str) -> str | None:
+        """Best-effort fetch of the connected mailbox address via Gmail getProfile.
+
+        Uses the existing ``gmail.readonly`` scope (no extra consent). Any
+        failure (network, non-200, malformed body) is swallowed and returns
+        ``None`` — the address is advisory and must never block the OAuth
+        callback.
+        """
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as http:
+                resp = await http.get(
+                    _GMAIL_PROFILE_URL,
+                    headers={"Authorization": f"Bearer {access_token}"},
+                )
+        except httpx.HTTPError:
+            logger.warning("Gmail getProfile request failed", exc_info=True)
+            return None
+        if resp.status_code != 200:
+            logger.warning("Gmail getProfile returned status=%d", resp.status_code)
+            return None
+        try:
+            email = resp.json().get("emailAddress")
+        except (ValueError, UnicodeDecodeError):
+            # Malformed/odd-encoding body — advisory only, never block the callback.
+            logger.warning("Gmail getProfile returned non-JSON body")
+            return None
+        return email if isinstance(email, str) and email else None
+
+    async def revoke(self, token: str) -> None:
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as http:
+                revoke_resp = await http.post(
+                    _GOOGLE_REVOKE_URL,
+                    data={"token": token},
+                    headers={"Content-Type": "application/x-www-form-urlencoded"},
+                )
+            # Best-effort: log non-2xx responses from Google. We still delete
+            # the local token (the revoke call is advisory; the local file is
+            # the authoritative record of "we no longer use this token").
+            # Operators may need to revoke manually at
+            # https://myaccount.google.com/permissions if the remote revoke
+            # failed.
+            if revoke_resp.status_code >= 400:
+                logger.warning(
+                    "Gmail revoke endpoint returned non-2xx: status=%d",
+                    revoke_resp.status_code,
+                )
+        except httpx.HTTPError as exc:
+            logger.warning("Gmail revoke remote call failed: %s", exc)
+
+
+class _NullStateStore:
+    """No-op ``OAuthStateStorePort`` for endpoints that never touch state.
+
+    ``upload_credentials`` / ``status`` / ``revoke`` don't take a DB session
+    dependency; wiring a real ``_DbOAuthStateStore`` for them would require
+    one just to satisfy the service constructor. Any accidental call is a
+    programming error, so it fails loudly rather than silently no-op'ing.
+    """
+
+    async def add(self, record: OAuthStateRecord) -> None:
+        raise NotImplementedError("state store not wired for this endpoint")
+
+    async def get(self, state: str) -> OAuthStateRecord | None:
+        raise NotImplementedError("state store not wired for this endpoint")
+
+    async def delete(self, state: str) -> None:
+        raise NotImplementedError("state store not wired for this endpoint")
+
+
+def _build_service(
+    settings: Settings, session: AsyncSession | None = None
+) -> GmailConnectionService:
+    """Build a :class:`GmailConnectionService` wired to production adapters.
+
+    *session* is required for the ``authorize``/``callback`` endpoints (which
+    read/write ``gmail_oauth_state``); the other endpoints never touch OAuth
+    state and pass ``None``, wiring a :class:`_NullStateStore` instead.
+    """
+    redirect_uri = f"{settings.get_public_base_url()}{_CALLBACK_PATH}"
+    config = GmailOAuthConfig(
+        redirect_uri=redirect_uri,
+        scopes=GMAIL_SCOPES,
+        state_ttl=timedelta(minutes=_STATE_TTL_MINUTES),
+        token_uri=_GOOGLE_TOKEN_URL,
+    )
+    states = _DbOAuthStateStore(session) if session is not None else _NullStateStore()
+    return GmailConnectionService(
+        credentials=_CredentialFileAdapter(settings),
+        tokens=_TokenStoreAdapter(settings),
+        states=states,
+        google=_HttpxGoogleOAuth(),
+        config=config,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -179,30 +322,30 @@ async def upload_credentials(
 ) -> ApiResponse[GmailCredentialsUploadResult]:
     """Upload Google OAuth ``credentials.json``, encrypt, persist 0600."""
     raw = await file.read()
-    if len(raw) > 1_000_000:
+    service = _build_service(settings)
+    result = service.prepare_upload(raw)
+    if result is UploadError.OVERSIZED:
         raise HTTPException(
             status_code=413, detail="檔案過大，credentials.json 應小於 1 MB"
         )
-    try:
-        payload = json.loads(raw)
-    except json.JSONDecodeError as exc:
-        # Avoid echoing the uploaded bytes back via JSONDecodeError's message
-        # (security-reviewer H2).
-        raise HTTPException(status_code=422, detail="上傳檔案不是合法 JSON") from exc
-    if not isinstance(payload, dict):
+    if result is UploadError.NOT_JSON:
+        raise HTTPException(status_code=422, detail="上傳檔案不是合法 JSON")
+    if result is UploadError.NOT_OBJECT:
         raise HTTPException(status_code=422, detail="credentials.json 頂層必須為物件")
-    client_id, _ = _extract_oauth_client(payload)
-
-    target = Path(settings.gmail_credentials_path)
-    target.parent.mkdir(parents=True, exist_ok=True)
-    write_encrypted_token_file(
-        target, json.dumps(payload, indent=2), settings.master_key_manager
-    )
+    if result is UploadError.MISSING_BLOCK:
+        raise HTTPException(
+            status_code=422,
+            detail="credentials.json 必須包含 'web' 或 'installed' 物件",
+        )
+    if result is UploadError.MISSING_CLIENT:
+        raise HTTPException(
+            status_code=422, detail="credentials.json 缺少 client_id 或 client_secret"
+        )
 
     return ApiResponse(
         data=GmailCredentialsUploadResult(
-            saved_path=str(target),
-            client_id_last8=client_id[-8:],
+            saved_path=result.saved_path,
+            client_id_last8=result.client_id_last8,
         )
     )
 
@@ -216,33 +359,25 @@ async def authorize(
     session: AsyncSession = Depends(get_db_session),
 ) -> ApiResponse[GmailAuthorizeUrl]:
     """Generate PKCE + state, persist verifier, return Google authorize URL."""
-    payload = _load_credentials_payload(settings)
-    client_id, _ = _extract_oauth_client(payload)
-
-    verifier, challenge = _gen_pkce()
-    state_token = secrets.token_urlsafe(32)
-    session.add(
-        GmailOAuthState(
-            state=state_token,
-            code_verifier=verifier,
-            created_at=datetime.now(UTC),
+    service = _build_service(settings, session)
+    result = await service.authorize()
+    if result is AuthorizeError.NO_CREDENTIALS:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Gmail credentials.json 尚未上傳；"
+                "請先呼叫 POST /api/setup/gmail/credentials"
+            ),
         )
-    )
-    await session.commit()
+    if result is AuthorizeError.INVALID_CREDENTIALS:
+        raise HTTPException(
+            status_code=422,
+            detail="credentials.json 解析失敗（格式不正確）",
+        )
 
-    params = {
-        "response_type": "code",
-        "client_id": client_id,
-        "redirect_uri": _redirect_uri(settings),
-        "scope": " ".join(GMAIL_SCOPES),
-        "state": state_token,
-        "code_challenge": challenge,
-        "code_challenge_method": "S256",
-        "access_type": "offline",
-        "prompt": "consent",
-    }
-    url = f"{_GOOGLE_AUTH_URL}?{urlencode(params)}"
-    return ApiResponse(data=GmailAuthorizeUrl(authorize_url=url, state=state_token))
+    return ApiResponse(
+        data=GmailAuthorizeUrl(authorize_url=result.authorize_url, state=result.state)
+    )
 
 
 @router.get("/callback")
@@ -259,112 +394,25 @@ async def callback(
     ``error`` instead of ``code``) reaches this handler rather than tripping
     FastAPI's required-parameter validation (422).
     """
-    # User denied consent / Google returned an error: redirect to a friendly
-    # result page. Do NOT echo Google's raw error string into the URL.
-    if error:
-        # Strip CRLF to prevent log injection in plain-text log mode; cap length.
-        safe_error = error.replace("\r", "").replace("\n", "")[:200]
-        logger.warning("OAuth error from Google: %s", safe_error)
-        return RedirectResponse(
-            url=f"{_FRONTEND_RESULT_PATH}?status=error",
-            status_code=303,
-        )
-    if not code or not state:
+    service = _build_service(settings, session)
+    outcome = await service.handle_callback(code=code, state=state, error=error)
+
+    if outcome.kind is CallbackKind.MISSING_CODE:
         raise HTTPException(
             status_code=400,
             detail="OAuth callback 缺少 code 或 state",
         )
-
-    row = await session.get(GmailOAuthState, state)
-    if row is None:
+    if outcome.kind is CallbackKind.UNKNOWN_STATE:
         raise HTTPException(status_code=422, detail="未知或已使用的 OAuth state")
-
-    created_at = row.created_at
-    if created_at.tzinfo is None:
-        created_at = created_at.replace(tzinfo=UTC)
-    if datetime.now(UTC) - created_at > _STATE_TTL:
-        await session.delete(row)
-        await session.commit()
+    if outcome.kind is CallbackKind.EXPIRED_STATE:
         raise HTTPException(
             status_code=422,
             detail="OAuth state 已過期，請重新點擊授權按鈕",
         )
-
-    verifier = row.code_verifier
-    payload = _load_credentials_payload(settings)
-    client_id, client_secret = _extract_oauth_client(payload)
-
-    # Consume the state before the (slow) network exchange so it cannot be
-    # replayed concurrently while the token exchange is in flight. PKCE
-    # (code_verifier) remains the primary protection; a failed exchange then
-    # requires the user to restart authorization.
-    await session.delete(row)
-    await session.commit()
-
-    # The state is already consumed, so any failure below redirects the browser
-    # to the frontend error screen (a raw 4xx/5xx page would strand the user).
-    error_redirect = RedirectResponse(
-        url=f"{_FRONTEND_RESULT_PATH}?status=error", status_code=303
-    )
-    try:
-        async with httpx.AsyncClient(timeout=30.0) as http:
-            resp = await http.post(
-                _GOOGLE_TOKEN_URL,
-                data={
-                    "code": code,
-                    "client_id": client_id,
-                    "client_secret": client_secret,
-                    "code_verifier": verifier,
-                    "grant_type": "authorization_code",
-                    "redirect_uri": _redirect_uri(settings),
-                },
-            )
-    except httpx.HTTPError:
-        logger.warning("Gmail token exchange request failed", exc_info=True)
-        return error_redirect
-    if resp.status_code != 200:
-        logger.warning(
-            "Gmail token exchange failed: status=%d body_len=%d",
-            resp.status_code,
-            len(resp.text),
+    if outcome.kind in (CallbackKind.OAUTH_ERROR, CallbackKind.EXCHANGE_FAILED):
+        return RedirectResponse(
+            url=f"{_FRONTEND_RESULT_PATH}?status=error", status_code=303
         )
-        return error_redirect
-    token = resp.json()
-
-    if not token.get("refresh_token"):
-        # Without a refresh token the ingestor cannot renew access later; surface
-        # it for operators (prompt=consent should normally guarantee one).
-        logger.warning("Google 未回傳 refresh_token；token 將無法自動更新，請重新授權")
-
-    # Best-effort: record the connected mailbox address so the status endpoint
-    # can surface it. google-auth's from_authorized_user_info ignores the extra
-    # ``email`` key, so persisting it alongside the credential is safe.
-    access_token = token.get("access_token")
-    email = await _fetch_gmail_email(access_token) if access_token else None
-
-    # Persist token.json in the format google-auth's
-    # Credentials.from_authorized_user_info / from_authorized_user_file expect.
-    token_record: dict[str, Any] = {
-        "token": access_token,
-        "refresh_token": token.get("refresh_token"),
-        "token_uri": _GOOGLE_TOKEN_URL,
-        "client_id": client_id,
-        "client_secret": client_secret,
-        "scopes": token.get("scope", "").split() or list(GMAIL_SCOPES),
-    }
-    if email:
-        token_record["email"] = email
-    token_path = Path(settings.gmail_token_path)
-    token_path.parent.mkdir(parents=True, exist_ok=True)
-    try:
-        write_encrypted_token_file(
-            token_path,
-            json.dumps(token_record, indent=2),
-            settings.master_key_manager,
-        )
-    except (MasterKeyMismatchError, OSError):
-        logger.error("寫入 Gmail token 檔失敗", exc_info=True)
-        return error_redirect
 
     return RedirectResponse(
         url=f"{_FRONTEND_RESULT_PATH}?status=connected",
@@ -380,29 +428,13 @@ async def status(
     settings: Settings = Depends(get_settings),
 ) -> ApiResponse[GmailConnectionStatus]:
     """Return whether token.json exists and which scopes were granted."""
-    token_path = Path(settings.gmail_token_path)
-    if not token_path.exists():
-        return ApiResponse(data=GmailConnectionStatus(connected=False))
-    try:
-        token_data = read_token_payload(token_path, settings.master_key_manager)
-    except (json.JSONDecodeError, MasterKeyMismatchError):
-        # Unreadable/undecryptable token.json is treated as "not connected"
-        # (status is advisory; the user can re-run the OAuth flow). A master.key
-        # mismatch is logged so operators can spot a botched data/ restore.
-        logger.warning("Gmail token.json unreadable; reporting disconnected")
-        return ApiResponse(data=GmailConnectionStatus(connected=False))
-
-    scopes = token_data.get("scopes")
-    if not isinstance(scopes, list):
-        scopes = []
-    # ``email`` is persisted by the callback via Gmail getProfile (best-effort);
-    # legacy token.json written before this change simply lacks the key → None.
-    email = token_data.get("email")
-    if not isinstance(email, str) or not email:
-        email = None
+    service = _build_service(settings)
+    result = service.get_status()
     return ApiResponse(
         data=GmailConnectionStatus(
-            connected=True, email=email, granted_scopes=list(scopes)
+            connected=result.connected,
+            email=result.email,
+            granted_scopes=result.granted_scopes,
         )
     )
 
@@ -415,36 +447,12 @@ async def revoke(
     settings: Settings = Depends(get_settings),
 ) -> ApiResponse[GmailConnectionStatus]:
     """Delete local token.json and best-effort POST to Google's revoke endpoint."""
-    token_path = Path(settings.gmail_token_path)
-    if token_path.exists():
-        try:
-            token_data = read_token_payload(token_path, settings.master_key_manager)
-        except (json.JSONDecodeError, MasterKeyMismatchError):
-            # Best-effort remote revoke: if we cannot read the token we still
-            # delete the local file below (the authoritative "stop using it").
-            token_data = {}
-        access_or_refresh = token_data.get("token") or token_data.get("refresh_token")
-        if isinstance(access_or_refresh, str) and access_or_refresh:
-            try:
-                async with httpx.AsyncClient(timeout=10.0) as http:
-                    revoke_resp = await http.post(
-                        _GOOGLE_REVOKE_URL,
-                        data={"token": access_or_refresh},
-                        headers={"Content-Type": "application/x-www-form-urlencoded"},
-                    )
-                # Best-effort: log non-2xx responses from Google. We still
-                # delete the local token (the revoke call is advisory; the
-                # local file is the authoritative record of "we no longer
-                # use this token"). Operators may need to revoke manually
-                # at https://myaccount.google.com/permissions if the remote
-                # revoke failed.
-                if revoke_resp.status_code >= 400:
-                    logger.warning(
-                        "Gmail revoke endpoint returned non-2xx: status=%d",
-                        revoke_resp.status_code,
-                    )
-            except httpx.HTTPError as exc:
-                logger.warning("Gmail revoke remote call failed: %s", exc)
-        token_path.unlink(missing_ok=True)
-
-    return ApiResponse(data=GmailConnectionStatus(connected=False))
+    service = _build_service(settings)
+    result = await service.revoke()
+    return ApiResponse(
+        data=GmailConnectionStatus(
+            connected=result.connected,
+            email=result.email,
+            granted_scopes=result.granted_scopes,
+        )
+    )

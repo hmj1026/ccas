@@ -11,9 +11,7 @@
  * - 分類來源徽章：manual_override / engine（含 hover tooltip）
  * - 「重置覆寫」按鈕：呼叫 DELETE /manual-override
  */
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, RefreshCcw, Tag, X } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -24,21 +22,9 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import { LoadingState, ErrorState } from '@/components/shared/states'
-import { apiDelete, apiGet, apiPatch } from '@/lib/api-client'
-import type {
-  ApiResponse,
-  CategoryKeywordItem,
-  TransactionDetailItem,
-  TransactionUpdateRequest,
-} from '@/lib/types'
+import { useTransactionEdit } from '@/hooks/use-transaction-edit'
+import type { TransactionDetailItem } from '@/lib/types'
 import { formatAmount, formatDate } from '@/lib/utils'
-
-const NOTE_DEBOUNCE_MS = 500
-const ALIAS_DEBOUNCE_MS = 500
-const SAVED_RESET_MS = 2000
-
-/** note / merchant_alias 自動儲存的狀態，獨立於共用的 updateMutation.isPending。 */
-type SaveStatus = 'idle' | 'saving' | 'saved'
 
 function classificationSourceLabel(detail: TransactionDetailItem): {
   readonly label: string
@@ -65,143 +51,31 @@ function TransactionDetailPage() {
   const params = useParams<{ id: string }>()
   const transactionId = Number(params.id)
   const navigate = useNavigate()
-  const queryClient = useQueryClient()
 
-  const detailQueryKey = ['transactions', transactionId, 'detail'] as const
-
-  const { data, isLoading, error, refetch, isFetching } = useQuery({
-    queryKey: detailQueryKey,
-    queryFn: () =>
-      apiGet<ApiResponse<TransactionDetailItem>>(
-        `/api/transactions/${transactionId}`,
-      ),
-    enabled: Number.isFinite(transactionId) && transactionId > 0,
-  })
-
-  const detail = data?.data
-
-  const { data: categoriesData } = useQuery({
-    queryKey: ['settings', 'categories'],
-    queryFn: () =>
-      apiGet<ApiResponse<readonly CategoryKeywordItem[]>>(
-        '/api/settings/categories',
-      ),
-  })
-
-  // -- Mutations -----------------------------------------------------------
-
-  const updateMutation = useMutation({
-    mutationFn: (body: TransactionUpdateRequest) =>
-      apiPatch<ApiResponse<TransactionDetailItem>>(
-        `/api/transactions/${transactionId}`,
-        body,
-      ),
-    onSuccess: (resp) => {
-      queryClient.setQueryData(detailQueryKey, resp)
-    },
-  })
-
-  const resetOverrideMutation = useMutation({
-    mutationFn: () =>
-      apiDelete<ApiResponse<TransactionDetailItem>>(
-        `/api/transactions/${transactionId}/manual-override`,
-      ),
-    onSuccess: (resp) => {
-      queryClient.setQueryData(detailQueryKey, resp)
-    },
-  })
-
-  // -- Local debounced fields ---------------------------------------------
-  //
-  // Drafts use ``string | null`` 初值 null：尚未由使用者編輯時 fallback 到 server
-  // 端值；一旦使用者輸入就成為 controlled state。這樣可避免在 useEffect 裡呼叫
-  // setState（react-hooks/set-state-in-effect 規則）來同步 props → state。
-
-  const [noteDraft, setNoteDraft] = useState<string | null>(null)
-  const [aliasDraft, setAliasDraft] = useState<string | null>(null)
-  const [tagInput, setTagInput] = useState('')
-
-  // 自動儲存狀態，獨立於 updateMutation.isPending（後者跨 category/tags/note/alias 共用）。
-  const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle')
-  const savedResetRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  const noteValue = noteDraft ?? detail?.note ?? ''
-  const aliasValue = aliasDraft ?? detail?.merchant_alias ?? ''
-
-  // 統一封裝「note / alias 自動儲存」的狀態轉換，避免兩個 effect 重複邏輯。
-  const { mutate: updateMutate } = updateMutation
-  function autoSave(body: TransactionUpdateRequest) {
-    if (savedResetRef.current !== null) {
-      clearTimeout(savedResetRef.current)
-      savedResetRef.current = null
-    }
-    setSaveStatus('saving')
-    updateMutate(body, {
-      onSuccess: () => {
-        setSaveStatus('saved')
-        savedResetRef.current = setTimeout(
-          () => setSaveStatus('idle'),
-          SAVED_RESET_MS,
-        )
-      },
-      onError: () => setSaveStatus('idle'),
-    })
-  }
-
-  // 卸載時清除殘留 timer，避免在 unmounted component 上 setState。
-  useEffect(() => {
-    return () => {
-      if (savedResetRef.current !== null) clearTimeout(savedResetRef.current)
-    }
-  }, [])
-
-  // Debounced note auto-save：只有 noteDraft 已被使用者改過才送
-  useEffect(() => {
-    if (!detail || noteDraft === null) return
-    if (noteDraft === (detail.note ?? '')) return
-    const t = setTimeout(() => {
-      autoSave({ note: noteDraft })
-    }, NOTE_DEBOUNCE_MS)
-    return () => clearTimeout(t)
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- autoSave 為穩定封裝，刻意省略以避免每 render 重觸
-  }, [noteDraft, detail])
-
-  // Debounced merchant_alias auto-save
-  useEffect(() => {
-    if (!detail || aliasDraft === null) return
-    if (aliasDraft === detail.merchant_alias) return
-    const t = setTimeout(() => {
-      autoSave({ merchant_alias: aliasDraft })
-    }, ALIAS_DEBOUNCE_MS)
-    return () => clearTimeout(t)
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- autoSave 為穩定封裝，刻意省略以避免每 render 重觸
-  }, [aliasDraft, detail])
-
-  // -- Handlers ------------------------------------------------------------
-
-  function handleCategoryChange(categoryId: number) {
-    updateMutation.mutate({ category_id: categoryId })
-  }
-
-  function handleAddTag() {
-    const trimmed = tagInput.trim()
-    if (!trimmed || !detail) return
-    if (detail.tags.includes(trimmed)) {
-      setTagInput('')
-      return
-    }
-    updateMutation.mutate({ tags: [...detail.tags, trimmed] })
-    setTagInput('')
-  }
-
-  function handleRemoveTag(tag: string) {
-    if (!detail) return
-    updateMutation.mutate({ tags: detail.tags.filter((t) => t !== tag) })
-  }
-
-  function handleResetOverride() {
-    resetOverrideMutation.mutate()
-  }
+  const edit = useTransactionEdit(transactionId)
+  const {
+    detail,
+    categories,
+    isLoading,
+    queryError: error,
+    refetch,
+    isFetching,
+    saveStatus,
+    error: saveError,
+    isResetting,
+    noteValue,
+    aliasValue,
+    tagInput,
+    setNoteDraft,
+    flushNote,
+    setAliasDraft,
+    flushAlias,
+    changeCategory,
+    addTag,
+    removeTag,
+    resetOverride,
+    setTagInput,
+  } = edit
 
   // -- Render --------------------------------------------------------------
 
@@ -227,9 +101,8 @@ function TransactionDetailPage() {
     )
 
   const source = classificationSourceLabel(detail)
-  const categoryOptions = categoriesData?.data ?? []
   const uniqueCategories = Array.from(
-    new Map(categoryOptions.map((c) => [c.category, c])).values(),
+    new Map(categories.map((c) => [c.category, c])).values(),
   )
 
   return (
@@ -288,8 +161,8 @@ function TransactionDetailPage() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={handleResetOverride}
-                disabled={resetOverrideMutation.isPending}
+                onClick={resetOverride}
+                disabled={isResetting}
                 aria-label="重置覆寫"
               >
                 <RefreshCcw className="size-3" />
@@ -308,7 +181,7 @@ function TransactionDetailPage() {
             onValueChange={(v) => {
               // The placeholder item ('' = current category) is a no-op; only
               // a real category id triggers the update mutation.
-              if (v) handleCategoryChange(Number(v))
+              if (v) changeCategory(Number(v))
             }}
             options={[
               { value: '', label: detail.category ?? '未分類' },
@@ -331,6 +204,7 @@ function TransactionDetailPage() {
             value={aliasValue}
             maxLength={200}
             onChange={(e) => setAliasDraft(e.target.value)}
+            onBlur={flushAlias}
             aria-label="商家別名"
           />
         </section>
@@ -345,11 +219,7 @@ function TransactionDetailPage() {
             value={noteValue}
             maxLength={2000}
             onChange={(e) => setNoteDraft(e.target.value)}
-            onBlur={() => {
-              if (detail && noteDraft !== null && noteDraft !== (detail.note ?? '')) {
-                autoSave({ note: noteDraft })
-              }
-            }}
+            onBlur={flushNote}
             aria-label="備註"
           />
           <div
@@ -374,7 +244,7 @@ function TransactionDetailPage() {
                 {tag}
                 <button
                   type="button"
-                  onClick={() => handleRemoveTag(tag)}
+                  onClick={() => removeTag(tag)}
                   aria-label={`移除標籤 ${tag}`}
                   className="ml-1 hover:text-destructive"
                 >
@@ -395,28 +265,26 @@ function TransactionDetailPage() {
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {
                   e.preventDefault()
-                  handleAddTag()
+                  addTag()
                 }
               }}
               maxLength={100}
               aria-label="新增標籤"
               className="flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm"
             />
-            <Button variant="outline" size="sm" onClick={handleAddTag}>
+            <Button variant="outline" size="sm" onClick={addTag}>
               新增
             </Button>
           </div>
         </section>
 
-        {(updateMutation.isError || resetOverrideMutation.isError) && (
+        {saveError !== null && (
           <div
             role="alert"
             className="rounded-md border border-destructive bg-destructive/10 p-3 text-sm"
           >
             儲存失敗：
-            {updateMutation.error?.message ??
-              resetOverrideMutation.error?.message ??
-              '未知錯誤'}
+            {saveError.message}
             <Button
               variant="link"
               size="sm"

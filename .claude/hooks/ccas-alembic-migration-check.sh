@@ -5,8 +5,13 @@
 set -o pipefail
 
 FILE="${1:-}"
-if [ -z "$FILE" ] && [ ! -t 0 ] && command -v jq >/dev/null 2>&1; then
-    FILE=$(jq -r '.tool_input.file_path // empty' 2>/dev/null || true)
+if [ -z "$FILE" ] && [ ! -t 0 ]; then
+    PAYLOAD=$(cat)
+    if command -v jq >/dev/null 2>&1; then
+        FILE=$(printf '%s' "$PAYLOAD" | jq -r '.tool_input.file_path // empty' 2>/dev/null || true)
+    elif command -v python3 >/dev/null 2>&1; then
+        FILE=$(printf '%s' "$PAYLOAD" | python3 -c 'import sys,json;print(json.load(sys.stdin).get("tool_input",{}).get("file_path") or "")' 2>/dev/null || true)
+    fi
 fi
 [ -n "$FILE" ] || exit 0
 

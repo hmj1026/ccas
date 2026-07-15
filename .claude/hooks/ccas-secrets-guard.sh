@@ -8,15 +8,24 @@ set -o pipefail
 # Resolve target file path from PreToolUse stdin JSON; fall back to argv.
 FILE="${1:-}"
 CONTENT=""
-if [ -z "$FILE" ] && [ ! -t 0 ] && command -v jq >/dev/null 2>&1; then
+if [ -z "$FILE" ] && [ ! -t 0 ]; then
     PAYLOAD=$(cat)
-    FILE=$(printf '%s' "$PAYLOAD" | jq -r '.tool_input.file_path // empty' 2>/dev/null || true)
-    # Write tool: full content; Edit tool: new_string; MultiEdit: edits[].new_string
-    CONTENT=$(printf '%s' "$PAYLOAD" | jq -r '
-        (.tool_input.content // empty),
-        (.tool_input.new_string // empty),
-        ((.tool_input.edits // []) | map(.new_string // "") | join("\n"))
-    ' 2>/dev/null || true)
+    if command -v jq >/dev/null 2>&1; then
+        FILE=$(printf '%s' "$PAYLOAD" | jq -r '.tool_input.file_path // empty' 2>/dev/null || true)
+        # Write tool: full content; Edit tool: new_string; MultiEdit: edits[].new_string
+        CONTENT=$(printf '%s' "$PAYLOAD" | jq -r '
+            (.tool_input.content // empty),
+            (.tool_input.new_string // empty),
+            ((.tool_input.edits // []) | map(.new_string // "") | join("\n"))
+        ' 2>/dev/null || true)
+    elif command -v python3 >/dev/null 2>&1; then
+        FILE=$(printf '%s' "$PAYLOAD" | python3 -c 'import sys,json;print(json.load(sys.stdin).get("tool_input",{}).get("file_path") or "")' 2>/dev/null || true)
+        CONTENT=$(printf '%s' "$PAYLOAD" | python3 -c 'import sys,json
+d=json.load(sys.stdin).get("tool_input",{})
+parts=[d.get("content") or "", d.get("new_string") or ""]
+parts+=[e.get("new_string") or "" for e in (d.get("edits") or [])]
+print("\n".join([p for p in parts if p]))' 2>/dev/null || true)
+    fi
 fi
 [ -n "$FILE" ] || exit 0
 

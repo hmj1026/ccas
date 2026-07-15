@@ -42,3 +42,19 @@ def _discover_parser_modules() -> tuple[str, ...]:
 # 模組 import 時即執行探索（副作用：各 parser 模組註冊進 registry）。
 # 公開為常數供測試斷言「無漏載」。
 DISCOVERED_PARSER_MODULES: tuple[str, ...] = _discover_parser_modules()
+
+_discovered_once = True
+
+
+def ensure_discovered() -> tuple[str, ...]:
+    """No-op guard returning the already-discovered parser modules.
+
+    Discovery already happened at module import time above; this only
+    re-scans if that module-level init was somehow skipped (e.g. a test
+    reset ``_discovered_once`` to ``False``).
+    """
+    global _discovered_once, DISCOVERED_PARSER_MODULES
+    if not _discovered_once:
+        DISCOVERED_PARSER_MODULES = _discover_parser_modules()
+        _discovered_once = True
+    return DISCOVERED_PARSER_MODULES

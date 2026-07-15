@@ -16,6 +16,7 @@ from ccas.classifier.job import ClassifySummary, run_classify_job
 from ccas.decryptor.job import DecryptionSummary, run_decryption_job
 from ccas.ingestor.job import IngestionSummary, run_ingestion_job
 from ccas.parser.job import ParseSummary, run_parse_job
+from ccas.pipeline.lifecycle import RunLifecycle
 from ccas.pipeline.options import PipelineOptions
 from ccas.pipeline.progress import NoopProgressReporter, ProgressReporter
 from ccas.pipeline.summary import (
@@ -33,20 +34,6 @@ STAGE_ORDER: tuple[str, ...] = ("ingest", "decrypt", "parse", "classify", "notif
 # shape; the concrete run_notify_job binding is injected by the caller
 # (pipeline/worker.py / pipeline/__main__.py). orchestrator never imports bot.
 NotifyJob = Callable[..., Awaitable[NotifySummary]]
-
-
-def _summary_to_progress(stage_summary: StageSummary) -> tuple[int, int]:
-    """Derive (ok, fail) counts for ProgressReporter.stage_finished.
-
-    ``fail`` maps directly to the ``failed`` bucket in stage counts.
-    ``ok`` aggregates everything else (staged / decrypted / passthrough /
-    parsed / skipped / classified / sent) since they all represent items
-    that progressed without error from the stage's perspective.
-    """
-    counts = stage_summary.counts
-    fail = counts.get("failed", 0)
-    ok = sum(counts.values()) - fail
-    return ok, fail
 
 
 def _validate_stage_range(
@@ -183,7 +170,7 @@ async def _run_stage(
         )
 
     elapsed_ms = int((time.monotonic() - started) * 1000)
-    ok, fail = _summary_to_progress(summary)
+    ok, fail = RunLifecycle.stage_progress(summary)
     await reporter.stage_finished(
         stage_name,
         ok=ok,

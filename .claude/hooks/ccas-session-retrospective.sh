@@ -31,7 +31,7 @@ BRANCH=$(git -C "$PROJECT_ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null || echo 
     echo "- **Git state:** staged=$STAGED, unstaged=$UNSTAGED, untracked=$UNTRACKED"
     echo
     echo "## Suggested follow-ups"
-    [ "$CHANGED_PY" -gt 0 ] && echo "- /python-review (Python edits)"
+    [ "$CHANGED_PY" -gt 0 ] && echo "- /code-review (Python edits)"
     [ "$CHANGED_PY" -gt 0 ] && [ "$CHANGED_TEST" -eq 0 ] && echo "- /tdd (Python edits without test updates)"
     [ "$CHANGED_SQL" -gt 0 ] && echo "- database-reviewer (models/alembic edits)"
     [ "$CHANGED_AUTH" -gt 0 ] && echo "- security-reviewer (auth/security touched)"

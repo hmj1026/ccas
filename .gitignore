@@ -8,18 +8,25 @@ Thumbs.db
 *.swp
 *.swo
 
-# OpenSpec runtime output (keep changes/ tracked, ignore temp files)
-openspec/.cache/
-openspec/*.log
+# OpenSpec: only synced specs are version-controlled; changes/ is transient work
+openspec/*
+!openspec/specs/
+!openspec/config.yaml
 
-# Playwright snapshots (local testing artifacts)
+# Playwright snapshots & reports (local testing artifacts)
 .playwright-cli/
 test-results/
+playwright-report/
 
 # Logs
 *.log
 logs/
 !logs/.gitkeep
+
+# Runtime PIDs and Sockets
+*.pid
+*.sock
+
 
 # Environment
 .env
@@ -61,8 +68,9 @@ backend/data/*.db-wal
 backend/data/*.db-shm
 *.db-journal
 
-# Staging data (user downloads, contains PII)
+# Staging data (user downloads / manual processing, contains PII)
 backend/data/staging/
+backend/data/manual-staging/
 
 # Scheduler runtime heartbeat（容器啟動時生成，內含 timestamp）
 backend/data/scheduler-heartbeat
@@ -124,3 +132,17 @@ backend/data/captcha-archive/
 
 # Working plan file (per-user CLAUDE.md convention: deleted on completion)
 IMPLEMENTATION_PLAN.md
+
+# Eval run outputs (fixtures + README tracked; results are transient)
+evals/results/
+
+# Tool-generated directories (auto-managed by npx/tooling, not version-controlled)
+.agents/
+.hyperweave/
+.reports/
+
+# Tool-generated skills and commands (not version-controlled)
+.claude/skills/openspec-*/
+.gemini/skills/
+.claude/commands/opsx/
+.gemini/commands/opsx/

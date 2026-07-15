@@ -13,7 +13,7 @@
 cd ~/ccas    # 你 docker-compose.yml 所在的目錄
 
 # 1) 修改 .env 的版本
-sed -i 's/^CCAS_VERSION=.*/CCAS_VERSION=v0.6.0/' .env
+sed -i 's/^CCAS_VERSION=.*/CCAS_VERSION=v0.6.1/' .env
 
 # 2) 拉新 image 並重啟
 docker compose -f docker-compose.yml pull
@@ -38,6 +38,24 @@ CCAS 採 [SemVer](https://semver.org/)：
 | Major（`v0.x.x` → `v1.0.0`） | 可能 breaking change；release notes 會明示 | 升級前**閱讀 release notes**、備份 |
 
 每次 release 的詳細 changelog 見 [GitHub Releases](https://github.com/<owner>/ccas/releases)。
+
+---
+
+## v0.6.1（Patch）— 2026-07-15 — 功能增強與架構重構
+
+**適用對象**：v0.6.0 升級至 v0.6.1。alembic schema 不變，不含破壞性變更。
+
+**功能增強與修復**：
+- **交易編輯與 Hook 機制**：前端實作交易編輯功能，支援編輯備註與標籤，並加入 Hook 觸發更新。
+- **Gmail 連線管理 API**：後端實作 Gmail 連線狀態監控與 API 設定路由，增強對 Gmail 連線健康狀態的控制。
+- **系統初始化腳本**：支援在本地設定檔缺失時，由 `setup.sh` 自動複製範本檔案，降低新環境的佈署門檻。
+
+**架構重構與優化**：
+- **Pipeline 生命週期管理**：抽離與重構 Pipeline 任務狀態管理，增強狀態轉移時的防禦性邏輯。
+- **Parser 職責重構**：抽離 Ingestor/Parser 職責，明確區分帳單下載/收取 (Intake) 與解析 (Parse) 的責任邊界，並增加其單元測試覆蓋率。
+- **依賴套件更新**：替換遭 yanked 的 `pydantic-extra-types` 並升級 `pyright` 靜態分析工具。
+
+**升級後**：無額外手動步驟。
 
 ---
 

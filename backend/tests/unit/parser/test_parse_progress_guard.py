@@ -52,11 +52,15 @@ async def test_reporter_failure_does_not_abort_parse_batch(
 
     with (
         patch(
-            "ccas.parser.job.fetch_parseable_attachments",
+            "ccas.parser.intake.staging.fetch_parseable_attachments",
             new=AsyncMock(return_value=attachments),
         ),
-        patch("ccas.parser.job._process_attachment", new=process_mock),
-        caplog.at_level(logging.WARNING, logger="ccas.parser.job"),
+        patch(
+            "ccas.parser.intake.staging.get_bank_config",
+            new=AsyncMock(return_value=None),
+        ),
+        patch("ccas.parser.intake.ParserIntake.process_one", new=process_mock),
+        caplog.at_level(logging.WARNING, logger="ccas.parser.intake"),
     ):
         await run_parse_job(session, options=None, reporter=reporter)
 

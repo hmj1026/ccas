@@ -40,7 +40,7 @@ if [ "$RUN_BACKEND" = "1" ]; then
     echo "-> pyright"
     uv run pyright
     echo "-> pytest"
-    uv run pytest tests/unit/ --cov --cov-fail-under=70 -q
+    uv run pytest tests/unit/ --cov --cov-fail-under=80 -q
 fi
 
 if [ "$RUN_FRONTEND" = "1" ]; then
@@ -54,8 +54,8 @@ if [ "$RUN_FRONTEND" = "1" ]; then
     pnpm run lint
     echo "-> build (tsc + vite)"
     pnpm run build
-    echo "-> vitest"
-    pnpm run test
+    echo "-> vitest (coverage)"
+    pnpm run test --coverage
 fi
 
 echo "=== All checks passed ==="
