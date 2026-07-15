@@ -87,7 +87,7 @@ class DbProgressReporter:
         self._session_factory = session_factory
         self._throttle_seconds = throttle_seconds
         self._lock = asyncio.Lock()
-        self._last_flush_at: float = 0.0
+        self._last_flush_at: float | None = None
 
     async def stage_started(self, stage: str, total: int) -> None:
         async with self._session_factory() as session:
@@ -104,12 +104,15 @@ class DbProgressReporter:
         # Reset throttle window so first item_done fires immediately for new
         # stage; otherwise the prior stage's last flush could suppress it.
         async with self._lock:
-            self._last_flush_at = 0.0
+            self._last_flush_at = None
 
     async def stage_item_done(self, stage: str, processed: int) -> None:
         async with self._lock:
             now = time.monotonic()
-            if now - self._last_flush_at < self._throttle_seconds:
+            if (
+                self._last_flush_at is not None
+                and now - self._last_flush_at < self._throttle_seconds
+            ):
                 return
             self._last_flush_at = now
 
