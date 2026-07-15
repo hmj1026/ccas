@@ -23,6 +23,11 @@ playwright-report/
 logs/
 !logs/.gitkeep
 
+# Runtime PIDs and Sockets
+*.pid
+*.sock
+
+
 # Environment
 .env
 .env.local
