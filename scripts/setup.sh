@@ -8,6 +8,9 @@ ENV_FILE="$ROOT_DIR/.env"
 BANKS_FILE="$ROOT_DIR/config/banks.yaml"
 BANKS_EXAMPLE_FILE="$ROOT_DIR/config/banks.example.yaml"
 REGISTRY_FILE="$ROOT_DIR/config/bank-code-registry.yaml"
+REGISTRY_EXAMPLE_FILE="$ROOT_DIR/config/bank-code-registry.example.yaml"
+CATEGORIES_FILE="$ROOT_DIR/config/categories.yaml"
+CATEGORIES_EXAMPLE_FILE="$ROOT_DIR/config/categories.example.yaml"
 UV_CACHE_DIR="${UV_CACHE_DIR:-${TMPDIR:-/tmp}/uv-cache}"
 
 step() {
@@ -40,7 +43,17 @@ require_env() {
 }
 
 require_file "$ENV_FILE" "找不到 $ENV_FILE。請先執行: cp .env.example .env"
-require_file "$REGISTRY_FILE" "找不到 $REGISTRY_FILE。請確認 repo 內容完整。"
+
+# 自動複製預設設定檔（若不存在）
+if [[ ! -f "$REGISTRY_FILE" ]]; then
+  cp "$REGISTRY_EXAMPLE_FILE" "$REGISTRY_FILE"
+  echo "-> 已從範本建立 $REGISTRY_FILE"
+fi
+
+if [[ ! -f "$CATEGORIES_FILE" ]]; then
+  cp "$CATEGORIES_EXAMPLE_FILE" "$CATEGORIES_FILE"
+  echo "-> 已從範本建立 $CATEGORIES_FILE"
+fi
 
 if [[ ! -f "$BANKS_FILE" ]]; then
   cp "$BANKS_EXAMPLE_FILE" "$BANKS_FILE"
