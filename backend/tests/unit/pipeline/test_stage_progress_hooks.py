@@ -178,10 +178,17 @@ async def test_parse_emits_started_and_per_attachment_progress() -> None:
 
     with (
         patch(
-            "ccas.parser.job.fetch_parseable_attachments",
+            "ccas.parser.intake.staging.fetch_parseable_attachments",
             new=AsyncMock(return_value=attachments),
         ),
-        patch("ccas.parser.job._process_attachment", new=AsyncMock(return_value=None)),
+        patch(
+            "ccas.parser.intake.staging.get_bank_config",
+            new=AsyncMock(return_value=None),
+        ),
+        patch(
+            "ccas.parser.intake.ParserIntake.process_one",
+            new=AsyncMock(return_value=None),
+        ),
     ):
         await run_parse_job(session, options=None, reporter=reporter)
 

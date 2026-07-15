@@ -10,10 +10,12 @@ import sys
 
 from ccas.bot.job import run_notify_job
 from ccas.log import configure_logging
+from ccas.pipeline.lifecycle import RunLifecycle
 from ccas.pipeline.options import PipelineOptions
 from ccas.pipeline.orchestrator import STAGE_ORDER, run_pipeline
 from ccas.pipeline.summary import PipelineSummary
 from ccas.storage.database import get_engine, get_session_factory
+from ccas.storage.models import PipelineRunStatus
 
 
 def _summary_to_dict(summary: PipelineSummary) -> dict:
@@ -108,8 +110,8 @@ def main() -> None:
     options = _parse_args()
     summary = asyncio.run(_main(options))
     print(json.dumps(_summary_to_dict(summary), ensure_ascii=False, indent=2))
-    # Non-zero exit if any failures
-    if summary.failures:
+    # Non-zero exit if the run's lifecycle classification is FAILED
+    if RunLifecycle.classify(summary).status == PipelineRunStatus.FAILED:
         sys.exit(1)
 
 

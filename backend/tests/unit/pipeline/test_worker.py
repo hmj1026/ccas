@@ -1,7 +1,8 @@
 """RQ worker 與重試邏輯的單元測試。
 
-涵蓋重試設定、狀態標記函式、失敗分類、run_pipeline_sync 內部協程
-（以真實 asyncio.run 執行）、bank_code 解析與 on_failure_handler。
+涵蓋重試設定、run_pipeline_sync 內部協程（以真實 asyncio.run 執行）、
+bank_code 解析與 on_failure_handler。狀態標記與失敗分類已隨
+``DbLifecycleStore`` / ``RunLifecycle`` 移至 ``test_lifecycle.py``。
 """
 
 from __future__ import annotations
@@ -16,17 +17,13 @@ from ccas.pipeline.summary import PipelineSummary, StageSummary
 from ccas.pipeline.worker import (
     MAX_RETRIES,
     _calculate_retry_delays,
-    _classify_batch_failed,
     _extract_bank_code,
-    _run_failure_reason,
     get_retry,
     mark_manual_review,
-    mark_pipeline_run_failed,
-    mark_pipeline_run_running,
-    mark_pipeline_run_succeeded,
     on_failure_handler,
     run_pipeline_sync,
 )
+from ccas.storage.models import PipelineRunStatus
 
 
 class _FakeSession:
@@ -66,87 +63,46 @@ class TestRetryConfig:
         assert retry.intervals == [1, 2, 4]
 
 
-class TestMarkStatusFunctions:
-    """直接覆蓋 _set_pipeline_run_status 與三個狀態標記函式。"""
+class _TerminalStatusView:
+    """View over ``DbLifecycleStore.persist_terminal`` calls filtered by
+    ``LifecycleResult.status``, so existing succeeded/failed-style assertions
+    keep working now that both outcomes funnel through one method.
+    """
 
-    async def test_mark_running(self):
-        session = AsyncMock()
-        await mark_pipeline_run_running(session, "run-1")
-        session.execute.assert_awaited_once()
-        session.commit.assert_awaited_once()
+    def __init__(self, terminal: AsyncMock, status: PipelineRunStatus) -> None:
+        self._terminal = terminal
+        self._status = status
 
-    async def test_mark_succeeded(self):
-        session = AsyncMock()
-        await mark_pipeline_run_succeeded(session, "run-1")
-        session.execute.assert_awaited_once()
-        session.commit.assert_awaited_once()
+    def _matching_calls(self) -> list:
+        return [
+            call
+            for call in self._terminal.await_args_list
+            if call.args[1].status == self._status
+        ]
 
-    async def test_mark_failed(self):
-        session = AsyncMock()
-        await mark_pipeline_run_failed(session, "run-1", "boom")
-        session.execute.assert_awaited_once()
-        session.commit.assert_awaited_once()
-
-
-class TestFailureClassification:
-    """驗證 _classify_batch_failed 與 _run_failure_reason 的判定。"""
-
-    def test_classify_batch_failed_true(self):
-        summary = PipelineSummary(
-            stages=(StageSummary(stage="classify", counts={"failed": 2}),),
-            total_seconds=1.0,
+    def assert_awaited_once(self) -> None:
+        matches = self._matching_calls()
+        assert len(matches) == 1, (
+            f"expected exactly one persist_terminal({self._status}) call, "
+            f"got {len(matches)}"
         )
-        assert _classify_batch_failed(summary) is True
 
-    def test_classify_batch_failed_false_on_success_counts(self):
-        summary = PipelineSummary(
-            stages=(StageSummary(stage="classify", counts={"classified": 5}),),
-            total_seconds=1.0,
+    def assert_not_awaited(self) -> None:
+        matches = self._matching_calls()
+        assert len(matches) == 0, (
+            f"expected no persist_terminal({self._status}) call, got {len(matches)}"
         )
-        assert _classify_batch_failed(summary) is False
-
-    def test_run_failure_reason_classify(self):
-        summary = PipelineSummary(
-            stages=(StageSummary(stage="classify", counts={"failed": 1}),),
-            total_seconds=1.0,
-        )
-        reason = _run_failure_reason(summary)
-        assert reason is not None
-        assert "classify" in reason
-
-    def test_run_failure_reason_stage_error(self):
-        summary = PipelineSummary(
-            stages=(StageSummary(stage="ingest", counts={}, errors=["page 2 failed"]),),
-            total_seconds=1.0,
-        )
-        reason = _run_failure_reason(summary)
-        assert reason is not None
-        assert "ingest" in reason
-        assert "page 2 failed" in reason
-
-    def test_run_failure_reason_ignores_notify_errors(self):
-        summary = PipelineSummary(
-            stages=(
-                StageSummary(stage="notify", counts={}, errors=["telegram timeout"]),
-            ),
-            total_seconds=1.0,
-        )
-        assert _run_failure_reason(summary) is None
-
-    def test_run_failure_reason_success(self):
-        summary = PipelineSummary(
-            stages=(StageSummary(stage="parse", counts={"parsed": 3}),),
-            total_seconds=1.0,
-        )
-        assert _run_failure_reason(summary) is None
 
 
 @contextlib.contextmanager
 def _patched_pipeline_env(*, result=None, run_pipeline_exc=None, mark_failed_exc=None):
     """Patch run_pipeline_sync 依賴，讓內部 _run 協程可以真實執行。
 
-    Yields a namespace exposing the patched mark_* AsyncMocks so callers
-    can assert which state-transition path executed.
+    Yields a namespace exposing the patched ``DbLifecycleStore`` persist_*
+    AsyncMocks so callers can assert which state-transition path executed.
+    ``succeeded`` / ``failed`` are :class:`_TerminalStatusView` filters over
+    ``terminal`` calls since both outcomes now funnel through the single
+    ``persist_terminal`` method.
     """
     session = _FakeSession()
     with contextlib.ExitStack() as stack:
@@ -175,31 +131,26 @@ def _patched_pipeline_env(*, result=None, run_pipeline_exc=None, mark_failed_exc
 
         running = stack.enter_context(
             patch(
-                "ccas.pipeline.worker.mark_pipeline_run_running",
+                "ccas.pipeline.lifecycle.DbLifecycleStore.persist_progress",
                 new_callable=AsyncMock,
             )
         )
-        succeeded = stack.enter_context(
+        terminal = stack.enter_context(
             patch(
-                "ccas.pipeline.worker.mark_pipeline_run_succeeded",
-                new_callable=AsyncMock,
-            )
-        )
-        failed = stack.enter_context(
-            patch(
-                "ccas.pipeline.worker.mark_pipeline_run_failed",
+                "ccas.pipeline.lifecycle.DbLifecycleStore.persist_terminal",
                 new_callable=AsyncMock,
             )
         )
         if mark_failed_exc is not None:
-            failed.side_effect = mark_failed_exc
+            terminal.side_effect = mark_failed_exc
 
         yield SimpleNamespace(
             session=session,
             run_pipeline=run_pipeline,
             running=running,
-            succeeded=succeeded,
-            failed=failed,
+            terminal=terminal,
+            succeeded=_TerminalStatusView(terminal, PipelineRunStatus.SUCCEEDED),
+            failed=_TerminalStatusView(terminal, PipelineRunStatus.FAILED),
         )
 
 
@@ -366,7 +317,7 @@ def _patched_failure_env(*, mark_review_exc=None, mark_failed_exc=None, review_c
 
         failed = stack.enter_context(
             patch(
-                "ccas.pipeline.worker.mark_pipeline_run_failed",
+                "ccas.pipeline.lifecycle.DbLifecycleStore.persist_terminal",
                 new_callable=AsyncMock,
             )
         )

@@ -143,7 +143,7 @@ class TestParseStage:
         mock_parser.parse.return_value = fake_result
 
         with patch(
-            "ccas.parser.job.registry.resolve",
+            "ccas.parser.intake.registry.resolve",
             return_value=[mock_parser],
         ):
             from ccas.parser.job import run_parse_job
