@@ -152,8 +152,8 @@ class TestSuccessfulParse:
             await session.commit()
 
             with (
-                patch("ccas.parser.job.registry", test_registry),
-                patch("ccas.parser.job.get_settings") as mock_get_settings,
+                patch("ccas.parser.intake.registry", test_registry),
+                patch("ccas.parser.intake.get_settings") as mock_get_settings,
             ):
                 mock_get_settings.return_value.staging_dir = TEST_STAGING_DIR
                 mock_get_settings.return_value.pdf_parse_timeout_seconds = 30.0
@@ -193,7 +193,7 @@ class TestSuccessfulParse:
             )
             await session.commit()
 
-            with patch("ccas.parser.job.registry", test_registry):
+            with patch("ccas.parser.intake.registry", test_registry):
                 await run_parse_job(session)
 
             stmt = select(StagedAttachment).where(
@@ -223,7 +223,7 @@ class TestParseFailure:
             )
             await session.commit()
 
-            with patch("ccas.parser.job.registry", test_registry):
+            with patch("ccas.parser.intake.registry", test_registry):
                 summary = await run_parse_job(session)
 
             assert summary.parsed_count == 0
@@ -253,7 +253,7 @@ class TestParseFailure:
             )
             await session.commit()
 
-            with patch("ccas.parser.job.registry", test_registry):
+            with patch("ccas.parser.intake.registry", test_registry):
                 summary = await run_parse_job(session)
 
             assert summary.failed_count == 1
@@ -285,7 +285,7 @@ class TestParseFailure:
             )
             await session.commit()
 
-            with patch("ccas.parser.job.registry", test_registry):
+            with patch("ccas.parser.intake.registry", test_registry):
                 summary = await run_parse_job(session)
 
             assert summary.failed_count == 1
@@ -319,7 +319,7 @@ class TestDeduplication:
             )
             await session.commit()
 
-            with patch("ccas.parser.job.registry", test_registry):
+            with patch("ccas.parser.intake.registry", test_registry):
                 summary = await run_parse_job(session)
 
             assert summary.parsed_count == 0
@@ -395,7 +395,7 @@ class TestDeduplication:
             await seed.commit()
 
         async with session_factory() as session:
-            with patch("ccas.parser.job.registry", test_registry):
+            with patch("ccas.parser.intake.registry", test_registry):
                 summary = await run_parse_job(
                     session, options=PipelineOptions(force=True)
                 )
@@ -434,7 +434,7 @@ class TestDeduplication:
             )
             await session.commit()
 
-            with patch("ccas.parser.job.registry", test_registry):
+            with patch("ccas.parser.intake.registry", test_registry):
                 summary = await run_parse_job(session)
 
             # 因為狀態不是 decrypted，所以不會被處理

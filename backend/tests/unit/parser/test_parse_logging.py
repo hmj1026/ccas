@@ -9,7 +9,7 @@ from pathlib import Path
 from unittest.mock import MagicMock
 
 from ccas.parser.base import BankParser, ParseError
-from ccas.parser.job import _try_parse
+from ccas.parser.intake import _try_parse
 from ccas.parser.result import ParseResult
 
 
@@ -38,7 +38,7 @@ class _FakeParser(BankParser):
 class TestTryParseLogging:
     def test_successful_match_logs_info(self, caplog):
         parser = _FakeParser()
-        with caplog.at_level(logging.INFO, logger="ccas.parser.job"):
+        with caplog.at_level(logging.INFO, logger="ccas.parser.intake"):
             success, result, error = _try_parse([parser], Path("/tmp/test.pdf"))
 
         assert success is True
@@ -48,7 +48,7 @@ class TestTryParseLogging:
         parser = _FakeParser(
             parse_error=ParseError("帳單摘要缺失", reason="找不到帳單月份"),
         )
-        with caplog.at_level(logging.ERROR, logger="ccas.parser.job"):
+        with caplog.at_level(logging.ERROR, logger="ccas.parser.intake"):
             success, _, _ = _try_parse([parser], Path("/tmp/bill.pdf"))
 
         assert success is False
@@ -61,7 +61,7 @@ class TestTryParseLogging:
 
     def test_unexpected_error_logs_with_traceback(self, caplog):
         parser = _FakeParser(parse_error=RuntimeError("crash"))
-        with caplog.at_level(logging.ERROR, logger="ccas.parser.job"):
+        with caplog.at_level(logging.ERROR, logger="ccas.parser.intake"):
             success, _, _ = _try_parse([parser], Path("/tmp/crash.pdf"))
 
         assert success is False
@@ -76,7 +76,7 @@ class TestTryParseLogging:
             _FakeParser(bank_code="A", can_parse_result=False),
             _FakeParser(bank_code="B", can_parse_result=False),
         ]
-        with caplog.at_level(logging.WARNING, logger="ccas.parser.job"):
+        with caplog.at_level(logging.WARNING, logger="ccas.parser.intake"):
             success, _, _ = _try_parse(parsers, Path("/tmp/unknown.pdf"))
 
         assert success is False
@@ -88,7 +88,7 @@ class TestTryParseLogging:
 
     def test_can_parse_false_logs_debug(self, caplog):
         parser = _FakeParser(can_parse_result=False)
-        with caplog.at_level(logging.DEBUG, logger="ccas.parser.job"):
+        with caplog.at_level(logging.DEBUG, logger="ccas.parser.intake"):
             _try_parse([parser], Path("/tmp/skip.pdf"))
 
         debug_records = [r for r in caplog.records if r.levelno == logging.DEBUG]

@@ -114,7 +114,7 @@ class TestUbotParseJob:
             )
             await session.commit()
 
-            with patch("ccas.parser.job.registry", test_registry):
+            with patch("ccas.parser.intake.registry", test_registry):
                 summary = await run_parse_job(session)
 
             assert summary.parsed_count == 1
@@ -167,7 +167,7 @@ class TestUbotParseJob:
             )
             await session.commit()
 
-            with patch("ccas.parser.job.registry", test_registry):
+            with patch("ccas.parser.intake.registry", test_registry):
                 await run_parse_job(session)
 
             stmt = select(StagedAttachment).where(
