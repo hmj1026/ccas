@@ -140,3 +140,9 @@ evals/results/
 .agents/
 .hyperweave/
 .reports/
+
+# Tool-generated skills and commands (not version-controlled)
+.claude/skills/openspec-*/
+.gemini/skills/
+.claude/commands/opsx/
+.gemini/commands/opsx/
