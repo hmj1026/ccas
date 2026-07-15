@@ -198,6 +198,36 @@ describe('GmailSetupPage credentials upload', () => {
   })
 })
 
+describe('GmailSetupPage status polling', () => {
+  it('polls every 5s while disconnected and stops once connected', async () => {
+    vi.useFakeTimers()
+    try {
+      mockApiGet
+        .mockResolvedValueOnce(statusResponse({ connected: false }))
+        .mockResolvedValueOnce(
+          statusResponse({ connected: true, email: 'paul@example.com' }),
+        )
+
+      renderWithProviders(<GmailSetupPage />, { initialEntries: ['/setup/gmail'] })
+
+      await vi.waitFor(() => expect(mockApiGet).toHaveBeenCalledTimes(1))
+
+      await vi.advanceTimersByTimeAsync(5000)
+      await vi.waitFor(() => expect(mockApiGet).toHaveBeenCalledTimes(2))
+      await vi.waitFor(() =>
+        expect(screen.getByText('Gmail 已連線')).toBeInTheDocument(),
+      )
+
+      // refetchInterval is now false (connected) -- further polling ticks
+      // must not trigger additional status requests.
+      await vi.advanceTimersByTimeAsync(15000)
+      expect(mockApiGet).toHaveBeenCalledTimes(2)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+})
+
 describe('GmailSetupPage authorize errors', () => {
   it('shows an authorize error when the authorize request fails', async () => {
     const user = userEvent.setup()

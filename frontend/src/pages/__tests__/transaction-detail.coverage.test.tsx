@@ -193,6 +193,20 @@ describe('TransactionDetailPage editing', () => {
     // Real timers restored by the top-level afterEach.
   })
 
+  it('flushes the merchant alias immediately on blur', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    renderDetail('/transactions/42')
+    await waitFor(() => expect(screen.getByLabelText('商家別名')).toBeInTheDocument())
+
+    await user.type(screen.getByLabelText('商家別名'), '立即別名')
+    await user.tab()
+
+    expect(mockApiPatch).toHaveBeenCalledWith('/api/transactions/42', {
+      merchant_alias: '立即別名',
+    })
+  })
+
   it('resets the save status to idle when an auto-save PATCH fails', async () => {
     mockApiPatch.mockRejectedValue(new Error('網路中斷'))
     const user = userEvent.setup()
