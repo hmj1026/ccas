@@ -66,6 +66,17 @@ class TestStageStarted:
 class TestStageItemDone:
     """stage_item_done 的 250ms 節流行為。"""
 
+    async def test_first_item_flushes_when_uptime_is_below_throttle(self):
+        session = _FakeSession()
+        reporter = DbProgressReporter(
+            "run-1", cast(AsyncSessionFactory, lambda: session), throttle_seconds=100.0
+        )
+
+        with patch("ccas.pipeline.progress.time.monotonic", return_value=1.0):
+            await reporter.stage_item_done("parse", 1)
+
+        assert session.execute.await_count == 1
+
     async def test_throttle_suppresses_rapid_calls(self):
         session = _FakeSession()
         reporter = DbProgressReporter(
