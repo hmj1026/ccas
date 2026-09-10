@@ -39,9 +39,9 @@ Pipeline 各階段以狀態機推進：`staged → decrypted → parsed`，遇�
 | 層級 | 技術 |
 |---|---|
 | **後端** | Python 3.12、FastAPI、SQLAlchemy (async) + aiosqlite、Alembic、RQ + Redis、APScheduler |
-| **前端** | React 19、Vite 8、TypeScript 5.9、Tailwind CSS 4、TanStack Query 5、React Router 7、Recharts |
+| **前端** | React、Vite、TypeScript、Tailwind CSS、TanStack Query、React Router、Recharts（版本以 `frontend/package.json` 為準） |
 | **PDF / OCR** | pdfplumber、pikepdf、tabula-py、pytesseract、ddddocr（富邦 captcha） |
-| **測試** | pytest（asyncio_mode=auto、cov ≥ 70%）、Vitest、Playwright |
+| **測試** | pytest（asyncio_mode=auto、cov ≥ 80%）、Vitest、Playwright |
 | **Lint / Type** | ruff（check + format）、pyright、eslint |
 | **基礎設施** | Docker Compose、SQLite（WAL + busy_timeout）、Nginx proxy |
 | **套件管理** | uv（後端）、pnpm（前端） |
@@ -102,7 +102,7 @@ pnpm e2e            # Playwright
 ccas/
 ├── backend/           # FastAPI 服務（src/ccas/{api,ingestor,decryptor,parser,
 │                      #   classifier,pipeline,scheduler,bot,storage,tools}）
-├── frontend/          # React 19 + Vite 8 + TypeScript
+├── frontend/          # React + Vite + TypeScript
 ├── docker/            # 正式環境 pull-only compose + nginx proxy image
 ├── docker-compose.yaml          # dev compose（從原始碼 build）
 ├── docker-compose.override.yml  # dev 覆寫（bind-mount、hot reload）
@@ -126,15 +126,17 @@ ccas/
 | Gmail OAuth 設定 | [`docs/gmail-setup.md`](docs/gmail-setup.md) |
 | 銀行代碼對照 | [`docs/bank-codes.md`](docs/bank-codes.md) |
 | 貢獻指南 | [`docs/CONTRIBUTING.md`](docs/CONTRIBUTING.md) |
+| 領域上下文 | [`CONTEXT.md`](CONTEXT.md) |
+| 目前實作總覽 | [`docs/CODEMAPS/current-implementation.md`](docs/CODEMAPS/current-implementation.md) |
 
-架構地圖（給貢獻者）：[`docs/CODEMAPS/`](docs/CODEMAPS/) —— `architecture.md`、`backend.md`、`frontend.md`、`data.md`、`dependencies.md`。
+架構地圖（給貢獻者）：[`docs/CODEMAPS/`](docs/CODEMAPS/) —— `current-implementation.md`、`architecture.md`、`backend.md`、`frontend.md`、`data.md`、`dependencies.md`。
 
 ## CI/CD
 
 GitHub Actions 於 push 與 PR 至 `develop` / `master` 時觸發：
 
 - **backend-lint** —— `ruff check` + `ruff format --check` + `pyright`
-- **backend-test** —— `pytest tests/unit/`，覆蓋率 ≥ 70%
+- **backend-test** —— `pytest tests/unit/`，覆蓋率 ≥ 80%
 - **frontend-lint-test** —— `pnpm lint` + `pnpm build`（含 `tsc`） + `pnpm test`
 
 發佈流程（`release-docker.yaml`）在打 tag 時 build & push 容器 image 到 GHCR。

@@ -102,7 +102,7 @@ docker compose exec backend uv run python -m ccas.pipeline --force --bank CTBC -
 curl -s -H "Authorization: Bearer $API_TOKEN" \
   "http://localhost:8000/api/pipeline/runs?limit=10"
 
-# 查看單一 run 的 stage_summary（含 processed / total / errors）
+# 查看單一 run 的 stage_summary（含每 stage 的 ok / fail / counts / errors）
 curl -s -H "Authorization: Bearer $API_TOKEN" \
   "http://localhost:8000/api/pipeline/runs/<run_id>"
 
@@ -159,7 +159,8 @@ docker cp backend/data/token.json ccas-backend-1:/data/token.json
 3. 完成授權後由 `GET /api/setup/gmail/callback` 自動寫回 token
 4. 確認狀態 → `GET /api/setup/gmail/status`
 
-`gmail_oauth_state` 表存放 PKCE state，redirect URI 由 `gmail_oauth_redirect_uri` 控制（local / docker / prod 各自的 PUBLIC_BASE_URL）。
+`gmail_oauth_state` 表存放 PKCE state，redirect URI 由 `PUBLIC_BASE_URL` 組成
+`${PUBLIC_BASE_URL}/api/setup/gmail/callback`（local / docker / prod 依部署網址設定）。
 
 ### Redis 連線失敗
 

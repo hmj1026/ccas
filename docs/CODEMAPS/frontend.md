@@ -1,39 +1,43 @@
-<!-- Generated: 2026-05-10 | Files scanned: ~50 | Token estimate: ~960 -->
+<!-- Verified: 2026-09-10 | Canonical details: ../current-implementation.md -->
 
 # Frontend
 
+> 先看 [目前實作總覽](./current-implementation.md) 取得全局流程；本文件只保留
+> 前端路由、元件、狀態與型別的細節。
+
 ## Stack
 
-React 19, Vite 8, TypeScript 5.9, Tailwind 4.2, shadcn, TanStack React Query 5, React Router 7
+React, Vite, TypeScript, Tailwind CSS, shadcn, TanStack React Query, React Router；版本以 `frontend/package.json` 與 lockfile 為準。
 
 ## Page Tree
 
-| Route | Page (LOC) | Description |
-|-------|------------|-------------|
-| `/login` | `login.tsx` (101) | Token-based authentication |
-| `/overview` | `overview.tsx` (157) | Dashboard：summary cards、upcoming bills、budget alert banner |
-| `/transactions` | `transactions.tsx` (197) | Filterable list、pagination、CSV/Excel export dialog |
-| `/transactions/:id` | `transaction-detail.tsx` (368) | Transaction edit：category override、tags、merchant alias、note |
-| `/insights` | `insights.tsx` (336) | Insights v2：bank/year compare、top merchants、comparison-chart |
+| Route | Page | Description |
+|-------|------|-------------|
+| `/login` | `login.tsx` | Token-based authentication |
+| `/overview` | `overview.tsx` | Dashboard：summary cards、upcoming bills、budget alert banner |
+| `/transactions` | `transactions.tsx` | Filterable list、pagination、CSV/Excel export dialog |
+| `/transactions/:id` | `transaction-detail.tsx` | Transaction edit：category override、tags、merchant alias、note |
+| `/insights` | `insights.tsx` | Insights v2：bank/year compare、top merchants、comparison-chart |
 | `/analytics` | — | redirect → `/insights`（保留舊路徑） |
-| `/bills` | `bills.tsx` (281) | Bill list、mark paid、PDF download、expandable inline transactions |
-| `/operations` | `operations.tsx` (674) | Pipeline 觸發 + run 列表 + stage 進度即時輪詢 |
-| `/settings` | `settings.tsx` (252) | Bank config、category keyword rules |
-| `/settings/reminders` | `settings-reminders.tsx` (222) | 每張帳單的 reminder days_before / channel |
-| `/settings/budgets` | `settings-budgets.tsx` (301) | 預算 CRUD + scope（bank / category / total） |
-| `/settings/rules` | `settings-rules.tsx` (466) | ClassificationRule CRUD + dry-run test |
-| `/setup` | `setup/layout.tsx` (58) | Setup wizard shell；redirect → `/setup/gmail` |
-| `/setup/gmail` | `setup/gmail.tsx` (390) | OAuth 流程：上傳 client secret → 授權 → status |
-| `/setup/gmail/callback` | `setup/gmail-callback.tsx` (50) | OAuth code 接收頁，回填到 `/setup/gmail` |
-| `/setup/banks` | `setup/banks.tsx` (165) | 啟用 / 停用銀行 + 顯示名稱 |
-| `/setup/secrets` | `setup/secrets.tsx` (372) | 銀行 PDF 密碼寫入（含 `import-from-env`） |
-| `/setup/admin` | `setup/admin.tsx` (276) | API token rotate / token-info |
+| `/bills` | `bills.tsx` | Bill list、mark paid、PDF download、expandable inline transactions |
+| `/operations` | `operations.tsx` | Pipeline 觸發 + run 列表 + stage 進度即時輪詢 |
+| `/settings` | `settings.tsx` | Bank config、category keyword rules |
+| `/settings/reminders` | `settings-reminders.tsx` | 每張帳單的 reminder days_before / channel |
+| `/settings/budgets` | `settings-budgets.tsx` | 預算 CRUD + scope（monthly_total / monthly_category / monthly_bank） |
+| `/settings/rules` | `settings-rules.tsx` | ClassificationRule CRUD + dry-run test |
+| `/setup` | `setup/layout.tsx` | Setup wizard shell；redirect → `/setup/gmail` |
+| `/setup/gmail` | `setup/gmail.tsx` | OAuth 流程：上傳 client secret → 授權 → status |
+| `/setup/gmail/callback` | `setup/gmail-callback.tsx` | OAuth code 接收頁，回填到 `/setup/gmail` |
+| `/setup/banks` | `setup/banks.tsx` | 啟用 / 停用銀行 + 顯示名稱 |
+| `/setup/secrets` | `setup/secrets.tsx` | 銀行 PDF 密碼寫入（含 `import-from-env`） |
+| `/setup/login-credentials` | `setup/login-credentials.tsx` | 銀行網銀登入憑證管理 |
+| `/setup/admin` | `setup/admin.tsx` | API token rotate / token-info |
 
 ## Component Hierarchy
 
 ```
 App (QueryClient + BrowserRouter)
-└── AuthGuard (session check, except /login & /setup/gmail/callback)
+└── AuthGuard (session check, all routes except /login)
     └── Layout (sidebar nav)
         └── Suspense (LoadingState fallback)
             └── <Page /> (React.lazy code-split)
@@ -42,28 +46,28 @@ App (QueryClient + BrowserRouter)
 
 ## Code Splitting
 
-15 pages lazy-loaded via `React.lazy()` + `<Suspense fallback={<LoadingState />}>`：
-`overview`、`transactions`、`transaction-detail`、`insights`、`bills`、`operations`、`settings`、`settings-reminders`、`settings-budgets`、`settings-rules`、`setup/layout`、`setup/gmail`、`setup/gmail-callback`、`setup/banks`、`setup/secrets`、`setup/admin`
+17 route modules lazy-loaded via `React.lazy()` + `<Suspense fallback={<LoadingState />}>`：
+`overview`、`transactions`、`transaction-detail`、`insights`、`bills`、`operations`、`settings`、`settings-reminders`、`settings-budgets`、`settings-rules`、`setup/layout`、`setup/gmail`、`setup/gmail-callback`、`setup/banks`、`setup/secrets`、`setup/login-credentials`、`setup/admin`
 
 ## Shared Components
 
 ```
 components/
-├── auth-guard.tsx                  Session verification HOC (44)
-├── layout.tsx                      Sidebar navigation shell (136)
-├── staged-attachments-warning.tsx  Warning panel for failed attachments (157)
-├── budget-alert-banner.tsx         Active budget breach banner（overview 頂端） (85)
-├── budget-progress-card.tsx        Per-budget 進度條 + 警戒色 (72)
-├── comparison-chart.tsx            Insights bank/year compare 共用圖表 (85)
-├── export-dialog.tsx               CSV/Excel export 互動 dialog (164)
-├── top-merchants-table.tsx         Insights 排行榜 (41)
+├── auth-guard.tsx                  Session verification HOC
+├── layout.tsx                      Sidebar navigation shell
+├── staged-attachments-warning.tsx  Warning panel for failed attachments
+├── budget-alert-banner.tsx         Active budget breach banner（overview 頂端）
+├── budget-progress-card.tsx        Per-budget 進度條 + 警戒色
+├── comparison-chart.tsx            Insights bank/year compare 共用圖表
+├── export-dialog.tsx               CSV/Excel export 互動 dialog
+├── top-merchants-table.tsx         Insights 排行榜
 ├── shared/
-│   ├── filter-bar.tsx              Month/bank/status filter controls (227)
-│   └── states.tsx                  LoadingState, ErrorState, EmptyState (46)
+│   ├── filter-bar.tsx              Month/bank/status filter controls
+│   └── states.tsx                  LoadingState, ErrorState, EmptyState
 └── ui/
-    ├── button.tsx                  shadcn button (72)
-    ├── dialog.tsx                  shadcn dialog / modal (158)
-    └── collapsible.tsx             Collapsible expand/collapse (25)
+    ├── button.tsx                  shadcn button
+    ├── dialog.tsx                  shadcn dialog / modal
+    └── collapsible.tsx             Collapsible expand/collapse
 ```
 
 ## State Management
@@ -81,4 +85,4 @@ components/
 ## Types
 
 `lib/types.ts` — TypeScript interfaces 對齊 backend Pydantic schema：
-`OverviewData`、`TransactionItem`、`TransactionDetailItem`、`BillItem`、`CategoryKeywordItem`、`BankConfigItem`、`StagedAttachmentItem`、`PipelineRunSummary`、`PipelineRunDetail`、`ClassificationRuleItem`、`BudgetItem`、`BudgetAlertItem`、`BudgetCurrentPeriod`、`ReminderSettingItem`、`BankCompareItem`、`YearCompareItem`、`TopMerchantItem`、`PaginatedResponse<T>`、Setup 系列 (`SetupBankItem`、`BankSecretStatus`、`GmailConnectionStatus`、`AdminTokenInfo`)
+`OverviewData`、`TransactionItem`、`TransactionDetailItem`、`BillItem`、`CategoryKeywordItem`、`BankConfigItem`、`StagedAttachmentItem`、`PipelineRunSummary`、`PipelineRunDetail`、`ClassificationRuleItem`、`BudgetItem`、`BudgetAlertItem`、`BudgetCurrentPeriod`、`ReminderSettingItem`、`BankCompareItem`、`YearCompareItem`、`TopMerchantItem`、`PaginatedResponse<T>`、Setup 系列 (`SetupBankItem`、`BankSecretStatus`、`BankLoginCredentialStatus`、`GmailConnectionStatus`、`AdminTokenInfo`)

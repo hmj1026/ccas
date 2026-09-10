@@ -1,6 +1,6 @@
 # Codex Agent Guidelines
 
-> Shared project context is in [CLAUDE.md](./CLAUDE.md). This file contains only Codex-specific information.
+> Shared project context is in [CLAUDE.md](./CLAUDE.md). For pipeline, API/auth, storage, integration, deployment, or frontend tasks, start with [current implementation](./docs/CODEMAPS/current-implementation.md) and follow its detail map for the affected area. This file contains only Codex-specific information.
 
 ## Platform Differences
 
@@ -33,7 +33,7 @@ For code exploration use `cx`. Reference: `~/.claude/CX.md` (global, all project
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **ccas** (12114 symbols, 21142 relationships, 228 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **ccas** (12664 symbols, 22176 relationships, 241 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
 

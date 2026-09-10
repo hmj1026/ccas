@@ -51,7 +51,7 @@ Docker Compose 啟動時會再覆寫成容器內的 `/data/` 掛載點。
 ./scripts/setup-hooks.sh
 ```
 
-Pre-commit hook 針對 staged 檔案執行 gitleaks secret scan、ruff auto-fix、pyright、frontend ESLint。Pre-push hook 模擬完整 CI（lint + unit test ≥ 70% + frontend build & test）。需要 gitleaks：`brew install gitleaks`。
+Pre-commit hook 針對 staged 檔案執行 gitleaks secret scan、ruff auto-fix、pyright、frontend ESLint。Pre-push hook 模擬完整 CI（lint + unit test ≥ 80% + frontend build & test）。需要 gitleaks：`brew install gitleaks`。
 
 常見失敗模式：
 - Python 變更只通過 `ruff check` 不代表 CI 會過；`ruff format --check` 也會擋下過長行與格式不一致。提交前請至少跑 `./scripts/dev-lint.sh` 或 `cd backend && uv run ruff format --check .`
@@ -81,7 +81,7 @@ Dev 模式將 `backend/data/` 掛載到容器的 `/data/`，原始碼變更即�
 |------|------|
 | Backend API | http://127.0.0.1:8000 |
 | Frontend | http://localhost:5173 |
-| API Docs | http://127.0.0.1:8000/docs |
+| API Docs | http://127.0.0.1:8000/docs（需 `ENABLE_API_DOCS=true`） |
 
 > **Docker Compose 開發模式**：`docker compose up` 會自動套用 `docker-compose.override.yml`，將 backend/frontend 切至 `dev` target、bind mount 原始碼、frontend 走 Vite dev server（`http://localhost:5173`）。
 >
@@ -160,8 +160,9 @@ docker compose exec backend uv run pytest
 docker compose -f docker-compose.yaml up --build
 ```
 
-此指令不合併 override，僅啟動 backend、scheduler、bot、redis（不含 frontend）。
-Frontend 僅供開發驗證資料，production 透過 Telegram bot 存取。
+此指令會啟動 backend、worker、scheduler、bot、frontend、redis；frontend 以
+nginx static 提供 Web UI，並直接暴露在 `http://localhost:8080`。正式 pull-only
+部署則使用 `docker/docker-compose.yml`，由 `proxy` 統一提供 `/` 與 `/api`。
 詳見 [部署指南](deployment-guide.md)。
 
 ## 5. 本地開發（進階，無 Docker）
@@ -188,50 +189,17 @@ cd frontend && pnpm dev
 
 ## 6. 架構總覽
 
-### 技術棧
+技術棧、資料流、狀態與目錄責任以
+[目前實作總覽](CODEMAPS/current-implementation.md) 為準。需要查特定分支時，載入：
 
-| Layer | Technology |
-|-------|-----------|
-| Backend | Python 3.12, FastAPI, SQLAlchemy (async), Alembic |
-| Database | SQLite (WAL mode) |
-| Frontend | React, Vite, TypeScript, Tailwind CSS |
-| OCR | tesseract-ocr + chi-tra（Docker 內建） |
-| Integrations | Gmail API, Telegram Bot |
+- pipeline、stage、progress：`CODEMAPS/current-implementation.md`、`CODEMAPS/backend.md`
+- API、認證、設定：`CODEMAPS/backend.md`
+- ORM、狀態值、索引、migration：`CODEMAPS/data.md`
+- 前端路由、元件、型別：`CODEMAPS/frontend.md`
+- 外部服務、Compose、runtime：`CODEMAPS/dependencies.md`
 
-### Pipeline 五階段
-
-```
-Gmail Inbox
-    |
-[INGEST]   -> StagedAttachment (從 Gmail 下載 PDF；FUBON 另含 web-fetch + captcha 解析)
-    |
-[DECRYPT]  -> 解密 PDF (pikepdf + bank-specific password)
-    |
-[PARSE]    -> Bill + Transaction (pdfplumber + tesseract OCR 提取資料)
-    |
-[CLASSIFY] -> Transaction.category (關鍵字分類)
-    |
-[NOTIFY]   -> Telegram 通知 (帳單摘要)
-```
-
-### 目錄結構
-
-```
-backend/src/ccas/
-  api/          # FastAPI routers（含登入速率限制，v0.4.0+）
-  bot/          # Telegram bot handler
-  classifier/   # Keyword-based classification
-  config.py     # Pydantic settings
-  decryptor/    # PDF decryption
-  ingestor/     # Gmail 附件下載 + staging；`fetcher/` 子模組含 BaseFetcher 介面、FUBON web-fetch 流程、captcha OCR（ddddocr）與 Claude Vision LLM fallback；原子 staging paths（v0.4.0+）
-  parser/       # PDF parsing (per-bank)；共用退款偵測模組 `refund_utils`（v0.4.0+）
-  pipeline/     # Orchestration + CLI
-  scheduler/    # APScheduler jobs
-  storage/      # SQLAlchemy models + database；原子寫入 helper + OAuth 加密（v0.4.0+）
-    ├─ atomic.py       # 原子寫入（temp-then-rename）、OAuth secret 管理（v0.4.0+）
-    ├─ oauth_secrets.py # Gmail token.json / credentials.json 加密存放（v0.4.0+）
-    └─ paths.py        # Staging path helper（v0.4.0+）
-```
+變更完成條件：受影響的 detail map 已反映新行為，且文件中的命令、設定名稱與
+實作／設定檔一致。
 
 ## 7. 測試
 
@@ -288,7 +256,7 @@ GitHub Actions（`.github/workflows/ci.yaml`）分四個 job：
 | Job | 內容 |
 |-----|------|
 | backend-lint | ruff check + format + pyright |
-| backend-test | unit tests，`--cov-fail-under=70` |
+| backend-test | unit tests，`--cov-fail-under=80` |
 | backend-integration-test | integration tests，`--timeout=120` |
 | frontend-lint-test | eslint + tsc build + vitest |
 

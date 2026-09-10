@@ -1,6 +1,9 @@
-<!-- Generated: 2026-06-17 | Files scanned: 12 | Token estimate: ~1080 -->
+<!-- Verified: 2026-09-10 | Canonical details: ../current-implementation.md -->
 
 # Data
+
+> 先看 [目前實作總覽](./current-implementation.md) 取得資料流；本文件只保留
+> 資料表、狀態值、索引與 migration 的細節。
 
 ## Database
 
@@ -59,14 +62,14 @@ bank_code (str, UQ), bank_name, gmail_filter, pdf_password_rule?, active_parser_
 |--------|------|-------|
 | id | int PK | |
 | bank_code | str | |
-| source_type | str | `gmail` / `web` |
+| source_type | str | `attachment` / `web_fetch` |
 | gmail_message_id | str | |
 | gmail_attachment_id | str | legacy, 舊資料保留 |
 | gmail_part_id | str? | dedupe key（Gmail MIME part），舊列 NULL 時 fallback 檔名 |
 | message_date | datetime | |
 | original_filename | str | |
 | staged_path | str? | 相對 STAGING_DIR 路徑 |
-| status | str | staged/decrypted/parsed/skipped/*_failed |
+| status | str | staged/decrypted/decrypt_failed/parsed/parse_skipped/parse_failed/manual_review_needed/failed/fetch_expired |
 | error_reason | str? | |
 | **UQ** | (gmail_message_id, gmail_part_id) | |
 
@@ -87,7 +90,7 @@ bill_id (FK), reminder_type, sent_at | **UQ** (bill_id, reminder_type)
 |--------|------|-------|
 | id | int PK | |
 | pattern | str | |
-| pattern_type | str | `contains` / `regex` / `prefix` 等 |
+| pattern_type | str | `keyword` / `exact` / `regex` |
 | category_id | int FK(categories.id) | |
 | priority | int | default 0；DESC 排序 |
 | enabled | bool | default 1 |
@@ -98,8 +101,8 @@ bill_id (FK), reminder_type, sent_at | **UQ** (bill_id, reminder_type)
 | Column | Type | Notes |
 |--------|------|-------|
 | id | int PK | |
-| scope | str | `total` / `bank` / `category` |
-| scope_ref | str? | bank_code 或 category 名；scope=`total` 時 NULL |
+| scope | str | `monthly_total` / `monthly_bank` / `monthly_category` |
+| scope_ref | str? | bank_code 或 category 名；scope=`monthly_total` 時 NULL |
 | amount_ntd | int | NTD 整數元（不乘 100，無單位換算） |
 | alert_threshold_percent | int | default 80 |
 | enabled | bool | default 1 |
@@ -116,6 +119,7 @@ bill_id (FK), reminder_type, sent_at | **UQ** (bill_id, reminder_type)
 | current_amount_ntd | int | NTD 整數元 |
 | triggered_at | datetime | |
 | acknowledged_at | datetime? | UI ack 後寫入 |
+| notified | bool | default 0；告警是否已送出通知 |
 
 ### pipeline_runs  *(pipeline-operations-center)*
 | Column | Type | Notes |
@@ -128,7 +132,7 @@ bill_id (FK), reminder_type, sent_at | **UQ** (bill_id, reminder_type)
 | current_stage | str(16)? | ingest / decrypt / parse / classify / notify |
 | current_stage_processed | int | default 0 |
 | current_stage_total | int | default 0 |
-| stage_summary | JSON | 各 stage `{processed, total, errors}` |
+| stage_summary | JSON | 各 stage `{stage, ok, fail, elapsed_ms, counts, errors}` |
 | error_message | text? | |
 | started_at / completed_at | datetime? | |
 | created_at / updated_at | datetime | trigger 維護 |
@@ -145,6 +149,9 @@ bank_code(PK), encrypted_password, created_at, updated_at（trigger 維護）
 ### gmail_oauth_state  *(setup wizard — OAuth PKCE state)*
 state(PK), code_verifier, created_at
 
+### bank_login_credentials  *(setup wizard — 銀行網銀登入憑證)*
+composite PK `(bank_code, credential_key)`、encrypted_value、created_at、updated_at
+
 ## Relationships
 
 ```
@@ -152,7 +159,7 @@ Bill 1--* Transaction      (cascade delete)
 Bill 1--* PaymentReminder
 Bill 1--1 ReminderSetting  (per-bill override)
 Budget 1--* BudgetAlert
-Category 1--* ClassificationRule
+Category 1--* classification_rules
 PipelineRun (no FK，獨立紀錄)
 ```
 
@@ -164,7 +171,7 @@ PipelineRun (no FK，獨立紀錄)
 | 08828cd4e8ca | Add staged_attachments |
 | c3a1f5e8d9b2 | Add payment_reminders |
 | ca5a1f05744d | Add bill.is_notified column |
-| 11ca9b74b00c | Add staged_attachment.source_type (`gmail` / `web`) |
+| 11ca9b74b00c | Add staged_attachment.source_type (`attachment` / `web_fetch`) |
 | 1334f4fe5f73 | Add staged_attachment.gmail_part_id + switch UQ to `(message_id, part_id)` |
 | 066eb5d1c70c | Add categories.source (`"seed"` / `"user"`) |
 | 2570bbdebf54 | Add setup tables (bank_settings、bank_secrets、gmail_oauth_state) + updated_at triggers |
@@ -172,5 +179,10 @@ PipelineRun (no FK，獨立紀錄)
 | a4b8c2d6e0f1 | Add transactions user fields (manual_category_override、tags、merchant_alias、updated_at) + (category, trans_date) index |
 | 5f9d4a7b3c8e | Add classification_rules、budgets、budget_alerts（含 priority DESC index） |
 | 9b3e2c8a4f10 | Add reminder_settings（per-bill override，含 updated_at trigger） |
+| ec74b5138c9f | Add missing supporting indexes |
+| f3a9d8c1b2e4 | Rename budget amount columns to NTD units |
+| c1d2e3f4a5b6 | Add transactions category and merchant indexes |
 | 65070f49fd2d | Add transactions.trans_date index（bill detail list 加速查詢，v0.4.0） |
 | a344841591e6 | Add bills.due_date_estimated（CTBC estimated due date marker，v0.4.0） |
+| 413739f494ff | Add budget_alerts.notified |
+| 7f3ae66246a3 | Add bank_login_credentials |

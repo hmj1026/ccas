@@ -13,6 +13,24 @@ Gmail PDF → decrypt → parse → classify → REST API / Telegram notificatio
 | Feature development workflow | `/dhpk:feature-dev` |
 | Harness audit & optimization | `/dhpk:harness-audit` |
 
+## Agent skills
+
+### Issue tracker
+
+Issues are tracked as GitHub Issues in this repo (`gh` CLI). See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Uses the five canonical labels as-is (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`). See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context layout (`CONTEXT.md` + `docs/adr/` at repo root, created lazily). Read `CONTEXT.md` before naming domain concepts, writing issue/test names, or changing business language; read relevant ADRs before changing a recorded decision. See `docs/agents/domain.md` for the routing rules.
+
+### Implementation docs
+
+Read `docs/CODEMAPS/current-implementation.md` when a task touches pipeline flow, API/auth, storage, integrations, deployment, or frontend behavior; follow its linked detail map for that branch. Treat source/config/tests as the final source of truth when the document and repository disagree.
+
 ## Rules (`.claude/rules/`)
 
 - `execution-policy.md` — task classification, agent roster (dhpk-preferred), process gates, anti-loop
@@ -39,24 +57,24 @@ Do not vendor or manually sync: `openspec`, `codex`, `pyright-lsp` — managed b
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **ccas** (symbol, relationship, and execution-flow graph). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely. Exact counts live in `.gitnexus/meta.json` — query the graph rather than trusting numbers written here.
+This project is indexed by GitNexus as **ccas** (12664 symbols, 22176 relationships, 241 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
-> If any GitNexus tool warns the index is stale, refresh with `npx gitnexus analyze --no-stats --skip-agents-md` (plain `analyze` re-injects volatile stats and MUST-wording into this block).
+> If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
 
-## Recommended (advisory — no hook enforces these)
+## Always Do
 
-- **Before editing a symbol**, consider running `gitnexus_impact({target: "symbolName", direction: "upstream"})` and reporting the blast radius (direct callers, affected processes, risk level) to the user.
-- **Before committing**, consider running `gitnexus_detect_changes()` to verify your changes only affect expected symbols and execution flows.
-- Warn the user if impact analysis returns HIGH or CRITICAL risk before proceeding with edits.
-- When exploring unfamiliar code, `gitnexus_query({query: "concept"})` finds execution flows faster than grepping — it returns process-grouped results ranked by relevance.
-- For full context on a specific symbol — callers, callees, which execution flows it participates in — use `gitnexus_context({name: "symbolName"})`.
+- **MUST run impact analysis before editing any symbol.** Before modifying a function, class, or method, run `gitnexus_impact({target: "symbolName", direction: "upstream"})` and report the blast radius (direct callers, affected processes, risk level) to the user.
+- **MUST run `gitnexus_detect_changes()` before committing** to verify your changes only affect expected symbols and execution flows.
+- **MUST warn the user** if impact analysis returns HIGH or CRITICAL risk before proceeding with edits.
+- When exploring unfamiliar code, use `gitnexus_query({query: "concept"})` to find execution flows instead of grepping. It returns process-grouped results ranked by relevance.
+- When you need full context on a specific symbol — callers, callees, which execution flows it participates in — use `gitnexus_context({name: "symbolName"})`.
 
-## Prefer / Avoid
+## Never Do
 
-- Prefer running `gitnexus_impact` before editing a function, class, or method, rather than editing blind.
-- Don't ignore HIGH or CRITICAL risk warnings from impact analysis.
-- Avoid renaming symbols with find-and-replace — use `gitnexus_rename`, which understands the call graph.
-- Prefer running `gitnexus_detect_changes()` before committing to check affected scope.
+- NEVER edit a function, class, or method without first running `gitnexus_impact` on it.
+- NEVER ignore HIGH or CRITICAL risk warnings from impact analysis.
+- NEVER rename symbols with find-and-replace — use `gitnexus_rename` which understands the call graph.
+- NEVER commit changes without running `gitnexus_detect_changes()` to check affected scope.
 
 ## Resources
 
