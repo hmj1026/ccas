@@ -1,17 +1,24 @@
-<!-- Generated: 2026-06-17 | Files scanned: ~133 | Token estimate: ~1220 -->
+<!-- Verified: 2026-09-10 | Canonical details: ../current-implementation.md -->
 
 # Backend
 
+> 先看 [目前實作總覽](./current-implementation.md) 取得全局流程；本文件只保留
+> API、pipeline stage、設定與後端模組的細節。
+
 ## API Routes
 
-All under `/api`, require Bearer token auth (except `/health` and Setup OAuth callback).
+All business and setup routes under `/api` require either Bearer token auth or the
+HMAC session cookie. Public endpoints are `/health`, `/api/health`, `/health/ready`,
+`/api/health/ready`, and `GET/POST /api/auth/session`. Session deletion still
+requires valid auth. The Gmail OAuth callback is
+also protected; the frontend callback page completes it with the user's session.
 Mounted in `api/app.py:create_app()` via `include_router(...)`。
 
 ```
 Auth (auth.py):
-  GET    /api/auth/session
-  POST   /api/auth/session
-  DELETE /api/auth/session
+  GET    /api/auth/session                    (公開，檢查瀏覽器 session)
+  POST   /api/auth/session                    (公開，以 API token 建立 session)
+  DELETE /api/auth/session                    (需有效 Bearer/session)
 
 Dashboard (overview.py):
   GET    /api/overview
@@ -27,7 +34,7 @@ Transactions (transactions.py):
 
 Transaction Edit (transactions_edit.py):
   GET    /api/transactions/{id}                       (detail)
-  PUT    /api/transactions/{id}                       (edit category/note/tags/alias → manual_override)
+  PATCH  /api/transactions/{id}                       (edit category/note/tags/alias → manual_override)
   POST   /api/transactions/{id}/note
   DELETE /api/transactions/{id}/manual-override       (revert to auto-classify)
 
@@ -86,7 +93,7 @@ Staged Attachments (staged_attachments.py):
 Setup — Gmail OAuth (setup/gmail.py):
   POST   /api/setup/gmail/credentials      (上傳 client secret JSON)
   GET    /api/setup/gmail/authorize        (取得授權 URL)
-  GET    /api/setup/gmail/callback         (OAuth code → token)，無需 Bearer
+  GET    /api/setup/gmail/callback         (OAuth code → token，需有效 Bearer/session)
   GET    /api/setup/gmail/status
   POST   /api/setup/gmail/revoke
 
@@ -100,12 +107,21 @@ Setup — Bank Secrets (setup/secrets.py):
   DELETE /api/setup/secrets/{code}
   POST   /api/setup/secrets/import-from-env
 
+Setup — Bank Login Credentials (setup/login_credentials.py):
+  GET    /api/setup/login-credentials
+  PUT    /api/setup/login-credentials/{bank_code}/{credential_key}
+  DELETE /api/setup/login-credentials/{bank_code}/{credential_key}
+  POST   /api/setup/login-credentials/import-from-env
+
 Setup — Admin Token (setup/admin.py):
   GET    /api/setup/admin/token-info       (rotate 時間 / 版本)
   POST   /api/setup/admin/token-rotate
 
 Health:
   GET    /health                           (no auth)
+  GET    /api/health                       (no auth)
+  GET    /health/ready                     (DB + Redis readiness)
+  GET    /api/health/ready                 (DB + Redis readiness)
 ```
 
 ## Pipeline Stages
@@ -126,30 +142,32 @@ Health:
 | Group | Key Fields |
 |-------|-----------|
 | Database | `database_url`, `staging_dir` |
-| Gmail | `gmail_credentials_path`, `gmail_token_path`, `gmail_oauth_redirect_uri`（dynamic switch） |
+| Gmail | `gmail_credentials_path`, `gmail_token_path`, `public_base_url`（callback effective path: `/api/setup/gmail/callback`） |
 | Telegram | `telegram_bot_token`, `telegram_chat_id`, `telegram_allowed_chat_ids` |
-| API | `api_token`, `api_host`, `api_port`, `api_session_cookie_name`, `api_session_max_age`, `api_cookie_secure`, `frontend_origins`, `admin_token_*` |
+| API | `api_token`, `api_token_path`, `api_token_version_path`, `api_host`, `api_port`, `api_session_cookie_name`, `api_session_max_age`, `api_cookie_secure`, `frontend_origins` |
 | Redis / Queue | `redis_url`（default `redis://localhost:6379/0`） |
 | Scheduler | `scheduler_api_base_url`, `scheduler_heartbeat_path`（default `/data/scheduler-heartbeat`） |
-| FUBON Fetcher | `fubon_national_id`, `fubon_roc_birthday`, `fubon_captcha_max_retries`, `fubon_captcha_fallback_llm`, `fubon_captcha_archive_dir`, `fubon_manual_staging_dir` |
+| FUBON Fetcher | `fubon_captcha_max_retries`, `fubon_captcha_fallback_llm`, `fubon_captcha_archive_dir`, `fubon_manual_staging_dir`; `FUBON_NATIONAL_ID` / `FUBON_ROC_BIRTHDAY` 由 `get_bank_credential()` 解析 |
 | Anthropic | `anthropic_api_key`（SecretStr，僅 captcha LLM fallback 啟用時需要） |
+| PDF / Secrets | `pdf_parse_timeout_seconds`, `master_key_path` |
 | Logging | `log_level`, `log_format`, `log_dir`, `log_file_max_bytes`, `log_file_backup_count`, `log_file_prefix` |
 | PDF Passwords | `get_pdf_password(bank_code)` → 讀 `bank_secrets` 表（fallback `PDF_PASSWORD_{BANK_CODE}`） |
 | Database Resilience | `PRAGMA busy_timeout=30000`（per-connection on `connect`）+ `DbProgressReporter.stage_finished` 3-retry backoff（0.1 / 0.5 / 2 秒）on `database is locked` |
 
 ## Module Inventory
 
-| Module | Files | LOC | Purpose |
-|--------|-------|-----|---------|
-| api | 20 | ~3100 | FastAPI routes（18 routers，含 setup/）、schemas、deps、security headers、登入速率限制（v0.4.0+） |
-| parser | 18 | ~4650 | 7 bank parsers + registry + OCR fallback + 共用退款偵測（v0.4.0+） |
-| ingestor | 18 | ~2350 | Gmail download + staging；fetcher（FUBON web-fetch + captcha）；原子 staging paths（v0.4.0+） |
-| bot | 10 | ~932 | Telegram commands、notifications、reminder dispatch |
-| pipeline | 8 | ~870 | Orchestrator + progress（stage_finished）+ CLI + worker glue |
-| tools | 4 | ~773 | Bank configs YAML、Gmail auth helpers、reclassify utility |
-| classifier | 5 | ~410 | Engine：user-rule 優先 + keyword fallback |
-| decryptor | 5 | ~390 | PDF password resolution；staged_path 相對路徑 |
-| storage | 8 | ~520 | ORM models + async session + 原子寫入 + OAuth 加密（v0.4.0+） |
-| scheduler | 5 | ~310 | APScheduler cron + heartbeat writer + reminder dispatch |
-| core | 4 | ~475 | config / errors / log / __init__ |
-| **Total** | **~133** | **~14780** | |
+File and LOC counts are intentionally omitted because they drift quickly. Use the
+source tree and the central as-built document for exact current boundaries.
+
+| Module | Key files | Responsibility |
+|--------|-----------|----------------|
+| `api` | `app.py`, `deps.py`, `routers/`, `schemas/` | FastAPI composition, auth, business and setup endpoints |
+| `ingestor` | `job.py`, `gmail_client.py`, `gmail_connection.py`, `fetcher/` | Gmail ingestion, staging, FUBON web-fetch and captcha flow |
+| `decryptor` | `job.py`, `decrypt.py` | Resolve bank secrets and decrypt staged PDFs |
+| `parser` | `intake.py`, `registry.py`, `banks/`, `ocr.py` | Discover bank/version parser, extract PDF data and persist bills/transactions |
+| `classifier` | `job.py`, `engine.py`, `rules.py` | Manual override, user rules, keyword fallback and batch persistence |
+| `pipeline` | `orchestrator.py`, `options.py`, `progress.py`, `worker.py` | Stage orchestration, RQ/CLI entry points and run progress |
+| `bot` | `job.py`, `notifications.py`, `handlers.py` | Telegram notifications and bot commands |
+| `scheduler` | `__main__.py`, `jobs.py`, `reminders.py`, `budget_evaluator.py` | Daily pipeline, reminders, budget evaluation and heartbeat |
+| `storage` | `models.py`, `database.py`, `queries.py`, `secrets.py` | ORM models, async sessions, queries and encrypted secrets |
+| `tools` | `bank_configs.py`, `gmail_auth.py`, maintenance scripts | Bank configuration, Gmail helpers and operational utilities |

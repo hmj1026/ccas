@@ -1,13 +1,17 @@
-<!-- Generated: 2026-05-10 | Files scanned: ~95 | Token estimate: ~860 -->
+<!-- Verified: 2026-09-10 | Canonical details: ../current-implementation.md -->
 
 # Dependencies
+
+> 先看 [目前實作總覽](./current-implementation.md) 取得系統邊界；本文件只保留
+> 外部服務、Compose 與 runtime 依賴的細節。
 
 ## External Services
 
 ### Gmail API
 - **Module**: `ingestor/gmail_client.py`、`ingestor/auth.py`、`api/routers/setup/gmail.py`
 - **Auth**: OAuth2（client secret JSON 透過 setup wizard 上傳；token 存 token.json；OAuth state 存 `gmail_oauth_state` 表）
-- **Redirect URI**: `gmail_oauth_redirect_uri` dynamic switch（local / docker / prod 三種落點）
+- **Redirect URI**: 由 `public_base_url` 組成 `${public_base_url}/api/setup/gmail/callback`
+  （local / Docker / production 依部署網址設定）
 - **Library**: `google-api-python-client`
 
 ### 銀行網銀 web-fetch
@@ -23,7 +27,7 @@
 - **Library**: `anthropic`（optional extra `fubon-llm`）
 
 ### Telegram Bot API
-- **Module**: `bot/`（10 files, ~932 LOC）
+- **Module**: `bot/`
 - **Auth**: Bot token
 - **Mode**: Long polling（`Application.run_polling()`）；不需 webhook / 對外 port，未填 token 時 bot 進入 disabled idle
 - **Commands**: `/status`、`/upcoming`、`/summary`、`/category`、`/paid`
@@ -61,8 +65,8 @@ redis-commander  Redis key browser, port 8081
 ## Runtime Requirements
 
 - **Python**: 3.12+（`backend/pyproject.toml: requires-python = ">=3.12"`）
-- **Node**: 22+（CI matrix + `.nvmrc`）
-- **pnpm**: 9.15.9+
+- **Node**: 22+（CI matrix + Dockerfile）
+- **pnpm**: 10.33.4+
 
 ## System Dependencies
 
