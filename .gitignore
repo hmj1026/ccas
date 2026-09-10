@@ -146,3 +146,4 @@ evals/results/
 .gemini/skills/
 .claude/commands/opsx/
 .gemini/commands/opsx/
+.codex/skills/openspec-*/
