@@ -13,7 +13,7 @@
 cd ~/ccas    # 你 docker-compose.yml 所在的目錄
 
 # 1) 修改 .env 的版本
-sed -i 's/^CCAS_VERSION=.*/CCAS_VERSION=v0.6.1/' .env
+sed -i 's/^CCAS_VERSION=.*/CCAS_VERSION=v0.6.2/' .env
 
 # 2) 拉新 image 並重啟
 docker compose -f docker-compose.yml pull
@@ -38,6 +38,23 @@ CCAS 採 [SemVer](https://semver.org/)：
 | Major（`v0.x.x` → `v1.0.0`） | 可能 breaking change；release notes 會明示 | 升級前**閱讀 release notes**、備份 |
 
 每次 release 的詳細 changelog 見 [GitHub Releases](https://github.com/<owner>/ccas/releases)。
+
+---
+
+## v0.6.2（Patch）— 2026-09-10 — 架構圖資更新、Agent 協作規範與忽略規則維護
+
+**適用對象**：v0.6.1 升級至 v0.6.2。alembic schema 不變，不含破壞性變更。
+
+**規格與架構圖資**：
+- **架構地圖與現行實作總覽**：新增 `docs/CODEMAPS/current-implementation.md` 現行實作總覽，並全面更新整體架構地圖與領域上下文 (`CONTEXT.md`)。
+- **模組深度規格**：歸檔 `deepen-codebase-architecture`，並新增 Gmail 連線管理、帳單收取流程 (Intake)、Pipeline 生命週期與交易編輯深度規格。
+- **開發指南對齊**：更新開發手冊、Runbook 與 README，統一對齊測試覆蓋率門檻與部署設定。
+
+**Agent 與 Harness 維護**：
+- **Agent 規範配置**：配置 Agent 協作規範、議題追蹤指引與更新規格配置。
+- **忽略規則調整**：精細化 `.gitignore` 配置，忽略外部安裝之 Agent 技能與工具生成目錄（`.agents/skills/`、`.agent/`、`.codex/`、`.cursor/`），保留倉庫外掛描述檔。
+
+**升級後**：無額外手動步驟。
 
 ---
 
