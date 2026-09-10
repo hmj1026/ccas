@@ -39,9 +39,9 @@ Pipeline stages move PDFs through a state machine: `staged → decrypted → par
 | Layer | Stack |
 |---|---|
 | **Backend** | Python 3.12, FastAPI, SQLAlchemy (async) + aiosqlite, Alembic, RQ + Redis, APScheduler |
-| **Frontend** | React 19, Vite 8, TypeScript 5.9, Tailwind CSS 4, TanStack Query 5, React Router 7, Recharts |
+| **Frontend** | React, Vite, TypeScript, Tailwind CSS, TanStack Query, React Router, Recharts（versions in `frontend/package.json`） |
 | **PDF / OCR** | pdfplumber, pikepdf, tabula-py, pytesseract, ddddocr (Fubon captcha) |
-| **Testing** | pytest (asyncio_mode=auto, cov ≥ 70%), Vitest, Playwright |
+| **Testing** | pytest (asyncio_mode=auto, cov ≥ 80%), Vitest, Playwright |
 | **Lint / Types** | ruff (check + format), pyright, eslint |
 | **Infrastructure** | Docker Compose, SQLite (WAL + busy_timeout), Nginx proxy |
 | **Package Managers** | uv (backend), pnpm (frontend) |
@@ -102,7 +102,7 @@ See [`docs/developer-guide.md`](docs/developer-guide.md) for the full toolchain 
 ccas/
 ├── backend/           # FastAPI service (src/ccas/{api,ingestor,decryptor,parser,
 │                      #   classifier,pipeline,scheduler,bot,storage,tools})
-├── frontend/          # React 19 + Vite 8 + TypeScript
+├── frontend/          # React + Vite + TypeScript
 ├── docker/            # production pull-only compose + nginx proxy image
 ├── docker-compose.yaml          # dev compose (build from source)
 ├── docker-compose.override.yml  # dev overrides (bind-mount, hot reload)
@@ -128,15 +128,17 @@ ccas/
 | Gmail OAuth setup | [`docs/gmail-setup.md`](docs/gmail-setup.md) |
 | Bank code reference | [`docs/bank-codes.md`](docs/bank-codes.md) |
 | Contributing | [`docs/CONTRIBUTING.md`](docs/CONTRIBUTING.md) |
+| Domain context | [`CONTEXT.md`](CONTEXT.md) |
+| Current implementation | [`docs/CODEMAPS/current-implementation.md`](docs/CODEMAPS/current-implementation.md) |
 
-Architecture maps for contributors: [`docs/CODEMAPS/`](docs/CODEMAPS/) — `architecture.md`, `backend.md`, `frontend.md`, `data.md`, `dependencies.md`.
+Architecture maps for contributors: [`docs/CODEMAPS/`](docs/CODEMAPS/) — `current-implementation.md`, `architecture.md`, `backend.md`, `frontend.md`, `data.md`, `dependencies.md`.
 
 ## CI/CD
 
 GitHub Actions on push & PR to `develop` / `master`:
 
 - **backend-lint** — `ruff check` + `ruff format --check` + `pyright`
-- **backend-test** — `pytest tests/unit/` with coverage ≥ 70%
+- **backend-test** — `pytest tests/unit/` with coverage ≥ 80%
 - **frontend-lint-test** — `pnpm lint` + `pnpm build` (includes `tsc`) + `pnpm test`
 
 Release pipeline (`release-docker.yaml`) builds and pushes container images to GHCR on tagged releases.

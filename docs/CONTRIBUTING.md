@@ -96,7 +96,7 @@ Session 結束時，若有檔案異動，`.claude/hooks/ccas-pre-push-stop.sh` �
 |------|------|
 | verify-claude-plugins | 驗證 Claude plugin pin |
 | ruff check + format + pyright | 完整 backend 靜態分析 |
-| pytest (unit, --cov ≥ 70%) | Unit test coverage 門檻 |
+| pytest (unit, --cov ≥ 80%) | Unit test coverage 門檻 |
 | pnpm lint + build + test | 前端完整驗證（TypeScript 編譯含其中）|
 
 注意：
@@ -115,7 +115,7 @@ Session 結束時，若有檔案異動，`.claude/hooks/ccas-pre-push-stop.sh` �
 | `dev-lint.sh` | `ruff check` + `ruff format --check` + `pyright`（後端完整靜態檢查） |
 | `dev-test.sh` | `uv run pytest "$@"`（in-memory SQLite，免 Docker / Redis） |
 | `pre-commit.sh` | gitleaks + ruff + pyright + eslint（針對 staged 檔案） |
-| `pre-push.sh` | 完整 CI 模擬：plugin pin、ruff、pytest（cov ≥ 70%）、pnpm lint/build/test |
+| `pre-push.sh` | 完整 CI 模擬：plugin pin、ruff、pytest（cov ≥ 80%）、pnpm lint/build/test |
 | `setup-hooks.sh` | 安裝 git pre-commit / pre-push hooks（非 Claude 工作流才需要） |
 | `setup.sh` | 互動式環境初始化（依賴、`.env`、Gmail OAuth、banks.yaml 等） |
 | `pipeline.sh` | `docker compose exec backend uv run python -m ccas.pipeline "$@"` |
@@ -152,7 +152,7 @@ Session 結束時，若有檔案異動，`.claude/hooks/ccas-pre-push-stop.sh` �
 ./scripts/dev-test.sh --cov --cov-report=term-missing  # 含 coverage
 ```
 
-Coverage 門檻：CI／`pre-push` hook 強制 **70%**（見 `.github/workflows/ci.yaml` 與 `scripts/pre-push.sh`）；`backend/pyproject.toml` 的 `fail_under` 設為 **80%**，本地 `uv run pytest --cov` 直接呼叫時會套用較高門檻。目標仍是 80%。
+Coverage 門檻：CI、`pre-push` hook 與 `backend/pyproject.toml` 的 `fail_under` 都是 **80%**。
 
 ### Lint & Type Check
 
@@ -181,7 +181,7 @@ uv run pyright           # type check
 在提交 PR 前確認：
 
 - [ ] 測試通過：`./scripts/dev-test.sh`
-- [ ] Coverage ≥ 70%（CI 門檻，目標 80%）：`./scripts/dev-test.sh --cov`
+- [ ] Coverage ≥ 80%：`./scripts/dev-test.sh --cov`
 - [ ] Lint 通過：`./scripts/dev-lint.sh`
 - [ ] 新功能有對應的 unit / integration tests
 - [ ] Commit messages 符合 Conventional Commits 格式
