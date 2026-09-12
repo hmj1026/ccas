@@ -7,8 +7,8 @@ Gmail PDF → decrypt → parse → classify → REST API / Telegram notificatio
 | Scenario | Skill |
 |---|---|
 | OpenSpec spec-driven workflow | `/opsx:*` series |
-| Bug root-cause investigation | `dhpk:bug-investigation` |
-| Architecture decisions, module boundaries | `dhpk:software-architecture` |
+| Bug root-cause investigation | `dhpk:code-trace` (`diagnose` mode; replaces retired `bug-investigation`) |
+| Architecture decisions, module boundaries | `dhpk:dhpk-module-design` (canonical DHPK name; not projected as a local Codex symlink) |
 | Free-text task routing (feature/bug/maintenance) | `/dhpk:do` |
 | Feature development workflow | `/dhpk:feature-dev` |
 | Harness audit & optimization | `/dhpk:harness-audit` |
@@ -57,7 +57,7 @@ Do not vendor or manually sync: `openspec`, `codex`, `pyright-lsp` — managed b
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **ccas** (12664 symbols, 22176 relationships, 241 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **ccas** (12699 symbols, 22224 relationships, 241 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
 

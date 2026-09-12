@@ -6,7 +6,7 @@
 
 - Codex has **skills only** (no slash commands directory)
 - Skills are defined in `.codex/skills/<name>/SKILL.md`
-- This repo's `.codex/skills/` contains 12 skills: the same 10 OpenSpec workflow skills as Claude, plus `bug-investigation` and `software-architecture`
+- This repo does not vendor DHPK skills or track cross-repository symlinks. The `.codex/skills/` directory is a DHPK-managed runtime projection; consult the installer/receipt for the current roster.
 - No interactive tools (no AskUserQuestion equivalent) — batch mode only: receives full prompt, returns full response
 
 ## Skill Sources (Codex)
@@ -15,14 +15,14 @@ Skill sources match CLAUDE.md: (1) `npx skills` CLI → `.agents/skills/`; (2) s
 
 Do not vendor or manually sync ECC reference skills (`everything-claude-code`), `openspec`, `codex`, or `pyright-lsp`.
 
-When updating OpenSpec skills, sync `.codex/skills/` alongside `.claude/skills/`.
+When updating OpenSpec skills, sync the tracked provider directories. DHPK-generated `.codex/skills/` projections are managed by the installer/receipt; generated cross-repository symlinks must not be committed.
 
 ## Additional Skills
 
 | Skill | Purpose |
 |-------|---------|
-| `bug-investigation` | Structured bug triage and root cause analysis |
-| `software-architecture` | Architecture decision records |
+| `code-trace` | Structured code tracing and root-cause investigation (replaces retired `bug-investigation`) |
+| `dhpk-module-design` | DHPK's canonical architecture and module-boundary skill; it is not a project-local Codex symlink |
 
 Claude-only ECC/reference skills are not additional entries under `.codex/skills/`.
 
@@ -33,7 +33,7 @@ For code exploration use `cx`. Reference: `~/.claude/CX.md` (global, all project
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **ccas** (12664 symbols, 22176 relationships, 241 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **ccas** (12699 symbols, 22224 relationships, 241 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
 
