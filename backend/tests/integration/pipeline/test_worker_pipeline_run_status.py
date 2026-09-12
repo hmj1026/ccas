@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
@@ -10,12 +11,14 @@ import pytest
 from rq.job import Job
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+from ccas.pipeline.lifecycle import DbLifecycleStore
 from ccas.pipeline.summary import PipelineSummary, StageSummary
 from ccas.pipeline.worker import (
     mark_manual_review,
     on_failure_handler,
     run_pipeline_sync,
 )
+from ccas.storage import models as storage_models
 from ccas.storage.models import (
     Base,
     PipelineRun,
@@ -49,18 +52,31 @@ def worker_db(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     asyncio.run(engine.dispose())
 
 
-async def _insert_run(session_factory, *, run_id: str = "run-1") -> None:
+async def _insert_run(
+    session_factory,
+    *,
+    run_id: str = "run-1",
+    status: PipelineRunStatus = PipelineRunStatus.QUEUED,
+    terminal_reason=None,
+    error_message: str | None = None,
+    completed_at: datetime | None = None,
+) -> None:
     async with session_factory() as session:
-        session.add(
-            PipelineRun(
-                id=run_id,
-                job_id="job-1",
-                status=PipelineRunStatus.QUEUED,
-                triggered_by="api",
-                params={},
-                stage_summary=[],
-            )
+        run = PipelineRun(
+            id=run_id,
+            job_id="job-1",
+            status=status,
+            triggered_by="api",
+            params={},
+            stage_summary=[],
         )
+        if terminal_reason is not None:
+            setattr(run, "terminal_reason", terminal_reason)
+        if error_message is not None:
+            run.error_message = error_message
+        if completed_at is not None:
+            run.completed_at = completed_at
+        session.add(run)
         await session.commit()
 
 
@@ -108,6 +124,7 @@ class TestRunPipelineSyncPipelineRunStatus:
         assert run.started_at is not None
         assert run.completed_at is not None
         assert run.error_message is None
+        assert run.terminal_reason == storage_models.PipelineRunTerminalReason.SUCCEEDED
         assert run.current_stage == "ingest"
         assert run.current_stage_total == 1
         assert seen["progress_reporter"].__class__.__name__ == "DbProgressReporter"
@@ -146,6 +163,16 @@ async def _get_staged_statuses(session_factory) -> dict[str, str]:
 
 
 class TestRunPipelineSyncFailurePath:
+    def test_existing_pipeline_run_rows_have_no_terminal_reason(
+        self,
+        worker_db,
+    ):
+        asyncio.run(_insert_run(worker_db))
+
+        run = asyncio.run(_get_run(worker_db))
+
+        assert run.terminal_reason is None
+
     def test_marks_run_failed_when_run_pipeline_raises(
         self,
         worker_db,
@@ -166,6 +193,33 @@ class TestRunPipelineSyncFailurePath:
         assert run.status == PipelineRunStatus.FAILED
         assert run.error_message is not None
         assert "RuntimeError" in run.error_message
+        assert (
+            run.terminal_reason
+            == storage_models.PipelineRunTerminalReason.WORKER_EXCEPTION
+        )
+
+    def test_retry_start_clears_previous_terminal_outcome(
+        self,
+        worker_db,
+    ):
+        asyncio.run(
+            _insert_run(
+                worker_db,
+                run_id="retry-run",
+                status=PipelineRunStatus.FAILED,
+                terminal_reason=storage_models.PipelineRunTerminalReason.STAGE_FAILURE,
+                error_message="previous stage failure",
+                completed_at=datetime(2026, 1, 1, tzinfo=UTC),
+            )
+        )
+
+        asyncio.run(DbLifecycleStore(worker_db).persist_progress("retry-run"))
+
+        run = asyncio.run(_get_run(worker_db, "retry-run"))
+        assert run.status == PipelineRunStatus.RUNNING
+        assert run.terminal_reason is None
+        assert run.error_message is None
+        assert run.completed_at is None
 
     def test_marks_run_failed_when_classify_batch_commit_fails(
         self,
@@ -371,6 +425,32 @@ class TestOnFailureHandlerPipelineRunStatus:
         assert run.completed_at is not None
         assert run.error_message is not None
         assert "timeout" in run.error_message.lower()
+        assert (
+            run.terminal_reason
+            == storage_models.PipelineRunTerminalReason.RETRIES_EXHAUSTED
+        )
+
+    def test_retry_failure_does_not_record_terminal_reason_before_final_attempt(
+        self,
+        worker_db,
+    ):
+        asyncio.run(_insert_run(worker_db))
+        job = MagicMock(spec=Job)
+        job.id = "job-1"
+        job.retries_left = 1
+        job.kwargs = {"run_id": "run-1"}
+
+        on_failure_handler(
+            job,
+            MagicMock(),
+            RuntimeError,
+            RuntimeError("transient failure"),
+            None,
+        )
+
+        run = asyncio.run(_get_run(worker_db))
+        assert run.status == PipelineRunStatus.QUEUED
+        assert run.terminal_reason is None
 
     def test_passes_bank_code_from_job_args_to_mark_manual_review(
         self,

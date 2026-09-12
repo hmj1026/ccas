@@ -134,6 +134,7 @@ bill_id (FK), reminder_type, sent_at | **UQ** (bill_id, reminder_type)
 | current_stage_total | int | default 0 |
 | stage_summary | JSON | 各 stage `{stage, ok, fail, elapsed_ms, counts, errors}` |
 | error_message | text? | |
+| terminal_reason | str(32)? | retry exhaustion / manual review reason；nullable，無 default |
 | started_at / completed_at | datetime? | |
 | created_at / updated_at | datetime | trigger 維護 |
 | **IX** | created_at DESC、status | |
@@ -176,6 +177,7 @@ PipelineRun (no FK，獨立紀錄)
 | 066eb5d1c70c | Add categories.source (`"seed"` / `"user"`) |
 | 2570bbdebf54 | Add setup tables (bank_settings、bank_secrets、gmail_oauth_state) + updated_at triggers |
 | 0a2c400f1179 | Add pipeline_runs（含 stage_summary、created_at DESC index、updated_at trigger） |
+| b72e619af430 | Add pipeline_runs.terminal_reason（nullable） |
 | a4b8c2d6e0f1 | Add transactions user fields (manual_category_override、tags、merchant_alias、updated_at) + (category, trans_date) index |
 | 5f9d4a7b3c8e | Add classification_rules、budgets、budget_alerts（含 priority DESC index） |
 | 9b3e2c8a4f10 | Add reminder_settings（per-bill override，含 updated_at trigger） |

@@ -49,6 +49,8 @@ CCAS 是一個以 SQLite 為資料來源、以 Redis/RQ 執行非同步工作、
 | Pipeline CLI | `python -m ccas.pipeline` | 直接執行 pipeline；使用 `NoopProgressReporter`，不建立 `pipeline_runs` |
 | Scheduler | `python -m ccas.scheduler` | 每日觸發 pipeline、付款提醒、預算評估；每 30 秒寫 heartbeat |
 | Telegram bot | `python -m ccas.bot` | long polling、白名單指令、查詢與標記帳單已繳 |
+| Agent CLI | `ccas-agent` / `python -m ccas.cli` | 唯讀 agent 查詢，JSON/table 輸出 |
+| Agent MCP | `ccas-mcp` / `python -m ccas.mcp` | 官方 MCP SDK stdio 唯讀工具介面 |
 | Frontend | Vite dev / Nginx production | React Router、React Query、頁面與設定中心 |
 
 Docker Compose 將 backend、worker、scheduler、bot、frontend、redis 分開執行；production pull-only compose 另外以 proxy 統一對外暴露入口。
@@ -151,6 +153,8 @@ Server state 使用 TanStack Query；交易、設定與 pipeline progress 的 ca
 ### Secrets 與設定
 
 `Settings` 從 `.env`／環境變數載入；`.env.example` 是變數說明的 SSOT。API token、master key、Gmail credentials/token 與 bank secrets 都有獨立的檔案或加密儲存規則；文件只描述路徑與來源，不記錄實際秘密值。
+
+Agent surfaces 共用 `ccas.services` 的安全投影；REST 提供 `/api/bills/payment-due` 與 `/api/pipeline/status`，CLI/MCP 僅允許唯讀查詢。`AGENT_WRITE_ENABLED` 預設為 false，且目前不會暴露任何寫入工具。
 
 ## 7. 測試與文件維護入口
 

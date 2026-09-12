@@ -72,6 +72,9 @@ class Settings(BaseSettings):
     # Swagger UI / ReDoc / openapi.json are disabled by default; opt-in via
     # ENABLE_API_DOCS=true for development or internal debugging only.
     enable_api_docs: bool = False
+    # Reserved for the future Agent write-tool contract.  The current MCP and
+    # CLI surfaces are read-only regardless of this setting.
+    agent_write_enabled: bool = False
     # Required (no default): preserves fail-fast at startup when API_TOKEN is
     # unset. SecretStr masks it in pydantic repr / model_dump; callers read the
     # plain value with ``.get_secret_value()``.

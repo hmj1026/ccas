@@ -25,6 +25,8 @@ Dashboard (overview.py):
 
 Bills (bills.py):
   GET    /api/bills                       (list + paginate)
+  GET    /api/bills/payment-due            (agent payment-due projection)
+         Requires Bearer/session auth; returns the standard ApiResponse envelope.
   PATCH  /api/bills/{id}                  (mark paid)
   GET    /api/bills/{id}/transactions     (inline transaction list)
   GET    /api/bills/{id}/pdf              (download)
@@ -65,6 +67,8 @@ Pipeline (pipeline.py):
   POST   /api/pipeline/trigger             (推入 RQ queue → 回傳 run_id)
   GET    /api/pipeline/runs                (status filter + limit ≤100)
   GET    /api/pipeline/runs/{run_id}       (含 stage_summary 詳情)
+  GET    /api/pipeline/status              (agent latest-run projection)
+         Requires Bearer/session auth; returns the standard ApiResponse envelope.
 
 Rules (rules.py):
   GET    /api/rules                        (filter by enabled)
@@ -145,6 +149,7 @@ Health:
 | Gmail | `gmail_credentials_path`, `gmail_token_path`, `public_base_url`（callback effective path: `/api/setup/gmail/callback`） |
 | Telegram | `telegram_bot_token`, `telegram_chat_id`, `telegram_allowed_chat_ids` |
 | API | `api_token`, `api_token_path`, `api_token_version_path`, `api_host`, `api_port`, `api_session_cookie_name`, `api_session_max_age`, `api_cookie_secure`, `frontend_origins` |
+| Agent | `agent_write_enabled` (default false; no write tools currently exposed) |
 | Redis / Queue | `redis_url`（default `redis://localhost:6379/0`） |
 | Scheduler | `scheduler_api_base_url`, `scheduler_heartbeat_path`（default `/data/scheduler-heartbeat`） |
 | FUBON Fetcher | `fubon_captcha_max_retries`, `fubon_captcha_fallback_llm`, `fubon_captcha_archive_dir`, `fubon_manual_staging_dir`; `FUBON_NATIONAL_ID` / `FUBON_ROC_BIRTHDAY` 由 `get_bank_credential()` 解析 |
@@ -170,4 +175,7 @@ source tree and the central as-built document for exact current boundaries.
 | `bot` | `job.py`, `notifications.py`, `handlers.py` | Telegram notifications and bot commands |
 | `scheduler` | `__main__.py`, `jobs.py`, `reminders.py`, `budget_evaluator.py` | Daily pipeline, reminders, budget evaluation and heartbeat |
 | `storage` | `models.py`, `database.py`, `queries.py`, `secrets.py` | ORM models, async sessions, queries and encrypted secrets |
+| `services` | `schemas.py`, `bills.py`, `transactions.py`, `budgets.py`, `pipeline.py` | Read-only agent projections shared by REST, CLI and MCP |
+| `mcp` | `server.py`, `__main__.py` | Official SDK stdio transport with six read-only tools |
+| `cli.py` | `cli.py` | Read-only agent CLI surface |
 | `tools` | `bank_configs.py`, `gmail_auth.py`, maintenance scripts | Bank configuration, Gmail helpers and operational utilities |

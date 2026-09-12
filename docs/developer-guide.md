@@ -307,6 +307,17 @@ uv run python -m ccas.pipeline --force
 uv run python -m ccas.pipeline --from parse --to classify
 ```
 
+### Agent CLI / MCP
+
+唯讀 agent 查詢可使用 ccas-agent（或 python -m ccas.cli），支援 JSON 與 table 輸出；
+MCP client 使用 ccas-mcp（或 python -m ccas.mcp）的 stdio transport。兩者共用
+ccas.services 安全投影，不會輸出 secrets，也不提供寫入工具。AGENT_WRITE_ENABLED=true
+目前仍不會啟用寫入操作。
+
+MCP tools：list_bills、get_bill、query_transactions、get_payment_due、budget_status、pipeline_status。
+CLI commands 對應上述六項查詢，支援 --format json 或 --format table；MCP 透過 stdio
+啟動，不接受網路 transport。
+
 ## 12. 貢獻指南
 
 ### Branching

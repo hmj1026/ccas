@@ -13,7 +13,21 @@ from ccas.pipeline.lifecycle import (
     StageProgress,
 )
 from ccas.pipeline.summary import PipelineSummary, StageSummary
+from ccas.storage import models as storage_models
 from ccas.storage.models import PipelineRunStatus
+
+
+class TestPipelineRunTerminalReason:
+    def test_terminal_reason_values_are_stable(self):
+        assert {
+            reason.value for reason in storage_models.PipelineRunTerminalReason
+        } == {
+            "succeeded",
+            "stage_failure",
+            "worker_exception",
+            "retries_exhausted",
+            "enqueue_failure",
+        }
 
 
 class TestStageProgress:
@@ -104,6 +118,10 @@ class TestClassify:
         )
         result = RunLifecycle.classify(summary)
         assert result.status == PipelineRunStatus.FAILED
+        assert (
+            result.terminal_reason
+            == storage_models.PipelineRunTerminalReason.STAGE_FAILURE
+        )
         assert result.error_message is not None
         assert "classify" in result.error_message
         assert result.stage_progress == (
@@ -125,6 +143,9 @@ class TestClassify:
         )
         result = RunLifecycle.classify(summary)
         assert result.status == PipelineRunStatus.SUCCEEDED
+        assert (
+            result.terminal_reason == storage_models.PipelineRunTerminalReason.SUCCEEDED
+        )
         assert result.error_message is None
 
     def test_success_summary_yields_succeeded_result(self):
@@ -134,6 +155,9 @@ class TestClassify:
         )
         result = RunLifecycle.classify(summary)
         assert result.status == PipelineRunStatus.SUCCEEDED
+        assert (
+            result.terminal_reason == storage_models.PipelineRunTerminalReason.SUCCEEDED
+        )
         assert result.error_message is None
 
 
@@ -141,6 +165,10 @@ class TestLifecycleResultFailed:
     def test_failed_classmethod_builds_failed_result(self):
         result = LifecycleResult.failed("RuntimeError: boom")
         assert result.status == PipelineRunStatus.FAILED
+        assert (
+            result.terminal_reason
+            == storage_models.PipelineRunTerminalReason.WORKER_EXCEPTION
+        )
         assert result.error_message == "RuntimeError: boom"
         assert result.stage_progress == ()
 

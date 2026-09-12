@@ -38,7 +38,13 @@ dependencies = [
     "ddddocr==1.6.1",
     # Excel export streaming（write_only mode）— bills-management-and-insights §8
     "openpyxl>=3.1",
+    "mcp>=2.2.0,<3",
+    "click>=8.3,<9",
 ]
+
+[project.scripts]
+ccas-mcp = "ccas.mcp.server:main"
+ccas-agent = "ccas.cli:main"
 
 [project.optional-dependencies]
 fubon-llm = ["anthropic>=0.40.0"]
@@ -116,6 +122,9 @@ line-length = 88
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "W", "UP"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["ccas"]
 
 [tool.pyright]
 venvPath = "."
