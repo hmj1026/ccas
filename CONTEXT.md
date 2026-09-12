@@ -47,3 +47,14 @@ _避免_: 額度、信用額度
 **預算告警（Budget alert）**：消費累計達到預算指定閾值時產生的提醒事件，可被使用者確認。
 _避免_: 預算通知、錯誤
 
+## Agent 協作與對帳
+
+**外部代理（Agent）**：獨立於 CCAS 之外、以 Notion 作為自身資料與決策依據的第三方程式（例如信用卡帳單小幫手），可透過 MCP／CLI 向 CCAS 讀取結構化資料，僅在使用者明確授權時才能寫入 CCAS 自身狀態。
+_避免_: 助理、機器人（除非特指 Telegram Bot）
+
+**對帳（Reconciliation）**：Agent 或使用者將 CCAS 資料與 Notion 資料逐筆比對、找出差異並交由人工判斷的行為；對帳本身不會覆寫或合併任一方資料。
+_避免_: 同步、合併（CCAS 與 Notion 之間不存在自動同步或合併機制，見 `docs/adr/0001-agent-notion-trust-boundary.md`）
+
+**穩定識別鍵（Reconciliation identity）**：由 Bill／Transaction 既有欄位衍生出的字串組合鍵（非資料庫欄位），供 Agent 對帳時比對 CCAS 與 Notion 上代表同一筆帳單／交易的紀錄。
+_避免_: 主鍵、UUID
+
