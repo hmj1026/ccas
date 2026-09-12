@@ -53,7 +53,7 @@ Pipeline 各階段以狀態機推進：`staged → decrypted → parsed`，遇�
 ```bash
 mkdir ~/ccas && cd ~/ccas
 REPO_OWNER=<owner>   # GHCR namespace / GitHub owner（即 release 連結中的 <owner>）
-RELEASE=v0.6.2       # 改為要安裝的精確版號
+RELEASE=v0.7.0       # 改為要安裝的精確版號
 curl -fsSL -o docker-compose.yml \
   "https://github.com/${REPO_OWNER}/ccas/releases/download/${RELEASE}/docker-compose.yml"
 curl -fsSL -o example.env \

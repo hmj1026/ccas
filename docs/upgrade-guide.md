@@ -13,7 +13,7 @@
 cd ~/ccas    # 你 docker-compose.yml 所在的目錄
 
 # 1) 修改 .env 的版本
-sed -i 's/^CCAS_VERSION=.*/CCAS_VERSION=v0.6.2/' .env
+sed -i 's/^CCAS_VERSION=.*/CCAS_VERSION=v0.7.0/' .env
 
 # 2) 拉新 image 並重啟
 docker compose -f docker-compose.yml pull
@@ -38,6 +38,25 @@ CCAS 採 [SemVer](https://semver.org/)：
 | Major（`v0.x.x` → `v1.0.0`） | 可能 breaking change；release notes 會明示 | 升級前**閱讀 release notes**、備份 |
 
 每次 release 的詳細 changelog 見 [GitHub Releases](https://github.com/<owner>/ccas/releases)。
+
+---
+
+## v0.7.0（Minor）— 2026-09-12 — Agent CLI 與 MCP 唯讀介面、對帳架構與管線狀態升級
+
+**適用對象**：v0.6.2 升級至 v0.7.0。包含 alembic migration（`b72e619af430_add_pipeline_terminal_reason`），不含破壞性變更。
+
+**Agent CLI 與 MCP 伺服器**：
+- **唯讀介面**：新增 `ccas agent` CLI 指令與標準 Model Context Protocol (MCP) 伺服器，支援外部代理讀取帳單、交易、預算與管線狀態。
+- **對帳與領域語彙 (ADR 0001)**：建立外部代理與 Notion 信任邊界架構決策紀錄，導入穩定識別鍵 (Reconciliation identity) 機制。
+- **安裝與整合指南**：新增 `docs/mcp-installation.md` 提供完整 MCP 設定與使用指引。
+
+**管線與資料庫**：
+- **管線終止原因追蹤**：Alembic 遷移新增 `pipeline_runs.terminal_reason` 欄位，精準記錄管線終止、失敗或中止原因。
+
+**Harness 與規格對齊**：
+- **DHPK 執行期對齊**：移除已追蹤的失效 Codex 技能符號連結，全面對齊 DHPK v0.58.0 執行期規格並加入防禦性測試。
+
+**升級後**：容器啟動時自動套用 alembic migration，無額外手動步驟。
 
 ---
 
