@@ -100,6 +100,8 @@ apt-get install tesseract-ocr tesseract-ocr-chi-tra
 | rq | Redis job queue（2.x） |
 | openpyxl | XLSX export 產出（exports.py） |
 | cryptography | bank_secrets 對稱加密 |
+| mcp | 官方 MCP SDK stdio server（agent 唯讀工具） |
+| click | agent CLI 指令與輸出格式 |
 
 ## Dev Dependencies
 

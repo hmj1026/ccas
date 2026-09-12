@@ -19,7 +19,11 @@ from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ccas.pipeline.summary import PipelineSummary, StageSummary
-from ccas.storage.models import PipelineRun, PipelineRunStatus
+from ccas.storage.models import (
+    PipelineRun,
+    PipelineRunStatus,
+    PipelineRunTerminalReason,
+)
 
 #: Type alias for any callable that returns an :class:`AsyncSession` instance.
 AsyncSessionFactory = Callable[[], AsyncSession]
@@ -41,11 +45,23 @@ class LifecycleResult:
     status: PipelineRunStatus
     error_message: str | None
     stage_progress: tuple[StageProgress, ...] = ()
+    terminal_reason: PipelineRunTerminalReason | None = None
 
     @classmethod
-    def failed(cls, msg: str) -> LifecycleResult:
+    def failed(
+        cls,
+        msg: str,
+        *,
+        terminal_reason: (
+            PipelineRunTerminalReason
+        ) = PipelineRunTerminalReason.WORKER_EXCEPTION,
+    ) -> LifecycleResult:
         """建立一個 FAILED 結果（例如 run_pipeline 拋出未預期例外時）。"""
-        return cls(status=PipelineRunStatus.FAILED, error_message=msg)
+        return cls(
+            status=PipelineRunStatus.FAILED,
+            error_message=msg,
+            terminal_reason=terminal_reason,
+        )
 
 
 @runtime_checkable
@@ -143,11 +159,13 @@ class RunLifecycle:
                 status=PipelineRunStatus.FAILED,
                 error_message=reason,
                 stage_progress=stage_progress,
+                terminal_reason=PipelineRunTerminalReason.STAGE_FAILURE,
             )
         return LifecycleResult(
             status=PipelineRunStatus.SUCCEEDED,
             error_message=None,
             stage_progress=stage_progress,
+            terminal_reason=PipelineRunTerminalReason.SUCCEEDED,
         )
 
 
@@ -163,6 +181,9 @@ class InMemoryLifecycleStore:
 
     async def persist_terminal(self, run_id: str, result: LifecycleResult) -> None:
         self.terminals[run_id] = result
+
+
+_UNSET = object()
 
 
 class DbLifecycleStore:
@@ -181,6 +202,9 @@ class DbLifecycleStore:
                 run_id,
                 PipelineRunStatus.RUNNING,
                 started_at=datetime.now(UTC),
+                completed_at=None,
+                error_message=None,
+                terminal_reason=None,
             )
 
     async def persist_terminal(self, run_id: str, result: LifecycleResult) -> None:
@@ -191,6 +215,7 @@ class DbLifecycleStore:
                 result.status,
                 completed_at=datetime.now(UTC),
                 error_message=result.error_message,
+                terminal_reason=result.terminal_reason,
             )
 
     @staticmethod
@@ -199,22 +224,26 @@ class DbLifecycleStore:
         run_id: str,
         status: PipelineRunStatus,
         *,
-        started_at: datetime | None = None,
-        completed_at: datetime | None = None,
-        error_message: str | None = None,
+        started_at: datetime | None | object = _UNSET,
+        completed_at: datetime | None | object = _UNSET,
+        error_message: str | None | object = _UNSET,
+        terminal_reason: PipelineRunTerminalReason | None | object = _UNSET,
     ) -> None:
-        """寫入 PipelineRun 狀態與對應時間戳。
+        """寫入 PipelineRun 狀態與對應時間戳 / 原因欄位。
 
-        僅設置呼叫端顯式傳入的欄位（``None`` 不寫入），避免在 running → failed
-        轉換時誤覆寫 ``started_at``。
+        僅設置呼叫端顯式傳入的欄位（未傳入的 _UNSET 不寫入），避免在
+        running → failed / succeeded 轉換時誤覆寫 started_at；
+        顯式傳入 None 時則會清除該欄位（例如 persist_progress 重試時清除前次終態）。
         """
         values: dict[str, object] = {"status": status}
-        if started_at is not None:
+        if started_at is not _UNSET:
             values["started_at"] = started_at
-        if completed_at is not None:
+        if completed_at is not _UNSET:
             values["completed_at"] = completed_at
-        if error_message is not None:
+        if error_message is not _UNSET:
             values["error_message"] = error_message
+        if terminal_reason is not _UNSET:
+            values["terminal_reason"] = terminal_reason
 
         await session.execute(
             update(PipelineRun).where(PipelineRun.id == run_id).values(**values)

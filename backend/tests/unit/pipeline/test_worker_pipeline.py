@@ -11,6 +11,7 @@ from ccas.pipeline.worker import (
     on_failure_handler,
     run_pipeline_sync,
 )
+from ccas.storage import models as storage_models
 
 
 def _make_summary() -> PipelineSummary:
@@ -130,6 +131,45 @@ class TestOnFailureHandler:
         on_failure_handler(job, MagicMock(), RuntimeError, RuntimeError("boom"), None)
 
         mock_asyncio_run.assert_called_once()
+
+    def test_records_retries_exhausted_reason_on_final_failure(self):
+        session = AsyncMock()
+        session.__aenter__.return_value = session
+        session.__aexit__.return_value = False
+        session_factory = MagicMock(return_value=session)
+        engine = MagicMock()
+        engine.dispose = AsyncMock()
+        job = MagicMock()
+        job.id = "job-1"
+        job.retries_left = 0
+        job.kwargs = {"run_id": "run-1"}
+
+        with (
+            patch(
+                "ccas.storage.database.get_session_factory",
+                return_value=session_factory,
+            ),
+            patch("ccas.storage.database.get_engine", return_value=engine),
+            patch(
+                "ccas.pipeline.worker.mark_manual_review",
+                new_callable=AsyncMock,
+                return_value=0,
+            ),
+            patch(
+                "ccas.pipeline.lifecycle.DbLifecycleStore.persist_terminal",
+                new_callable=AsyncMock,
+            ) as persist_terminal,
+        ):
+            on_failure_handler(
+                job, MagicMock(), RuntimeError, RuntimeError("boom"), None
+            )
+
+        persist_terminal.assert_awaited_once()
+        assert persist_terminal.await_args is not None
+        assert (
+            persist_terminal.await_args.args[1].terminal_reason
+            == storage_models.PipelineRunTerminalReason.RETRIES_EXHAUSTED
+        )
 
     @patch("ccas.pipeline.worker.asyncio.run")
     def test_marks_review_when_no_retries_attr(self, mock_asyncio_run):
