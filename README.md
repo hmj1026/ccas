@@ -73,6 +73,8 @@ Then:
 
 Full walkthrough: [`docs/install-quickstart.md`](docs/install-quickstart.md) (Traditional Chinese).
 
+Agent integration: [`docs/mcp-installation.md`](docs/mcp-installation.md) (manual and delegated-AI setup).
+
 ## Local Development
 
 Without Docker — requires Python 3.12+, Node.js 22+, `uv`, and `pnpm`.
@@ -130,6 +132,7 @@ ccas/
 | Contributing | [`docs/CONTRIBUTING.md`](docs/CONTRIBUTING.md) |
 | Domain context | [`CONTEXT.md`](CONTEXT.md) |
 | Current implementation | [`docs/CODEMAPS/current-implementation.md`](docs/CODEMAPS/current-implementation.md) |
+| MCP installation | [`docs/mcp-installation.md`](docs/mcp-installation.md) |
 
 Architecture maps for contributors: [`docs/CODEMAPS/`](docs/CODEMAPS/) — `current-implementation.md`, `architecture.md`, `backend.md`, `frontend.md`, `data.md`, `dependencies.md`.
 
