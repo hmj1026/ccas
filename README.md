@@ -53,7 +53,7 @@ Requires Docker + Docker Compose. First create a Google Cloud OAuth client — s
 ```bash
 mkdir ~/ccas && cd ~/ccas
 REPO_OWNER=<owner>   # GHCR namespace / GitHub owner (the <owner> in the release URL)
-RELEASE=v0.6.2       # pin a released version
+RELEASE=v0.7.0       # pin a released version
 curl -fsSL -o docker-compose.yml \
   "https://github.com/${REPO_OWNER}/ccas/releases/download/${RELEASE}/docker-compose.yml"
 curl -fsSL -o example.env \
@@ -72,6 +72,8 @@ Then:
 3. Visit **Settings** to upload Gmail `credentials.json`, enable banks, and set PDF passwords
 
 Full walkthrough: [`docs/install-quickstart.md`](docs/install-quickstart.md) (Traditional Chinese).
+
+Agent integration: [`docs/mcp-installation.md`](docs/mcp-installation.md) (manual and delegated-AI setup).
 
 ## Local Development
 
@@ -130,6 +132,7 @@ ccas/
 | Contributing | [`docs/CONTRIBUTING.md`](docs/CONTRIBUTING.md) |
 | Domain context | [`CONTEXT.md`](CONTEXT.md) |
 | Current implementation | [`docs/CODEMAPS/current-implementation.md`](docs/CODEMAPS/current-implementation.md) |
+| MCP installation | [`docs/mcp-installation.md`](docs/mcp-installation.md) |
 
 Architecture maps for contributors: [`docs/CODEMAPS/`](docs/CODEMAPS/) — `current-implementation.md`, `architecture.md`, `backend.md`, `frontend.md`, `data.md`, `dependencies.md`.
 

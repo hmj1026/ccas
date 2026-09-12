@@ -31,7 +31,11 @@ def trigger_pipeline_via_rq(opts: dict | None = None) -> str:
     """
     from ccas.pipeline.worker import get_retry, on_failure_handler, run_pipeline_sync
     from ccas.storage.database import get_engine, get_session_factory
-    from ccas.storage.models import PipelineRun, PipelineRunStatus
+    from ccas.storage.models import (
+        PipelineRun,
+        PipelineRunStatus,
+        PipelineRunTerminalReason,
+    )
 
     params = opts or {}
     run_id = str(uuid4())
@@ -71,6 +75,7 @@ def trigger_pipeline_via_rq(opts: dict | None = None) -> str:
                 run = await session.get(PipelineRun, run_id)
                 if run is not None:
                     run.status = PipelineRunStatus.FAILED
+                    run.terminal_reason = PipelineRunTerminalReason.ENQUEUE_FAILURE
                     run.error_message = "Pipeline enqueue failed (scheduler)"
                     await session.commit()
                 raise

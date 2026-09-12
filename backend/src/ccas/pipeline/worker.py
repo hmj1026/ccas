@@ -16,6 +16,7 @@ from rq.job import Job
 
 from ccas.pipeline.lifecycle import DbLifecycleStore, LifecycleResult, RunLifecycle
 from ccas.pipeline.summary import PipelineSummary
+from ccas.storage.models import PipelineRunTerminalReason
 
 logger = logging.getLogger(__name__)
 
@@ -83,7 +84,10 @@ def run_pipeline_sync(opts: dict | None = None, run_id: str | None = None) -> di
                     try:
                         await store.persist_terminal(
                             active_run_id,
-                            LifecycleResult.failed(f"{type(exc).__name__}: {exc}"),
+                            LifecycleResult.failed(
+                                f"{type(exc).__name__}: {exc}",
+                                terminal_reason=PipelineRunTerminalReason.WORKER_EXCEPTION,
+                            ),
                         )
                     except Exception:
                         logger.error(
@@ -204,7 +208,10 @@ def on_failure_handler(
                     try:
                         await DbLifecycleStore(session_factory).persist_terminal(
                             run_id,
-                            LifecycleResult.failed(f"{typ.__name__}: {value}"),
+                            LifecycleResult.failed(
+                                f"{typ.__name__}: {value}",
+                                terminal_reason=PipelineRunTerminalReason.RETRIES_EXHAUSTED,
+                            ),
                         )
                     except Exception:
                         logger.error(

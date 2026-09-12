@@ -1,6 +1,7 @@
 """Bills API：帳單列表、狀態更新、PDF 下載。"""
 
 from pathlib import Path
+from typing import Any, NoReturn
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from fastapi.responses import FileResponse
@@ -17,6 +18,9 @@ from ccas.api.schemas import (
     TransactionItem,
 )
 from ccas.config import get_settings
+from ccas.services.bills import get_payment_due
+from ccas.services.bills import list_bills as service_list_bills
+from ccas.services.schemas import AgentBill, AgentQueryError
 from ccas.storage.database import get_db_session
 from ccas.storage.models import Bill, Transaction
 from ccas.storage.queries import fetch_bank_names
@@ -26,6 +30,34 @@ router = APIRouter(prefix="/api/bills", tags=["bills"])
 # 防護上限：單一帳單交易明細一次最多回傳的筆數，避免異常帳單拖垮回應。
 # 正常帳單遠低於此值；完整筆數另透過 X-Total-Count header 暴露。
 TRANSACTIONS_HARD_LIMIT = 500
+
+
+def _handle_agent_query_error(exc: AgentQueryError) -> NoReturn:
+    if exc.code == "resource_not_found":
+        raise HTTPException(status_code=404, detail=exc.message)
+    if exc.code == "invalid_argument":
+        raise HTTPException(status_code=422, detail=exc.message)
+    raise HTTPException(status_code=500, detail=exc.message)
+
+
+def _agent_bill_to_bill_item(
+    agent_bill: AgentBill,
+    rest_metadata: dict[str, Any],
+) -> BillItem:
+    meta = rest_metadata.get(str(agent_bill.id), {})
+    has_pdf = meta.get("has_pdf", False)
+    pdf_url = f"/api/bills/{agent_bill.id}/pdf" if has_pdf else None
+    return BillItem(
+        id=agent_bill.id,
+        bank_code=agent_bill.bank_code,
+        bank_name=agent_bill.bank_name,
+        billing_month=agent_bill.billing_month,
+        total_amount=int(agent_bill.total_amount.value),
+        due_date=agent_bill.due_date,
+        is_paid=agent_bill.is_paid,
+        pdf_url=pdf_url,
+        created_at=agent_bill.created_at,
+    )
 
 
 def _resolve_bill_pdf_path(file_path: str, allowed_root: str) -> Path:
@@ -74,39 +106,46 @@ async def list_bills(
     ),
     pagination: PaginationParams = Depends(),
     session: AsyncSession = Depends(get_db_session),
-):
+) -> PaginatedResponse[BillItem]:
     """取得帳單清單，可依月份、年度、銀行與付款狀態篩選，支援分頁。"""
-    bank_names = await fetch_bank_names(session)
-
-    stmt = select(Bill).order_by(Bill.billing_month.desc(), Bill.bank_code)
-    if month is not None:
-        stmt = stmt.where(Bill.billing_month == month)
-    elif year is not None:
-        stmt = stmt.where(Bill.billing_month.startswith(f"{year}-"))
-    if bank_code is not None:
-        stmt = stmt.where(Bill.bank_code == bank_code)
-    if status == "unpaid":
-        stmt = stmt.where(Bill.is_paid.is_(False))
-    elif status == "paid":
-        stmt = stmt.where(Bill.is_paid.is_(True))
-
-    total = (
-        await session.execute(select(func.count()).select_from(stmt.subquery()))
-    ).scalar_one()
-
-    paged = stmt.offset(pagination.offset).limit(pagination.page_size)
-    bills = (await session.execute(paged)).scalars().all()
-
-    total_pages = max(1, (total + pagination.page_size - 1) // pagination.page_size)
-    return PaginatedResponse(
-        data=[_to_bill_item(b, bank_names) for b in bills],
-        pagination=PaginationMeta(
+    try:
+        projection = await service_list_bills(
+            session,
+            month=month,
+            year=year,
+            bank_code=bank_code,
+            status=status,
             page=pagination.page,
             page_size=pagination.page_size,
-            total=total,
-            total_pages=total_pages,
+        )
+    except AgentQueryError as exc:
+        _handle_agent_query_error(exc)
+
+    return PaginatedResponse(
+        data=[
+            _agent_bill_to_bill_item(b, projection.rest_metadata)
+            for b in projection.payload.data
+        ],
+        pagination=PaginationMeta(
+            page=projection.payload.pagination.page,
+            page_size=projection.payload.pagination.page_size,
+            total=projection.payload.pagination.total,
+            total_pages=projection.payload.pagination.total_pages,
         ),
     )
+
+
+@router.get("/payment-due", response_model=ApiResponse[list[AgentBill]])
+async def list_payment_due(
+    session: AsyncSession = Depends(get_db_session),
+) -> ApiResponse[list[AgentBill]]:
+    """取得未繳帳單到期清單。"""
+    try:
+        projection = await get_payment_due(session)
+    except AgentQueryError as exc:
+        _handle_agent_query_error(exc)
+
+    return ApiResponse(data=projection.payload.data)
 
 
 @router.patch("/{bill_id}", response_model=ApiResponse[BillItem])

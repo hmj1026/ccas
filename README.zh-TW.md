@@ -53,7 +53,7 @@ Pipeline 各階段以狀態機推進：`staged → decrypted → parsed`，遇�
 ```bash
 mkdir ~/ccas && cd ~/ccas
 REPO_OWNER=<owner>   # GHCR namespace / GitHub owner（即 release 連結中的 <owner>）
-RELEASE=v0.6.2       # 改為要安裝的精確版號
+RELEASE=v0.7.0       # 改為要安裝的精確版號
 curl -fsSL -o docker-compose.yml \
   "https://github.com/${REPO_OWNER}/ccas/releases/download/${RELEASE}/docker-compose.yml"
 curl -fsSL -o example.env \
@@ -72,6 +72,8 @@ docker compose -f docker-compose.yml up -d
 3. 進「設定中心」上傳 Gmail `credentials.json`、啟用銀行、設定 PDF 密碼
 
 完整步驟（含 env 變數逐項說明）：[`docs/install-quickstart.md`](docs/install-quickstart.md)。
+
+Agent／MCP 整合安裝（含人工與委託 AI 方式）：[`docs/mcp-installation.md`](docs/mcp-installation.md)。
 
 ## 本地開發
 
@@ -128,6 +130,7 @@ ccas/
 | 貢獻指南 | [`docs/CONTRIBUTING.md`](docs/CONTRIBUTING.md) |
 | 領域上下文 | [`CONTEXT.md`](CONTEXT.md) |
 | 目前實作總覽 | [`docs/CODEMAPS/current-implementation.md`](docs/CODEMAPS/current-implementation.md) |
+| MCP 安裝與使用 | [`docs/mcp-installation.md`](docs/mcp-installation.md) |
 
 架構地圖（給貢獻者）：[`docs/CODEMAPS/`](docs/CODEMAPS/) —— `current-implementation.md`、`architecture.md`、`backend.md`、`frontend.md`、`data.md`、`dependencies.md`。
 

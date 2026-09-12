@@ -6,15 +6,15 @@
 
 - Slash commands use **TOML format**: `.gemini/commands/opsx/*.toml`
 - Skills are defined in `.gemini/skills/<name>/SKILL.md`
-- This repo's `.gemini/skills/` contains 13 skills total: 10 OpenSpec workflow skills plus 3 Gemini-specific skills
+- This repo's tracked `.gemini/skills/` contains only the OpenSpec workflow skills. DHPK skills are provisioned at runtime; consult the installer/receipt for the current roster.
 
-## Gemini-Exclusive Skills
+## DHPK Runtime Skills
 
 | Skill | Purpose |
 |-------|---------|
-| `bug-investigation` | Structured bug triage and root cause analysis |
+| `code-trace` | Structured code tracing and root-cause investigation (replaces retired `bug-investigation`) |
 | `git-smart-commit` | Intelligent commit message generation and splitting |
-| `software-architecture` | Architecture decision records |
+| `dhpk-module-design` | DHPK's canonical architecture and module-boundary skill |
 
 ## Gemini-Exclusive Commands
 
@@ -23,4 +23,4 @@
 
 ## Synchronization
 
-When updating OpenSpec skills, sync `.gemini/skills/`, `.claude/skills/`, and `.codex/skills/` together.
+When updating OpenSpec skills, sync the tracked provider directories together. DHPK-generated `.codex/skills/` projections are installer-managed and must not be committed as cross-repository symlinks.

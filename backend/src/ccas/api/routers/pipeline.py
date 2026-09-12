@@ -4,14 +4,13 @@
 """
 
 import logging
-from typing import cast
+from typing import Any, NoReturn, cast
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Response
 from fastapi.responses import JSONResponse
 from redis import Redis
 from rq import Queue
-from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ccas.api.deps import PaginationParams
@@ -28,8 +27,22 @@ from ccas.api.schemas import (
 )
 from ccas.config import get_settings
 from ccas.pipeline.worker import get_retry, on_failure_handler, run_pipeline_sync
+from ccas.services.pipeline import (
+    get_pipeline_run as service_get_pipeline_run,
+)
+from ccas.services.pipeline import (
+    list_pipeline_runs as service_list_pipeline_runs,
+)
+from ccas.services.pipeline import (
+    pipeline_status,
+)
+from ccas.services.schemas import AgentQueryError, PipelineStatus
 from ccas.storage.database import get_db_session
-from ccas.storage.models import PipelineRun, PipelineRunStatus
+from ccas.storage.models import (
+    PipelineRun,
+    PipelineRunStatus,
+    PipelineRunTerminalReason,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +59,14 @@ def get_redis_client() -> Redis:
     if _redis_pool is None:
         _redis_pool = Redis.from_url(get_settings().redis_url)
     return _redis_pool
+
+
+def _handle_agent_query_error(exc: AgentQueryError) -> NoReturn:
+    if exc.code == "resource_not_found":
+        raise HTTPException(status_code=404, detail=exc.message)
+    if exc.code == "invalid_argument":
+        raise HTTPException(status_code=422, detail=exc.message)
+    raise HTTPException(status_code=500, detail=exc.message)
 
 
 @router.post("/trigger", response_model=ApiResponse[PipelineTriggerData])
@@ -98,6 +119,7 @@ async def trigger_pipeline(
         run = await session.get(PipelineRun, run_id)
         if run is not None:
             run.status = PipelineRunStatus.FAILED
+            run.terminal_reason = PipelineRunTerminalReason.ENQUEUE_FAILURE
             run.error_message = error_message
             await session.commit()
         # Return the project's ApiResponse error envelope (success=false)
@@ -125,8 +147,28 @@ async def trigger_pipeline(
     )
 
 
-def _stage_entries(raw: list[dict] | None) -> list[PipelineStageEntry]:
+def _stage_entries(raw: list[dict[str, Any]] | None) -> list[PipelineStageEntry]:
     return [PipelineStageEntry.model_validate(item) for item in (raw or [])]
+
+
+def _raw_summary_to_item(raw: dict[str, Any]) -> PipelineRunSummary:
+    status = cast(PipelineRunStatusLiteral, raw["status"])
+    return PipelineRunSummary(
+        id=raw["id"],
+        job_id=raw["job_id"],
+        status=status,
+        triggered_by=raw["triggered_by"],
+        params=raw["params"],
+        current_stage=raw["current_stage"],
+        current_stage_processed=raw["current_stage_processed"],
+        current_stage_total=raw["current_stage_total"],
+        stage_summary=_stage_entries(raw.get("stage_summary")),
+        error_message=raw["error_message"],
+        started_at=raw["started_at"],
+        completed_at=raw["completed_at"],
+        created_at=raw["created_at"],
+        updated_at=raw["updated_at"],
+    )
 
 
 def _run_summary(row: PipelineRun) -> PipelineRunSummary:
@@ -149,6 +191,19 @@ def _run_summary(row: PipelineRun) -> PipelineRunSummary:
     )
 
 
+@router.get("/status", response_model=ApiResponse[PipelineStatus])
+async def get_pipeline_status(
+    session: AsyncSession = Depends(get_db_session),
+) -> ApiResponse[PipelineStatus]:
+    """取得最新一次 pipeline 執行狀態。"""
+    try:
+        projection = await pipeline_status(session)
+    except AgentQueryError as exc:
+        _handle_agent_query_error(exc)
+
+    return ApiResponse(data=projection.payload.data)
+
+
 @router.get("/runs", response_model=PaginatedResponse[PipelineRunSummary])
 async def list_pipeline_runs(
     response: Response,
@@ -163,24 +218,21 @@ async def list_pipeline_runs(
     回應採統一 ``PaginatedResponse`` 信封。為向下相容仍保留 ``X-Total-Count``
     header（未過濾的總筆數）。page < 1 或 page_size 超出 1-100 回 422。
     """
-    # Total over the SAME status filter but ignoring pagination, so the
-    # frontend knows when it has paged through every matching run.
-    count_stmt = select(func.count()).select_from(PipelineRun)
-    page_stmt = select(PipelineRun)
-    if status is not None:
-        count_stmt = count_stmt.where(PipelineRun.status == status)
-        page_stmt = page_stmt.where(PipelineRun.status == status)
-    page_stmt = (
-        page_stmt.order_by(PipelineRun.created_at.desc())
-        .offset(pagination.offset)
-        .limit(pagination.page_size)
-    )
+    try:
+        projection = await service_list_pipeline_runs(
+            session,
+            status=status,
+            page=pagination.page,
+            page_size=pagination.page_size,
+        )
+    except AgentQueryError as exc:
+        _handle_agent_query_error(exc)
 
-    total = (await session.execute(count_stmt)).scalar_one()
-    rows = (await session.execute(page_stmt)).scalars().all()
+    total = projection.rest_metadata["total"]
+    raw_summaries = projection.rest_metadata["raw_summaries"]
     response.headers["X-Total-Count"] = str(total)
     return PaginatedResponse(
-        data=[_run_summary(row) for row in rows],
+        data=[_raw_summary_to_item(r) for r in raw_summaries],
         pagination=PaginationMeta(
             page=pagination.page,
             page_size=pagination.page_size,
@@ -198,10 +250,11 @@ async def get_pipeline_run(
     session: AsyncSession = Depends(get_db_session),
 ) -> ApiResponse[PipelineRunDetail]:
     """取得單筆 pipeline 執行紀錄詳情。"""
-    row = await session.get(PipelineRun, run_id)
-    if row is None:
-        raise HTTPException(status_code=404, detail=f"找不到執行紀錄 #{run_id}")
+    try:
+        projection = await service_get_pipeline_run(session, run_id)
+    except AgentQueryError as exc:
+        _handle_agent_query_error(exc)
 
-    return ApiResponse(
-        data=PipelineRunDetail.model_validate(_run_summary(row).model_dump())
-    )
+    raw = projection.rest_metadata["raw_summary"]
+    summary = _raw_summary_to_item(raw)
+    return ApiResponse(data=PipelineRunDetail.model_validate(summary.model_dump()))

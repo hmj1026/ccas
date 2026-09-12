@@ -425,6 +425,23 @@ class PipelineRunStatus(StrEnum):
     CANCELLED = "cancelled"
 
 
+class PipelineRunTerminalReason(StrEnum):
+    """Pipeline 執行終態原因（pipeline terminal reason）。
+
+    succeeded: 正常完成或非關鍵階段失敗但主要階段完成
+    stage_failure: 核心階段失敗（如 classify 失敗）
+    worker_exception: worker 執行時未預期例外
+    retries_exhausted: RQ retry 次數耗盡
+    enqueue_failure: 入列失敗（如 Redis 無法連線）
+    """
+
+    SUCCEEDED = "succeeded"
+    STAGE_FAILURE = "stage_failure"
+    WORKER_EXCEPTION = "worker_exception"
+    RETRIES_EXHAUSTED = "retries_exhausted"
+    ENQUEUE_FAILURE = "enqueue_failure"
+
+
 class PipelineRun(Base):
     """Pipeline 執行歷史與即時進度 SSOT（pipeline-operations-center §1）。
 
@@ -444,6 +461,8 @@ class PipelineRun(Base):
     - ``current_stage_total``: 當前階段總 item 數
     - ``stage_summary``: 已完成階段陣列，每筆 ``{stage, ok, fail, elapsed_ms}``
     - ``error_message``: 階段 crash 或 RQ timeout 訊息
+    - ``terminal_reason``: 終態原因（succeeded / stage_failure /
+      worker_exception / retries_exhausted / enqueue_failure）
     - ``started_at`` / ``completed_at`` / ``created_at`` / ``updated_at``: 時間戳
 
     SQLite trigger 確保 ``updated_at`` 在 Core-style bulk UPDATE 下亦自動刷新
@@ -480,6 +499,9 @@ class PipelineRun(Base):
         JSON, nullable=False, default=list
     )
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    terminal_reason: Mapped[PipelineRunTerminalReason | None] = mapped_column(
+        String(32), nullable=True, default=None
+    )
     started_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     completed_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
