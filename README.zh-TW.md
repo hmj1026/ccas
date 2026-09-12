@@ -73,6 +73,8 @@ docker compose -f docker-compose.yml up -d
 
 完整步驟（含 env 變數逐項說明）：[`docs/install-quickstart.md`](docs/install-quickstart.md)。
 
+Agent／MCP 整合安裝（含人工與委託 AI 方式）：[`docs/mcp-installation.md`](docs/mcp-installation.md)。
+
 ## 本地開發
 
 不使用 Docker —— 需要 Python 3.12+、Node.js 22+、`uv`、`pnpm`。
@@ -128,6 +130,7 @@ ccas/
 | 貢獻指南 | [`docs/CONTRIBUTING.md`](docs/CONTRIBUTING.md) |
 | 領域上下文 | [`CONTEXT.md`](CONTEXT.md) |
 | 目前實作總覽 | [`docs/CODEMAPS/current-implementation.md`](docs/CODEMAPS/current-implementation.md) |
+| MCP 安裝與使用 | [`docs/mcp-installation.md`](docs/mcp-installation.md) |
 
 架構地圖（給貢獻者）：[`docs/CODEMAPS/`](docs/CODEMAPS/) —— `current-implementation.md`、`architecture.md`、`backend.md`、`frontend.md`、`data.md`、`dependencies.md`。
 

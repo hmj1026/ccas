@@ -1,5 +1,8 @@
 # CCAS 本地安裝引導文件（供 AI 閱讀）
 
+若使用者要安裝 Agent MCP，先讀 [`mcp-installation.md`](mcp-installation.md)。該文件是
+MCP command、client 設定與委託 AI 安裝的唯一來源；本引導只處理 CCAS Docker 執行環境。
+
 本文件的讀者是 AI，不是人類。你的任務是閱讀本文件後，逐步引導使用者以 Docker Compose 在本地完成 CCAS 的完整安裝與設定，包含排程、Redis job queue、Telegram Bot 與前端儀表板。
 
 ## 給 AI 的操作原則

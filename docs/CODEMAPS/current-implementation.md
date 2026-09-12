@@ -1,4 +1,4 @@
-<!-- Verified: 2026-09-10 | Sources: source tree, tests, compose files, GitNexus -->
+<!-- Verified: 2026-09-12 | Sources: source tree, tests, compose files, GitNexus -->
 
 # 目前實作總覽（As-built）
 
@@ -155,6 +155,8 @@ Server state 使用 TanStack Query；交易、設定與 pipeline progress 的 ca
 `Settings` 從 `.env`／環境變數載入；`.env.example` 是變數說明的 SSOT。API token、master key、Gmail credentials/token 與 bank secrets 都有獨立的檔案或加密儲存規則；文件只描述路徑與來源，不記錄實際秘密值。
 
 Agent surfaces 共用 `ccas.services` 的安全投影；REST 提供 `/api/bills/payment-due` 與 `/api/pipeline/status`，CLI/MCP 僅允許唯讀查詢。`AGENT_WRITE_ENABLED` 預設為 false，且目前不會暴露任何寫入工具。
+
+MCP client 的人工安裝與委託 AI 安裝步驟集中於 [`docs/mcp-installation.md`](../mcp-installation.md)；本文件只保留 as-built 契約，避免複製易漂移的 client 設定片段。
 
 ## 7. 測試與文件維護入口
 

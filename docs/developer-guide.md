@@ -309,6 +309,9 @@ uv run python -m ccas.pipeline --from parse --to classify
 
 ### Agent CLI / MCP
 
+完整的 client 設定、人工安裝、委託 AI 安裝與排錯請見
+[`mcp-installation.md`](mcp-installation.md)。本節只保留 runtime 契約摘要。
+
 唯讀 agent 查詢可使用 ccas-agent（或 python -m ccas.cli），支援 JSON 與 table 輸出；
 MCP client 使用 ccas-mcp（或 python -m ccas.mcp）的 stdio transport。兩者共用
 ccas.services 安全投影，不會輸出 secrets，也不提供寫入工具。AGENT_WRITE_ENABLED=true

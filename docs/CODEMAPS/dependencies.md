@@ -103,6 +103,8 @@ apt-get install tesseract-ocr tesseract-ocr-chi-tra
 | mcp | 官方 MCP SDK stdio server（agent 唯讀工具） |
 | click | agent CLI 指令與輸出格式 |
 
+MCP client 的人工安裝、委託 AI 安裝與 stdio 排錯見 [`../mcp-installation.md`](../mcp-installation.md)。
+
 ## Dev Dependencies
 
 | Package | Purpose |
