@@ -7,7 +7,7 @@ a conservative gate before being returned:
 
     1. text is exactly 4 characters
     2. text is all digits 0-9
-    3. aggregate confidence >= 0.80
+    3. aggregate confidence >= 0.95
 
 Samples that fail the gate (or trigger an inference error) return ``None``,
 signalling the caller to refetch the captcha and retry. This trades recall for
@@ -28,7 +28,7 @@ from PIL import Image, ImageEnhance, ImageFilter
 
 logger = logging.getLogger(__name__)
 
-_MIN_CONF: float = 0.80
+_MIN_CONF: float = 0.95
 _EXPECTED_LEN: int = 4
 # Defense in depth: cap the bytes fed into opencv/onnxruntime decoders.
 # Real FUBON captchas are well under 10 KB; 512 KB leaves generous headroom
@@ -132,7 +132,7 @@ def _classify(ocr: ddddocr.DdddOcr, image_bytes: bytes) -> CaptchaResult | None:
 
 
 def solve(jpeg_bytes: bytes) -> CaptchaResult | None:
-    """Run dual-view OCR and apply the conf+length+digit gate.
+    """Run OCR and apply the confidence, length and digit gate.
 
     Returns:
         ``CaptchaResult`` when the gate accepts; ``None`` when the result
@@ -141,19 +141,5 @@ def solve(jpeg_bytes: bytes) -> CaptchaResult | None:
     if len(jpeg_bytes) > _MAX_CAPTCHA_BYTES:
         logger.warning("fubon_captcha_oversized", extra={"size": len(jpeg_bytes)})
         return None
-    ocr = _get_ocr()
-    original = _classify(ocr, jpeg_bytes)
-    if original is None:
-        return None
-
     processed = _preprocess(jpeg_bytes)
-    preprocessed = _classify(ocr, processed)
-    if preprocessed is None:
-        return None
-    if original.text != preprocessed.text:
-        logger.warning("fubon_captcha_ocr_disagreement")
-        return None
-    return CaptchaResult(
-        text=original.text,
-        confidence=min(original.confidence, preprocessed.confidence),
-    )
+    return _classify(_get_ocr(), processed)
