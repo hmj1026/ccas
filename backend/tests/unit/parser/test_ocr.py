@@ -3,7 +3,7 @@
 Tests is_ocr_available() and extract_text_from_image() with mocked tesseract.
 """
 
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 from PIL import Image
@@ -91,3 +91,53 @@ class TestExtractTextFromImage:
         with patch("pytesseract.image_to_string", return_value="test") as mock_ocr:
             ocr.extract_text_from_image(img, lang="eng")
         mock_ocr.assert_called_once_with(img, lang="eng", config="--psm 7")
+
+    @patch("ccas.parser.ocr.is_ocr_available", return_value=True)
+    def test_returns_empty_on_unexpected_ocr_error(self, mock_avail):
+        img = Image.new("RGB", (100, 20))
+        with patch("pytesseract.image_to_string", side_effect=ValueError("bad image")):
+            assert ocr.extract_text_from_image(img) == ""
+
+
+class TestExtractTextFromPdf:
+    @patch("ccas.parser.ocr.is_ocr_available", return_value=False)
+    def test_returns_empty_when_tesseract_is_unavailable(self, mock_avail, tmp_path):
+        with patch("pdfplumber.open") as open_pdf:
+            assert ocr.extract_text_from_pdf(tmp_path / "scan.pdf") == ""
+        open_pdf.assert_not_called()
+
+    @patch("ccas.parser.ocr.is_ocr_available", return_value=True)
+    def test_ocr_scanned_pages_in_order(self, mock_avail, tmp_path):
+        page1 = MagicMock()
+        page2 = MagicMock()
+        pdf = type("Pdf", (), {"pages": [page1, page2]})()
+        with (
+            patch("pdfplumber.open") as open_pdf,
+            patch(
+                "ccas.parser.ocr.extract_text_from_image",
+                side_effect=["page 1", " page 2 "],
+            ),
+        ):
+            open_pdf.return_value.__enter__.return_value = pdf
+            assert ocr.extract_text_from_pdf(tmp_path / "scan.pdf") == "page 1\npage 2"
+
+
+def test_parse_ocr_text_extracts_summary_with_non_rules_confidence() -> None:
+    result = ocr.parse_ocr_text(
+        "中國信託信用卡帳單\n帳單月份：2026年03月\n"
+        "繳費截止日：2026/04/15\n本期應繳總額：NT$ 1,000",
+        "CTBC",
+    )
+
+    assert result is not None
+    assert result.parse_method == "ocr"
+    assert result.parse_confidence == 0.95
+    assert result.needs_review is False
+
+
+def test_parse_ocr_text_returns_low_confidence_for_missing_summary_field() -> None:
+    result = ocr.parse_ocr_text("帳單月份：2026年03月\n本期應繳總額：NT$ 1,000", "CTBC")
+
+    assert result is not None
+    assert result.parse_confidence < 0.85
+    assert result.needs_review is True

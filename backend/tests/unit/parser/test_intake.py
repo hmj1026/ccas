@@ -20,7 +20,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from ccas.parser.base import BankParser, ParseError
-from ccas.parser.intake import ParserIntake, ParseSummary
+from ccas.parser.intake import OcrFallbackResult, ParserIntake, ParseSummary
 from ccas.parser.registry import _ParserRegistry
 from ccas.parser.result import ParseResult, TransactionItem
 from ccas.storage.models import StagedAttachmentStatus
@@ -105,6 +105,36 @@ def _make_parse_result(
     )
 
 
+class FakeOcrFallback:
+    """可控的 OCR fallback port。"""
+
+    def __init__(self, result: ParseResult | None, calls: list[str]) -> None:
+        self.result = result
+        self.calls = calls
+
+    async def parse(self, pdf_path: Path, candidates) -> OcrFallbackResult:
+        self.calls.append("ocr")
+        return OcrFallbackResult(result=self.result, text="ocr text")
+
+
+class FakeLlmReference:
+    """可控的 LLM reference port。"""
+
+    def __init__(self, result: ParseResult | None, calls: list[str]) -> None:
+        self.result = result
+        self.calls = calls
+
+    async def parse(
+        self,
+        *,
+        bank_code: str,
+        source_text: str,
+        candidate: ParseResult | None,
+    ) -> ParseResult | None:
+        self.calls.append("llm")
+        return self.result
+
+
 def _make_attachment(
     *,
     bank_code: str = "CTBC",
@@ -180,6 +210,9 @@ def _make_intake(
     config: InMemoryBankConfigPort | None = None,
     persistence: InMemoryParsePersistencePort | None = None,
     timeout: float = 30.0,
+    ocr_fallback=None,
+    llm_reference=None,
+    llm_enabled: bool = False,
 ) -> tuple[ParserIntake, InMemoryBankConfigPort, InMemoryParsePersistencePort]:
     reg = registry if registry is not None else _ParserRegistry()
     cfg = config if config is not None else InMemoryBankConfigPort()
@@ -190,6 +223,9 @@ def _make_intake(
         persistence=persist,
         timeout_provider=lambda: timeout,
         staging_root_provider=lambda: TEST_STAGING_DIR,
+        ocr_fallback=ocr_fallback,
+        llm_reference=llm_reference,
+        llm_enabled_provider=lambda: llm_enabled,
     )
     return intake, cfg, persist
 
@@ -292,6 +328,99 @@ class TestProcessOneParseOutcomes:
 
         assert summary.failed_count == 1
         assert any("所有 parser 皆失敗" in e for e in summary.errors)
+        assert persist.status_calls[-1][1] == StagedAttachmentStatus.PARSE_FAILED
+
+    async def test_rules_success_stops_before_ocr(self) -> None:
+        registry = _ParserRegistry()
+        registry.register(FakeParser("CTBC", "v1", _make_parse_result()))
+        calls: list[str] = []
+        intake, _cfg, persist = _make_intake(
+            registry=registry,
+            ocr_fallback=FakeOcrFallback(None, calls),
+            llm_reference=FakeLlmReference(None, calls),
+            llm_enabled=True,
+        )
+
+        await intake.process_one(AsyncMock(), _make_attachment(), ParseSummary(), None)
+
+        assert calls == []
+        assert persist.created
+
+    async def test_low_confidence_rules_result_reaches_ocr(self) -> None:
+        low = _make_parse_result()
+        low = low.__class__(
+            **{
+                **low.__dict__,
+                "parse_confidence": 0.83,
+                "needs_review": True,
+                "review_reasons": ("低信心",),
+            }
+        )
+        high = _make_parse_result()
+        registry = _ParserRegistry()
+        registry.register(FakeParser("CTBC", "v1", low))
+        calls: list[str] = []
+        intake, _cfg, persist = _make_intake(
+            registry=registry, ocr_fallback=FakeOcrFallback(high, calls)
+        )
+
+        await intake.process_one(AsyncMock(), _make_attachment(), ParseSummary(), None)
+
+        assert calls == ["ocr"]
+        assert persist.created[-1][0].parse_method == "ocr"
+
+    async def test_low_confidence_ocr_reaches_llm_only_when_enabled(self) -> None:
+        low = _make_parse_result()
+        low = low.__class__(
+            **{
+                **low.__dict__,
+                "parse_confidence": 0.83,
+                "needs_review": True,
+                "review_reasons": ("低信心",),
+            }
+        )
+        llm_result = _make_parse_result()
+        registry = _ParserRegistry()
+        registry.register(FakeCannotParseParser("CTBC", "v1"))
+        calls: list[str] = []
+        intake, _cfg, persist = _make_intake(
+            registry=registry,
+            ocr_fallback=FakeOcrFallback(low, calls),
+            llm_reference=FakeLlmReference(llm_result, calls),
+            llm_enabled=True,
+        )
+
+        await intake.process_one(AsyncMock(), _make_attachment(), ParseSummary(), None)
+
+        assert calls == ["ocr", "llm"]
+        assert persist.created[-1][0].parse_method == "llm"
+
+    async def test_llm_off_stops_after_low_confidence_ocr(self) -> None:
+        low = _make_parse_result()
+        low = low.__class__(
+            **{
+                **low.__dict__,
+                "parse_confidence": 0.83,
+                "needs_review": True,
+                "review_reasons": ("低信心",),
+            }
+        )
+        registry = _ParserRegistry()
+        registry.register(FakeCannotParseParser("CTBC", "v1"))
+        calls: list[str] = []
+        intake, _cfg, persist = _make_intake(
+            registry=registry,
+            ocr_fallback=FakeOcrFallback(low, calls),
+            llm_reference=FakeLlmReference(_make_parse_result(), calls),
+            llm_enabled=False,
+        )
+        summary = ParseSummary()
+
+        await intake.process_one(AsyncMock(), _make_attachment(), summary, None)
+
+        assert calls == ["ocr"]
+        assert summary.failed_count == 1
+        assert persist.created == []
         assert persist.status_calls[-1][1] == StagedAttachmentStatus.PARSE_FAILED
 
     async def test_existing_bill_without_force_is_skipped(self) -> None:

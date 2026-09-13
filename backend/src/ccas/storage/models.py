@@ -21,6 +21,7 @@ from sqlalchemy import (
     Boolean,
     Date,
     DateTime,
+    Float,
     ForeignKey,
     Index,
     Integer,
@@ -77,6 +78,10 @@ class Bill(Base):
     is_notified: Mapped[bool] = mapped_column(Boolean, default=False)
     file_path: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
+    parse_method: Mapped[str | None] = mapped_column(Text, nullable=True)
+    parse_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    needs_review: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    review_reasons: Mapped[list[str] | None] = mapped_column(JSON, nullable=True)
 
     transactions: Mapped[list["Transaction"]] = relationship(
         back_populates="bill", cascade="all, delete-orphan"

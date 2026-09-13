@@ -1,0 +1,15 @@
+{
+  "name": "low-confidence",
+  "result": {
+    "bank_code": "CTBC",
+    "billing_month": "",
+    "total_amount": 100,
+    "due_date": "2026-04-15",
+    "transactions": [],
+    "parse_method": "ocr",
+    "parse_confidence": 0.83,
+    "needs_review": true,
+    "review_reasons": ["必要欄位 billing_month 無效", "解析信心 0.83 低於門檻 0.85"]
+  },
+  "persistence": {"bill_created": false, "attachment_status": "parse_failed"}
+}

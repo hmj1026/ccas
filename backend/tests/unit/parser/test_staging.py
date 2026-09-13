@@ -6,6 +6,7 @@ so the SQL actually executes (cascade deletes, flush-assigned PKs, etc.).
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import date, datetime
 
 import pytest
@@ -228,6 +229,10 @@ class TestCreateBillAndTransactions:
         assert bill.due_date == date(2026, 4, 15)
         assert bill.due_date_estimated is True
         assert bill.file_path == "/tmp/CTBC/bill.pdf"
+        assert bill.parse_method == "rules"
+        assert bill.parse_confidence == 1.0
+        assert bill.needs_review is False
+        assert bill.review_reasons == []
 
         txns = (
             (await db_session.execute(select(Transaction).order_by(Transaction.id)))
@@ -249,6 +254,29 @@ class TestCreateBillAndTransactions:
         bill = await create_bill_and_transactions(db_session, parse_result)
 
         assert bill.file_path is None
+
+    async def test_bill_review_metadata_is_independent_from_attachment_status(
+        self, db_session
+    ):
+        parse_result = replace(
+            _make_parse_result(),
+            parse_method="ocr",
+            parse_confidence=0.83,
+            needs_review=True,
+            review_reasons=("OCR 信心不足",),
+        )
+        attachment = _make_attachment("decrypted")
+        db_session.add(attachment)
+
+        bill = await create_bill_and_transactions(db_session, parse_result)
+        await update_attachment_status(
+            db_session, attachment, status=StagedAttachmentStatus.PARSED
+        )
+
+        assert bill.needs_review is True
+        assert bill.review_reasons == ["OCR 信心不足"]
+        assert attachment.status == StagedAttachmentStatus.PARSED
+        assert attachment.error_reason is None
 
 
 # -- update_attachment_status --
