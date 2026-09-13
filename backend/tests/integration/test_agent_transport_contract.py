@@ -219,6 +219,17 @@ def _mcp_success_payload(
     return structured
 
 
+def _mcp_error_payload(result: dict[str, Any]) -> dict[str, Any]:
+    assert result["resultType"] == "complete"
+    assert result["isError"] is True
+    assert "structuredContent" not in result
+    text_blocks = [block for block in result["content"] if block["type"] == "text"]
+    assert text_blocks
+    payload = json.loads(text_blocks[0]["text"])
+    assert isinstance(payload, dict)
+    return payload
+
+
 def _mcp_call_arguments(tool_name: str, bill_id: int) -> dict[str, Any]:
     if tool_name == "get_bill":
         return {"bill_id": bill_id}
@@ -288,10 +299,9 @@ def test_invalid_extra_arguments_are_safe_for_all_six_cli_and_mcp_reads(
             result = server.request(
                 mcp_wire._tool_call(tool_name, request_id, arguments)
             )["result"]
-            assert result["resultType"] == "complete"
-            assert result["isError"] is True
-            assert result["structuredContent"]["code"] == "invalid_argument"
-            assert "needs_human" not in result["structuredContent"]
+            error = _mcp_error_payload(result)
+            assert error["code"] == "invalid_argument"
+            assert "needs_human" not in error
             _assert_no_sensitive_values(json.dumps(result))
 
     mcp_diagnostics = _mcp_stderr(server)
@@ -319,9 +329,7 @@ def test_needs_human_errors_are_actionable_without_private_details(tmp_path: Pat
         result = server.request(mcp_wire._tool_call("pipeline_status", 2, {}))["result"]
 
     mcp_diagnostics = _mcp_stderr(server)
-    assert result["resultType"] == "complete"
-    assert result["isError"] is True
-    error = result["structuredContent"]
+    error = _mcp_error_payload(result)
     assert error["code"] == "needs_human"
     assert error["needs_human"] is True
     assert error["message"]
@@ -332,6 +340,31 @@ def test_needs_human_errors_are_actionable_without_private_details(tmp_path: Pat
     cli_output = cli_result.stdout + cli_result.stderr
     assert "needs_human" in cli_output
     _assert_no_sensitive_values(cli_output)
+
+
+def test_pipeline_without_runs_keeps_error_outside_success_output_schema(
+    tmp_path: Path,
+):
+    """A no-run resource error remains content-only beside the success schema."""
+    db_path = tmp_path / "pipeline-empty.sqlite3"
+    asyncio.run(mcp_wire._create_schema(db_path))
+
+    with mcp_wire._McpProcess(db_path, tmp_path) as server:
+        server.request(mcp_wire._request("server/discover", 1))
+        listed = server.request(mcp_wire._request("tools/list", 2))["result"]
+        pipeline_tool = next(
+            tool for tool in listed["tools"] if tool["name"] == "pipeline_status"
+        )
+        output_schema = pipeline_tool["outputSchema"]
+        jsonschema.Draft202012Validator.check_schema(output_schema)
+        result = server.request(mcp_wire._tool_call("pipeline_status", 3, {}))["result"]
+
+    error = _mcp_error_payload(result)
+    assert error == {
+        "code": "resource_not_found",
+        "message": "No pipeline runs found.",
+    }
+    assert output_schema["required"] == ["data"]
 
 
 @pytest.mark.parametrize("write_enabled", [False, True])

@@ -53,7 +53,7 @@ Requires Docker + Docker Compose. First create a Google Cloud OAuth client — s
 ```bash
 mkdir ~/ccas && cd ~/ccas
 REPO_OWNER=<owner>   # GHCR namespace / GitHub owner (the <owner> in the release URL)
-RELEASE=v0.7.0       # pin a released version
+RELEASE=v0.8.0       # pin a released version
 curl -fsSL -o docker-compose.yml \
   "https://github.com/${REPO_OWNER}/ccas/releases/download/${RELEASE}/docker-compose.yml"
 curl -fsSL -o example.env \
@@ -74,6 +74,10 @@ Then:
 Full walkthrough: [`docs/install-quickstart.md`](docs/install-quickstart.md) (Traditional Chinese).
 
 Agent integration: [`docs/mcp-installation.md`](docs/mcp-installation.md) (manual and delegated-AI setup).
+Non-Docker MCP host: [`docs/non-docker-agent-host.md`](docs/non-docker-agent-host.md)
+（MCP-only 不需要 Node、pnpm 或 Redis）。
+Non-Docker worker/scheduler: [docs/non-docker-host-services.md](docs/non-docker-host-services.md)
+（Linux systemd、macOS launchd；Redis 由 host package service 管理）。
 
 ## Local Development
 
@@ -97,6 +101,8 @@ pnpm e2e            # Playwright
 ```
 
 See [`docs/developer-guide.md`](docs/developer-guide.md) for the full toolchain reference (Traditional Chinese).
+無 Docker 的 MCP host、Redis 與 Node/Corepack 差異見
+[`docs/non-docker-agent-host.md`](docs/non-docker-agent-host.md)。
 
 ## Project Structure
 
@@ -109,7 +115,7 @@ ccas/
 ├── docker-compose.yaml          # dev compose (build from source)
 ├── docker-compose.override.yml  # dev overrides (bind-mount, hot reload)
 ├── config/            # banks.yaml, categories.yaml, bank-code-registry.yaml
-├── scripts/           # 16 shell scripts: setup, start, lint, test, hooks, ...
+├── scripts/           # 18 shell scripts: setup, start, lint, test, hooks, ...
 ├── docs/              # user / developer / deployment / RUNBOOK + CODEMAPS/
 ├── openspec/          # spec-driven change workflow artifacts
 └── .env.example       # environment variable template (SSOT)

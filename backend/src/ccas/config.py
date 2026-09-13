@@ -102,6 +102,8 @@ class Settings(BaseSettings):
     fubon_captcha_fallback_llm: bool = False
     fubon_captcha_archive_dir: str = ""
     fubon_manual_staging_dir: str = "./data/manual-staging/FUBON"
+    bill_parse_llm_reference_enabled: bool = False
+    bill_parse_llm_timeout_seconds: float = Field(default=15.0, gt=0)
     anthropic_api_key: SecretStr = SecretStr("")
 
     # master.key 路徑（Fernet 對稱加密；oauth-onboarding-ui §1.4）。entrypoint

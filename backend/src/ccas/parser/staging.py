@@ -157,6 +157,10 @@ async def create_bill_and_transactions(
         due_date=parse_result.due_date,
         due_date_estimated=parse_result.due_date_estimated,
         file_path=file_path,
+        parse_method=parse_result.parse_method,
+        parse_confidence=parse_result.parse_confidence,
+        needs_review=parse_result.needs_review,
+        review_reasons=list(parse_result.review_reasons),
     )
     session.add(bill)
     await session.flush()

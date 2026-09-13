@@ -1,0 +1,5 @@
+{
+  "name": "failed",
+  "result": null,
+  "persistence": {"bill_created": false, "attachment_status": "parse_failed"}
+}

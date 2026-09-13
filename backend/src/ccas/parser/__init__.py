@@ -9,9 +9,11 @@ from ccas.parser.intake import ParserIntake, build_parser_intake
 from ccas.parser.job import ParseSummary, run_parse_job
 from ccas.parser.registry import ParserNotFoundError, registry
 from ccas.parser.result import ParseResult, TransactionItem
+from ccas.parser.result_schema import BillParseResultSchema
 
 __all__ = [
     "BankParser",
+    "BillParseResultSchema",
     "ParseError",
     "ParseResult",
     "ParseSummary",
