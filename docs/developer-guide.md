@@ -171,6 +171,11 @@ nginx static 提供 Web UI，並直接暴露在 `http://localhost:8080`。正式
 - tesseract OCR 需手動安裝（`apt-get install tesseract-ocr tesseract-ocr-chi-tra`）
 - 未安裝 tesseract 時 merchant OCR 會略過（graceful fallback）
 
+若只在本機提供 Agent MCP，不需要啟動 frontend、Redis 或 Docker；請先讀
+[無 Docker 的 Agent Host](non-docker-agent-host.md)，依照 MCP-only 的最小流程以
+`get_payment_due` 做第一個 smoke check。需要 worker 或 scheduler 時，Redis 必須由
+Linux systemd 或 macOS Homebrew service 管理，兩個平台的指令不同。
+
 ### 腳本啟動
 
 ```bash

@@ -19,6 +19,11 @@ token、完整卡號或其他 secrets。
 
 ## 方式 A：人員手動安裝（本機開發）
 
+若 MCP client 所在主機不使用 Docker，先讀
+[`無 Docker 的 Agent Host`](non-docker-agent-host.md)。該文件列出 MCP-only 的最小
+依賴、資料庫準備、`get_payment_due` smoke check，以及 worker/scheduler 才需要的
+Redis host service。
+
 1. 取得程式碼並安裝 backend 依賴：
 
    ```bash
