@@ -82,6 +82,9 @@ jobs:
       - name: Install dependencies
         run: uv sync --frozen --all-extras
 
+      - name: Evaluate FUBON CAPTCHA fixtures
+        run: uv run python scripts/eval_captcha.py
+
       # Integration-layer router coverage floor. Explicit --cov=src/ccas/api/routers
       # targets the API router package directly (the unit-only omit list in
       # pyproject excludes 5 routers from the *unit* gate; here they are the very
