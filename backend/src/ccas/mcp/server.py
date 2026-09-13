@@ -162,7 +162,6 @@ def _tool_error(error: AgentQueryError) -> types.CallToolResult:
     payload = _business_error_payload(error)
     return types.CallToolResult(
         content=[_text_content(payload)],
-        structured_content=payload,
         is_error=True,
         result_type="complete",
     )

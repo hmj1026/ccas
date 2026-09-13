@@ -133,6 +133,17 @@ def _tool_call(
     )
 
 
+def _mcp_error_payload(result: dict[str, Any]) -> dict[str, Any]:
+    assert result["resultType"] == "complete"
+    assert result["isError"] is True
+    assert "structuredContent" not in result
+    text_blocks = [block for block in result["content"] if block["type"] == "text"]
+    assert text_blocks
+    payload = json.loads(text_blocks[0]["text"])
+    assert isinstance(payload, dict)
+    return payload
+
+
 class _McpProcess:
     def __init__(self, db_path: Path, tmp_path: Path) -> None:
         self._process = subprocess.Popen(
@@ -279,7 +290,9 @@ def test_mcp_unknown_tool_is_protocol_error(tmp_path: Path):
     assert db_path.read_bytes() == before
 
 
-def test_mcp_invalid_arguments_are_tool_error_without_mutation(tmp_path: Path):
+def test_mcp_invalid_arguments_are_content_only_tool_error_without_mutation(
+    tmp_path: Path,
+):
     db_path = tmp_path / "mcp.sqlite3"
     asyncio.run(_create_schema(db_path))
     bill_id = asyncio.run(_seed_bill(db_path))
@@ -294,13 +307,12 @@ def test_mcp_invalid_arguments_are_tool_error_without_mutation(tmp_path: Path):
             )
         )["result"]
 
-    assert result["resultType"] == "complete"
-    assert result["isError"] is True
-    assert result["structuredContent"]["code"] == "invalid_argument"
+    error = _mcp_error_payload(result)
+    assert error["code"] == "invalid_argument"
     assert asyncio.run(_bill_exists(db_path, bill_id))
 
 
-def test_mcp_missing_bill_is_structured_resource_error(tmp_path: Path):
+def test_mcp_missing_bill_is_content_only_resource_error(tmp_path: Path):
     db_path = tmp_path / "mcp.sqlite3"
     asyncio.run(_create_schema(db_path))
 
@@ -308,10 +320,24 @@ def test_mcp_missing_bill_is_structured_resource_error(tmp_path: Path):
         server.request(_request("server/discover", 1))
         result = server.request(_tool_call("get_bill", 2, {"bill_id": 9999}))["result"]
 
-    assert result["resultType"] == "complete"
-    assert result["isError"] is True
-    assert result["structuredContent"]["code"] == "resource_not_found"
-    assert result["structuredContent"]["message"]
+    error = _mcp_error_payload(result)
+    assert error["code"] == "resource_not_found"
+    assert error["message"]
+
+
+def test_mcp_pipeline_without_runs_is_content_only_resource_error(tmp_path: Path):
+    db_path = tmp_path / "mcp.sqlite3"
+    asyncio.run(_create_schema(db_path))
+
+    with _McpProcess(db_path, tmp_path) as server:
+        server.request(_request("server/discover", 1))
+        result = server.request(_tool_call("pipeline_status", 2))["result"]
+
+    error = _mcp_error_payload(result)
+    assert error == {
+        "code": "resource_not_found",
+        "message": "No pipeline runs found.",
+    }
 
 
 def test_mcp_success_has_matching_structured_and_text_content(tmp_path: Path):
