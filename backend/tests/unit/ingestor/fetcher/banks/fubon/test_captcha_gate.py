@@ -107,19 +107,6 @@ def test_solve_returns_result_on_passing_gate() -> None:
         assert result.confidence == pytest.approx(0.95)
 
 
-def test_solve_rejects_original_and_preprocessed_disagreement() -> None:
-    mock_ocr = MagicMock()
-    mock_ocr.classification.side_effect = [
-        _fake_ddddocr_return("4075", 0.99),
-        _fake_ddddocr_return("4076", 0.99),
-    ]
-    with (
-        patch.object(captcha, "_get_ocr", return_value=mock_ocr),
-        patch.object(captcha, "_preprocess", return_value=b"processed"),
-    ):
-        assert captcha.solve(b"original") is None
-
-
 def test_solve_returns_none_on_ocr_exception() -> None:
     mock_ocr = MagicMock()
     mock_ocr.classification.side_effect = RuntimeError("decode failed")
@@ -148,19 +135,19 @@ def test_solve_rejects_oversized_blob() -> None:
     mock_ocr.classification.assert_not_called()
 
 
-def test_solve_confidence_exactly_080_accepted() -> None:
+def test_solve_confidence_exactly_095_accepted() -> None:
     mock_ocr = MagicMock()
-    mock_ocr.classification.return_value = _fake_ddddocr_return("1234", 0.80)
+    mock_ocr.classification.return_value = _fake_ddddocr_return("1234", 0.95)
     with patch.object(captcha, "_get_ocr", return_value=mock_ocr):
         result = captcha.solve(b"\xff\xd8\xffanything")
         assert result is not None
         assert result.text == "1234"
-        assert result.confidence == pytest.approx(0.80)
+        assert result.confidence == pytest.approx(0.95)
 
 
-def test_solve_confidence_just_below_080_rejected() -> None:
+def test_solve_confidence_just_below_095_rejected() -> None:
     mock_ocr = MagicMock()
-    mock_ocr.classification.return_value = _fake_ddddocr_return("1234", 0.7999)
+    mock_ocr.classification.return_value = _fake_ddddocr_return("1234", 0.949)
     with patch.object(captcha, "_get_ocr", return_value=mock_ocr):
         assert captcha.solve(b"\xff\xd8\xffanything") is None
 
@@ -202,7 +189,7 @@ def test_solve_exactly_max_bytes_accepted() -> None:
     with patch.object(captcha, "_get_ocr", return_value=mock_ocr):
         result = captcha.solve(blob)
         assert result is not None
-    assert mock_ocr.classification.call_count == 2
+    mock_ocr.classification.assert_called_once()
 
 
 def test_solve_one_byte_over_max_rejected() -> None:
