@@ -1,0 +1,16 @@
+[Unit]
+Description=CCAS RQ worker (host-managed)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=__CCAS_BACKEND__
+ExecStart=__CCAS_RUNNER__ worker __UV_BIN__
+Restart=on-failure
+RestartSec=5
+KillSignal=SIGTERM
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=default.target

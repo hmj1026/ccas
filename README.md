@@ -76,6 +76,8 @@ Full walkthrough: [`docs/install-quickstart.md`](docs/install-quickstart.md) (Tr
 Agent integration: [`docs/mcp-installation.md`](docs/mcp-installation.md) (manual and delegated-AI setup).
 Non-Docker MCP host: [`docs/non-docker-agent-host.md`](docs/non-docker-agent-host.md)
 （MCP-only 不需要 Node、pnpm 或 Redis）。
+Non-Docker worker/scheduler: [docs/non-docker-host-services.md](docs/non-docker-host-services.md)
+（Linux systemd、macOS launchd；Redis 由 host package service 管理）。
 
 ## Local Development
 
@@ -113,7 +115,7 @@ ccas/
 ├── docker-compose.yaml          # dev compose (build from source)
 ├── docker-compose.override.yml  # dev overrides (bind-mount, hot reload)
 ├── config/            # banks.yaml, categories.yaml, bank-code-registry.yaml
-├── scripts/           # 16 shell scripts: setup, start, lint, test, hooks, ...
+├── scripts/           # 18 shell scripts: setup, start, lint, test, hooks, ...
 ├── docs/              # user / developer / deployment / RUNBOOK + CODEMAPS/
 ├── openspec/          # spec-driven change workflow artifacts
 └── .env.example       # environment variable template (SSOT)
