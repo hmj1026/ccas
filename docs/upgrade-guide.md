@@ -13,7 +13,7 @@
 cd ~/ccas    # 你 docker-compose.yml 所在的目錄
 
 # 1) 修改 .env 的版本
-sed -i 's/^CCAS_VERSION=.*/CCAS_VERSION=v0.7.0/' .env
+sed -i 's/^CCAS_VERSION=.*/CCAS_VERSION=v0.7.1/' .env
 
 # 2) 拉新 image 並重啟
 docker compose -f docker-compose.yml pull
@@ -38,6 +38,23 @@ CCAS 採 [SemVer](https://semver.org/)：
 | Major（`v0.x.x` → `v1.0.0`） | 可能 breaking change；release notes 會明示 | 升級前**閱讀 release notes**、備份 |
 
 每次 release 的詳細 changelog 見 [GitHub Releases](https://github.com/<owner>/ccas/releases)。
+
+---
+
+## v0.7.1（Patch）— 2026-09-13 — FUBON 驗證碼測試與非 Docker 維運補強
+
+**適用對象**：v0.7.0 升級至 v0.7.1。無資料庫 schema 變更，不含破壞性變更。
+
+**MCP 與維運**：
+- **MCP 錯誤契約**：工具執行錯誤維持 `isError=true` 與 JSON `TextContent`，不再把錯誤 payload 放入成功 `structuredContent` schema。
+- **非 Docker background services**：新增 worker／scheduler 的 Linux systemd user service 與 macOS launchd 管理腳本，包含 restart 與 smoke check；此路徑使用主機 Redis。
+- **Docker Redis**：Docker Compose 部署仍使用 Compose 管理的 Redis container，無需安裝 host Redis。
+
+**FUBON 驗證碼**：
+- 新增 deterministic HTTP/OCR/retry/PDF end-to-end 測試。
+- 將 45 個 CAPTCHA fixture 的辨識率 gate 納入 CI，最低門檻維持 80%。
+
+**升級後**：pull-only Docker 部署請使用 `CCAS_VERSION=v0.7.1`，不需要手動執行資料庫 migration。
 
 ---
 
