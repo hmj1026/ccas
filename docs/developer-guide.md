@@ -174,7 +174,8 @@ nginx static 提供 Web UI，並直接暴露在 `http://localhost:8080`。正式
 若只在本機提供 Agent MCP，不需要啟動 frontend、Redis 或 Docker；請先讀
 [無 Docker 的 Agent Host](non-docker-agent-host.md)，依照 MCP-only 的最小流程以
 `get_payment_due` 做第一個 smoke check。需要 worker 或 scheduler 時，Redis 必須由
-Linux systemd 或 macOS Homebrew service 管理，兩個平台的指令不同。
+Linux systemd 或 macOS Homebrew service 管理，兩個平台的指令不同；常駐服務的
+安裝、重啟與 smoke check 見 [無 Docker 的 Worker 與 Scheduler 維運](non-docker-host-services.md)。
 
 ### 腳本啟動
 

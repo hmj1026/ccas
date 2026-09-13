@@ -167,4 +167,5 @@ pnpm install --frozen-lockfile
 | Corepack permission denied | 使用 `--install-directory "$HOME/.local/bin"` 並更新 PATH。 |
 
 MCP 的 tools、資料投影與安全邊界仍以 [`mcp-installation.md`](mcp-installation.md)
-為準；本文件只補充非 Docker host 的依賴與最小啟動路徑。
+為準；本文件只補充非 Docker host 的依賴與最小啟動路徑。需要常駐 worker 或
+scheduler 時，請看 [無 Docker 的 Worker 與 Scheduler 維運](non-docker-host-services.md)。
