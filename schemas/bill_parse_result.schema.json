@@ -1,0 +1,167 @@
+{
+  "$defs": {
+    "TransactionItemSchema": {
+      "additionalProperties": false,
+      "description": "Serialized form of :class:`TransactionItem`.",
+      "properties": {
+        "amount": {
+          "title": "Amount",
+          "type": "integer"
+        },
+        "card_last4": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Card Last4"
+        },
+        "currency": {
+          "default": "TWD",
+          "title": "Currency",
+          "type": "string"
+        },
+        "installment_current": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Installment Current"
+        },
+        "installment_total": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Installment Total"
+        },
+        "merchant": {
+          "title": "Merchant",
+          "type": "string"
+        },
+        "original_amount": {
+          "anyOf": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Original Amount"
+        },
+        "posting_date": {
+          "anyOf": [
+            {
+              "format": "date",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Posting Date"
+        },
+        "trans_date": {
+          "format": "date",
+          "title": "Trans Date",
+          "type": "string"
+        }
+      },
+      "required": [
+        "trans_date",
+        "merchant",
+        "amount"
+      ],
+      "title": "TransactionItemSchema",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Model-first JSON contract for a normalized bill parse result.",
+  "properties": {
+    "bank_code": {
+      "title": "Bank Code",
+      "type": "string"
+    },
+    "billing_month": {
+      "title": "Billing Month",
+      "type": "string"
+    },
+    "due_date": {
+      "format": "date",
+      "title": "Due Date",
+      "type": "string"
+    },
+    "due_date_estimated": {
+      "default": false,
+      "title": "Due Date Estimated",
+      "type": "boolean"
+    },
+    "needs_review": {
+      "default": false,
+      "title": "Needs Review",
+      "type": "boolean"
+    },
+    "parse_confidence": {
+      "default": 1.0,
+      "maximum": 1.0,
+      "minimum": 0.0,
+      "title": "Parse Confidence",
+      "type": "number"
+    },
+    "parse_method": {
+      "default": "rules",
+      "enum": [
+        "rules",
+        "ocr",
+        "llm"
+      ],
+      "title": "Parse Method",
+      "type": "string"
+    },
+    "review_reasons": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Review Reasons",
+      "type": "array"
+    },
+    "total_amount": {
+      "title": "Total Amount",
+      "type": "integer"
+    },
+    "transactions": {
+      "items": {
+        "$ref": "#/$defs/TransactionItemSchema"
+      },
+      "title": "Transactions",
+      "type": "array"
+    }
+  },
+  "required": [
+    "bank_code",
+    "billing_month",
+    "total_amount",
+    "due_date",
+    "transactions"
+  ],
+  "title": "BillParseResultSchema",
+  "type": "object"
+}

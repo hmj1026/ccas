@@ -171,6 +171,10 @@ class TestSuccessfulParse:
             assert bills[0].total_amount == 5000
             assert bills[0].due_date == date(2026, 4, 15)
             assert bills[0].file_path == _resolved_test_path("/tmp/ctbc.pdf")
+            assert bills[0].parse_method == "rules"
+            assert bills[0].parse_confidence == 1.0
+            assert bills[0].needs_review is False
+            assert bills[0].review_reasons == []
 
             # 驗證 Transaction 已建立
             txns = (await session.execute(select(Transaction))).scalars().all()

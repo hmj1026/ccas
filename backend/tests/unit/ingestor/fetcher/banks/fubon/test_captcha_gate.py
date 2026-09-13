@@ -107,6 +107,19 @@ def test_solve_returns_result_on_passing_gate() -> None:
         assert result.confidence == pytest.approx(0.95)
 
 
+def test_solve_rejects_original_and_preprocessed_disagreement() -> None:
+    mock_ocr = MagicMock()
+    mock_ocr.classification.side_effect = [
+        _fake_ddddocr_return("4075", 0.99),
+        _fake_ddddocr_return("4076", 0.99),
+    ]
+    with (
+        patch.object(captcha, "_get_ocr", return_value=mock_ocr),
+        patch.object(captcha, "_preprocess", return_value=b"processed"),
+    ):
+        assert captcha.solve(b"original") is None
+
+
 def test_solve_returns_none_on_ocr_exception() -> None:
     mock_ocr = MagicMock()
     mock_ocr.classification.side_effect = RuntimeError("decode failed")
@@ -189,7 +202,7 @@ def test_solve_exactly_max_bytes_accepted() -> None:
     with patch.object(captcha, "_get_ocr", return_value=mock_ocr):
         result = captcha.solve(blob)
         assert result is not None
-    mock_ocr.classification.assert_called_once()
+    assert mock_ocr.classification.call_count == 2
 
 
 def test_solve_one_byte_over_max_rejected() -> None:

@@ -1,0 +1,15 @@
+{
+  "name": "llm-assisted",
+  "result": {
+    "bank_code": "CTBC",
+    "billing_month": "2026-03",
+    "total_amount": 100,
+    "due_date": "2026-04-15",
+    "transactions": [],
+    "parse_method": "llm",
+    "parse_confidence": 1.0,
+    "needs_review": false,
+    "review_reasons": []
+  },
+  "persistence": {"bill_created": true, "attachment_status": "parsed"}
+}

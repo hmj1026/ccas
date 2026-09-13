@@ -101,19 +101,9 @@ def _otsu_threshold(img: Image.Image) -> int:
     return best_thresh
 
 
-def solve(jpeg_bytes: bytes) -> CaptchaResult | None:
-    """Run OCR on a FUBON captcha JPEG and apply the conf+length+digit gate.
-
-    Returns:
-        ``CaptchaResult`` when the gate accepts; ``None`` when the result
-        should be rejected and the caller should refetch + retry.
-    """
-    if len(jpeg_bytes) > _MAX_CAPTCHA_BYTES:
-        logger.warning("fubon_captcha_oversized", extra={"size": len(jpeg_bytes)})
-        return None
-    processed = _preprocess(jpeg_bytes)
+def _classify(ocr: ddddocr.DdddOcr, image_bytes: bytes) -> CaptchaResult | None:
     try:
-        result: Any = _get_ocr().classification(processed, probability=True)
+        result: Any = ocr.classification(image_bytes, probability=True)
     except Exception:  # noqa: BLE001 -- ddddocr raises broad types on bad input
         logger.warning("fubon_captcha_ocr_error", exc_info=True)
         return None
@@ -139,3 +129,31 @@ def solve(jpeg_bytes: bytes) -> CaptchaResult | None:
     if confidence < _MIN_CONF:
         return None
     return CaptchaResult(text=text, confidence=confidence)
+
+
+def solve(jpeg_bytes: bytes) -> CaptchaResult | None:
+    """Run dual-view OCR and apply the conf+length+digit gate.
+
+    Returns:
+        ``CaptchaResult`` when the gate accepts; ``None`` when the result
+        should be rejected and the caller should refetch + retry.
+    """
+    if len(jpeg_bytes) > _MAX_CAPTCHA_BYTES:
+        logger.warning("fubon_captcha_oversized", extra={"size": len(jpeg_bytes)})
+        return None
+    ocr = _get_ocr()
+    original = _classify(ocr, jpeg_bytes)
+    if original is None:
+        return None
+
+    processed = _preprocess(jpeg_bytes)
+    preprocessed = _classify(ocr, processed)
+    if preprocessed is None:
+        return None
+    if original.text != preprocessed.text:
+        logger.warning("fubon_captcha_ocr_disagreement")
+        return None
+    return CaptchaResult(
+        text=original.text,
+        confidence=min(original.confidence, preprocessed.confidence),
+    )

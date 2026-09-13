@@ -99,3 +99,26 @@ def test_anthropic_api_key_not_leaked_in_repr(
     settings = Settings(_env_file=None)  # pyright: ignore[reportCallIssue]
     assert "sk-ant-super-secret-xyz" not in repr(settings)
     assert "sk-ant-super-secret-xyz" not in str(settings.anthropic_api_key)
+
+
+def test_bill_parse_llm_reference_is_off_by_default(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _setup_required(monkeypatch)
+    settings = Settings(_env_file=None)  # pyright: ignore[reportCallIssue]
+
+    assert settings.bill_parse_llm_reference_enabled is False
+    assert settings.bill_parse_llm_timeout_seconds == 15.0
+
+
+def test_bill_parse_llm_reference_settings_can_be_enabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _setup_required(monkeypatch)
+    monkeypatch.setenv("BILL_PARSE_LLM_REFERENCE_ENABLED", "true")
+    monkeypatch.setenv("BILL_PARSE_LLM_TIMEOUT_SECONDS", "4")
+
+    settings = Settings(_env_file=None)  # pyright: ignore[reportCallIssue]
+
+    assert settings.bill_parse_llm_reference_enabled is True
+    assert settings.bill_parse_llm_timeout_seconds == 4.0

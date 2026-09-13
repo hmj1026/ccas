@@ -11,7 +11,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Protocol
 
@@ -21,8 +21,13 @@ from ccas.config import get_settings
 from ccas.ingestor.staging import resolve_staged_path
 from ccas.parser import staging
 from ccas.parser.base import BankParser, ParseError
+from ccas.parser.ocr import extract_text_from_pdf
 from ccas.parser.registry import ParserNotFoundError, registry
-from ccas.parser.result import ParseResult
+from ccas.parser.result import (
+    ParseResult,
+    finalize_parse_result,
+    is_parse_result_acceptable,
+)
 from ccas.shared.pipeline_types import PipelineOptions
 from ccas.shared.progress import NoopProgressReporter, ProgressReporter
 from ccas.storage.models import Bill, StagedAttachment, StagedAttachmentStatus
@@ -45,6 +50,83 @@ class ParseSummary:
     skipped_count: int = 0
     failed_count: int = 0
     errors: list[str] = field(default_factory=list)
+
+
+@dataclass(frozen=True)
+class OcrFallbackResult:
+    """文字層 OCR fallback 的候選與原始文字。"""
+
+    result: ParseResult | None
+    text: str = ""
+    error: str = ""
+
+
+class OcrFallbackPort(Protocol):
+    """OCR fallback adapter。"""
+
+    async def parse(
+        self, pdf_path: Path, candidates: Sequence[BankParser]
+    ) -> OcrFallbackResult: ...
+
+
+class LlmReferencePort(Protocol):
+    """Optional LLM reference adapter。"""
+
+    async def parse(
+        self,
+        *,
+        bank_code: str,
+        source_text: str,
+        candidate: ParseResult | None,
+    ) -> ParseResult | None: ...
+
+
+@dataclass
+class _DefaultOcrFallback:
+    """Production OCR adapter with optional parser text adapters."""
+
+    async def parse(
+        self, pdf_path: Path, candidates: Sequence[BankParser]
+    ) -> OcrFallbackResult:
+        text = await asyncio.to_thread(extract_text_from_pdf, pdf_path)
+        if not text:
+            return OcrFallbackResult(None, error="OCR 未產出文字")
+
+        for parser in candidates:
+            parse_text = getattr(parser, "parse_text", None)
+            if not callable(parse_text):
+                continue
+            try:
+                result = await asyncio.to_thread(parse_text, text)
+            except Exception as exc:  # noqa: BLE001 -- try the next adapter
+                logger.warning(
+                    "OCR 文字解析失敗: parser=%s/%s error_type=%s",
+                    parser.bank_code,
+                    parser.version,
+                    type(exc).__name__,
+                )
+                continue
+            if isinstance(result, ParseResult):
+                return OcrFallbackResult(
+                    finalize_parse_result(result, method="ocr"), text=text
+                )
+
+        from ccas.parser.ocr import parse_ocr_text
+
+        generic_result = (
+            parse_ocr_text(text, candidates[0].bank_code) if candidates else None
+        )
+        if generic_result is not None:
+            return OcrFallbackResult(generic_result, text=text)
+
+        return OcrFallbackResult(None, text=text, error="OCR 文字無法形成帳單候選")
+
+
+def _with_method(result: ParseResult, method: str) -> ParseResult:
+    """Keep an injected candidate's metadata while setting its route method."""
+    if result.parse_method == method:
+        return result
+    return replace(result, parse_method=method)  # type: ignore[arg-type]
 
 
 def _try_parse(
@@ -187,6 +269,13 @@ class ParserIntake:
     persistence: ParsePersistencePort
     timeout_provider: Callable[[], float]
     staging_root_provider: Callable[[], str]
+    ocr_fallback: OcrFallbackPort | None = None
+    llm_reference: LlmReferencePort | None = None
+    llm_enabled_provider: Callable[[], bool] = lambda: False
+
+    def __post_init__(self) -> None:
+        if self.ocr_fallback is None:
+            self.ocr_fallback = _DefaultOcrFallback()
 
     async def process_one(
         self,
@@ -285,30 +374,123 @@ class ParserIntake:
             )
             return
 
-        if not success:
-            pdf_filename = attachment.original_filename or "unknown"
+        pdf_filename = attachment.original_filename or "unknown"
 
-            # Zero-balance historical bills (e.g. SINOPAC 2021 無消費帳單) raise a
-            # ParseError tagged with "zero-balance" — treat as skip, not failure,
-            # since there is no actionable amount / due_date to persist.
-            if "zero-balance" in (error_detail or ""):
-                summary.skipped_count += 1
-                logger.info(
-                    "略過零額歷史帳單: bank_code=%s pdf=%s detail=%s",
+        # Zero-balance historical bills (e.g. SINOPAC 2021 無消費帳單) raise a
+        # ParseError tagged with "zero-balance" — preserve the existing skip
+        # semantics and do not send a non-bill to OCR/LLM.
+        if not success and "zero-balance" in (error_detail or ""):
+            summary.skipped_count += 1
+            logger.info(
+                "略過零額歷史帳單: bank_code=%s pdf=%s detail=%s",
+                bank_code,
+                pdf_filename,
+                error_detail,
+            )
+            await self.persistence.set_status(
+                session,
+                attachment,
+                status=StagedAttachmentStatus.PARSE_SKIPPED,
+                error_reason=error_detail,
+            )
+            return
+
+        # Rules results with insufficient confidence remain candidates only;
+        # they must pass through OCR before they can be persisted.
+        selected_result = (
+            parse_result
+            if success
+            and parse_result is not None
+            and is_parse_result_acceptable(parse_result)
+            else None
+        )
+        if success and parse_result is not None and selected_result is None:
+            logger.warning(
+                "規則解析信心不足，進入 OCR fallback: "
+                "bank_code=%s pdf=%s confidence=%.2f",
+                bank_code,
+                pdf_filename,
+                parse_result.parse_confidence,
+            )
+
+        ocr_result = OcrFallbackResult(None, error="OCR 未執行")
+        if selected_result is None:
+            try:
+                assert self.ocr_fallback is not None
+                ocr_result = await self.ocr_fallback.parse(staged_path, candidates)
+            except Exception as exc:  # noqa: BLE001 -- one attachment must continue
+                ocr_result = OcrFallbackResult(None, error=f"OCR fallback 失敗: {exc}")
+                logger.warning(
+                    "OCR fallback 發生例外: bank_code=%s pdf=%s error_type=%s",
                     bank_code,
                     pdf_filename,
-                    error_detail,
+                    type(exc).__name__,
+                    exc_info=True,
                 )
-                await self.persistence.set_status(
-                    session,
-                    attachment,
-                    status=StagedAttachmentStatus.PARSE_SKIPPED,
-                    error_reason=error_detail,
-                )
-                return
 
+            if ocr_result.result is not None:
+                ocr_candidate = _with_method(ocr_result.result, "ocr")
+                if is_parse_result_acceptable(ocr_candidate):
+                    selected_result = ocr_candidate
+                else:
+                    logger.warning(
+                        "OCR 解析信心不足: bank_code=%s pdf=%s confidence=%.2f",
+                        bank_code,
+                        pdf_filename,
+                        ocr_candidate.parse_confidence,
+                    )
+
+        if selected_result is None and self.llm_enabled_provider():
+            if self.llm_reference is None:
+                logger.error(
+                    "LLM reference 已啟用但 adapter 不存在: bank_code=%s pdf=%s",
+                    bank_code,
+                    pdf_filename,
+                )
+            else:
+                try:
+                    llm_candidate = await self.llm_reference.parse(
+                        bank_code=bank_code,
+                        source_text=ocr_result.text,
+                        candidate=ocr_result.result or parse_result,
+                    )
+                except Exception as exc:  # noqa: BLE001 -- fallback is optional
+                    llm_candidate = None
+                    logger.warning(
+                        "LLM reference 失敗: bank_code=%s pdf=%s error_type=%s",
+                        bank_code,
+                        pdf_filename,
+                        type(exc).__name__,
+                        exc_info=True,
+                    )
+                if llm_candidate is not None:
+                    llm_candidate = _with_method(llm_candidate, "llm")
+                    if is_parse_result_acceptable(llm_candidate):
+                        selected_result = llm_candidate
+                    else:
+                        logger.warning(
+                            "LLM reference 候選未通過 gate: "
+                            "bank_code=%s pdf=%s confidence=%.2f",
+                            bank_code,
+                            pdf_filename,
+                            llm_candidate.parse_confidence,
+                        )
+
+        if selected_result is None:
+            error_detail = "; ".join(
+                detail
+                for detail in (
+                    error_detail,
+                    ocr_result.error,
+                    "LLM reference 未啟用"
+                    if not self.llm_enabled_provider()
+                    else "所有候選未通過解析 gate",
+                )
+                if detail
+            )
             error_msg = (
-                f"所有 parser 皆失敗 ({bank_code}/{pdf_filename}): {error_detail}"
+                f"所有 parser 皆失敗，所有解析路徑皆失敗 "
+                f"({bank_code}/{pdf_filename}): {error_detail}"
             )
             summary.failed_count += 1
             summary.errors.append(error_msg)
@@ -329,7 +511,7 @@ class ParserIntake:
             )
             return
 
-        assert parse_result is not None
+        parse_result = selected_result
 
         # 去重複：檢查同銀行同月份帳單是否已存在
         bill_exists = await self.persistence.bill_exists(
@@ -547,6 +729,7 @@ class _DbParsePersistencePort:
 def build_parser_intake() -> ParserIntake:
     """建立 production ``ParserIntake``（真實 DB ports、真實 registry）。"""
     from ccas.parser import banks
+    from ccas.parser.llm_reference import build_bill_llm_reference
 
     banks.ensure_discovered()
     return ParserIntake(
@@ -555,4 +738,6 @@ def build_parser_intake() -> ParserIntake:
         persistence=_DbParsePersistencePort(),
         timeout_provider=lambda: get_settings().pdf_parse_timeout_seconds,
         staging_root_provider=lambda: get_settings().staging_dir,
+        llm_reference=build_bill_llm_reference(),
+        llm_enabled_provider=lambda: get_settings().bill_parse_llm_reference_enabled,
     )
