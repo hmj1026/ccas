@@ -13,7 +13,7 @@
 cd ~/ccas    # 你 docker-compose.yml 所在的目錄
 
 # 1) 修改 .env 的版本
-sed -i 's/^CCAS_VERSION=.*/CCAS_VERSION=v0.7.1/' .env
+sed -i 's/^CCAS_VERSION=.*/CCAS_VERSION=v0.8.0/' .env
 
 # 2) 拉新 image 並重啟
 docker compose -f docker-compose.yml pull
@@ -38,6 +38,25 @@ CCAS 採 [SemVer](https://semver.org/)：
 | Major（`v0.x.x` → `v1.0.0`） | 可能 breaking change；release notes 會明示 | 升級前**閱讀 release notes**、備份 |
 
 每次 release 的詳細 changelog 見 [GitHub Releases](https://github.com/<owner>/ccas/releases)。
+
+---
+
+## v0.8.0（Minor）— 2026-09-13 — 帳單解析管線強化、結構化詮釋資料與資料庫遷移
+
+**適用對象**：v0.7.1 升級至 v0.8.0。包含 alembic migration（`d4e7f2a1b9c3_add_bill_parse_metadata`），不含破壞性變更。升級前建議備份 `${CCAS_DATA_LOCATION}`。
+
+**帳單解析管線（Bill Parsing Pipeline）**：
+- **三層解析與信心度管理**：提供 Rules 規則引擎、OCR 文字辨識與選用 LLM 參考輔助三層架構，具備確定性（deterministic）信心度評估與跨視角回退機制。
+- **解析結果合約與 Schema**：新增 `schemas/bill_parse_result.schema.json` 結構契約與驗證工具，規範各層解析來源與結構化資料。
+- **Golden Fixtures 測試覆蓋**：新增 rules-only、ocr-fallback、llm-assisted、low-confidence 與 failed 等完整 golden 測試案例。
+
+**資料庫與儲存**：
+- **帳單詮釋資料（Metadata）**：`bills` 資料表新增 `parse_source`、`parse_confidence` 與 `parse_metadata` 欄位，由 migration 自動補齊既有資料預設值。
+
+**驗證碼與穩定度**：
+- **FUBON 驗證碼辨識**：進一步收緊並微調 FUBON 驗證碼信心度閘門，消除 CI 與正式環境的偶發邊界問題。
+
+**升級後**：pull-only Docker 部署請使用 `CCAS_VERSION=v0.8.0`，容器啟動時 entrypoint 會自動執行資料庫 migration。
 
 ---
 
