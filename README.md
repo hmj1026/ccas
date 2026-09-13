@@ -74,6 +74,8 @@ Then:
 Full walkthrough: [`docs/install-quickstart.md`](docs/install-quickstart.md) (Traditional Chinese).
 
 Agent integration: [`docs/mcp-installation.md`](docs/mcp-installation.md) (manual and delegated-AI setup).
+Non-Docker MCP host: [`docs/non-docker-agent-host.md`](docs/non-docker-agent-host.md)
+（MCP-only 不需要 Node、pnpm 或 Redis）。
 
 ## Local Development
 
@@ -97,6 +99,8 @@ pnpm e2e            # Playwright
 ```
 
 See [`docs/developer-guide.md`](docs/developer-guide.md) for the full toolchain reference (Traditional Chinese).
+無 Docker 的 MCP host、Redis 與 Node/Corepack 差異見
+[`docs/non-docker-agent-host.md`](docs/non-docker-agent-host.md)。
 
 ## Project Structure
 
