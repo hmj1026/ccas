@@ -60,6 +60,8 @@ CCAS 採 [SemVer](https://semver.org/)：
 **升級後**：pull-only Docker 部署請使用 `CCAS_VERSION=v0.8.2`；非 Docker MCP host
   不需 Redis 才能查詢，但若使用既有 stale session，仍需由 host 重新建立 session。
 
+---
+
 ## v0.8.1（Patch）— 2026-09-14 — Supervisord 宿主常駐驅動、API 服務管理與 Agent 規格同步
 
 **適用對象**：v0.8.0 升級至 v0.8.1。無資料庫 schema 變更，不含破壞性變更。
