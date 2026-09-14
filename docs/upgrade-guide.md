@@ -13,7 +13,7 @@
 cd ~/ccas    # 你 docker-compose.yml 所在的目錄
 
 # 1) 修改 .env 的版本
-sed -i 's/^CCAS_VERSION=.*/CCAS_VERSION=v0.8.0/' .env
+sed -i 's/^CCAS_VERSION=.*/CCAS_VERSION=v0.8.1/' .env
 
 # 2) 拉新 image 並重啟
 docker compose -f docker-compose.yml pull
@@ -38,6 +38,23 @@ CCAS 採 [SemVer](https://semver.org/)：
 | Major（`v0.x.x` → `v1.0.0`） | 可能 breaking change；release notes 會明示 | 升級前**閱讀 release notes**、備份 |
 
 每次 release 的詳細 changelog 見 [GitHub Releases](https://github.com/<owner>/ccas/releases)。
+
+---
+
+## v0.8.1（Patch）— 2026-09-14 — Supervisord 宿主常駐驅動、API 服務管理與 Agent 規格同步
+
+**適用對象**：v0.8.0 升級至 v0.8.1。無資料庫 schema 變更，不含破壞性變更。
+
+**非 Docker 宿主常駐服務（Host Services）**：
+- **Supervisord 常駐驅動**：新增第三種常駐驅動 `supervisord`，為無 systemd user bus 的 Linux 環境（如容器化或限制 init 的 host）提供第一方 fallback。純 Python 實作、無需 root 權限。
+- **API 服務常駐管理**：`supervisord` 驅動正式納入 `api` (uvicorn) 服務管理，提供正式 production 啟動參數與 HTTP readiness smoke check。
+- **統一驅動契約架構**：重構 `host-services.sh` 平台邏輯為統一的 driver 契約（`systemd`、`launchd`、`supervisord`），各自宣告能力並提供完整生命週期操作（install、uninstall、status、restart、is_running）。
+
+**OpenSpec 規格與索引同步**：
+- **Agent 規格歸檔**：同步已歸檔之 `agent-cli-interface`、`agent-mcp-interface` 與 `reconciliation-identity` 規格文件，補齊 stdio MCP / CLI 唯讀介面與對帳查詢規格。
+- **GitNexus 索引**：同步最新程式碼拓撲分析指標。
+
+**升級後**：pull-only Docker 部署請使用 `CCAS_VERSION=v0.8.1`，無資料庫 migration；非 Docker 部署如需使用 supervisord 可參考 `docs/non-docker-host-services.md`。
 
 ---
 

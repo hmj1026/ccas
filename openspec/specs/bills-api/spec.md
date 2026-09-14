@@ -43,3 +43,19 @@ TBD - created by archiving change backend-api. Update Purpose after archive.
 - **WHEN** 前端送出 `PATCH /api/bills/123` 並帶入 `{"is_paid": true}`
 - **THEN** API 會更新該帳單狀態並回傳最新資料
 
+### Requirement: 提供到期彙總查詢供對帳使用
+
+系統 SHALL 提供一個到期帳單彙總查詢（供 REST 與 `get_payment_due` MCP 工具共用），回傳目前未繳、依到期日排序的帳單摘要，欄位至少包含帳單識別鍵、銀行代碼、到期日、應繳金額、是否已繳；應繳金額 SHALL 使用 `agent-mcp-interface` 定義的明確 TWD money object。
+
+#### Scenario: 查詢即將到期的未繳帳單
+
+- **WHEN** 呼叫方查詢到期彙總，未指定日期範圍
+- **THEN** 系統 SHALL 回傳所有 `is_paid=false` 的帳單，依 `due_date` 由近到遠排序
+
+#### Scenario: 彙總結果可與 `reconciliation-identity` 對帳鍵對應
+
+- **WHEN** 呼叫方取得到期彙總結果
+- **THEN** 每筆帳單摘要 SHALL 使用共用 `AgentBill`，包含 `bank_code`、`billing_month`、`due_date`、關聯交易末四碼的去重排序陣列 `card_last4s` 與衍生 `reconciliation_key`
+
+REST 入口 SHALL 是 `GET /api/bills/payment-due`，沿用既有 `ApiResponse` envelope 與 Bearer／session cookie 認證。
+

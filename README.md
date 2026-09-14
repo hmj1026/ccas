@@ -53,7 +53,7 @@ Requires Docker + Docker Compose. First create a Google Cloud OAuth client — s
 ```bash
 mkdir ~/ccas && cd ~/ccas
 REPO_OWNER=<owner>   # GHCR namespace / GitHub owner (the <owner> in the release URL)
-RELEASE=v0.8.0       # pin a released version
+RELEASE=v0.8.1       # pin a released version
 curl -fsSL -o docker-compose.yml \
   "https://github.com/${REPO_OWNER}/ccas/releases/download/${RELEASE}/docker-compose.yml"
 curl -fsSL -o example.env \
@@ -77,7 +77,7 @@ Agent integration: [`docs/mcp-installation.md`](docs/mcp-installation.md) (manua
 Non-Docker MCP host: [`docs/non-docker-agent-host.md`](docs/non-docker-agent-host.md)
 （MCP-only 不需要 Node、pnpm 或 Redis）。
 Non-Docker worker/scheduler: [docs/non-docker-host-services.md](docs/non-docker-host-services.md)
-（Linux systemd、macOS launchd；Redis 由 host package service 管理）。
+（Linux systemd／supervisord、macOS launchd；Redis 由 host package service 管理）。
 
 ## Local Development
 
