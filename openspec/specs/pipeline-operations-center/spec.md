@@ -3,9 +3,7 @@
 ## Purpose
 
 CCAS 操作中心 capability：在前端提供 `/operations` 頁面讓非工程使用者觸發 pipeline、觀察進行中進度、檢視歷史紀錄；在後端提供 `pipeline_runs` 表作為執行歷史與即時進度的單一真實來源、`ProgressReporter` 抽象層、`/api/pipeline/runs*` 列表與詳情端點，以及 worker 端的 DB-backed 進度回報實作。`ProgressReporter` Protocol 預留未來升級 SSE / WebSocket 的空間（透過新增 `RedisPubsubReporter` + `CompositeProgressReporter`，不動 orchestrator 介面）。Scheduler 自動排程刻意走 NoopProgressReporter，不寫入 `pipeline_runs`；UI 歷史卡片明示「僅手動觸發紀錄」橫幅。
-
 ## Requirements
-
 ### Requirement: Pipeline 執行歷史 DB 模型
 
 系統 SHALL 提供 `pipeline_runs` 資料表作為 pipeline 執行歷史與即時進度的單一真實來源。每筆 pipeline 觸發 SHALL 對應一筆 `PipelineRun` row，欄位至少包含：`id`（UUID PK）、`job_id`（RQ id）、`status`（queued / running / succeeded / failed / cancelled）、`triggered_by`、`params`（JSON：force / bank_code / year / month / from_stage / to_stage）、`current_stage`、`current_stage_processed`、`current_stage_total`、`stage_summary`（JSON 陣列：每階段 `stage` / `ok` / `fail` / `elapsed_ms` / `counts` / `errors`）、`error_message`、`started_at`、`completed_at`、`created_at`、`updated_at`。資料表 SHALL 含 `(created_at DESC)` 與 `(status)` 兩個索引。
@@ -179,3 +177,18 @@ CCAS 操作中心 capability：在前端提供 `/operations` 頁面讓非工程�
 
 - **WHEN** 前端呼叫 `GET /api/pipeline/runs/{id}`
 - **THEN** response SHALL 包含足夠資訊讓前端在無歷史 state 的前提下完整重建畫面（不依賴 incremental updates）
+
+### Requirement: 提供 pipeline 狀態彙總查詢供 Agent 對帳使用
+
+系統 SHALL 提供一個 pipeline 狀態彙總查詢（供 REST 與 `pipeline_status` MCP 工具共用），回傳最近一次執行的 `PipelineRunSummary` 欄位、整體狀態、當前階段，以及明確的 `needs_human` 衍生狀態，不需要呼叫方先知道特定 `run_id`。
+
+#### Scenario: 查詢最近一次執行狀態
+
+- **WHEN** 呼叫方查詢 pipeline 狀態彙總，未指定 `run_id`
+- **THEN** 系統 SHALL 回傳最近一筆 `PipelineRun` 的摘要，至少包含既有 `PipelineRunSummary` 的全部欄位，並附加 `needs_human` 衍生狀態
+
+#### Scenario: 標示需要人工介入的狀態
+
+- **WHEN** 最近一次執行處於失敗且已達重試上限的狀態
+- **THEN** 彙總結果 SHALL 包含足以讓 MCP 工具回應 `isError=true`、`code=needs_human` 與 `needs_human=true` 的欄位或狀態值
+
