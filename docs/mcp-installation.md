@@ -9,10 +9,12 @@ token、完整卡號或其他 secrets。
 | 項目 | 實作 |
 |---|---|
 | MCP server | `ccas-mcp`（等同 `python -m ccas.mcp`） |
+| Release metadata | v0.8.2；MCP `serverInfo.version` 與 package metadata 同步 |
 | Transport | `stdio`；stdout 僅保留 MCP JSON 訊息，診斷訊息走 stderr |
 | Tools | `list_bills`、`get_bill`、`query_transactions`、`get_payment_due`、`budget_status`、`pipeline_status` |
 | 寫入 | 未提供；`AGENT_WRITE_ENABLED` 不會把目前 server 變成寫入介面 |
 | 依賴 | Python 3.12+、uv；`backend/pyproject.toml` 宣告 `mcp>=2.2.0,<3` |
+| 時間欄位 | Agent DTO 的 datetime 以 UTC RFC3339 `Z` suffix 輸出；既有 SQLite naive value 視為 UTC |
 
 需要了解資料欄位與安全邊界時，先讀 [`current-implementation.md`](CODEMAPS/current-implementation.md)
 與 [`0001-agent-notion-trust-boundary.md`](adr/0001-agent-notion-trust-boundary.md)。
@@ -61,8 +63,9 @@ Redis host service。
    若 client 不支援 `--directory`，改用 `cwd=/absolute/path/to/ccas/backend`，command
    為 `uv run ccas-mcp`。
 
-4. 驗證：在 MCP client 中列出 tools，應看到上述六個名稱；再呼叫
-   `pipeline_status` 或 `list_bills`。若沒有資料，先依
+4. 驗證：在 MCP client 中列出 tools，應看到上述六個名稱；再依序等待 response 後呼叫
+   `get_payment_due`、`pipeline_status` 或 `list_bills`。Agent datetime 欄位應使用
+   `Z` suffix。若沒有資料，先依
    [`install-quickstart.md`](install-quickstart.md) 啟動 CCAS 並完成登入。
 
 ## 方式 B：委託 AI 安裝
@@ -100,6 +103,35 @@ AI 執行時必須遵守：
 規劃遠端連線，必須先新增安全與授權設計文件。
 
 ## 排錯
+
+### stdio session 顯示 connected 但 tools/call 顯示 `Not connected`
+
+若 client 顯示 server 已 connected 且能列出 6 個 tools，但呼叫在數毫秒內回報
+`Not connected`，而 server／wrapper log 沒有收到對應 JSON-RPC `tools/call`，這是
+host 的 stale session 或 routing lifecycle 症狀，不是 CCAS query handler 的資料錯誤。
+
+請在 host 端執行下列恢復步驟：
+
+1. 移除或停止目前的 `ccas` MCP entry。
+2. 重新 Add／Restart MCP server，讓 host 建立新的 stdio session。
+3. 重新執行 `tools/list`，再逐次等待 response 呼叫 `get_payment_due`。
+
+若新 session 的 server wire log 已收到 `tools/call` 且回傳 result，請將 host connector
+的原始錯誤提交給該 host 的維護者；CCAS 端不需以 Redis、API 或 supervisord 解法處理
+這個 pre-roundtrip failure。
+
+### `pipeline_status` 顯示 `-32602` 與 `date-time` validation
+
+這表示 host 已收到 server response，但嚴格驗證 structured output 時拒絕沒有 timezone
+offset 的 datetime。升級至 v0.8.2 並重建 MCP session；v0.8.2 會把 Agent datetime
+統一輸出為 UTC `Z`，不需要資料庫 migration。
+
+### timeout smoke test 與實際 tool call
+
+`timeout 3 uv run ccas-mcp` 只確認長駐程序可以啟動，不會驗證 `tools/call`。若一次把
+多個 JSON-RPC request 寫入 stdin 後立即關閉 stdin，server 可能在 pending request
+完成前收到 EOF，產生 `Connection closed`；完整驗證必須逐次寫入 request、等待 response，
+並保持 stdin 開啟直到最後一個 response 收到。
 
 | 症狀 | 檢查 |
 |---|---|

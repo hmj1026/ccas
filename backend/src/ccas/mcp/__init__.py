@@ -1,5 +1,5 @@
 """Read-only MCP transport for CCAS Agent queries."""
 
-__all__ = ["__version__"]
+from ccas import __version__
 
-__version__ = "0.1.0"
+__all__ = ["__version__"]
