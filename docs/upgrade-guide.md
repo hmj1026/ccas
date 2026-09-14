@@ -2,8 +2,9 @@
 
 本文件說明從現有版本升級至新版的步驟、相容性政策與回滾建議。
 
-> 本指南僅適用於 prod pull-only 部署（`docker/docker-compose.yml`）。dev（含原始碼）
-> 升級請走 `git pull` + `docker compose up -d --build`。
+> **prod pull-only**（`docker/docker-compose.yml`）用下方「標準升級流程」。
+> **dev（含原始碼 + Compose）** 走 `git pull` + `docker compose up -d --build`。
+> **非 Docker**（uv + supervisord，無 Compose）走「非 Docker（uv + supervisord）升級」。
 
 ---
 
@@ -24,6 +25,43 @@ curl -fsS http://localhost:${CCAS_PORT:-8080}/api/health
 ```
 
 **alembic migration 會在 backend 容器啟動時自動執行**（entrypoint 已內建），不需手動跑。
+
+---
+
+## TL;DR — 非 Docker（uv + supervisord）升級
+
+適用於沒有 Docker、以 `uv` 與 `host-services.sh --driver=supervisord` 常駐
+api／worker／scheduler 的 host。Redis 啟動方式見
+[`non-docker-agent-host.md`](non-docker-agent-host.md)（systemd、Homebrew，或
+systemd-less `redis-server --daemonize`）。MCP PID 回收見
+[`mcp-installation.md`](mcp-installation.md)。
+
+```bash
+cd /path/to/ccas
+git fetch --tags
+git checkout v0.8.4    # 改成目標 tag
+
+cd backend
+uv sync --frozen --extra supervisor
+cd ..
+
+# Redis：systemd / brew / daemonize，見 non-docker-agent-host.md
+./scripts/host-services.sh --driver=supervisord install all
+./scripts/host-services.sh --driver=supervisord smoke all
+
+# MCP 由 host 管理；Restart 不夠，必須先殺殘留行程再重接
+pgrep -af 'ccas-mcp-logging-wrapper|ccas-mcp'
+pkill -f 'ccas-mcp-logging-wrapper|ccas-mcp' || true
+# 然後在 MCP client Restart 或重新 Add：
+# uv run --directory /absolute/path/to/ccas/backend ccas-mcp
+# 依序：tools/list → get_payment_due → pipeline_status（timestamp 須帶 Z）
+```
+
+無 systemd 時 Redis 與 supervisord 重開機後都不會自己起來；開機 checklist 見
+[`non-docker-agent-host.md`](non-docker-agent-host.md) 與
+[`non-docker-host-services.md`](non-docker-host-services.md)。
+`host-services.sh` 不會跑 alembic；有 schema 變更時先在 `backend/` 執行
+`uv run alembic upgrade head`。v0.8.4 無資料庫 schema 變更。
 
 ---
 
@@ -78,12 +116,14 @@ CCAS 採 [SemVer](https://semver.org/)：
 
 **Host troubleshooting**：
 - 若 host 顯示 MCP connected／tools=6，但 tools/call 在 JSON-RPC 前回報
-  `Not connected`，請重新 Add／Restart MCP server 建立新 stdio session。
-- 若 host 已收到 response 但回報 `-32602 date-time`，請確認已升級至 v0.8.2 並重建
-  session。
+  `Not connected`，或 Restart 後仍跑舊碼，請依
+  [`mcp-installation.md`](mcp-installation.md) 殺掉殘留 PID 再 Add／Restart。
+- 若 host 已收到 response 但回報 `-32602 date-time`，請確認已升級至 v0.8.2 並走
+  同一份 PID 回收 SOP；不要只 Restart。
 
 **升級後**：pull-only Docker 部署請使用 `CCAS_VERSION=v0.8.2`；非 Docker MCP host
-  不需 Redis 才能查詢，但若使用既有 stale session，仍需由 host 重新建立 session。
+  不需 Redis 才能查詢，但升級後必須回收 MCP 子行程，見
+  [`mcp-installation.md`](mcp-installation.md)。
 
 ---
 
@@ -389,6 +429,8 @@ crashloop 設計：未填 `TELEGRAM_BOT_TOKEN` 時 idle，不影響其他 servic
 
 ## 路徑分流提醒
 
-- 本指南為 **prod（pull-only）** 升級；用 `docker/docker-compose.yml`
-- **dev** 升級走 `git pull` + 根目錄 `docker-compose.yaml`，與本文不同
+- **prod（pull-only）**：`docker/docker-compose.yml`，用本文件開頭的標準升級流程
+- **dev Compose**：`git pull` + 根目錄 `docker-compose.yaml`，與 prod 不同
+- **非 Docker uv + supervisord**：用本文件「非 Docker（uv + supervisord）升級」；
+  Redis 與 MCP PID 回收分別以 agent-host、mcp-installation 為 SSOT
 - **prod self-build 中間路徑（`docker compose -f docker-compose.yaml up -d` 跳 override）已棄用**，若你還在用該路徑，請先依本指南遷移到 prod compose

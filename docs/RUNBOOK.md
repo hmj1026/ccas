@@ -44,11 +44,13 @@ MCP server 不由 backend／worker／scheduler 的 host service manager 管理�
 host 依 MCP 設定建立獨立 stdio process。排查時先區分兩種錯誤：
 
 - `connected`、tools=6，但 `tools/call` 在 4–22ms 內失敗且 server wire log 沒有
-  request：host stale session／routing 問題。移除並重新 Add／Restart MCP server，讓
-  host 建立新 session。
+  request：host stale session／routing 問題。先依
+  [`mcp-installation.md`](mcp-installation.md)「升級後 MCP 子行程殘留」殺掉舊 PID，
+  再移除並重新 Add／Restart MCP server。單靠 Restart 不能保證載入新碼。
 - server wire log 有 `tools/call` 與 response，但 host 回 `-32602` 並指出
-  `date-time`：client structured output validation 問題。v0.8.2 會輸出帶 `Z` 的 UTC
-  datetime；不需要 Redis restart 或 database migration。
+  `date-time`：client structured output validation 問題，或仍連到升級前的子行程。
+  v0.8.2 會輸出帶 `Z` 的 UTC datetime；不需要 Redis restart 或 database migration。
+  checkout 已是 v0.8.2+ 仍失敗時，走同一份 PID 回收 SOP。
 
 驗證時要逐次等待 `initialize`／`tools/list`／`tools/call` 的 response；單純執行
 `timeout ... ccas-mcp` 只驗證程序存活，輸入後立即 EOF 也可能人為造成 `Connection closed`。
