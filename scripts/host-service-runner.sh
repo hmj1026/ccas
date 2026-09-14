@@ -4,7 +4,7 @@
 set -euo pipefail
 
 if [[ $# -ne 2 ]]; then
-  printf 'usage: %s <worker|scheduler> <absolute-path-to-uv>\n' "$0" >&2
+  printf 'usage: %s <worker|scheduler|api> <absolute-path-to-uv>\n' "$0" >&2
   exit 2
 fi
 
@@ -28,6 +28,10 @@ case "$SERVICE" in
     ;;
   scheduler)
     exec "$UV_BIN" run --no-sync python -m ccas.scheduler
+    ;;
+  api)
+    exec "$UV_BIN" run --no-sync uvicorn ccas.api.app:create_app \
+      --factory --host 127.0.0.1 --port 8000
     ;;
   *)
     printf 'unknown service: %s\n' "$SERVICE" >&2

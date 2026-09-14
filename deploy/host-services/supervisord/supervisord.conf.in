@@ -1,0 +1,19 @@
+[unix_http_server]
+file=__CCAS_SOCKET__
+chmod=0600
+
+[supervisord]
+logfile=__CCAS_LOGFILE__
+pidfile=__CCAS_PIDFILE__
+childlogdir=__CCAS_LOGDIR__
+nodaemon=false
+loglevel=info
+
+[supervisorctl]
+serverurl=unix://__CCAS_SOCKET__
+
+[rpcinterface:supervisor]
+supervisor.rpcinterface_factory = supervisor.rpcinterface:make_main_rpcinterface
+
+[include]
+files = __CCAS_CONF_DIR__/*.conf
