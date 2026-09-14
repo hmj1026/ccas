@@ -37,7 +37,9 @@ jobs:
 
   backend-test:
     name: Backend Tests
-    runs-on: ubuntu-latest
+    # The unit suite includes the real ONNX Runtime CAPTCHA fixture gate.
+    # Keep its CPU topology aligned with the integration evaluator below.
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: backend
@@ -58,11 +60,19 @@ jobs:
       # [tool.coverage.report] fail_under (SSOT); this flag is kept equal to it
       # so the three runners (CI unit, pre-push, pyproject) never drift.
       - name: Run unit tests with coverage
-        run: uv run pytest tests/unit/ --cov --cov-report=term-missing --cov-fail-under=80
+        # Real ONNX fixture inference is exercised by the dedicated evaluator
+        # in backend-integration-test, with its runner/CPU topology pinned.
+        run: >-
+          uv run pytest tests/unit/ -m "not live_fubon and not captcha_model"
+          --cov --cov-report=term-missing --cov-fail-under=80
 
   backend-integration-test:
     name: Backend Integration Tests
-    runs-on: ubuntu-latest
+    # Keep the ONNX Runtime CAPTCHA gate on a pinned image.  Its default
+    # thread affinity has produced all-rejected OCR results on one
+    # ubuntu-latest hosted-runner pool; constraining this small model check to
+    # one logical CPU makes it independent of the runner's CPU topology.
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: backend
@@ -83,7 +93,7 @@ jobs:
         run: uv sync --frozen --all-extras
 
       - name: Evaluate FUBON CAPTCHA fixtures
-        run: uv run python scripts/eval_captcha.py
+        run: taskset --cpu-list 0 uv run python scripts/eval_captcha.py
 
       # Integration-layer router coverage floor. Explicit --cov=src/ccas/api/routers
       # targets the API router package directly (the unit-only omit list in

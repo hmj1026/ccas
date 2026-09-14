@@ -72,6 +72,7 @@ asyncio_mode = "auto"
 # (captcha OCR), and rate-limited by the upstream bank.
 markers = [
     "live_fubon: live FUBON web-fetch integration test (opt-in)",
+    "captcha_model: real ddddocr/ONNX fixture regression (dedicated CI step)",
 ]
 addopts = "-m 'not live_fubon'"
 

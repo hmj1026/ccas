@@ -3,7 +3,8 @@
 Usage: uv run python scripts/eval_captcha.py [--fixtures-dir PATH]
 
 Loads all *.jpg files from the fixtures directory (filename stem = ground truth).
-Reports accept rate and accuracy. Exits with code 1 if accuracy < 80%.
+Reports accept rate and accuracy. Exits with code 1 if accept rate or accuracy
+is below 80%, or if any accepted result is incorrect.
 """
 
 from __future__ import annotations
@@ -22,6 +23,7 @@ DEFAULT_FIXTURES = (
     / "captcha_samples"
 )
 MIN_ACCURACY = 0.80
+MIN_ACCEPT_RATE = 0.80
 
 
 def evaluate(fixtures_dir: Path) -> int:
@@ -59,15 +61,28 @@ def evaluate(fixtures_dir: Path) -> int:
     print(f"Rejected:    {rejected}")
     print(f"Correct:     {correct}")
     print(f"Accuracy:    {accuracy:.1%} (of accepted)")
-    print(f"Threshold:   {MIN_ACCURACY:.0%}")
+    print(
+        f"Threshold:   accept rate >= {MIN_ACCEPT_RATE:.0%}, "
+        f"accuracy >= {MIN_ACCURACY:.0%}, false positives = 0"
+    )
 
     if false_positives:
         print(f"\nFalse positives ({len(false_positives)}):")
         for fp in false_positives:
             print(fp)
 
+    failed = False
+    if accept_rate < MIN_ACCEPT_RATE:
+        print(f"\nFAIL: accept rate {accept_rate:.1%} < {MIN_ACCEPT_RATE:.0%}")
+        failed = True
     if accuracy < MIN_ACCURACY:
         print(f"\nFAIL: accuracy {accuracy:.1%} < {MIN_ACCURACY:.0%}")
+        failed = True
+    if false_positives:
+        print(f"\nFAIL: false positives {len(false_positives)} > 0")
+        failed = True
+
+    if failed:
         return 1
 
     print("\nPASS")
