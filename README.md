@@ -77,7 +77,7 @@ Agent integration: [`docs/mcp-installation.md`](docs/mcp-installation.md) (manua
 Non-Docker MCP host: [`docs/non-docker-agent-host.md`](docs/non-docker-agent-host.md)
 （MCP-only 不需要 Node、pnpm 或 Redis）。
 Non-Docker worker/scheduler: [docs/non-docker-host-services.md](docs/non-docker-host-services.md)
-（Linux systemd、macOS launchd；Redis 由 host package service 管理）。
+（Linux systemd／supervisord、macOS launchd；Redis 由 host package service 管理）。
 
 ## Local Development
 
