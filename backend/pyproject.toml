@@ -1,6 +1,6 @@
 [project]
 name = "ccas"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Credit Card Artifact System - automated bill parsing and reporting"
 license = {text = "MIT"}
 requires-python = ">=3.12"
@@ -53,6 +53,9 @@ supervisor = ["supervisor>=4.2.5,<5"]
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.hatch.version]
+path = "src/ccas/__init__.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/ccas"]

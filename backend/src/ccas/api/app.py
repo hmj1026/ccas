@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.base import BaseHTTPMiddleware
 
+from ccas import __version__
 from ccas.api.deps import verify_token
 from ccas.api.routers import (
     analytics,
@@ -90,7 +91,7 @@ def create_app() -> FastAPI:
     docs_enabled = settings_obj.enable_api_docs
     app = FastAPI(
         title="CCAS",
-        version="0.1.0",
+        version=__version__,
         # API docs are opt-in（ENABLE_API_DOCS=true）；production 預設關閉，
         # 避免暴露完整 API surface 給未認證流量。
         docs_url="/docs" if docs_enabled else None,

@@ -82,6 +82,16 @@ client 不支援 `--directory` 時，改用工作目錄
    frontend。沒有帳單時，收到空的 `data` 或可理解的業務結果即可。
 3. 再呼叫 `list_bills` 或 `pipeline_status`，確認 client 讀到的是目標資料庫。
 
+每一個 request 都要等待前一個 response 後再送下一個 request。不要用「一次寫完
+所有 JSON-RPC request 後立即關閉 stdin」模擬 tool call；EOF race 可能只得到
+`Connection closed`，不能代表 server 的 sequential tool-call 行為。
+
+若 host 顯示 `connected`、tools=6，但 `tools/call` 在數毫秒內回報
+`Not connected`，先移除並重新 Add／Restart 這個 MCP server 以建立新 stdio session。
+這個症狀若沒有出現在 server wire log，屬 host session routing／lifecycle 問題。建立
+新 session 後，`pipeline_status` 的 datetime 欄位應使用 UTC `Z`；v0.8.2 不需要
+database migration。
+
 如果 tools discovery 失敗，先在 `backend/` 執行 `uv sync --frozen` 並確認 client
 設定的絕對路徑。若 discovery 成功但資料為空，檢查 `DATABASE_URL`、資料庫檔案
 權限與目前工作目錄。
@@ -161,6 +171,8 @@ pnpm install --frozen-lockfile
 | `uv: command not found` | 安裝 uv，或把 uv 的安裝目錄加入 PATH。 |
 | `API_TOKEN` 缺少 | 在 backend/ 的 shell export，或寫入本機 `.env`；不要提交 `.env`。 |
 | MCP client 顯示 JSON parse error | 確認 command 是 stdio，stdout 沒有 shell banner 或 debug print。 |
+| tools 顯示 connected 但 call 顯示 `Not connected` | 重新 Add／Restart MCP server 建立新 stdio session；若 server 沒收到 `tools/call`，收集 host connector log。 |
+| `pipeline_status` 回 `-32602`／`date-time` | 升級 v0.8.2、重新建立 MCP session；確認輸出 timestamp 帶 `Z`。 |
 | tools 存在但查不到資料 | 確認 `DATABASE_URL`、資料庫檔案權限，以及 client 的 backend 路徑。 |
 | worker/scheduler 連不上 queue | 確認 `REDIS_URL`、`redis-cli ping` 與 host service 狀態。 |
 | macOS 沒有 `systemctl` | 使用 `brew services` 管理 Homebrew Redis。 |
