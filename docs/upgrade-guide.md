@@ -13,7 +13,7 @@
 cd ~/ccas    # 你 docker-compose.yml 所在的目錄
 
 # 1) 修改 .env 的版本
-sed -i 's/^CCAS_VERSION=.*/CCAS_VERSION=v0.8.2/' .env
+sed -i 's/^CCAS_VERSION=.*/CCAS_VERSION=v0.8.3/' .env
 
 # 2) 拉新 image 並重啟
 docker compose -f docker-compose.yml pull
@@ -38,6 +38,18 @@ CCAS 採 [SemVer](https://semver.org/)：
 | Major（`v0.x.x` → `v1.0.0`） | 可能 breaking change；release notes 會明示 | 升級前**閱讀 release notes**、備份 |
 
 每次 release 的詳細 changelog 見 [GitHub Releases](https://github.com/<owner>/ccas/releases)。
+
+---
+
+## v0.8.3（Patch）— 2026-09-14 — Dockerfile 動態版號構建修復與發布對齊
+
+**適用對象**：v0.8.1 或 v0.8.2 升級至 v0.8.3。無資料庫 schema 變更，不需執行 migration。
+
+**Docker 部署與構建**：
+- 修復 `backend/Dockerfile` 在 `builder` 階段缺少 `src/` 導致 Hatchling 解析動態版號失敗的問題。
+- 整合 v0.8.2 之 Agent MCP datetime UTC RFC3339 `Z` 格式與跨層 metadata 一致性。
+
+**升級後**：pull-only Docker 部署請使用 `CCAS_VERSION=v0.8.3`。
 
 ---
 
