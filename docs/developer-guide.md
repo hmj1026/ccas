@@ -175,7 +175,7 @@ nginx static 提供 Web UI，並直接暴露在 `http://localhost:8080`。正式
 [無 Docker 的 Agent Host](non-docker-agent-host.md)，依照 MCP-only 的最小流程以
 `get_payment_due` 做第一個 smoke check。需要 worker 或 scheduler 時，Redis 必須由
 Linux systemd 或 macOS Homebrew service 管理，兩個平台的指令不同；常駐服務的
-安裝、重啟與 smoke check 見 [無 Docker 的 Worker 與 Scheduler 維運](non-docker-host-services.md)。
+安裝、重啟與 smoke check 見 [無 Docker 的 Host Services 維運](non-docker-host-services.md)。
 
 ### 腳本啟動
 
@@ -318,14 +318,17 @@ uv run python -m ccas.pipeline --from parse --to classify
 完整的 client 設定、人工安裝、委託 AI 安裝與排錯請見
 [`mcp-installation.md`](mcp-installation.md)。本節只保留 runtime 契約摘要。
 
-唯讀 agent 查詢可使用 ccas-agent（或 python -m ccas.cli），支援 JSON 與 table 輸出；
-MCP client 使用 ccas-mcp（或 python -m ccas.mcp）的 stdio transport。兩者共用
-ccas.services 安全投影，不會輸出 secrets，也不提供寫入工具。AGENT_WRITE_ENABLED=true
-目前仍不會啟用寫入操作。
+唯讀 agent 查詢可使用 ccas-agent（或 python -m ccas.cli），支援 JSON 與 table 輸出。
+兩者共用 ccas.services 安全投影，不會輸出 secrets，也不提供寫入工具。
+`AGENT_WRITE_ENABLED=true` 目前仍不會啟用寫入操作。
 
-MCP tools：list_bills、get_bill、query_transactions、get_payment_due、budget_status、pipeline_status。
-CLI commands 對應上述六項查詢，支援 --format json 或 --format table；MCP 透過 stdio
-啟動，不接受網路 transport。
+MCP tools：`list_bills`、`get_bill`、`query_transactions`、`get_payment_due`、
+`budget_status`、`pipeline_status`。MCP 有兩個本機 adapter，共用 `create_server()`：
+Grok／Cursor 家族 host 首選 loopback Streamable HTTP（`ccas-mcp-http` 或
+`python -m ccas.mcp.http`，`http://127.0.0.1:8001/mcp`，Bearer = 既有 `API_TOKEN`）；
+仍能維持子行程的 host 才用 stdio（`ccas-mcp` 或 `python -m ccas.mcp`）。HTTP 不是
+deprecated HTTP+SSE，也不是遠端公開 MCP。CLI commands 對應上述六項查詢，支援
+`--format json` 或 `--format table`。
 
 ## 12. 貢獻指南
 

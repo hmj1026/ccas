@@ -4,7 +4,7 @@
 set -euo pipefail
 
 if [[ $# -ne 2 ]]; then
-  printf 'usage: %s <worker|scheduler|api> <absolute-path-to-uv>\n' "$0" >&2
+  printf 'usage: %s <worker|scheduler|api|mcp-http> <absolute-path-to-uv>\n' "$0" >&2
   exit 2
 fi
 
@@ -32,6 +32,12 @@ case "$SERVICE" in
   api)
     exec "$UV_BIN" run --no-sync uvicorn ccas.api.app:create_app \
       --factory --host 127.0.0.1 --port 8000
+    ;;
+  mcp-http)
+    MCP_HTTP_PORT="$("$UV_BIN" run --no-sync python -c \
+      'from ccas.config import get_settings; print(get_settings().mcp_http_port)')"
+    exec "$UV_BIN" run --no-sync uvicorn ccas.mcp.http:create_http_app \
+      --factory --host 127.0.0.1 --port "$MCP_HTTP_PORT"
     ;;
   *)
     printf 'unknown service: %s\n' "$SERVICE" >&2

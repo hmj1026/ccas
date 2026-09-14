@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted（2026-09-10 Paul 拍板；為本專案第一份 ADR）
+Accepted（2026-09-10 Paul 拍板；為本專案第一份 ADR。2026-09-14 修訂第 6 點：在本機 stdio 與遠端 Streamable HTTP 之間插入本機 loopback Streamable HTTP）
 
 ## Context
 
@@ -22,7 +22,7 @@ CCAS 目前是一套可獨立部署的本機系統：Gmail → 解密 → 解析
 3. **CCAS 是驗證／對帳來源，不是同步目標。** Agent 需要補漏、比對金額或解析結果時，可以呼叫 CCAS 的介面（見 `agent-mcp-interface`）取數，但取回的資料只用於「跟 Notion 對照」，不能拿去覆寫 Notion，CCAS 也不接受 Agent 拿 Notion 資料回頭覆寫自己的付款／解析狀態（除非透過使用者明確授權的寫入工具，且那些寫入工具只改 CCAS 自己的狀態，永不觸碰 Notion）。
 4. **兩邊不一致時，一律標示差異給人看，不擅自覆寫任一方。** 這是 Agent 端的行為約束，但 CCAS 這一側的介面設計必須支援「回傳足以讓 Agent 產生差異報告的結構化資料」（穩定的複合識別鍵，見 `reconciliation-identity`）。
 5. **Secrets 永不跨越這個邊界。** PDF 密碼、OAuth refresh token、session secret、完整卡號等，不論透過 MCP、CLI、或未來任何管道，都不得回傳給 Agent、寫進 Notion 或出現在聊天內容中。這是本決策的安全底線，任何未來的介面變更都不得放寬。
-6. **連線分期：先本機 stdio，遠端 Streamable HTTP 留待 stdio 穩定後再開。** 在本機 stdio 階段，信任邊界主要靠「同機、行程內連線」本身提供；stdio 遵守 MCP 現行 wire contract，但不套用 HTTP OAuth authorization spec。到遠端階段才需要 Origin 驗證與真正的 token／scope 授權模型，屬於後續 ADR 或本 ADR 的修訂範圍，不在本次決定中展開；新實作不得採用已 deprecated 的 HTTP+SSE transport。
+6. **連線分期：本機 stdio 保留；本機 loopback Streamable HTTP 為第二個真實 adapter；遠端 Streamable HTTP 仍待後續 ADR。** （1）**本機 stdio** 繼續提供：信任邊界主要靠「同機、host spawn 的行程內連線」；stdio 遵守 MCP 現行 wire contract，但不套用 HTTP OAuth authorization spec。（2）**本機 loopback Streamable HTTP**（`add-mcp-loopback-streamable-http`）：只聽 loopback、Bearer 使用既有 API token、並啟用 DNS rebinding 防護。這是本機常駐通道，不是公開遠端 MCP。Streamable HTTP 的 GET 可能用 SSE framing 推事件，那是現行 spec 的一部分，不是已 deprecated 的 HTTP+SSE。（3）**遠端**（非 loopback）Streamable HTTP 才需要 Origin 驗證與真正的 token／scope 授權模型，屬於後續 ADR 或本 ADR 的再修訂，不在本次決定中展開。新實作不得採用已 deprecated 的 HTTP+SSE transport（獨立 `/sse` + `/messages`）。
 
 ## Consequences
 
@@ -34,11 +34,12 @@ CCAS 目前是一套可獨立部署的本機系統：Gmail → 解密 → 解析
 **需要承擔的代價／後續影響：**
 - Notion 與 CCAS 資料可能長期存在差異，需要依賴人工或 Agent 主動比對；規劃中的 Phase 3 change（`add-agent-write-tools-and-events`，目前尚未建立）的「對帳報告工具」可作為這個代價的緩解手段，本身仍不自動改寫任一方。
 - 若未來要放寬到雙向同步，需要重新開一份 ADR 明確處理主從與衝突解決策略，不能只靠新增 API 端點默默達成。
-- `agent-mcp-interface`／`agent-cli-interface`／`reconciliation-identity` 三份 capability spec（見 `openspec/changes/add-agent-mcp-interface/`）都必須遵守本 ADR 訂下的邊界：預設唯讀、寫入需明確授權、複合鍵只用於對帳而非合併、secrets 永不回傳。
+- `agent-mcp-interface`／`agent-cli-interface`／`reconciliation-identity` 三份 capability spec（見 `openspec/specs/agent-mcp-interface/`、`openspec/specs/agent-cli-interface/`、`openspec/specs/reconciliation-identity/`）都必須遵守本 ADR 訂下的邊界：預設唯讀、寫入需明確授權、複合鍵只用於對帳而非合併、secrets 永不回傳。
 
 ## References
 
-- `openspec/changes/add-agent-mcp-interface/` — MCP／CLI 介面規格，實作本 ADR 的邊界
+- `openspec/specs/agent-mcp-interface/`、`openspec/specs/agent-cli-interface/`、`openspec/specs/reconciliation-identity/` — MCP／CLI 介面規格，實作本 ADR 的邊界
+- `openspec/changes/add-mcp-loopback-streamable-http/` — 本機 loopback Streamable HTTP adapter；修訂第 6 點分期
 - `openspec/changes/harden-bill-parsing-pipeline/` — 解析管線強化，與本 ADR 無直接耦合但共享同一份決策文件背景
 - `CONTEXT.md` — 「Agent」「對帳」等詞彙定義
 - [MCP Architecture](https://modelcontextprotocol.io/specification/2026-07-28/architecture) — host／client／server 與能力宣告
