@@ -57,7 +57,7 @@ Do not vendor or manually sync: `openspec`, `codex`, `pyright-lsp` — managed b
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **ccas** (12699 symbols, 22224 relationships, 241 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **ccas** (13961 symbols, 24369 relationships, 262 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
 
