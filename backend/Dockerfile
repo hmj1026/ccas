@@ -6,6 +6,7 @@ FROM python:3.12-slim AS builder
 COPY --from=uv /uv /usr/local/bin/uv
 WORKDIR /app
 COPY pyproject.toml uv.lock ./
+COPY src/ ./src/
 # ``fubon-llm`` extra installs the ``anthropic`` SDK so the documented
 # ``FUBON_CAPTCHA_FALLBACK_LLM=true`` recovery path is actually functional
 # in the stock production image. Without it, enabling the flag would
