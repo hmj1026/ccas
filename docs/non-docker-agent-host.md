@@ -87,10 +87,11 @@ client 不支援 `--directory` 時，改用工作目錄
 `Connection closed`，不能代表 server 的 sequential tool-call 行為。
 
 若 host 顯示 `connected`、tools=6，但 `tools/call` 在數毫秒內回報
-`Not connected`，先移除並重新 Add／Restart 這個 MCP server 以建立新 stdio session。
-這個症狀若沒有出現在 server wire log，屬 host session routing／lifecycle 問題。建立
-新 session 後，`pipeline_status` 的 datetime 欄位應使用 UTC `Z`；v0.8.2 不需要
-database migration。
+`Not connected`，或 Restart 後 `pipeline_status` 仍回 `-32602 date-time`，請走
+[`mcp-installation.md`](mcp-installation.md) 的「升級後 MCP 子行程殘留」：先殺殘留
+PID，再 Add／Restart。單靠 Restart 不能保證載入新碼。這個症狀若沒有出現在
+server wire log，屬 host session routing／lifecycle 問題。v0.8.2 的 datetime 為
+UTC `Z`，不需要 database migration。
 
 如果 tools discovery 失敗，先在 `backend/` 執行 `uv sync --frozen` 並確認 client
 設定的絕對路徑。若 discovery 成功但資料為空，檢查 `DATABASE_URL`、資料庫檔案
@@ -139,6 +140,29 @@ brew services list | grep redis
 ```
 
 `systemctl` 不存在於 macOS；不要用 Linux 的 systemd 指令管理 Homebrew Redis。
+
+### Linux（無 systemd／policy-rc.d）
+
+當 `systemctl` 不存在，或 `systemctl enable --now redis-server` 被 `policy-rc.d`
+擋住時，不要改走 Docker，也不要讓 `host-services.sh` 啟動私有 Redis。改用
+loopback 上的 `redis-server --daemonize`。`--dir` 不要設成 `/tmp`，否則重開機會
+丟掉 RDB：
+
+```bash
+STATE="${XDG_STATE_HOME:-$HOME/.local/state}/ccas/redis"
+mkdir -p "$STATE"
+redis-server --daemonize yes --bind 127.0.0.1 --port 6379 \
+  --dir "$STATE" --dbfilename dump.rdb --logfile "$STATE/redis.log"
+redis-cli ping
+```
+
+預期輸出是 `PONG`。此行程與 supervisord daemon 一樣不會在主機重開機後自動起來。
+開機後 checklist：重跑上面的 daemonize →
+`./scripts/host-services.sh --driver=supervisord install all` →
+`./scripts/host-services.sh --driver=supervisord smoke all`。
+可選把 daemonize 與 `host-services.sh ... install all` 放進 `cron @reboot`；
+這不是 `host-services.sh` 的自動能力。
+
 若 Redis 啟用密碼，將完整連線字串（例如
 `redis://:password@localhost:6379/0`）同步寫入 `REDIS_URL`，不要只設定
 `REDIS_PASSWORD`。
@@ -171,11 +195,12 @@ pnpm install --frozen-lockfile
 | `uv: command not found` | 安裝 uv，或把 uv 的安裝目錄加入 PATH。 |
 | `API_TOKEN` 缺少 | 在 backend/ 的 shell export，或寫入本機 `.env`；不要提交 `.env`。 |
 | MCP client 顯示 JSON parse error | 確認 command 是 stdio，stdout 沒有 shell banner 或 debug print。 |
-| tools 顯示 connected 但 call 顯示 `Not connected` | 重新 Add／Restart MCP server 建立新 stdio session；若 server 沒收到 `tools/call`，收集 host connector log。 |
-| `pipeline_status` 回 `-32602`／`date-time` | 升級 v0.8.2、重新建立 MCP session；確認輸出 timestamp 帶 `Z`。 |
+| tools 顯示 connected 但 call 顯示 `Not connected` | 走 [`mcp-installation.md`](mcp-installation.md) 的 PID 回收後再 Add／Restart；若 server 沒收到 `tools/call`，收集 host connector log。 |
+| `pipeline_status` 回 `-32602`／`date-time` | 確認已是 v0.8.2+，走 MCP PID 回收；確認輸出 timestamp 帶 `Z`。 |
 | tools 存在但查不到資料 | 確認 `DATABASE_URL`、資料庫檔案權限，以及 client 的 backend 路徑。 |
 | worker/scheduler 連不上 queue | 確認 `REDIS_URL`、`redis-cli ping` 與 host service 狀態。 |
 | macOS 沒有 `systemctl` | 使用 `brew services` 管理 Homebrew Redis。 |
+| Linux `systemctl` 被擋或不存在 | 使用本文件「Linux（無 systemd／policy-rc.d）」的 `redis-server --daemonize`；不要改走 Docker。 |
 | Corepack permission denied | 使用 `--install-directory "$HOME/.local/bin"` 並更新 PATH。 |
 
 MCP 的 tools、資料投影與安全邊界仍以 [`mcp-installation.md`](mcp-installation.md)

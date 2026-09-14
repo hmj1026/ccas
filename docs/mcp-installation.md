@@ -104,13 +104,52 @@ AI 執行時必須遵守：
 
 ## 排錯
 
+### 升級後 MCP 子行程殘留
+
+MCP server 由 Agent host 建立 stdio 子行程，不由 `host-services.sh` 管理。
+`Restart`／`Add` 之後 host 可能仍顯示 connected，但實際連到升級前啟動的
+`ccas-mcp` 或 logging wrapper。此時 `pipeline_status` 仍可能回舊的
+`-32602 date-time`，即使 checkout 已是 v0.8.2+。
+
+單靠 Restart **不能**保證載入新碼。每次 CCAS 升級後、或懷疑 session 殘留時，固定：
+
+1. 若本次有升 CCAS 且使用 host services，先重裝並 smoke，見
+   [`non-docker-host-services.md`](non-docker-host-services.md)。
+2. 確認殘留行程：
+
+   ```bash
+   pgrep -af 'ccas-mcp-logging-wrapper|ccas-mcp'
+   ```
+
+3. 停掉該機所有 CCAS MCP stdio（會中斷目前所有 `ccas-mcp` session）：
+
+   ```bash
+   pkill -f 'ccas-mcp-logging-wrapper|ccas-mcp' || true
+   ```
+
+4. 在 host 端 Restart 或重新 Add MCP server。command 維持：
+
+   ```text
+   uv run --directory /absolute/path/to/ccas/backend ccas-mcp
+   ```
+
+5. 依序等待 response：`tools/list` → `get_payment_due` → `pipeline_status`。
+   `pipeline_status` 的 timestamp 須帶 UTC `Z`。
+
+區分兩種失敗：
+
+- `tools/call` 在數毫秒內失敗，且 server／wrapper log **沒有**對應 JSON-RPC
+  request：host stale session 或 routing，見下一節。
+- server wire log **有** `tools/call` 與 response，但 host 回 `-32602` 並指出
+  `date-time`：舊行程或未升級的 DTO，見「date-time validation」一節。
+
 ### stdio session 顯示 connected 但 tools/call 顯示 `Not connected`
 
 若 client 顯示 server 已 connected 且能列出 6 個 tools，但呼叫在數毫秒內回報
 `Not connected`，而 server／wrapper log 沒有收到對應 JSON-RPC `tools/call`，這是
 host 的 stale session 或 routing lifecycle 症狀，不是 CCAS query handler 的資料錯誤。
 
-請在 host 端執行下列恢復步驟：
+請先做上一節的 PID 回收，再於 host 端：
 
 1. 移除或停止目前的 `ccas` MCP entry。
 2. 重新 Add／Restart MCP server，讓 host 建立新的 stdio session。
@@ -123,8 +162,9 @@ host 的 stale session 或 routing lifecycle 症狀，不是 CCAS query handler 
 ### `pipeline_status` 顯示 `-32602` 與 `date-time` validation
 
 這表示 host 已收到 server response，但嚴格驗證 structured output 時拒絕沒有 timezone
-offset 的 datetime。升級至 v0.8.2 並重建 MCP session；v0.8.2 會把 Agent datetime
-統一輸出為 UTC `Z`，不需要資料庫 migration。
+offset 的 datetime。v0.8.2 會把 Agent datetime 統一輸出為 UTC `Z`，不需要資料庫
+migration。若 checkout 已是 v0.8.2+ 仍出現此錯，幾乎都是舊 MCP 子行程，請走
+「升級後 MCP 子行程殘留」而不是只 Restart。
 
 ### timeout smoke test 與實際 tool call
 
@@ -138,5 +178,6 @@ offset 的 datetime。升級至 v0.8.2 並重建 MCP session；v0.8.2 會把 Age
 | `uv: command not found` | 安裝 uv，或改用已安裝的 Python/venv；不要直接使用系統 Python 猜測依賴。 |
 | 找不到 `ccas-mcp` | 確認 command 的 `--directory` 指向 `ccas/backend`，並重新執行 `uv sync`。 |
 | client 顯示 JSON parse error | 確認 server 使用 stdio，stdout 沒有 shell banner、debug print 或 log。 |
+| Restart 後仍跑舊碼或 `date-time` 錯 | 殺殘留 PID 再重接；見「升級後 MCP 子行程殘留」。 |
 | tools 存在但查不到資料 | 啟動 CCAS backend、確認 data path 與登入狀態，再呼叫 `pipeline_status`。 |
 | 需要寫入或同步 Notion | 目前契約不支援；遵守 ADR 的信任邊界，另行提出變更與授權設計。 |
