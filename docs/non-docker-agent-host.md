@@ -5,9 +5,12 @@
 SQLite 資料庫；要執行背景 pipeline 時，才需要 Redis、RQ worker 與 scheduler。
 前者不需要 Node.js、pnpm、frontend 或 Redis。
 
-MCP server 使用本機 `stdio`，不會自行啟動 API、worker、scheduler 或 Redis。它會
-讀取 `DATABASE_URL` 指向的資料庫，因此資料庫必須已由既有 CCAS 安裝產生，或先
-完成 migration 與登入資料準備。
+Grok／Cursor 家族 host 首選本機 loopback Streamable HTTP
+（`http://127.0.0.1:8001/mcp`）。stdio 是仍必須 spawn 子行程的 client 後援。
+兩個 adapter 都讀取 `DATABASE_URL` 指向的資料庫，因此資料庫必須已由既有 CCAS
+安裝產生，或先完成 migration 與登入資料準備。HTTP 路徑不自行啟動 API、worker、
+scheduler 或 Redis；`install mcp-http` 也會跳過 Redis。client 設定與排錯以
+[`mcp-installation.md`](mcp-installation.md) 為 SSOT。
 
 ## MCP-only 最小安裝
 
@@ -23,8 +26,9 @@ cd backend
 uv sync --frozen
 ```
 
-直接以 `uv` 啟動時，`API_TOKEN` 必須存在於環境或 `.env`；MCP 不使用 API
-endpoint，但共用同一套設定仍會要求此欄位：
+直接以 `uv` 啟動時，`API_TOKEN` 必須存在於環境或 `.env`。stdio 不把這個值當
+Bearer；loopback HTTP MCP 會用同一個 token 做 `Authorization: Bearer`。不要把
+真實 token 寫進 git 或 MCP 設定檔，client 範例用 `${env:API_TOKEN}`：
 
 ```bash
 export API_TOKEN="$(openssl rand -hex 32)"
@@ -41,60 +45,66 @@ uv run alembic upgrade head
 並跳過 migration。相對路徑是以 `backend/` 為目前工作目錄解析；需要固定位置時，
 請改成絕對路徑。
 
-### 2. 啟動與設定 MCP client
+### 2. 啟動與設定 MCP client（首選 HTTP）
 
-先用前景程序確認 server 可以啟動；它是長駐的 stdio 程序，不會顯示互動提示，按
-`Ctrl-C` 結束：
+Grok／Cursor 家族請把 host 指到 URL，不要 spawn `ccas-mcp`。常駐用 supervisord
+（systemd／launchd **不能**跑 `mcp-http`）：
 
 ```bash
-uv run ccas-mcp
+cd /absolute/path/to/ccas
+cd backend && uv sync --frozen --extra supervisor && cd ..
+./scripts/host-services.sh --driver=supervisord install mcp-http
+./scripts/host-services.sh --driver=supervisord smoke mcp-http
 ```
 
-MCP client 使用絕對路徑設定 `backend/`：
+`install all` 在 supervisord 下也會安裝 `mcp-http`。沒有 supervisord 時，前景檢查：
+
+```bash
+uv run ccas-mcp-http
+# 或：uv run python -m ccas.mcp.http
+```
+
+無 Bearer 打 `/mcp` 應為 HTTP 401。然後在 MCP client 寫入（不要填真實 token）：
 
 ```json
 {
   "mcpServers": {
     "ccas": {
-      "command": "uv",
-      "args": [
-        "run",
-        "--directory",
-        "/absolute/path/to/ccas/backend",
-        "ccas-mcp"
-      ]
+      "url": "http://127.0.0.1:8001/mcp",
+      "headers": {
+        "Authorization": "Bearer ${env:API_TOKEN}"
+      }
     }
   }
 }
 ```
 
-client 不支援 `--directory` 時，改用工作目錄
-`/absolute/path/to/ccas/backend`，command 使用 `uv run ccas-mcp`。不要把 stdout
-導向 log、加入 shell banner 或 debug print；stdout 只允許 MCP JSON 訊息，診斷訊息
-會走 stderr。
+若 host 需要顯式型別，加上 `"type": "streamable-http"`。完整片段與禁止事項見
+[`mcp-installation.md`](mcp-installation.md)。
+
+仍只能 spawn 子行程的 client，才用 stdio 後援：`uv run ccas-mcp`，command 為
+`uv run --directory /absolute/path/to/ccas/backend ccas-mcp`。stdio 的 stdout
+只允許 MCP JSON，診斷走 stderr。
 
 ### 3. 最小 smoke check
 
-在 MCP client 中依序確認：
-
-1. `tools/list` 回傳六個唯讀 tools。
-2. 第一個實際查詢呼叫 `get_payment_due`，它不需要參數，也不需要 Redis、API 或
-   frontend。沒有帳單時，收到空的 `data` 或可理解的業務結果即可。
+1. HTTP：無 Bearer 的 `http://127.0.0.1:8001/mcp` 回 401；有 token 的 client 能
+   `tools/list`。
+2. 第一個實際查詢呼叫 `get_payment_due`，它不需要參數，也不需要 Redis、REST API
+   或 frontend。沒有帳單時，收到空的 `data` 或可理解的業務結果即可。
 3. 再呼叫 `list_bills` 或 `pipeline_status`，確認 client 讀到的是目標資料庫。
 
-每一個 request 都要等待前一個 response 後再送下一個 request。不要用「一次寫完
-所有 JSON-RPC request 後立即關閉 stdin」模擬 tool call；EOF race 可能只得到
-`Connection closed`，不能代表 server 的 sequential tool-call 行為。
+每一個 request 都要等待前一個 response 後再送下一個。stdio 不要用「一次寫完
+所有 JSON-RPC request 後立即關閉 stdin」；EOF race 可能只得到
+`Connection closed`。
 
-若 host 顯示 `connected`、tools=6，但 `tools/call` 在數毫秒內回報
-`Not connected`，或 Restart 後 `pipeline_status` 仍回 `-32602 date-time`，請走
-[`mcp-installation.md`](mcp-installation.md) 的「升級後 MCP 子行程殘留」：先殺殘留
-PID，再 Add／Restart。單靠 Restart 不能保證載入新碼。這個症狀若沒有出現在
-server wire log，屬 host session routing／lifecycle 問題。v0.8.2 的 datetime 為
-UTC `Z`，不需要 database migration。
+若 HTTP host 連得上但 stdio 顯示 `connected`／tools=6、`tools/call` 卻 `Not
+connected`，改連 URL，不要再回收 PID 當主修法。仍走 stdio 時才依
+[`mcp-installation.md`](mcp-installation.md) 回收 **stdio** PID（不要殺
+`ccas-mcp-http`）。v0.8.2 的 datetime 為 UTC `Z`，不需要 database migration。
 
-如果 tools discovery 失敗，先在 `backend/` 執行 `uv sync --frozen` 並確認 client
-設定的絕對路徑。若 discovery 成功但資料為空，檢查 `DATABASE_URL`、資料庫檔案
+如果 tools discovery 失敗，先在 `backend/` 執行 `uv sync --frozen` 並確認 URL
+或 command 路徑。若 discovery 成功但資料為空，檢查 `DATABASE_URL`、資料庫檔案
 權限與目前工作目錄。
 
 ## 需要背景 pipeline 時的 Redis
@@ -193,9 +203,10 @@ pnpm install --frozen-lockfile
 | 症狀 | 先檢查 |
 |---|---|
 | `uv: command not found` | 安裝 uv，或把 uv 的安裝目錄加入 PATH。 |
-| `API_TOKEN` 缺少 | 在 backend/ 的 shell export，或寫入本機 `.env`；不要提交 `.env`。 |
-| MCP client 顯示 JSON parse error | 確認 command 是 stdio，stdout 沒有 shell banner 或 debug print。 |
-| tools 顯示 connected 但 call 顯示 `Not connected` | 走 [`mcp-installation.md`](mcp-installation.md) 的 PID 回收後再 Add／Restart；若 server 沒收到 `tools/call`，收集 host connector log。 |
+| `API_TOKEN` 缺少 | 在 backend/ 的 shell export，或寫入本機 `.env`；不要提交 `.env`。HTTP MCP 需要此 token 當 Bearer。 |
+| MCP client 顯示 JSON parse error | stdio：stdout 沒有 shell banner 或 debug print。HTTP：確認連的是 `/mcp` 而不是 REST。 |
+| tools 顯示 connected 但 call 顯示 `Not connected` | Grok／Cursor 改連 loopback URL。stdio 才走 [`mcp-installation.md`](mcp-installation.md) 的 PID 回收（不要殺 `ccas-mcp-http`）。 |
+| `mcp-http is only supported by supervisord` | 改 `--driver=supervisord`，或前景跑 `uv run ccas-mcp-http`。 |
 | `pipeline_status` 回 `-32602`／`date-time` | 確認已是 v0.8.2+，走 MCP PID 回收；確認輸出 timestamp 帶 `Z`。 |
 | tools 存在但查不到資料 | 確認 `DATABASE_URL`、資料庫檔案權限，以及 client 的 backend 路徑。 |
 | worker/scheduler 連不上 queue | 確認 `REDIS_URL`、`redis-cli ping` 與 host service 狀態。 |
@@ -204,5 +215,5 @@ pnpm install --frozen-lockfile
 | Corepack permission denied | 使用 `--install-directory "$HOME/.local/bin"` 並更新 PATH。 |
 
 MCP 的 tools、資料投影與安全邊界仍以 [`mcp-installation.md`](mcp-installation.md)
-為準；本文件只補充非 Docker host 的依賴與最小啟動路徑。需要常駐 worker 或
-scheduler 時，請看 [無 Docker 的 Worker 與 Scheduler 維運](non-docker-host-services.md)。
+為準；本文件只補充非 Docker host 的依賴與最小啟動路徑。需要常駐 worker、
+scheduler、api 或 `mcp-http` 時，請看 [無 Docker 的 Host Services 維運](non-docker-host-services.md)。

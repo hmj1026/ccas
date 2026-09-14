@@ -44,6 +44,7 @@ dependencies = [
 
 [project.scripts]
 ccas-mcp = "ccas.mcp.server:main"
+ccas-mcp-http = "ccas.mcp.http:main"
 ccas-agent = "ccas.cli:main"
 
 [project.optional-dependencies]

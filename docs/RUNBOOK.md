@@ -38,22 +38,25 @@ docker compose -f docker-compose.yaml exec redis redis-cli ping
 
 ## 服務監控指標
 
-### Agent MCP stdio session 與 structured output
+### Agent MCP（stdio 與 loopback Streamable HTTP）
 
-MCP server 不由 backend／worker／scheduler 的 host service manager 管理；它由 Agent
-host 依 MCP 設定建立獨立 stdio process。排查時先區分兩種錯誤：
+兩個 adapter 共用 `create_server()`。Grok／Cursor 家族請連
+`http://127.0.0.1:8001/mcp`（**僅**非 Docker `./scripts/host-services.sh --driver=supervisord`
+的 `mcp-http`；production Docker compose 不跑此行程）；stdio 子行程是後援。
+排查時先區分：
 
-- `connected`、tools=6，但 `tools/call` 在 4–22ms 內失敗且 server wire log 沒有
-  request：host stale session／routing 問題。先依
-  [`mcp-installation.md`](mcp-installation.md)「升級後 MCP 子行程殘留」殺掉舊 PID，
-  再移除並重新 Add／Restart MCP server。單靠 Restart 不能保證載入新碼。
+- 無 Bearer 的 `/mcp` 不是 401：HTTP adapter 未起來或聽錯 port。
+- 有效 Bearer 但 MCP session 404：idle 後需重新 initialize，不是 query 失敗。
+- stdio `connected`、tools=6，但 `tools/call` 在 4–22ms 內失敗且 server wire log
+  沒有 request：host stale session。改連 URL，或依
+  [`mcp-installation.md`](mcp-installation.md) 回收 **stdio** PID（不要
+  `pkill -f ccas-mcp`，會誤殺 `ccas-mcp-http`）。
 - server wire log 有 `tools/call` 與 response，但 host 回 `-32602` 並指出
-  `date-time`：client structured output validation 問題，或仍連到升級前的子行程。
+  `date-time`：client structured output validation，或仍連到升級前的行程。
   v0.8.2 會輸出帶 `Z` 的 UTC datetime；不需要 Redis restart 或 database migration。
-  checkout 已是 v0.8.2+ 仍失敗時，走同一份 PID 回收 SOP。
 
-驗證時要逐次等待 `initialize`／`tools/list`／`tools/call` 的 response；單純執行
-`timeout ... ccas-mcp` 只驗證程序存活，輸入後立即 EOF 也可能人為造成 `Connection closed`。
+驗證時要逐次等待 `initialize`／`tools/list`／`tools/call` 的 response。HTTP smoke
+是無 Bearer → 401；`timeout ... ccas-mcp` 只驗證 stdio 程序存活。
 
 ### Redis 工作佇列
 

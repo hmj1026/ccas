@@ -31,10 +31,11 @@ curl -fsS http://localhost:${CCAS_PORT:-8080}/api/health
 ## TL;DR — 非 Docker（uv + supervisord）升級
 
 適用於沒有 Docker、以 `uv` 與 `host-services.sh --driver=supervisord` 常駐
-api／worker／scheduler 的 host。Redis 啟動方式見
+api／worker／scheduler／mcp-http 的 host。Redis 啟動方式見
 [`non-docker-agent-host.md`](non-docker-agent-host.md)（systemd、Homebrew，或
-systemd-less `redis-server --daemonize`）。MCP PID 回收見
-[`mcp-installation.md`](mcp-installation.md)。
+systemd-less `redis-server --daemonize`）。Grok／Cursor 家族 MCP 改連 loopback
+URL，見 [`mcp-installation.md`](mcp-installation.md)。systemd／launchd **不能**
+跑 `mcp-http`（與 `api` 相同）。
 
 ```bash
 cd /path/to/ccas
@@ -49,10 +50,18 @@ cd ..
 ./scripts/host-services.sh --driver=supervisord install all
 ./scripts/host-services.sh --driver=supervisord smoke all
 
-# MCP 由 host 管理；Restart 不夠，必須先殺殘留行程再重接
-pgrep -af 'ccas-mcp-logging-wrapper|ccas-mcp'
-pkill -f 'ccas-mcp-logging-wrapper|ccas-mcp' || true
-# 然後在 MCP client Restart 或重新 Add：
+# Grok／Cursor：安裝 mcp-http（install all 已含）後把 host 指到 URL
+# ./scripts/host-services.sh --driver=supervisord install mcp-http
+# ./scripts/host-services.sh --driver=supervisord smoke mcp-http
+# 無 Bearer → HTTP 401 於 http://127.0.0.1:8001/mcp
+# mcpServers.ccas.url = http://127.0.0.1:8001/mcp
+# headers.Authorization = Bearer ${env:API_TOKEN}
+# 可選 type: "streamable-http"；不要把真實 token 寫進 git
+# systemd／launchd 不能跑 mcp-http
+
+# stdio 後援才需要回收子行程；不要 pkill -f ccas-mcp（會誤殺 ccas-mcp-http）
+# pgrep -af 'ccas-mcp-logging-wrapper|ccas-mcp'
+# 然後在仍用 stdio 的 MCP client Restart：
 # uv run --directory /absolute/path/to/ccas/backend ccas-mcp
 # 依序：tools/list → get_payment_due → pipeline_status（timestamp 須帶 Z）
 ```
@@ -445,5 +454,6 @@ crashloop 設計：未填 `TELEGRAM_BOT_TOKEN` 時 idle，不影響其他 servic
 - **prod（pull-only）**：`docker/docker-compose.yml`，用本文件開頭的標準升級流程
 - **dev Compose**：`git pull` + 根目錄 `docker-compose.yaml`，與 prod 不同
 - **非 Docker uv + supervisord**：用本文件「非 Docker（uv + supervisord）升級」；
-  Redis 與 MCP PID 回收分別以 agent-host、mcp-installation 為 SSOT
+  Redis 以 agent-host 為 SSOT；MCP 以 mcp-installation 為 SSOT（HTTP 重裝
+  `mcp-http`，stdio PID 回收為後援）
 - **prod self-build 中間路徑（`docker compose -f docker-compose.yaml up -d` 跳 override）已棄用**，若你還在用該路徑，請先依本指南遷移到 prod compose

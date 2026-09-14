@@ -5,12 +5,16 @@
 - RQ worker：從 Redis 取出 pipeline job。
 - APScheduler：將週期性工作放入 Redis，並寫入 scheduler heartbeat。
 - API：只在 supervisord driver 下由本腳本管理。
+- MCP HTTP：只在 supervisord driver 下由本腳本管理（capability `mcp-http`，比照
+  `api`）。stdio `ccas-mcp` 仍由 Agent host spawn，不在這裡。
 - Redis：由 Linux 發行版、macOS Homebrew，或 systemd-less host 上的
   `redis-server --daemonize` 提供；啟動步驟見
-  [`non-docker-agent-host.md`](non-docker-agent-host.md)。
+  [`non-docker-agent-host.md`](non-docker-agent-host.md)。本腳本永不啟動私有
+  Redis（#64）。
 
-Frontend、Telegram bot 與 MCP server 不由這組 service manager 管理。
-MCP-only 的安裝與依賴請看 non-docker-agent-host.md。
+Frontend 與 Telegram bot 不由這組 service manager 管理。MCP client 設定見
+[`mcp-installation.md`](mcp-installation.md)；MCP-only 依賴見
+[`non-docker-agent-host.md`](non-docker-agent-host.md)。
 
 ## 前置條件
 
@@ -78,9 +82,10 @@ service definition：
 ./scripts/host-services.sh uninstall
 ```
 
-target 可為 `worker`、`scheduler`、`api` 或 `all`。`all` 會依目前 driver 支援的
-capabilities 展開；systemd／launchd 不支援 `api`，請使用
-`--driver=supervisord`。install 會啟動選定服務，並設定失敗自動重啟：worker/scheduler 在
+target 可為 `worker`、`scheduler`、`api`、`mcp-http` 或 `all`。`all` 會依目前
+driver 支援的 capabilities 展開；systemd／launchd 不支援 `api` 與 `mcp-http`，
+請使用 `--driver=supervisord`。只安裝 `mcp-http` 時 preflight **不會**因為 Redis
+掛掉而失敗。install 會啟動選定服務，並設定失敗自動重啟：worker/scheduler 在
 Linux 使用 Restart=on-failure，在 macOS 使用 KeepAlive=true 與 5 秒 throttle。
 執行多次 install 是安全的，會重新產生目前 checkout 的 definition。
 
@@ -152,6 +157,7 @@ cd ..
 ./scripts/host-services.sh --driver=supervisord install worker
 ./scripts/host-services.sh --driver=supervisord install scheduler
 ./scripts/host-services.sh --driver=supervisord install api
+./scripts/host-services.sh --driver=supervisord install mcp-http
 ```
 
 設定與狀態檔位於：
@@ -172,34 +178,41 @@ uv run --directory backend --no-sync supervisorctl \
 tail -f "$HOME/.local/state/supervisord/log/ccas-api.log"
 ```
 
-supervisord 會自動重啟它管理的 worker、scheduler 與 API；但它本身不會在主機或
-容器 reboot 後自動重新啟動。systemd-less Redis（`redis-server --daemonize`）同樣
-不會在開機後自己起來。若需要開機恢復，必須由外部 hook 處理，例如 container
+supervisord 會自動重啟它管理的 worker、scheduler、API 與 mcp-http；但它本身不會
+在主機或容器 reboot 後自動重新啟動。systemd-less Redis（`redis-server --daemonize`）
+同樣不會在開機後自己起來。若需要開機恢復，必須由外部 hook 處理，例如 container
 entrypoint、`cron @reboot`（先 daemonize Redis，再 `host-services.sh ... install all`），
 或明確的人工啟動步驟。這不屬於本腳本的自動能力。Redis 指令見
-[`non-docker-agent-host.md`](non-docker-agent-host.md)。
+[`non-docker-agent-host.md`](non-docker-agent-host.md)。Grok／Cursor 把 MCP host
+指到 `http://127.0.0.1:8001/mcp`，見 [`mcp-installation.md`](mcp-installation.md)。
 
 ## Smoke check 與故障排除
 
-smoke 會依序確認：Redis 回 PONG、選定的 service manager process 存活、RQ
-可以連到 queue，以及在選定 scheduler 時 heartbeat 在最近兩分鐘內更新。若選定
-`api`，也會以同一個 `/health/ready` endpoint 確認 API 回傳 HTTP 200：
+smoke 會依序確認：選定服務若需要 Redis 則 Redis 回 PONG、選定的 service manager
+process 存活、RQ 可以連到 queue（同樣僅在需要 Redis 時），以及在選定 scheduler
+時 heartbeat 在最近兩分鐘內更新。若選定 `api`，也會以同一個 `/health/ready`
+endpoint 確認 API 回傳 HTTP 200。若選定 `mcp-http`，對
+`http://127.0.0.1:<mcp_http_port>/mcp` **不帶** Bearer，預期 HTTP 401：
 
 ```bash
 ./scripts/host-services.sh smoke
+./scripts/host-services.sh --driver=supervisord smoke mcp-http
 ```
 
 若 smoke 失敗：
 
-1. 先執行 redis-cli ping，確認 host Redis 正在運作且 REDIS_URL 使用正確 port
-   與密碼。若沒有 systemd，依
-   [`non-docker-agent-host.md`](non-docker-agent-host.md) 重跑 daemonize。
+1. 若本次含 worker／scheduler／api，先執行 redis-cli ping，確認 host Redis 正在
+   運作且 REDIS_URL 使用正確 port 與密碼。若沒有 systemd，依
+   [`non-docker-agent-host.md`](non-docker-agent-host.md) 重跑 daemonize。只裝
+   `mcp-http` 時跳過此步。
 2. 查看 worker/scheduler 的 service logs。
 3. 若包含 api，查看 supervisord API log，並以 curl 檢查
    `http://127.0.0.1:8000/health/ready`。
 4. 確認 API_TOKEN、DATABASE_URL、REDIS_URL 在 repository root .env，並且
-   執行 uv sync --frozen 後再重試。
-5. 確認 backend/data/scheduler-heartbeat 可寫入；若設定了
+   執行 uv sync --frozen 後再重試。只裝 `mcp-http` 時不需要 Redis 活著。
+5. 若包含 mcp-http，查看 supervisord MCP HTTP log，並以 curl 確認
+   `http://127.0.0.1:8001/mcp` 無 Bearer 時為 401。
+6. 確認 backend/data/scheduler-heartbeat 可寫入；若設定了
    SCHEDULER_HEARTBEAT_PATH，改檢查該路徑。
 
 若只要暫停背景服務，使用 uninstall；這不會刪除 SQLite、staging、Redis 資料或

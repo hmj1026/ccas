@@ -39,6 +39,8 @@ class Settings(BaseSettings):
         log_format: 日誌格式（json / text）。
         api_host: API 伺服器綁定位址。
         api_port: API 伺服器連接埠。
+        mcp_http_host: Loopback Streamable HTTP MCP 綁定位址（啟動時才檢查）。
+        mcp_http_port: Loopback Streamable HTTP MCP 連接埠。
         api_token: API 認證用 Bearer Token。
         redis_url: Redis 連線字串。
     """
@@ -69,6 +71,12 @@ class Settings(BaseSettings):
     log_file_prefix: str = "ccas"
     api_host: str = "0.0.0.0"
     api_port: int = 8000
+    # Loopback Streamable HTTP MCP bind. Validation that the host is loopback
+    # belongs on the HTTP MCP process entry (``create_http_app``), not here:
+    # ``get_settings()`` is shared by worker/API, so a stray
+    # ``MCP_HTTP_HOST=0.0.0.0`` must not fail those processes.
+    mcp_http_host: str = "127.0.0.1"
+    mcp_http_port: int = 8001
     # Swagger UI / ReDoc / openapi.json are disabled by default; opt-in via
     # ENABLE_API_DOCS=true for development or internal debugging only.
     enable_api_docs: bool = False

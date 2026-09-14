@@ -24,14 +24,15 @@ USER_ID="$(id -u)"
 usage() {
   cat <<'EOF'
 Usage: ./scripts/host-services.sh [--driver=systemd|launchd|supervisord] \
-  <install|uninstall|status|restart|smoke> [worker|scheduler|api|all]
+  <install|uninstall|status|restart|smoke> [worker|scheduler|api|mcp-http|all]
 
 Commands:
   install    Render and enable the selected services.
   uninstall  Stop, disable, and remove the selected service definitions.
   status     Show service-manager status for the selected services.
   restart    Restart the selected services.
-  smoke      Check Redis, service state, RQ connectivity, heartbeat, and API readiness.
+  smoke      Check Redis (when needed), service state, RQ, heartbeat, API readiness,
+             and MCP HTTP 401 without a Bearer token.
 
 The default target is all. Redis is installed and upgraded by the host package
 manager; this script never starts a private Redis process.
@@ -90,9 +91,9 @@ case "$ACTION" in
 esac
 
 case "$TARGET" in
-  worker|scheduler|api|all) ;;
+  worker|scheduler|api|mcp-http|all) ;;
   *)
-    die "target must be worker, scheduler, api, or all"
+    die "target must be worker, scheduler, api, mcp-http, or all"
     ;;
 esac
 
@@ -159,7 +160,7 @@ launchd_capabilities() {
 }
 
 supervisord_capabilities() {
-  printf '%s\n' worker scheduler api
+  printf '%s\n' worker scheduler api mcp-http
 }
 
 select_driver() {
@@ -232,8 +233,8 @@ resolve_selected_services() {
   done
 
   if [[ "$found" == 0 ]]; then
-    if [[ "$TARGET" == "api" && "$DRIVER" != "supervisord" ]]; then
-      die "api is only supported by supervisord; try --driver=supervisord"
+    if [[ "$TARGET" == "api" || "$TARGET" == "mcp-http" ]] && [[ "$DRIVER" != "supervisord" ]]; then
+      die "$TARGET is only supported by supervisord; try --driver=supervisord"
     fi
     die "driver '$DRIVER' does not support target '$TARGET'"
   fi
@@ -251,6 +252,24 @@ api_selected() {
   local service
   for service in "${SELECTED_SERVICES[@]}"; do
     [[ "$service" == api ]] && return 0
+  done
+  return 1
+}
+
+mcp_http_selected() {
+  local service
+  for service in "${SELECTED_SERVICES[@]}"; do
+    [[ "$service" == mcp-http ]] && return 0
+  done
+  return 1
+}
+
+needs_redis() {
+  local service
+  for service in "${SELECTED_SERVICES[@]}"; do
+    case "$service" in
+      worker|scheduler|api) return 0 ;;
+    esac
   done
   return 1
 }
@@ -344,7 +363,7 @@ render_supervisord_program() {
 
   [[ -f "$template" ]] || die "missing supervisord program template: $template"
   case "$service" in
-    worker|scheduler|api) ;;
+    worker|scheduler|api|mcp-http) ;;
     *) die "unsupported supervisord service: $service" ;;
   esac
   command="${runner} ${service} ${uv}"
@@ -406,6 +425,14 @@ heartbeat_path() {
   )
 }
 
+mcp_http_port() {
+  (
+    cd "$BACKEND_DIR"
+    "$UV_BIN" run --no-sync python -c \
+      'from ccas.config import get_settings; print(get_settings().mcp_http_port)'
+  )
+}
+
 check_redis() {
   command -v redis-cli >/dev/null 2>&1 || die "redis-cli is required; install host Redis first"
   local url="$1"
@@ -417,9 +444,11 @@ check_redis() {
 preflight() {
   [[ -d "$BACKEND_DIR" ]] || die "backend directory not found: $BACKEND_DIR"
   [[ -f "$ROOT_DIR/.env" ]] || die "create $ROOT_DIR/.env before installing host services"
-  local url
-  url="$(redis_url)" || die "cannot load CCAS settings; check API_TOKEN and .env"
-  check_redis "$url"
+  if needs_redis; then
+    local url
+    url="$(redis_url)" || die "cannot load CCAS settings; check API_TOKEN and .env"
+    check_redis "$url"
+  fi
 }
 
 systemd_install() {
@@ -549,12 +578,18 @@ smoke() {
   local heartbeat="$2"
   local service
   local code
-  check_redis "$url"
+  local port
+  local mcp_url
+  if needs_redis; then
+    check_redis "$url"
+  fi
   for service in "${SELECTED_SERVICES[@]}"; do
     service_is_running "$service" || die "$service is not running"
   done
-  "$UV_BIN" run --directory "$BACKEND_DIR" --no-sync rq info \
-    --url "$url" --raw -Q >/dev/null
+  if needs_redis; then
+    "$UV_BIN" run --directory "$BACKEND_DIR" --no-sync rq info \
+      --url "$url" --raw -Q >/dev/null
+  fi
   if [[ "$TARGET" == all || "$TARGET" == scheduler ]]; then
     [[ -f "$heartbeat" ]] || die "scheduler heartbeat is missing: $heartbeat"
     find "$heartbeat" -mmin -2 -print -quit | grep -q . \
@@ -566,10 +601,18 @@ smoke() {
       'http://127.0.0.1:8000/health/ready' 2>/dev/null || printf '000')"
     [[ "$code" == 200 ]] \
       || die "API readiness check failed (http_code=$code) at http://127.0.0.1:8000/health/ready"
-    info "smoke check passed: Redis, selected services, RQ, scheduler heartbeat, and API readiness"
-  else
-    info "smoke check passed: Redis, selected services, RQ, and scheduler heartbeat"
   fi
+  if mcp_http_selected; then
+    command -v curl >/dev/null 2>&1 || die "curl is required for the MCP HTTP auth check"
+    port="$(mcp_http_port)" || die "cannot load MCP HTTP port; check API_TOKEN and .env"
+    mcp_url="http://127.0.0.1:${port}/mcp"
+    code="$(curl -s -o /dev/null -w '%{http_code}' \
+      -H 'Accept: application/json, text/event-stream' \
+      "$mcp_url" 2>/dev/null || printf '000')"
+    [[ "$code" == 401 ]] \
+      || die "MCP HTTP auth check failed (http_code=$code) at $mcp_url"
+  fi
+  info "smoke check passed"
 }
 
 select_driver

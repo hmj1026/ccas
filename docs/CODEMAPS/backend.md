@@ -1,4 +1,4 @@
-<!-- Verified: 2026-09-10 | Canonical details: ../current-implementation.md -->
+<!-- Verified: 2026-09-14 | Canonical details: ../current-implementation.md -->
 
 # Backend
 
@@ -176,6 +176,6 @@ source tree and the central as-built document for exact current boundaries.
 | `scheduler` | `__main__.py`, `jobs.py`, `reminders.py`, `budget_evaluator.py` | Daily pipeline, reminders, budget evaluation and heartbeat |
 | `storage` | `models.py`, `database.py`, `queries.py`, `secrets.py` | ORM models, async sessions, queries and encrypted secrets |
 | `services` | `schemas.py`, `bills.py`, `transactions.py`, `budgets.py`, `pipeline.py` | Read-only agent projections shared by REST, CLI and MCP; Agent DTO JSON datetime normalization |
-| `mcp` | `server.py`, `__main__.py` | Official SDK stdio transport with six read-only tools |
+| `mcp` | `server.py`, `http.py`, `__main__.py` | Official SDK stdio and loopback Streamable HTTP (`/mcp` on 127.0.0.1:8001) adapters sharing `create_server()`; six read-only tools; HTTP is a separate uvicorn app, not mounted on REST `create_app()` |
 | `cli.py` | `cli.py` | Read-only agent CLI surface |
 | `tools` | `bank_configs.py`, `gmail_auth.py`, maintenance scripts | Bank configuration, Gmail helpers and operational utilities |

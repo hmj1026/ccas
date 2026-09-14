@@ -50,12 +50,25 @@ EOF
 
 cat > "${FAKE_BIN}/redis-cli" <<'EOF'
 #!/usr/bin/env bash
+if [[ "${FAKE_REDIS_DOWN:-0}" == 1 ]]; then
+  exit 1
+fi
 printf 'PONG\n'
 EOF
 
 cat > "${FAKE_BIN}/curl" <<'EOF'
 #!/usr/bin/env bash
-printf '%s' "${FAKE_CURL_CODE:-200}"
+url=""
+for arg in "$@"; do
+  case "$arg" in
+    http*) url="$arg" ;;
+  esac
+done
+if [[ "$url" == *"/mcp"* ]]; then
+  printf '%s' "${FAKE_MCP_CURL_CODE:-401}"
+else
+  printf '%s' "${FAKE_CURL_CODE:-200}"
+fi
 EOF
 
 cat > "${FAKE_BIN}/uv" <<'EOF'
@@ -81,6 +94,10 @@ case "$command_name" in
     fi
     if [[ "$*" == *"redis_url"* ]]; then
       printf 'redis://localhost:6379/0\n'
+      exit 0
+    fi
+    if [[ "$*" == *"mcp_http_port"* ]]; then
+      printf '8001\n'
       exit 0
     fi
     if [[ "$*" == *"scheduler_heartbeat_path"* ]]; then
@@ -145,6 +162,8 @@ chmod +x "${FAKE_BIN}"/*
 export FAKE_UNAME=Linux
 export FAKE_SYSTEMD_AVAILABLE=0
 export FAKE_CURL_CODE=200
+export FAKE_MCP_CURL_CODE=401
+export FAKE_REDIS_DOWN=0
 export FAKE_HEARTBEAT="${TMP_ROOT}/heartbeat"
 export FAKE_LOG FAKE_DAEMON
 : > "$FAKE_LOG"
@@ -199,7 +218,7 @@ pass 'Linux systemd user bus is preferred automatically'
 FAKE_SYSTEMD_AVAILABLE=0
 run_capture env CCAS_HOST_SERVICES_DRY_RUN=1 bash "$SCRIPT" install
 assert_contains "$LAST_OUT" 'driver=supervisord'
-assert_contains "$LAST_OUT" 'targets=worker scheduler api'
+assert_contains "$LAST_OUT" 'targets=worker scheduler api mcp-http'
 pass 'Linux falls back to supervisord and exposes api'
 
 FAKE_UNAME=Darwin
@@ -217,7 +236,7 @@ pass 'environment override is honored'
 run_capture env CCAS_HOST_SERVICE_DRIVER=launchd CCAS_HOST_SERVICES_DRY_RUN=1 \
   bash "$SCRIPT" --driver=supervisord status all
 assert_contains "$LAST_OUT" 'driver=supervisord'
-assert_contains "$LAST_OUT" 'targets=worker scheduler api'
+assert_contains "$LAST_OUT" 'targets=worker scheduler api mcp-http'
 pass 'CLI driver override has higher priority than environment'
 
 : > "$FAKE_LOG"
@@ -292,5 +311,55 @@ run_capture env FAKE_RUNNER_PROBE=1 bash "$RUNNER" api "${FAKE_BIN}/uv"
 assert_contains "$(cat "$FAKE_LOG")" \
   'uv run --no-sync uvicorn ccas.api.app:create_app --factory --host 127.0.0.1 --port 8000'
 pass 'host-service-runner exposes production API command'
+
+: > "$FAKE_LOG"
+run_capture env FAKE_RUNNER_PROBE=1 bash "$RUNNER" mcp-http "${FAKE_BIN}/uv"
+[[ "$LAST_RC" == 0 ]] || fail "mcp-http runner failed: $LAST_OUT"
+assert_contains "$(cat "$FAKE_LOG")" \
+  'uv run --no-sync uvicorn ccas.mcp.http:create_http_app --factory --host 127.0.0.1 --port 8001'
+pass 'host-service-runner exposes loopback MCP HTTP command'
+
+: > "$FAKE_LOG"
+run_capture bash "$SCRIPT" --driver=systemd status mcp-http
+[[ "$LAST_RC" -ne 0 ]] || fail 'systemd mcp-http mismatch should fail'
+assert_contains "$LAST_OUT" 'mcp-http is only supported by supervisord'
+assert_not_contains "$(cat "$FAKE_LOG")" 'systemctl --user'
+pass 'unsupported mcp-http target fails before manager commands on systemd'
+
+run_capture env CCAS_HOST_SERVICES_DRY_RUN=1 bash "$SCRIPT" --driver=launchd status mcp-http
+[[ "$LAST_RC" -ne 0 ]] || fail 'launchd mcp-http mismatch should fail'
+assert_contains "$LAST_OUT" 'mcp-http is only supported by supervisord'
+pass 'unsupported mcp-http target fails on launchd'
+
+run_capture bash "$SCRIPT" --driver=supervisord install mcp-http
+[[ "$LAST_RC" == 0 ]] || fail "supervisord mcp-http install failed: $LAST_OUT"
+MCP_HTTP_CONF="${STATE_DIR}/supervisord/conf.d/ccas-mcp-http.conf"
+[[ -f "$MCP_HTTP_CONF" ]] || fail 'mcp-http supervisord config was not rendered'
+assert_not_contains "$(sed -n '1,160p' "$MCP_HTTP_CONF")" 'ccas-mcp '
+pass 'supervisord mcp-http program is installable without stdio ccas-mcp'
+
+FAKE_MCP_CURL_CODE=401
+run_capture bash "$SCRIPT" --driver=supervisord smoke mcp-http
+[[ "$LAST_RC" == 0 ]] || fail "mcp-http smoke check failed: $LAST_OUT"
+assert_contains "$LAST_OUT" 'smoke check passed'
+pass 'mcp-http smoke check accepts HTTP 401 without a Bearer token'
+
+FAKE_MCP_CURL_CODE=200
+run_capture bash "$SCRIPT" --driver=supervisord smoke mcp-http
+[[ "$LAST_RC" -ne 0 ]] || fail 'mcp-http open endpoint should fail smoke check'
+assert_contains "$LAST_OUT" 'MCP HTTP auth check failed'
+pass 'mcp-http smoke check reports missing 401'
+FAKE_MCP_CURL_CODE=401
+
+export FAKE_REDIS_DOWN=1
+run_capture bash "$SCRIPT" --driver=supervisord install mcp-http
+[[ "$LAST_RC" == 0 ]] || fail "mcp-http-only install should skip Redis: $LAST_OUT"
+pass 'mcp-http-only install succeeds when Redis is down'
+
+run_capture bash "$SCRIPT" --driver=supervisord install worker
+[[ "$LAST_RC" -ne 0 ]] || fail 'worker install should still require Redis'
+assert_contains "$LAST_OUT" 'Redis did not answer PONG'
+pass 'worker install still health-checks host Redis'
+unset FAKE_REDIS_DOWN
 
 printf "\n${GREEN}All host-services tests passed.${NC}\n"
