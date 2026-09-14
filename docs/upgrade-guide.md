@@ -14,7 +14,7 @@
 cd ~/ccas    # 你 docker-compose.yml 所在的目錄
 
 # 1) 修改 .env 的版本
-sed -i 's/^CCAS_VERSION=.*/CCAS_VERSION=v0.8.4/' .env
+sed -i 's/^CCAS_VERSION=.*/CCAS_VERSION=v0.8.5/' .env
 
 # 2) 拉新 image 並重啟
 docker compose -f docker-compose.yml pull
@@ -39,7 +39,7 @@ systemd-less `redis-server --daemonize`）。MCP PID 回收見
 ```bash
 cd /path/to/ccas
 git fetch --tags
-git checkout v0.8.4    # 改成目標 tag
+git checkout v0.8.5    # 改成目標 tag
 
 cd backend
 uv sync --frozen --extra supervisor
@@ -61,7 +61,7 @@ pkill -f 'ccas-mcp-logging-wrapper|ccas-mcp' || true
 [`non-docker-agent-host.md`](non-docker-agent-host.md) 與
 [`non-docker-host-services.md`](non-docker-host-services.md)。
 `host-services.sh` 不會跑 alembic；有 schema 變更時先在 `backend/` 執行
-`uv run alembic upgrade head`。v0.8.4 無資料庫 schema 變更。
+`uv run alembic upgrade head`。v0.8.5 無資料庫 schema 變更。
 
 ---
 
@@ -76,6 +76,19 @@ CCAS 採 [SemVer](https://semver.org/)：
 | Major（`v0.x.x` → `v1.0.0`） | 可能 breaking change；release notes 會明示 | 升級前**閱讀 release notes**、備份 |
 
 每次 release 的詳細 changelog 見 [GitHub Releases](https://github.com/<owner>/ccas/releases)。
+
+---
+
+## v0.8.5（Patch）— 2026-09-14 — systemd-less Redis 與 MCP 行程回收運維手冊強化
+
+**適用對象**：v0.8.4 升級至 v0.8.5。無資料庫 schema 變更，不需執行 migration。
+
+**運維手冊與非 Docker 部署強化**：
+- 針對無 systemd 之 host 環境補齊 `redis-server --daemonize yes` 啟動路徑與重開機 checklist。
+- 補充非 Docker MCP host 升級後之殘留行程回收（`pkill -f`）與重連驗證 SOP。
+- 同步主幹版本與發布分支。
+
+**升級後**：pull-only Docker 部署請使用 `CCAS_VERSION=v0.8.5`；非 Docker 環境請依手冊執行行程回收與重啟。
 
 ---
 
