@@ -13,7 +13,7 @@
 cd ~/ccas    # 你 docker-compose.yml 所在的目錄
 
 # 1) 修改 .env 的版本
-sed -i 's/^CCAS_VERSION=.*/CCAS_VERSION=v0.8.3/' .env
+sed -i 's/^CCAS_VERSION=.*/CCAS_VERSION=v0.8.4/' .env
 
 # 2) 拉新 image 並重啟
 docker compose -f docker-compose.yml pull
@@ -38,6 +38,19 @@ CCAS 採 [SemVer](https://semver.org/)：
 | Major（`v0.x.x` → `v1.0.0`） | 可能 breaking change；release notes 會明示 | 升級前**閱讀 release notes**、備份 |
 
 每次 release 的詳細 changelog 見 [GitHub Releases](https://github.com/<owner>/ccas/releases)。
+
+---
+
+## v0.8.4（Patch）— 2026-09-14 — FUBON 驗證碼閘門與 CI 穩定性修正
+
+**適用對象**：v0.8.3 升級至 v0.8.4。無資料庫 schema 變更，不需執行 migration。
+
+**驗證碼與 CI**：
+- FUBON 驗證碼評估器同時檢查最低接受率、辨識正確率與 false positive，避免樣本幾乎全被拒絕時仍因「接受樣本 100% 正確」而錯誤通過。
+- 將真實 ONNX 驗證碼 fixture gate 保留在專用 integration job，並固定 CI runner／CPU 拓撲以降低模型執行環境差異造成的誤報。
+- 正式 OCR confidence gate 維持不變。
+
+**升級後**：pull-only Docker 部署請使用 `CCAS_VERSION=v0.8.4`。
 
 ---
 
