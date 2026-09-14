@@ -9,6 +9,7 @@ from pathlib import Path
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+from ccas import __version__
 from ccas.storage.models import PipelineRun, PipelineRunStatus
 from tests.integration import test_agent_cli as cli_wire
 from tests.integration import test_agent_mcp as mcp_wire
@@ -68,7 +69,7 @@ def test_pipeline_status_returns_strict_utc_datetimes_and_release_version() -> N
             discovery["result"]["_meta"]["io.modelcontextprotocol/serverInfo"][
                 "version"
             ]
-            == "0.8.2"
+            == __version__
         )
         assert result["resultType"] == "complete"
         values = result["structuredContent"]["data"]
