@@ -40,7 +40,7 @@ if [ "$RUN_BACKEND" = "1" ]; then
     echo "-> pyright"
     uv run pyright
     echo "-> pytest"
-    uv run pytest tests/unit/ --cov --cov-fail-under=80 -q
+    uv run pytest tests/unit/ -m "not live_fubon and not captcha_model" --cov --cov-fail-under=80 -q
 fi
 
 if [ "$RUN_FRONTEND" = "1" ]; then

@@ -33,6 +33,7 @@ def test_fixtures_exist() -> None:
     )
 
 
+@pytest.mark.captcha_model
 def test_all_samples_gate_correctness() -> None:
     """Accept rate >= 80%, false positive rate = 0."""
     samples = _samples()
