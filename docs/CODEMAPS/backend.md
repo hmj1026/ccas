@@ -175,7 +175,7 @@ source tree and the central as-built document for exact current boundaries.
 | `bot` | `job.py`, `notifications.py`, `handlers.py` | Telegram notifications and bot commands |
 | `scheduler` | `__main__.py`, `jobs.py`, `reminders.py`, `budget_evaluator.py` | Daily pipeline, reminders, budget evaluation and heartbeat |
 | `storage` | `models.py`, `database.py`, `queries.py`, `secrets.py` | ORM models, async sessions, queries and encrypted secrets |
-| `services` | `schemas.py`, `bills.py`, `transactions.py`, `budgets.py`, `pipeline.py` | Read-only agent projections shared by REST, CLI and MCP |
+| `services` | `schemas.py`, `bills.py`, `transactions.py`, `budgets.py`, `pipeline.py` | Read-only agent projections shared by REST, CLI and MCP; Agent DTO JSON datetime normalization |
 | `mcp` | `server.py`, `__main__.py` | Official SDK stdio transport with six read-only tools |
 | `cli.py` | `cli.py` | Read-only agent CLI surface |
 | `tools` | `bank_configs.py`, `gmail_auth.py`, maintenance scripts | Bank configuration, Gmail helpers and operational utilities |

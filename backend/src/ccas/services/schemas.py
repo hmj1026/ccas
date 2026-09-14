@@ -7,10 +7,10 @@ reconciliation-identity specifications with extra="forbid".
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_serializer
 
 from ccas.errors import CcasError
 
@@ -63,6 +63,23 @@ class AgentQueryError(CcasError):
         self.data = data
 
 
+class AgentModel(BaseModel):
+    """Base model for Agent DTOs with canonical JSON datetime output."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    @field_serializer("*", when_used="json", check_fields=False)
+    def _serialize_agent_value(self, value: Any) -> Any:
+        """Serialize datetime values as UTC RFC3339 strings with ``Z``."""
+        if not isinstance(value, datetime):
+            return value
+        if value.tzinfo is None or value.utcoffset() is None:
+            value = value.replace(tzinfo=UTC)
+        else:
+            value = value.astimezone(UTC)
+        return value
+
+
 def validate_payload_safety(obj: Any) -> None:
     """Recursively validate that public payload contains no sensitive data."""
     from ccas.services.identity import contains_sensitive_data
@@ -113,7 +130,7 @@ class ServiceProjection[T]:
 # --- Canonical Output DTOs ---
 
 
-class Money(BaseModel):
+class Money(AgentModel):
     """Money representation in non-scientific decimal integer-dollar TWD string."""
 
     model_config = ConfigDict(extra="forbid", strict=True)
@@ -122,7 +139,7 @@ class Money(BaseModel):
     value: str = Field(pattern=r"^-?[0-9]+(?:\.[0-9]+)?$")
 
 
-class PageMeta(BaseModel):
+class PageMeta(AgentModel):
     """Canonical pagination metadata."""
 
     model_config = ConfigDict(extra="forbid")
@@ -134,7 +151,7 @@ class PageMeta(BaseModel):
     has_next: bool
 
 
-class AgentBill(BaseModel):
+class AgentBill(AgentModel):
     """Canonical bill representation for Agent interfaces."""
 
     model_config = ConfigDict(extra="forbid")
@@ -151,7 +168,7 @@ class AgentBill(BaseModel):
     reconciliation_key: str
 
 
-class AgentTransaction(BaseModel):
+class AgentTransaction(AgentModel):
     """Canonical transaction representation for Agent interfaces."""
 
     model_config = ConfigDict(extra="forbid")
@@ -172,7 +189,7 @@ class AgentTransaction(BaseModel):
     reconciliation_key: str
 
 
-class BudgetCurrentPeriod(BaseModel):
+class BudgetCurrentPeriod(AgentModel):
     """Canonical budget current period spending status."""
 
     model_config = ConfigDict(extra="forbid")
@@ -185,7 +202,7 @@ class BudgetCurrentPeriod(BaseModel):
     alert_threshold_percent: int = Field(ge=1, le=100)
 
 
-class BudgetStatus(BaseModel):
+class BudgetStatus(AgentModel):
     """Canonical budget status."""
 
     model_config = ConfigDict(extra="forbid")
@@ -199,7 +216,7 @@ class BudgetStatus(BaseModel):
     current_period: BudgetCurrentPeriod | None
 
 
-class PipelineStageSummary(BaseModel):
+class PipelineStageSummary(AgentModel):
     """Canonical summary for a completed or failed pipeline stage."""
 
     model_config = ConfigDict(extra="forbid")
@@ -212,7 +229,7 @@ class PipelineStageSummary(BaseModel):
     errors: list[str]
 
 
-class PipelineStatus(BaseModel):
+class PipelineStatus(AgentModel):
     """Canonical pipeline run status."""
 
     model_config = ConfigDict(extra="forbid")
@@ -237,7 +254,7 @@ class PipelineStatus(BaseModel):
 # --- Success Envelope Classes ---
 
 
-class BillsPage(BaseModel):
+class BillsPage(AgentModel):
     """Envelope for list_bills tool result."""
 
     model_config = ConfigDict(extra="forbid")
@@ -246,7 +263,7 @@ class BillsPage(BaseModel):
     pagination: PageMeta
 
 
-class BillResult(BaseModel):
+class BillResult(AgentModel):
     """Envelope for get_bill tool result."""
 
     model_config = ConfigDict(extra="forbid")
@@ -254,7 +271,7 @@ class BillResult(BaseModel):
     data: AgentBill
 
 
-class TransactionsPage(BaseModel):
+class TransactionsPage(AgentModel):
     """Envelope for query_transactions tool result."""
 
     model_config = ConfigDict(extra="forbid")
@@ -263,7 +280,7 @@ class TransactionsPage(BaseModel):
     pagination: PageMeta
 
 
-class PaymentDueResult(BaseModel):
+class PaymentDueResult(AgentModel):
     """Envelope for get_payment_due tool result."""
 
     model_config = ConfigDict(extra="forbid")
@@ -271,7 +288,7 @@ class PaymentDueResult(BaseModel):
     data: list[AgentBill]
 
 
-class BudgetStatusResult(BaseModel):
+class BudgetStatusResult(AgentModel):
     """Envelope for budget_status tool result."""
 
     model_config = ConfigDict(extra="forbid")
@@ -279,7 +296,7 @@ class BudgetStatusResult(BaseModel):
     data: list[BudgetStatus]
 
 
-class PipelineStatusResult(BaseModel):
+class PipelineStatusResult(AgentModel):
     """Envelope for pipeline_status tool result."""
 
     model_config = ConfigDict(extra="forbid")

@@ -13,7 +13,7 @@
 cd ~/ccas    # 你 docker-compose.yml 所在的目錄
 
 # 1) 修改 .env 的版本
-sed -i 's/^CCAS_VERSION=.*/CCAS_VERSION=v0.8.1/' .env
+sed -i 's/^CCAS_VERSION=.*/CCAS_VERSION=v0.8.2/' .env
 
 # 2) 拉新 image 並重啟
 docker compose -f docker-compose.yml pull
@@ -40,6 +40,25 @@ CCAS 採 [SemVer](https://semver.org/)：
 每次 release 的詳細 changelog 見 [GitHub Releases](https://github.com/<owner>/ccas/releases)。
 
 ---
+
+## v0.8.2（Patch）— 2026-09-14 — Agent MCP datetime contract 與版本 metadata 修正
+
+**適用對象**：v0.8.1 升級至 v0.8.2。無資料庫 schema 變更，不需執行 migration。
+
+**Agent MCP／CLI**：
+- Agent DTO 的 datetime 統一以 UTC RFC3339 `Z` suffix 輸出，既有 SQLite naive timestamp
+  在讀取時視為 UTC。
+- MCP、CLI 與 API runtime metadata 使用同一個 package version source，serverInfo
+  version 對齊 `0.8.2`。
+
+**Host troubleshooting**：
+- 若 host 顯示 MCP connected／tools=6，但 tools/call 在 JSON-RPC 前回報
+  `Not connected`，請重新 Add／Restart MCP server 建立新 stdio session。
+- 若 host 已收到 response 但回報 `-32602 date-time`，請確認已升級至 v0.8.2 並重建
+  session。
+
+**升級後**：pull-only Docker 部署請使用 `CCAS_VERSION=v0.8.2`；非 Docker MCP host
+  不需 Redis 才能查詢，但若使用既有 stale session，仍需由 host 重新建立 session。
 
 ## v0.8.1（Patch）— 2026-09-14 — Supervisord 宿主常駐驅動、API 服務管理與 Agent 規格同步
 
