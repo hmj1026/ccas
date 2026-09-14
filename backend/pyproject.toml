@@ -48,6 +48,7 @@ ccas-agent = "ccas.cli:main"
 
 [project.optional-dependencies]
 fubon-llm = ["anthropic>=0.40.0"]
+supervisor = ["supervisor>=4.2.5,<5"]
 
 [build-system]
 requires = ["hatchling"]

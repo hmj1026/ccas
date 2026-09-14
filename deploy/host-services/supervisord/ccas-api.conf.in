@@ -1,0 +1,13 @@
+[program:ccas-api]
+command=__CCAS_COMMAND__
+directory=__CCAS_BACKEND__
+autostart=true
+autorestart=true
+startretries=10
+startsecs=5
+stopsignal=TERM
+stopasgroup=true
+killasgroup=true
+stdout_logfile=__CCAS_LOGDIR__/ccas-api.log
+stderr_logfile=__CCAS_LOGDIR__/ccas-api.error.log
+environment=PYTHONUNBUFFERED="1"
