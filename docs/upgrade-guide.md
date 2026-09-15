@@ -14,7 +14,7 @@
 cd ~/ccas    # 你 docker-compose.yml 所在的目錄
 
 # 1) 修改 .env 的版本
-sed -i 's/^CCAS_VERSION=.*/CCAS_VERSION=v0.9.1/' .env
+sed -i 's/^CCAS_VERSION=.*/CCAS_VERSION=v0.10.0/' .env
 
 # 2) 拉新 image 並重啟
 docker compose -f docker-compose.yml pull
@@ -40,7 +40,7 @@ URL，見 [`mcp-installation.md`](mcp-installation.md)。systemd／launchd **不
 ```bash
 cd /path/to/ccas
 git fetch --tags
-git checkout v0.9.1    # 改成目標 tag
+git checkout v0.10.0    # 改成目標 tag
 
 cd backend
 uv sync --frozen --extra supervisor
@@ -70,7 +70,7 @@ cd ..
 [`non-docker-agent-host.md`](non-docker-agent-host.md) 與
 [`non-docker-host-services.md`](non-docker-host-services.md)。
 `host-services.sh` 不會跑 alembic；有 schema 變更時先在 `backend/` 執行
-`uv run alembic upgrade head`。v0.9.1 無資料庫 schema 變更。
+`uv run alembic upgrade head`。v0.10.0 無資料庫 schema 變更。
 
 ---
 
@@ -85,6 +85,22 @@ CCAS 採 [SemVer](https://semver.org/)：
 | Major（`v0.x.x` → `v1.0.0`） | 可能 breaking change；release notes 會明示 | 升級前**閱讀 release notes**、備份 |
 
 每次 release 的詳細 changelog 見 [GitHub Releases](https://github.com/<owner>/ccas/releases)。
+
+---
+
+## v0.10.0（Minor）— 2026-09-15 — Agent MCP 完整輸出契約與新功能擴充
+
+**適用對象**：v0.9.1 升級至 v0.10.0。無資料庫 schema 變更，不需執行 migration。
+
+**Agent MCP 完整輸出契約與功能擴展（#72）**：
+- 完成 MCP protocol discovery（`server/discover`）、resources（`ccas://pipeline/status`、`ccas://payment-due`、`ccas://bill/{bill_id}`）、prompts（`reconcile_with_notion`、`monthly_budget_review`）與參數補全（completions）。
+- 五大清單方法加入快取新鮮度提示（SEP-2549 `ttlMs=300000`, `cacheScope=private`）。
+- 強化 MCP HTTP loopback 安全機制、Bearer 驗證與可選 RFC 9728 OAuth Protected Resource Metadata 掛載。
+- 統一所有 MCP 回傳 datetime 為 ISO 8601 UTC（`Z` 字尾）以及結構化錯誤格式。
+- 新增單元與整合測試（`test_mcp_resources_prompts.py`、`test_agent_mcp_http.py` 等）。
+
+**OpenSpec 規範維護（#71）**：
+- 修復 OpenSpec delta operations 與規格名稱解析，完成完成態變更歸檔與主要規格同步。
 
 ---
 
