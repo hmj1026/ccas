@@ -41,7 +41,8 @@ CMD ["uv", "run", "uvicorn", "ccas.api.app:create_app", "--host", "0.0.0.0", "--
 # Stage: production — non-root user, health check, image-internal entrypoint + config templates
 FROM python:3.12-slim AS production
 LABEL org.opencontainers.image.title="ccas-backend" \
-      org.opencontainers.image.description="CCAS Backend API, worker, scheduler, and bot"
+      org.opencontainers.image.description="CCAS Backend API, worker, scheduler, and bot" \
+      org.opencontainers.image.source="https://github.com/hmj1026/ccas"
 RUN apt-get update -qq \
     && apt-get install -y --no-install-recommends tesseract-ocr tesseract-ocr-chi-tra fonts-wqy-zenhei \
     && rm -rf /var/lib/apt/lists/*

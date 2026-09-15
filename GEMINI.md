@@ -4,9 +4,8 @@
 
 ## Platform Differences
 
-- Slash commands use **TOML format**: `.gemini/commands/opsx/*.toml`
-- Skills are defined in `.gemini/skills/<name>/SKILL.md`
-- This repo's tracked `.gemini/skills/` contains only the OpenSpec workflow skills. DHPK skills are provisioned at runtime; consult the installer/receipt for the current roster.
+- Slash commands use **TOML format** when provisioned locally: `.gemini/commands/opsx/*.toml`
+- Skills are provisioned by the runtime installer; `.gemini/skills/` is local-only and is not committed.
 
 ## DHPK Runtime Skills
 
@@ -18,9 +17,9 @@
 
 ## Gemini-Exclusive Commands
 
-`.gemini/commands/` contains shared `opsx/` namespace commands plus:
+When provisioned locally, `.gemini/commands/` contains shared `opsx/` namespace commands plus:
 - `gemini-commit.toml` -- corresponds to `git-smart-commit` skill
 
 ## Synchronization
 
-When updating OpenSpec skills, sync the tracked provider directories together. DHPK-generated `.codex/skills/` projections are installer-managed and must not be committed as cross-repository symlinks.
+Do not vendor or manually sync installed skills or generated command directories into this repository.

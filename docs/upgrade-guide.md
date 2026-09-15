@@ -288,7 +288,7 @@ CCAS 採 [SemVer](https://semver.org/)：
 
 **Agent 與 Harness 維護**：
 - **Agent 規範配置**：配置 Agent 協作規範、議題追蹤指引與更新規格配置。
-- **忽略規則調整**：精細化 `.gitignore` 配置，忽略外部安裝之 Agent 技能與工具生成目錄（`.agents/skills/`、`.agent/`、`.codex/`、`.cursor/`），保留倉庫外掛描述檔。
+- **忽略規則調整**：精細化 `.gitignore` 配置，忽略外部安裝之 Agent 技能與工具生成目錄（`.claude/`、`.agents/`、`.agent/`、`.codex/`、`.cursor/`、`.gemini/`），以及本機 skill lock；專案說明仍保留在根目錄文件。
 
 **升級後**：無額外手動步驟。
 

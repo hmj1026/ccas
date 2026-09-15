@@ -50,9 +50,9 @@ Docker Compose 啟動時會再覆寫成容器內的 `/data/` 掛載點。
 
 此腳本會：驗證環境變數 -> 安裝依賴 -> Gmail OAuth 認證 -> 資料庫 migration -> 同步銀行設定。
 
-**Claude Code 使用者**：無需安裝 pre-push hook。Session 結束且有檔案異動時，`.claude/hooks/ccas-pre-push-stop.sh` 自動執行完整 CI 模擬（ruff + pyright + pytest + frontend lint/build/test）。
+**Agent 工具設定與已安裝 skills 均為本機產物，不納入版控**；需要可重現的 Git hooks 時，請執行 `./scripts/setup-hooks.sh`。
 
-**非 Claude 工作流**（手動 git push 保護）：
+啟用 Git hooks（手動 git push 保護）：
 ```bash
 ./scripts/setup-hooks.sh
 ```

@@ -5,20 +5,17 @@
 ## Platform Differences
 
 - Codex has **skills only** (no slash commands directory)
-- Skills are defined in `.codex/skills/<name>/SKILL.md`
-- This repo does not vendor DHPK skills or track cross-repository symlinks. The `.codex/skills/` directory is a DHPK-managed runtime projection; consult the installer/receipt for the current roster.
+- Skills are supplied by the runtime skill catalog and local installer; `.codex/skills/` is not a repository source directory.
+- Agent client directories and installed skill files (`.claude/`, `.codex/`, `.cursor/`, `.gemini/`, `.agents/`, `.agent/`) are local-only and must not be committed.
 - No interactive tools (no AskUserQuestion equivalent) — batch mode only: receives full prompt, returns full response
 
 ## Skill Sources (Codex)
 
 Codex skills are supplied by the runtime skill catalog. This repository does not
-vendor a project-local `.agents/skills/` source directory; `.codex/skills/` only
-contains the DHPK-managed OpenSpec projection currently tracked here. Do not infer
-availability from a path that is absent from the checkout.
+vendor a project-local skill source or a checked-in provider projection. Do not
+infer skill availability from a path that is absent from the checkout.
 
 Do not vendor or manually sync ECC reference skills (`everything-claude-code`), `openspec`, `codex`, or `pyright-lsp`.
-
-When updating OpenSpec skills, sync the tracked provider directories. DHPK-generated `.codex/skills/` projections are managed by the installer/receipt; generated cross-repository symlinks must not be committed.
 
 ## Additional Skills
 
@@ -27,7 +24,7 @@ When updating OpenSpec skills, sync the tracked provider directories. DHPK-gener
 | `code-trace` | Structured code tracing and root-cause investigation (replaces retired `bug-investigation`) |
 | `dhpk-module-design` | DHPK's canonical architecture and module-boundary skill; it is not a project-local Codex symlink |
 
-Claude-only ECC/reference skills are not additional entries under `.codex/skills/`.
+Claude-only ECC/reference skills are not additional entries under the repository.
 
 ## Semantic Code Navigation (cx)
 

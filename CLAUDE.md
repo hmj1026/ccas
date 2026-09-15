@@ -31,16 +31,6 @@ Single-context layout (`CONTEXT.md` + `docs/adr/` at repo root, created lazily).
 
 Read `docs/CODEMAPS/current-implementation.md` when a task touches pipeline flow, API/auth, storage, integrations, deployment, or frontend behavior; follow its linked detail map for that branch. Treat source/config/tests as the final source of truth when the document and repository disagree.
 
-## Rules (`.claude/rules/`)
-
-- `execution-policy.md` — task classification, agent roster (dhpk-preferred), process gates, anti-loop
-- `skill-policy.md` — skill selection priority when multiple match
-- `tool-decision.md` — GitNexus / cx / file tool cost hierarchy, impact exemptions, memory thresholds
-- `python.md` / `python-api.md` / `python-db.md` / `python-testing.md` — backend conventions
-- `frontend-typescript.md` — frontend conventions
-- `parser-development.md` — bank parser registry pattern, PDF parsing conventions
-- `docker-deploy.md` — multi-stage builds, SSOT sync pairs, deployment iron laws
-
 ## Key Conventions
 
 - Responses in **Traditional Chinese**
@@ -50,9 +40,9 @@ Read `docs/CODEMAPS/current-implementation.md` when a task touches pipeline flow
 
 ## Skills & External Deps
 
-Skills come from installed Claude plugin manifests (dhpk, openspec/`opsx`, codex, …), surfaced at runtime — they are **not** vendored in this repo. The repository-local `.claude/skills/` directory contains the tracked OpenSpec projections; GitNexus guidance comes from the runtime skill catalog.
+Skills come from installed Claude plugin manifests (dhpk, openspec/`opsx`, codex, …), surfaced at runtime — they are **not** vendored in this repo. Agent client directories such as `.claude/`, `.codex/`, `.cursor/`, `.gemini/`, and `.agents/` are local-only and intentionally ignored.
 
-Do not vendor or manually sync: `openspec`, `codex`, `pyright-lsp` — managed by their own manifests/lock files.
+Do not vendor or manually sync installed skills or their lock files. Project instructions belong in the root `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, and versioned `docs/`.
 
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence

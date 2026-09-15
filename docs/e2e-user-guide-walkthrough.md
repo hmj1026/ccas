@@ -5,7 +5,7 @@
 - **執行環境**：Docker compose 完整堆疊
 - **資料來源**：真實 Gmail + 真實 PDF（`.env` 內的 `PDF_PASSWORD_<BANK>`）
 - **問題處理**：每發現一個問題立即 `/opsx:new` 開 change，不批次合併
-- **詳細 SOP**：見 `~/.claude/plans/groovy-yawning-avalanche.md`
+- **詳細 SOP**：依本文件與對應 OpenSpec change 的 `tasks.md` 執行；Agent 工具的本機 plan 不納入版控
 
 ---
 
@@ -142,7 +142,7 @@ docker exec -it ccas-backend-1 uv run python -m ccas.pipeline --bank <BANK> --fr
 
 1. 這張表加一列，`change slug` 先填 `TBD`
 2. 執行 `/opsx:new`，slug 建議 `YYYY-MM-DD-fix-<bank>-<stage>-<short>`（對齊 `openspec/changes/archive/` 既有命名）
-3. **先建 `tasks.md`**（見 `.claude/rules/execution-policy.md`，禁止先寫 code）
+3. **先建 `tasks.md`**（OpenSpec workflow 要求先規劃，禁止先寫 code）
 4. 回填本表 `對應 change slug`
 5. `tdd-guide` → 實作 → `python-reviewer`（若動 SQL 加 `database-reviewer`）
 6. `/opsx:apply` → `/opsx:verify` → `/opsx:archive`
