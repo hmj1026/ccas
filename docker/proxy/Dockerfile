@@ -7,7 +7,8 @@
 FROM nginx:alpine AS production
 
 LABEL org.opencontainers.image.title="ccas-proxy" \
-      org.opencontainers.image.description="CCAS reverse proxy - single ingress nginx for backend (/api) and frontend (/)"
+      org.opencontainers.image.description="CCAS reverse proxy - single ingress nginx for backend (/api) and frontend (/)" \
+      org.opencontainers.image.source="https://github.com/hmj1026/ccas"
 
 # Non-root user 與必要 temp path（與 frontend nginx 對齊）
 RUN addgroup -g 1001 -S appgroup \
