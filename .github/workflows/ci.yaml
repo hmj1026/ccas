@@ -98,6 +98,7 @@ jobs:
           OPENBLAS_NUM_THREADS: "1"
           MKL_NUM_THREADS: "1"
           NUMEXPR_NUM_THREADS: "1"
+          ORT_DISABLE_THREAD_SPINNING: "1"
         run: |
           set -euo pipefail
 
@@ -116,15 +117,15 @@ jobs:
             return "$status"
           }
 
-          if (( cpu_count > 1 )) && run_eval "CPU 1" taskset --cpu-list 1 uv run python scripts/eval_captcha.py; then
+          if run_eval "default" uv run python scripts/eval_captcha.py -v; then
             exit 0
           fi
 
-          if run_eval "CPU 0" taskset --cpu-list 0 uv run python scripts/eval_captcha.py; then
+          if (( cpu_count > 1 )) && run_eval "CPU 1" taskset --cpu-list 1 uv run python scripts/eval_captcha.py -v; then
             exit 0
           fi
 
-          if run_eval "unrestricted" uv run python scripts/eval_captcha.py; then
+          if run_eval "CPU 0" taskset --cpu-list 0 uv run python scripts/eval_captcha.py -v; then
             exit 0
           fi
 

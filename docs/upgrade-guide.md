@@ -14,7 +14,7 @@
 cd ~/ccas    # 你 docker-compose.yml 所在的目錄
 
 # 1) 修改 .env 的版本
-sed -i 's/^CCAS_VERSION=.*/CCAS_VERSION=v0.10.0/' .env
+sed -i 's/^CCAS_VERSION=.*/CCAS_VERSION=v0.10.1/' .env
 
 # 2) 拉新 image 並重啟
 docker compose -f docker-compose.yml pull
@@ -40,7 +40,7 @@ URL，見 [`mcp-installation.md`](mcp-installation.md)。systemd／launchd **不
 ```bash
 cd /path/to/ccas
 git fetch --tags
-git checkout v0.10.0    # 改成目標 tag
+git checkout v0.10.1    # 改成目標 tag
 
 cd backend
 uv sync --frozen --extra supervisor
@@ -70,7 +70,7 @@ cd ..
 [`non-docker-agent-host.md`](non-docker-agent-host.md) 與
 [`non-docker-host-services.md`](non-docker-host-services.md)。
 `host-services.sh` 不會跑 alembic；有 schema 變更時先在 `backend/` 執行
-`uv run alembic upgrade head`。v0.10.0 無資料庫 schema 變更。
+`uv run alembic upgrade head`。v0.10.1 無資料庫 schema 變更。
 
 ---
 
@@ -85,6 +85,18 @@ CCAS 採 [SemVer](https://semver.org/)：
 | Major（`v0.x.x` → `v1.0.0`） | 可能 breaking change；release notes 會明示 | 升級前**閱讀 release notes**、備份 |
 
 每次 release 的詳細 changelog 見 [GitHub Releases](https://github.com/<owner>/ccas/releases)。
+
+---
+
+## v0.10.1（Patch）— 2026-09-15 — 穩定 CI 虛擬化環境 FUBON CAPTCHA OCR
+
+**適用對象**：v0.10.0 升級至 v0.10.1。無資料庫 schema 變更，不需執行 migration。
+
+**CI 與 CAPTCHA OCR 穩定性修復（#75）**：
+- 於 `fubon/captcha.py` 配置 ONNX Runtime 單執行緒循序執行選項（`intra_op=1`, `inter_op=1`, `ORT_SEQUENTIAL`），徹底規避多核心虛擬機 runner 下執行緒池競爭與空推論結果問題。
+- 於 GitHub Actions CI 工作流加入 `ORT_DISABLE_THREAD_SPINNING=1`，並調整評估策略優先採循序單執行緒推論。
+- 擴充 `scripts/eval_captcha.py` 診斷工具，支援 verbose logging 與被拒絕樣本預覽。
+- 補齊 `_configure_ort_single_threaded` 與 CLI evaluator 相關單元測試。
 
 ---
 

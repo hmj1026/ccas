@@ -10,6 +10,7 @@ is below 80%, or if any accepted result is incorrect.
 from __future__ import annotations
 
 import argparse
+import logging
 import sys
 from pathlib import Path
 
@@ -26,7 +27,7 @@ MIN_ACCURACY = 0.80
 MIN_ACCEPT_RATE = 0.80
 
 
-def evaluate(fixtures_dir: Path) -> int:
+def evaluate(fixtures_dir: Path, verbose: bool = False) -> int:
     samples = sorted(fixtures_dir.glob("*.jpg"))
     if not samples:
         print(f"No *.jpg files found in {fixtures_dir}")
@@ -36,12 +37,15 @@ def evaluate(fixtures_dir: Path) -> int:
     correct = 0
     rejected = 0
     false_positives: list[str] = []
+    rejected_samples: list[str] = []
 
     for p in samples:
         gt = p.stem
         result = solve(p.read_bytes())
         if result is None:
             rejected += 1
+            if len(rejected_samples) < 5:
+                rejected_samples.append(f"{p.name} (ground truth={gt})")
         else:
             accepted += 1
             if result.text == gt:
@@ -71,6 +75,11 @@ def evaluate(fixtures_dir: Path) -> int:
         for fp in false_positives:
             print(fp)
 
+    if rejected_samples:
+        print(f"\nRejected samples preview (first {len(rejected_samples)}):")
+        for r in rejected_samples:
+            print(f"  {r}")
+
     failed = False
     if accept_rate < MIN_ACCEPT_RATE:
         print(f"\nFAIL: accept rate {accept_rate:.1%} < {MIN_ACCEPT_RATE:.0%}")
@@ -97,8 +106,16 @@ def main() -> None:
         default=DEFAULT_FIXTURES,
         help="Captcha JPEG fixtures dir (stem = ground truth)",
     )
+    parser.add_argument(
+        "-v",
+        "--verbose",
+        action="store_true",
+        help="Enable debug logging",
+    )
     args = parser.parse_args()
-    sys.exit(evaluate(args.fixtures_dir))
+    if args.verbose:
+        logging.basicConfig(level=logging.DEBUG, format="%(name)s: %(message)s")
+    sys.exit(evaluate(args.fixtures_dir, verbose=args.verbose))
 
 
 if __name__ == "__main__":

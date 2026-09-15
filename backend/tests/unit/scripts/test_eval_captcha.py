@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
+
+import pytest
 
 from ccas.ingestor.fetcher.banks.fubon.captcha import CaptchaResult
 from scripts import eval_captcha
@@ -57,3 +60,31 @@ def test_rejects_false_positive_even_when_rate_thresholds_pass(
     monkeypatch.setattr(eval_captcha, "solve", lambda _: next(outcomes))
 
     assert eval_captcha.evaluate(tmp_path) == 1
+
+
+def test_evaluate_handles_verbose_and_previews_rejected(
+    monkeypatch, tmp_path: Path, capsys
+) -> None:
+    _write_fixtures(tmp_path, ["0000", "0001"])
+    monkeypatch.setattr(eval_captcha, "solve", lambda _: None)
+
+    ret = eval_captcha.evaluate(tmp_path, verbose=True)
+    assert ret == 1
+    captured = capsys.readouterr().out
+    assert "Rejected samples preview" in captured
+    assert "0000.jpg" in captured
+
+
+def test_main_handles_verbose_arg(monkeypatch, tmp_path: Path) -> None:
+    _write_fixtures(tmp_path, ["0000"])
+    monkeypatch.setattr(
+        eval_captcha,
+        "solve",
+        lambda _: CaptchaResult(text="0000", confidence=0.99),
+    )
+    monkeypatch.setattr(
+        sys, "argv", ["eval_captcha.py", "--fixtures-dir", str(tmp_path), "-v"]
+    )
+    with pytest.raises(SystemExit) as exc_info:
+        eval_captcha.main()
+    assert exc_info.value.code == 0

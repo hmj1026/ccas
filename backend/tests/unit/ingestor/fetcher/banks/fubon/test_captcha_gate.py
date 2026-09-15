@@ -208,3 +208,29 @@ def test_solve_non_dict_result() -> None:
     mock_ocr.classification.return_value = "raw string result"
     with patch.object(captcha, "_get_ocr", return_value=mock_ocr):
         assert captcha.solve(b"\xff\xd8\xffanything") is None
+
+
+def test_configure_ort_single_threaded_modifies_sess_options(monkeypatch) -> None:
+    import onnxruntime as ort
+
+    recorded: list[ort.SessionOptions] = []
+
+    def mock_init(self, path_or_bytes, sess_options=None, **kwargs):
+        recorded.append(sess_options)
+
+    monkeypatch.setattr(captcha, "_ORT_CONFIGURED", False)
+    monkeypatch.setattr(ort.InferenceSession, "__init__", mock_init)
+
+    captcha._configure_ort_single_threaded()
+    assert captcha._ORT_CONFIGURED is True
+
+    # Call the wrapped init
+    ort.InferenceSession(b"dummy")  # type: ignore[call-arg]
+    assert len(recorded) == 1
+    opts = recorded[0]
+    assert opts.intra_op_num_threads == 1
+    assert opts.inter_op_num_threads == 1
+    assert opts.execution_mode == ort.ExecutionMode.ORT_SEQUENTIAL
+
+    # Test idempotency (should not re-wrap if _ORT_CONFIGURED is True)
+    captcha._configure_ort_single_threaded()
