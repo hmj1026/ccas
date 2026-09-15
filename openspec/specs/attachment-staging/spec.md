@@ -59,3 +59,22 @@ TBD - created by archiving change gmail-ingestor. Update Purpose after archive.
 - **WHEN** migration 套用到含有既有資料的 DB
 - **THEN** 既有列的 `gmail_part_id` 欄位 SHALL 為 NULL，且系統不因此拒絕查詢或寫入
 
+### Requirement: 附件層級審查狀態與帳單層級審查狀態為不同粒度
+
+`StagedAttachment` 的 `status=manual_review_needed`（重試耗盡後由 worker 批次標記）與 `error_reason`（單一目前值的自由文字欄位）SHALL 只代表「ingestion／重試層級」需要人工介入的狀態，SHALL 不與 `Bill` 上新增的 `needs_review`/`review_reasons[]`（解析信心層級，見 `parse-result-schema`）互相覆寫、合併或共用同一個欄位。兩者屬於不同粒度，須各自獨立記錄與查詢；`error_reason` 不被當作重試歷史資料庫。
+
+#### Scenario: 只有附件層級需要人工介入
+
+- **WHEN** 某附件因解密或抓取重試多次仍失敗，被 worker 標記 `status=manual_review_needed`
+- **THEN** 該附件對應的 `Bill`（若尚未成功建立）SHALL 不因此被賦予 `needs_review=True`——因為根本沒有解析結果可供評估信心
+
+#### Scenario: 只有帳單層級需要人工介入
+
+- **WHEN** 某附件成功完成 ingestion／解密／解析，但解析信心偏低、交叉檢查未通過
+- **THEN** 該附件的 `StagedAttachmentStatus` SHALL 維持 `parsed`（或既有對應成功狀態），不得因帳單解析信心偏低而回頭標記為 `manual_review_needed`；審查需求改由對應 `Bill.needs_review`/`review_reasons[]` 表達
+
+#### Scenario: 兩種狀態可同時存在但各自獨立
+
+- **WHEN** 某附件成功完成解析，但該次解析信心偏低
+- **THEN** 系統 SHALL 允許該附件目前的 ingestion 狀態與對應 `Bill` 的 `needs_review`/`review_reasons[]` 同時存在；查詢其中一方不 SHALL 影響或清除另一方的資料，且不得假設 `error_reason` 保存完整重試歷史
+
