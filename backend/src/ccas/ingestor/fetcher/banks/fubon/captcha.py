@@ -37,6 +37,34 @@ _MAX_CAPTCHA_BYTES: int = 512 * 1024
 
 _OCR: ddddocr.DdddOcr | None = None
 _OCR_LOCK = threading.Lock()
+_ORT_CONFIGURED = False
+
+
+def _configure_ort_single_threaded() -> None:
+    global _ORT_CONFIGURED
+    if _ORT_CONFIGURED:
+        return
+    _ORT_CONFIGURED = True
+    try:
+        import onnxruntime as ort
+
+        orig_init = ort.InferenceSession.__init__
+
+        def _single_threaded_init(
+            self: ort.InferenceSession,
+            path_or_bytes: Any,
+            sess_options: ort.SessionOptions | None = None,
+            **kwargs: Any,
+        ) -> None:
+            opts = ort.SessionOptions() if sess_options is None else sess_options
+            opts.intra_op_num_threads = 1
+            opts.inter_op_num_threads = 1
+            opts.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
+            orig_init(self, path_or_bytes, sess_options=opts, **kwargs)
+
+        ort.InferenceSession.__init__ = _single_threaded_init  # type: ignore[assignment]
+    except Exception:  # noqa: BLE001
+        pass
 
 
 @dataclass(frozen=True)
@@ -50,6 +78,7 @@ def _get_ocr() -> ddddocr.DdddOcr:
     if _OCR is None:
         with _OCR_LOCK:
             if _OCR is None:
+                _configure_ort_single_threaded()
                 _OCR = ddddocr.DdddOcr(show_ad=False, beta=False)
     return _OCR
 
@@ -109,24 +138,40 @@ def _classify(ocr: ddddocr.DdddOcr, image_bytes: bytes) -> CaptchaResult | None:
         return None
 
     if not isinstance(result, dict):
+        logger.debug("fubon_captcha_not_dict: %r", type(result))
         return None
 
     raw_text = result.get("text")
     raw_conf = result.get("confidence")
     if raw_text is None or raw_conf is None:
+        logger.debug("fubon_captcha_missing_fields: %r", result)
         return None
 
     text = str(raw_text)
     try:
         confidence = float(raw_conf)
     except (TypeError, ValueError):
+        logger.debug("fubon_captcha_invalid_conf: %r", raw_conf)
         return None
 
     if len(text) != _EXPECTED_LEN:
+        logger.debug(
+            "fubon_captcha_bad_length: %r len=%d expected=%d",
+            text,
+            len(text),
+            _EXPECTED_LEN,
+        )
         return None
     if not text.isdigit():
+        logger.debug("fubon_captcha_not_digit: %r", text)
         return None
     if confidence < _MIN_CONF:
+        logger.debug(
+            "fubon_captcha_low_conf: %r conf=%.3f < %.2f",
+            text,
+            confidence,
+            _MIN_CONF,
+        )
         return None
     return CaptchaResult(text=text, confidence=confidence)
 
