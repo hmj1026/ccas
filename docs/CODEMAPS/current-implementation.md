@@ -50,7 +50,7 @@ CCAS 是一個以 SQLite 為資料來源、以 Redis/RQ 執行非同步工作、
 | Scheduler | `python -m ccas.scheduler` | 每日觸發 pipeline、付款提醒、預算評估；每 30 秒寫 heartbeat |
 | Telegram bot | `python -m ccas.bot` | long polling、白名單指令、查詢與標記帳單已繳 |
 | Agent CLI | `ccas-agent` / `python -m ccas.cli` | 唯讀 agent 查詢，JSON/table 輸出 |
-| Agent MCP | `ccas-mcp` / `python -m ccas.mcp` 與 `ccas-mcp-http` / `python -m ccas.mcp.http` | stdio 與 loopback Streamable HTTP 共用 create_server()；HTTP 綁 127.0.0.1:8001 /mcp；serverInfo version 與 package metadata 同步 |
+| Agent MCP | `ccas-mcp` / `python -m ccas.mcp` 與 `ccas-mcp-http` / `python -m ccas.mcp.http` | stdio 與 loopback Streamable HTTP 共用 create_server()；HTTP 綁 127.0.0.1:8001 /mcp；serverInfo version 與 package metadata 同步；能力面為 6 個唯讀 tool + resources（`ccas://pipeline/status`、`ccas://payment-due`、template `ccas://bill/{bill_id}`）+ 2 個 prompt + argument completions |
 | Frontend | Vite dev / Nginx production | React Router、React Query、頁面與設定中心 |
 
 Docker Compose 將 backend、worker、scheduler、bot、frontend、redis 分開執行；production pull-only compose 另外以 proxy 統一對外暴露入口。
@@ -155,7 +155,7 @@ Server state 使用 TanStack Query；交易、設定與 pipeline progress 的 ca
 
 `Settings` 從 `.env`／環境變數載入；`.env.example` 是變數說明的 SSOT。API token、master key、Gmail credentials/token 與 bank secrets 都有獨立的檔案或加密儲存規則；文件只描述路徑與來源，不記錄實際秘密值。
 
-Agent surfaces 共用 `ccas.services` 的安全投影；REST 提供 `/api/bills/payment-due` 與 `/api/pipeline/status`，CLI/MCP 僅允許唯讀查詢。loopback Streamable HTTP MCP 只接受與 REST 相同來源的 Bearer API token，不接受儀表板 session cookie。Agent response DTO 的 datetime 在 JSON serialization boundary 統一輸出 UTC RFC3339 `Z`；`AGENT_WRITE_ENABLED` 預設為 false，且目前不會暴露任何寫入工具。
+Agent surfaces 共用 `ccas.services` 的安全投影；REST 提供 `/api/bills/payment-due` 與 `/api/pipeline/status`，CLI/MCP 僅允許唯讀查詢。loopback Streamable HTTP MCP 只接受與 REST 相同來源的 Bearer API token，不接受儀表板 session cookie。Agent response DTO 的 datetime 在 JSON serialization boundary 統一輸出 UTC RFC3339 `Z`；`AGENT_WRITE_ENABLED` 預設為 false，且目前不會暴露任何寫入工具。MCP 的 resources／prompts 與 tools 走同一組 service 投影，同樣唯讀；RFC 9728 的 protected resource metadata 預設不發布（開關條件見 [`mcp-installation.md`](../mcp-installation.md)）。
 
 MCP client 的人工安裝與委託 AI 安裝步驟集中於 [`docs/mcp-installation.md`](../mcp-installation.md)；本文件只保留 as-built 契約，避免複製易漂移的 client 設定片段。
 

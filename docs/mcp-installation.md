@@ -1,7 +1,7 @@
 # CCAS MCP 安裝與使用
 
 本文件是 CCAS MCP 的安裝 SSOT。CCAS 提供兩個本機 adapter，共用
-`create_server()` 與同一組六個唯讀工具：
+`create_server()` 與同一組唯讀能力（六個 tool，加上 resources／prompts／completions）：
 
 1. **loopback Streamable HTTP**（Grok／Cursor 家族 host 首選）：常駐行程聽
    `http://127.0.0.1:8001/mcp`。
@@ -9,7 +9,10 @@
    `python -m ccas.mcp`。
 
 兩者只讀取 CCAS 的安全資料投影，不開放寫入工具，也不回傳密碼、OAuth token、
-完整卡號或其他 secrets。HTTP 只聽 loopback，**不是**遠端公開 MCP。Streamable HTTP
+完整卡號或其他 secrets。除了 tools 之外，也提供唯讀的 resources、prompts 與
+argument completions（見下方契約表）。
+
+HTTP 只聽 loopback，**不是**遠端公開 MCP。Streamable HTTP
 的 GET 可能用 SSE framing 推事件，那是現行 spec 的一部分，**不是**已 deprecated
 的 HTTP+SSE（獨立 `/sse` + `/messages`）；本實作不掛後者。
 
@@ -22,10 +25,15 @@
 | HTTP 入口 | `http://127.0.0.1:8001/mcp`（port 由 `MCP_HTTP_PORT` 覆寫） |
 | HTTP bind | 預設 `MCP_HTTP_HOST=127.0.0.1`；非 loopback 在 `create_http_app()` fail-closed，不是 Settings validator（誤設 `0.0.0.0` 不得讓 worker／API 起不來） |
 | HTTP 認證 | `Authorization: Bearer`，token 與 REST 的 `API_TOKEN`／`current_api_token()` 相同；**不接受** REST session cookie |
+| 授權探索 | 預設**不發布** RFC 9728 metadata；設定 `MCP_OAUTH_ISSUER_URL` 後才掛上 `/.well-known/oauth-protected-resource` 並在 401 帶 `resource_metadata`。詳見下方「授權探索（選用）」 |
+| List 快取 | 五個靜態清單方法（`server/discover`、`tools/list`、`prompts/list`、`resources/list`、`resources/templates/list`）回傳 `ttlMs=300000`、`cacheScope=private`（SEP-2549）；`resources/read` 為即時資料，不帶快取提示 |
 | 常駐 | supervisord capability `mcp-http`（比照 `api`）。systemd／launchd **不支援** |
-| Release metadata | 與 `backend/src/ccas/__init__.py` 的 package metadata 同步；目前為 v0.9.1 |
+| Release metadata | 與 `backend/src/ccas/__init__.py` 的 package metadata 同步；目前為 v0.10.0 |
 | Transport | stdio（stdout 僅 MCP JSON）或官方 SDK Streamable HTTP；禁止 deprecated HTTP+SSE |
 | Tools | `list_bills`、`get_bill`、`query_transactions`、`get_payment_due`、`budget_status`、`pipeline_status` |
+| Resources | `ccas://pipeline/status`、`ccas://payment-due`；template `ccas://bill/{bill_id}`（皆為 `application/json`） |
+| Prompts | `reconcile_with_notion`、`monthly_budget_review`（參數 `month`，內文帶 ADR-0001 邊界） |
+| Completions | 只補全 prompt 的 `month` 與 template 的 `bill_id`；MCP 的 `completion/complete` 不接受 tool reference，故 tool 參數無法補全 |
 | 寫入 | 未提供；`AGENT_WRITE_ENABLED` 不會把目前 server 變成寫入介面 |
 | 依賴 | Python 3.12+、uv；`backend/pyproject.toml` 宣告 `mcp>=2.2.0,<3` |
 | 時間欄位 | Agent DTO 的 datetime 以 UTC RFC3339 `Z` suffix 輸出；既有 SQLite naive value 視為 UTC |
@@ -175,12 +183,43 @@ AI 執行時必須遵守：
 探索與 impact analysis。它與 CCAS 業務 MCP 是兩個不同 server：
 
 - `gitnexus`：程式碼知識圖譜，command 為 `npx -y gitnexus@1.6.3 mcp`。
-- `ccas`：業務資料唯讀查詢。Grok／Cursor 家族用 loopback
-  `http://127.0.0.1:8001/mcp`；stdio 後援為 `uv run ... ccas-mcp`。
+- `ccas`：業務資料唯讀查詢。`.mcp.json` 已登錄 loopback HTTP 條目
+  （`http://127.0.0.1:8001/mcp` + `Authorization: Bearer ${API_TOKEN}`），需要
+  `ccas-mcp-http` 已常駐且環境有 `API_TOKEN`；stdio 後援為 `uv run ... ccas-mcp`。
+  **`.mcp.json` 只放插值，永遠不要提交真實 token。**
 
 不要以其中一個取代另一個。本機 loopback Streamable HTTP 已是支援的業務 MCP
-通道；不要把任一個 server 改成**遠端**（非 loopback）HTTP endpoint。遠端連線必須
-先有後續 ADR 的 Origin／token／scope 設計。
+通道；不要把任一個 server 改成**遠端**（非 loopback）HTTP endpoint。遠端連線的
+Origin／token／scope 設計見
+[`0002-remote-mcp-exposure.md`](adr/0002-remote-mcp-exposure.md)，該 ADR 目前為
+**Proposed**，未被 Accept 前不得依其實作。
+
+## 授權探索（選用）
+
+預設情況下 CCAS 只做靜態 Bearer：沒有 token 就回 401，`WWW-Authenticate` 只有裸的
+`Bearer` challenge，**不會**有 `/.well-known/oauth-protected-resource`。這是刻意的
+——CCAS 自己不是 authorization server，若無條件發布 RFC 9728 metadata 並把
+`authorization_servers` 指向自己，遵循規格的 client 會從「拿到 401、退回人工填
+token」變成「走進一個永遠完成不了的 OAuth 流程」，比現狀更糟。
+
+當環境裡確實有一台 OAuth 2.1 authorization server 時，才設定：
+
+```bash
+MCP_OAUTH_ISSUER_URL=https://auth.example.com
+```
+
+設定後 `create_http_app()` 會改用 `resource_server_url`，SDK 隨即掛上：
+
+- `GET /.well-known/oauth-protected-resource/mcp` → 回傳 `resource`
+  （`http://127.0.0.1:8001/mcp`）與 `authorization_servers`
+- 401 的 `WWW-Authenticate` 追加
+  `resource_metadata="http://127.0.0.1:8001/.well-known/oauth-protected-resource/mcp"`
+
+**token 驗證方式不變**：仍是 `_ApiTokenVerifier` 比對 `API_TOKEN`，
+`validate_token_resource` 明確為 `False`（靜態 token 不帶 RFC 8707 resource
+indicator）。要真正驗證 audience／scope，屬於遠端 MCP 的後續 ADR 範圍。
+
+URL 請勿加尾斜線：RFC 8414／9207 的 issuer 是逐字串比對。
 
 ## 排錯
 

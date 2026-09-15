@@ -39,3 +39,36 @@ TBD - created by archiving change backend-api. Update Purpose after archive.
 - **WHEN** 操作者將 `agent_write_enabled` 設為 `True`
 - **THEN** 既有 REST API 的 Bearer Token 認證行為 SHALL 不受任何影響，MCP／CLI 的工具清單仍只包含唯讀面，且開關本身不得被視為任何寫入操作的使用者授權
 
+### Requirement: loopback Streamable HTTP MCP 必須通過 Bearer Token 認證
+
+系統 SHALL 對 Streamable HTTP MCP 的 HTTP 請求要求有效 `Authorization: Bearer`
+token，token 來源與 REST API 的 `current_api_token()` 相同（環境變數 `API_TOKEN` 或
+on-disk api-token 檔）。HTTP MCP SHALL NOT 接受 REST 儀表板使用的 session cookie 作為
+MCP 認證。stdio MCP 與 CLI 維持既有行為：不要求 Bearer。
+
+#### Scenario: 帶有效 Bearer 的 HTTP MCP 請求可進入 session
+
+- **WHEN** 外部代理對 loopback Streamable HTTP MCP 送出帶有效
+  `Authorization: Bearer <token>` 的請求
+- **THEN** 系統 SHALL 允許進行 MCP protocol handshake 與唯讀工具呼叫
+
+#### Scenario: 缺少 Bearer 的 HTTP MCP 請求被拒絕
+
+- **WHEN** 對 HTTP MCP endpoint 的請求沒有 `Authorization` header
+- **THEN** 系統 SHALL 回傳 `401 Unauthorized`，不得建立 MCP session 或執行工具
+
+#### Scenario: 無效 Bearer 的 HTTP MCP 請求被拒絕
+
+- **WHEN** 對 HTTP MCP endpoint 的 `Authorization` header 帶有無效 token
+- **THEN** 系統 SHALL 回傳 `401 Unauthorized`，不得執行工具
+
+#### Scenario: session cookie 不能代替 HTTP MCP Bearer
+
+- **WHEN** 請求只帶有效 REST session cookie、沒有有效 Bearer token
+- **THEN** HTTP MCP SHALL 回傳 `401 Unauthorized`
+
+#### Scenario: stdio MCP 仍不要求 Bearer
+
+- **WHEN** 外部代理透過 stdio 連上 MCP server
+- **THEN** 系統 SHALL 不要求 `Authorization` header，與既有 stdio 契約相同
+

@@ -96,6 +96,28 @@ async def list_bills_query(
     return bills, total, total_pages, has_next
 
 
+async def completion_candidates_query(
+    session: AsyncSession, *, limit: int
+) -> tuple[list[tuple[int, str]], bool]:
+    """Fetch `(id, billing_month)` pairs for MCP argument completion.
+
+    Completion only needs two scalar columns, so this deliberately does not go
+    through ``list_bills_query`` + ``AgentBill``: that path also resolves bank
+    names and card last-4s and builds full DTOs, which a completion request
+    discards. Ordering matches ``list_bills_query`` so suggestions appear in the
+    same order as the bill list. Returns one extra row's worth of knowledge as
+    the ``has_more`` flag.
+    """
+    stmt = (
+        select(Bill.id, Bill.billing_month)
+        .order_by(Bill.billing_month.desc(), Bill.bank_code.asc())
+        .limit(limit + 1)
+    )
+    rows = (await session.execute(stmt)).all()
+    has_more = len(rows) > limit
+    return [(row[0], row[1]) for row in rows[:limit]], has_more
+
+
 async def get_payment_due_query(session: AsyncSession) -> Sequence[Bill]:
     """Query all unpaid bills ordered by due_date ascending."""
     stmt = (
