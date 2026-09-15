@@ -77,6 +77,12 @@ class Settings(BaseSettings):
     # ``MCP_HTTP_HOST=0.0.0.0`` must not fail those processes.
     mcp_http_host: str = "127.0.0.1"
     mcp_http_port: int = 8001
+    # Optional OAuth 2.1 authorization server that issues tokens for this MCP
+    # resource server. Unset (the default) keeps the static-Bearer contract and
+    # publishes no Protected Resource Metadata: advertising an authorization
+    # server CCAS does not run would push RFC 9728 clients into an OAuth flow
+    # that cannot complete, which is worse than the plain 401 they get today.
+    mcp_oauth_issuer_url: str = ""
     # Swagger UI / ReDoc / openapi.json are disabled by default; opt-in via
     # ENABLE_API_DOCS=true for development or internal debugging only.
     enable_api_docs: bool = False

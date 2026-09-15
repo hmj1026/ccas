@@ -44,3 +44,13 @@ TBD - created by archiving change add-agent-mcp-interface. Update Purpose after 
 - **WHEN** 操作者執行任一讀取類 CLI 子命令
 - **THEN** stdout 與 stderr SHALL 不包含上述 secrets 或完整卡號
 
+### Requirement: CLI Agent datetime matches MCP canonical serialization
+
+CLI 六個 read-only command 的 JSON output SHALL 使用與 MCP structuredContent 完全相同
+的 Agent DTO serialization。所有 Agent datetime SHALL 是 UTC RFC3339 `Z` 字串；aware
+value 轉為 UTC，SQLite 讀回的 naive value 視為 UTC，nullable datetime 保持 null。
+
+#### Scenario: CLI and MCP serialize the same timestamps
+
+- **WHEN** 對同一 SQLite fixture 分別執行 CLI 與 MCP 的對應 read query
+- **THEN** 兩者 datetime 欄位 SHALL 完全一致，並都以 `Z` suffix 輸出

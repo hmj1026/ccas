@@ -12,12 +12,16 @@ import asyncio
 import contextvars
 import json
 import logging
+import re
+from collections.abc import Awaitable, Callable, Mapping
+from functools import cache
 from types import TracebackType
 from typing import Any
 
 import anyio
 from mcp import types
 from mcp.server import Server
+from mcp.server.caching import CacheableMethod, CacheHint
 from mcp.server.context import ServerRequestContext
 from mcp.server.stdio import stdio_server
 from mcp.shared._stream_protocols import ReadStream, WriteStream
@@ -47,6 +51,7 @@ from ccas.services.schemas import (
     TransactionsPage,
 )
 from ccas.services.transactions import query_transactions
+from ccas.storage.agent_queries import completion_candidates_query
 from ccas.storage.database import get_session_factory
 
 logger = logging.getLogger(__name__)
@@ -54,7 +59,22 @@ logger = logging.getLogger(__name__)
 _PARSE_ERROR = -32700
 _INVALID_REQUEST = -32600
 _METHOD_NOT_FOUND = -32601
+_INVALID_PARAMS = -32602
+_INTERNAL_ERROR = -32603
 _PROTOCOL_VERSION = "2026-07-28"
+# SEP-2549 freshness hints. The descriptor lists are derived from module-level
+# constants, so they only ever change across a deploy; five minutes bounds how
+# long a client may keep serving a retired descriptor.
+# ``private`` because both answers are produced behind Bearer authorization.
+_STATIC_LIST_TTL_MS = 300_000
+_CACHE_HINTS: Mapping[CacheableMethod, CacheHint] = {
+    "tools/list": CacheHint(ttl_ms=_STATIC_LIST_TTL_MS, scope="private"),
+    "server/discover": CacheHint(ttl_ms=_STATIC_LIST_TTL_MS, scope="private"),
+    "prompts/list": CacheHint(ttl_ms=_STATIC_LIST_TTL_MS, scope="private"),
+    "resources/list": CacheHint(ttl_ms=_STATIC_LIST_TTL_MS, scope="private"),
+    "resources/templates/list": CacheHint(ttl_ms=_STATIC_LIST_TTL_MS, scope="private"),
+    # `resources/read` is intentionally absent: its payload is live CCAS data.
+}
 
 
 class _ToolSpec:
@@ -114,15 +134,43 @@ _TOOL_SPECS: tuple[_ToolSpec, ...] = (
 )
 _TOOL_BY_NAME = {spec.name: spec for spec in _TOOL_SPECS}
 
+_JSON_MIME_TYPE = "application/json"
+_PIPELINE_STATUS_URI = "ccas://pipeline/status"
+_PAYMENT_DUE_URI = "ccas://payment-due"
+_BILL_URI_TEMPLATE = "ccas://bill/{bill_id}"
+# Derived so the advertised template and the matcher cannot drift apart: a URI
+# shape edited in one but not the other would advertise a template that never
+# resolves, and nothing would catch it.
+_BILL_URI_PATTERN = re.compile(
+    "^"
+    + re.escape(_BILL_URI_TEMPLATE).replace(r"\{bill_id\}", r"(?P<bill_id>\d+)")
+    + "$"
+)
+_PROMPT_RECONCILE = "reconcile_with_notion"
+_PROMPT_BUDGET_REVIEW = "monthly_budget_review"
+_MONTH_ARGUMENT = "month"
+_BILL_ID_ARGUMENT = "bill_id"
+# Completions are suggestions, not an index. One service page bounds the work;
+# ``has_more`` tells the client the list is truncated rather than exhaustive.
+_COMPLETION_PAGE_SIZE = 100
 
-def _tool_descriptors() -> list[types.Tool]:
-    """Build deterministic MCP descriptors from the canonical Pydantic DTOs."""
+
+@cache
+def _tool_descriptor_cache() -> tuple[types.Tool, ...]:
+    """Build the descriptors once; `model_json_schema()` dominates this call.
+
+    Measured at ~11 ms per build (two schema generations per tool), against
+    ~2 µs for the resource and prompt descriptor lists, which is why only this
+    one is memoized. The inputs are module constants, so the result is fixed for
+    the process lifetime — the same assumption the `tools/list` cache hint
+    already encodes.
+    """
     annotations = types.ToolAnnotations(
         read_only_hint=True,
         destructive_hint=False,
         idempotent_hint=True,
     )
-    return [
+    return tuple(
         types.Tool(
             name=spec.name,
             description=spec.description,
@@ -131,15 +179,26 @@ def _tool_descriptors() -> list[types.Tool]:
             annotations=annotations,
         )
         for spec in _TOOL_SPECS
-    ]
+    )
+
+
+def _tool_descriptors() -> list[types.Tool]:
+    """Return a fresh list over the shared, immutable-by-convention descriptors."""
+    return list(_tool_descriptor_cache())
+
+
+def _compact_json(payload: dict[str, Any]) -> str:
+    """Encode one payload in this server's wire format.
+
+    Single source for the compact, newline-free encoding: tool results and
+    resource contents must not drift apart on separators or escaping.
+    """
+    return json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
 
 
 def _text_content(payload: dict[str, Any]) -> types.TextContent:
     """Return one compact, newline-free compatibility text block."""
-    return types.TextContent(
-        type="text",
-        text=json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
-    )
+    return types.TextContent(type="text", text=_compact_json(payload))
 
 
 def _business_error_payload(error: AgentQueryError) -> dict[str, Any]:
@@ -233,7 +292,12 @@ async def _on_discover(
     """Return the modern discovery capabilities without a false listChanged flag."""
     return types.DiscoverResult(
         supported_versions=[_PROTOCOL_VERSION],
-        capabilities=types.ServerCapabilities(tools=types.ToolsCapability()),
+        capabilities=types.ServerCapabilities(
+            tools=types.ToolsCapability(),
+            resources=types.ResourcesCapability(),
+            prompts=types.PromptsCapability(),
+            completions=types.CompletionsCapability(),
+        ),
         result_type="complete",
     )
 
@@ -273,6 +337,304 @@ async def _on_call_tool(
         # echo sensitive database values or paths to stderr.
         logger.error("MCP Agent tool failed: %s", params.name)
         return _generic_tool_error()
+
+
+# --- Resources -------------------------------------------------------------
+
+
+def _resource_descriptors() -> list[types.Resource]:
+    """The two fixed projections a host can attach as context."""
+    return [
+        types.Resource(
+            name="pipeline_status",
+            title="CCAS pipeline status",
+            uri=_PIPELINE_STATUS_URI,
+            description=(
+                "The most recent CCAS pipeline run and its safe human-review status."
+            ),
+            mime_type=_JSON_MIME_TYPE,
+        ),
+        types.Resource(
+            name="payment_due",
+            title="CCAS unpaid bills",
+            uri=_PAYMENT_DUE_URI,
+            description="All unpaid CCAS bills ordered by due date.",
+            mime_type=_JSON_MIME_TYPE,
+        ),
+    ]
+
+
+def _resource_template_descriptors() -> list[types.ResourceTemplate]:
+    return [
+        types.ResourceTemplate(
+            name="bill",
+            title="CCAS bill",
+            uri_template=_BILL_URI_TEMPLATE,
+            description=(
+                "One CCAS bill by database ID, including its reconciliation identity."
+            ),
+            mime_type=_JSON_MIME_TYPE,
+        )
+    ]
+
+
+async def _read_projection(uri: str) -> ServiceProjection[Any]:
+    """Resolve one resource URI through the shared read-only services."""
+    match = _BILL_URI_PATTERN.match(uri)
+    if match is None and uri not in (_PIPELINE_STATUS_URI, _PAYMENT_DUE_URI):
+        raise MCPError(code=_INVALID_PARAMS, message="Resource not found")
+
+    session_factory = get_session_factory()
+    async with session_factory() as session:
+        if uri == _PIPELINE_STATUS_URI:
+            return await pipeline_status(session)
+        if uri == _PAYMENT_DUE_URI:
+            return await get_payment_due(session)
+        assert match is not None  # guarded above
+        return await get_bill(session, bill_id=int(match["bill_id"]))
+
+
+async def _on_list_resources(
+    _ctx: ServerRequestContext[Any], _params: types.PaginatedRequestParams | None
+) -> types.ListResourcesResult:
+    return types.ListResourcesResult(
+        resources=_resource_descriptors(), result_type="complete"
+    )
+
+
+async def _on_list_resource_templates(
+    _ctx: ServerRequestContext[Any], _params: types.PaginatedRequestParams | None
+) -> types.ListResourceTemplatesResult:
+    return types.ListResourceTemplatesResult(
+        resource_templates=_resource_template_descriptors(), result_type="complete"
+    )
+
+
+async def _on_read_resource(
+    _ctx: Any, params: types.ReadResourceRequestParams
+) -> types.ReadResourceResult:
+    """Read one resource, mapping business failures to JSON-RPC errors.
+
+    ``ReadResourceResult`` has no error channel of its own (unlike
+    ``CallToolResult.is_error``), so a business failure has to surface as a
+    protocol error. The message still goes through ``_business_error_payload``
+    so the same sanitization applies as on the tool path.
+    """
+    uri = str(params.uri)
+    try:
+        projection = await _read_projection(uri)
+    except MCPError:
+        raise
+    except AgentQueryError as exc:
+        # Carry the same public envelope the tool path returns, so a host can
+        # still tell `needs_human` apart from a plain not-found.
+        payload = _business_error_payload(exc)
+        raise MCPError(
+            code=_INVALID_PARAMS, message=payload["message"], data=payload
+        ) from exc
+    except Exception as exc:
+        # Never log or forward the exception object: the SDK's JSON-RPC
+        # dispatcher puts `str(exc)` straight on the wire for an uncaught
+        # handler exception, and a SQLAlchemy error can carry SQL, bound
+        # parameters, or the engine URL. A bad URI is the client's fault
+        # (-32602); this is the server's (-32603).
+        logger.error("MCP Agent resource read failed: %s", uri)
+        raise MCPError(
+            code=_INTERNAL_ERROR,
+            message="Agent query failed; manual review and check required.",
+        ) from exc
+
+    return types.ReadResourceResult(
+        contents=[
+            types.TextResourceContents(
+                uri=uri,
+                mime_type=_JSON_MIME_TYPE,
+                text=_compact_json(projection.payload.model_dump(mode="json")),
+            )
+        ],
+        result_type="complete",
+    )
+
+
+# --- Prompts ---------------------------------------------------------------
+
+# ADR-0001: Notion holds decision authority; CCAS is a verification source and
+# is never written back to. Every prompt restates that so an Agent acting on
+# these templates cannot drift from the recorded trust boundary.
+_BOUNDARY = (
+    "CCAS is a read-only verification source. Notion holds decision authority: "
+    "report differences for a human to resolve, and never write CCAS values "
+    "back into Notion or Notion values back into CCAS."
+)
+
+
+class _PromptSpec:
+    """Static descriptor metadata for one Agent prompt template."""
+
+    def __init__(self, name: str, summary: str, body: str) -> None:
+        self.name = name
+        self.summary = summary
+        self.body = body
+
+
+_PROMPT_SPECS: tuple[_PromptSpec, ...] = (
+    _PromptSpec(
+        _PROMPT_RECONCILE,
+        "Reconcile CCAS bills and transactions against Notion for one month.",
+        "Reconcile the CCAS record for {month} against Notion.\n\n"
+        "1. Call list_bills and query_transactions for {month}.\n"
+        "2. Compare each bill's amount, due date, and payment status with Notion.\n"
+        "3. Produce a difference report: matched, CCAS-only, Notion-only, "
+        "and conflicting rows.\n\n" + _BOUNDARY,
+    ),
+    _PromptSpec(
+        _PROMPT_BUDGET_REVIEW,
+        "Review configured CCAS budgets against actual spending for one month.",
+        "Review CCAS budgets for {month}.\n\n"
+        "1. Call budget_status with include_current_period set to true.\n"
+        "2. Call query_transactions for {month} to explain the largest "
+        "contributors to each over-budget scope.\n"
+        "3. Summarize which budgets are on track, at risk, and exceeded.\n\n"
+        + _BOUNDARY,
+    ),
+)
+_PROMPT_BY_NAME = {spec.name: spec for spec in _PROMPT_SPECS}
+
+
+def _prompt_descriptors() -> list[types.Prompt]:
+    return [
+        types.Prompt(
+            name=spec.name,
+            description=spec.summary,
+            arguments=[
+                types.PromptArgument(
+                    name=_MONTH_ARGUMENT,
+                    description="Billing month in YYYY-MM form.",
+                    required=True,
+                )
+            ],
+        )
+        for spec in _PROMPT_SPECS
+    ]
+
+
+async def _on_list_prompts(
+    _ctx: ServerRequestContext[Any], _params: types.PaginatedRequestParams | None
+) -> types.ListPromptsResult:
+    return types.ListPromptsResult(
+        prompts=_prompt_descriptors(), result_type="complete"
+    )
+
+
+async def _on_get_prompt(
+    _ctx: Any, params: types.GetPromptRequestParams
+) -> types.GetPromptResult:
+    spec = _PROMPT_BY_NAME.get(params.name)
+    if spec is None:
+        raise MCPError(code=_INVALID_PARAMS, message="Prompt not found")
+
+    arguments = params.arguments or {}
+    month = arguments.get(_MONTH_ARGUMENT)
+    if not month:
+        raise MCPError(code=_INVALID_PARAMS, message="Argument 'month' is required")
+    # Arguments are host-supplied free text that ends up inside model-facing
+    # instructions; sanitize before interpolation like every other echo path.
+    safe_month = sanitize_text(str(month))
+
+    return types.GetPromptResult(
+        description=spec.summary,
+        messages=[
+            types.PromptMessage(
+                role="user",
+                content=types.TextContent(
+                    type="text", text=spec.body.format(month=safe_month)
+                ),
+            )
+        ],
+        result_type="complete",
+    )
+
+
+# --- Completions -----------------------------------------------------------
+
+
+async def _completion_candidates() -> tuple[list[tuple[int, str]], bool]:
+    """`(bill_id, billing_month)` pairs for completion, plus a truncation flag.
+
+    Deliberately not ``list_bills``: that resolves bank names and card last-4s
+    and builds full ``AgentBill`` DTOs, all of which completion discards to keep
+    two scalars.
+    """
+    session_factory = get_session_factory()
+    async with session_factory() as session:
+        return await completion_candidates_query(session, limit=_COMPLETION_PAGE_SIZE)
+
+
+def _no_completions() -> types.CompleteResult:
+    return types.CompleteResult(
+        completion=types.Completion(values=[]), result_type="complete"
+    )
+
+
+def _matching(values: list[str], prefix: str) -> list[str]:
+    return [value for value in values if value.startswith(prefix)]
+
+
+async def _on_completion(
+    _ctx: Any, params: types.CompleteRequestParams
+) -> types.CompleteResult:
+    """Suggest argument values for prompts and the bill resource template.
+
+    The protocol only allows prompt and resource-template references here —
+    there is no tool reference — so tool arguments cannot be completed.
+    """
+    argument = params.argument
+    if (
+        isinstance(params.ref, types.ResourceTemplateReference)
+        and params.ref.uri == _BILL_URI_TEMPLATE
+    ):
+        completable = _BILL_ID_ARGUMENT
+    elif (
+        isinstance(params.ref, types.PromptReference)
+        and params.ref.name in _PROMPT_BY_NAME
+    ):
+        completable = _MONTH_ARGUMENT
+    else:
+        return _no_completions()
+    if argument.name != completable:
+        return _no_completions()
+
+    try:
+        candidates, has_more = await _completion_candidates()
+    except AgentQueryError:
+        # A business failure means "no suggestions", not a protocol error.
+        logger.warning("MCP Agent completion unavailable: %s", argument.name)
+        return _no_completions()
+    except Exception:
+        # Completion is a suggestion API, so degrading to an empty list is the
+        # right failure mode — but it is logged, never silent. The registration
+        # guard would also catch this; keeping it here preserves the argument
+        # name in the log and the empty-list shape instead of a protocol error.
+        logger.error("MCP Agent completion lookup failed: %s", argument.name)
+        return _no_completions()
+
+    if completable == _BILL_ID_ARGUMENT:
+        values = _matching(
+            [str(bill_id) for bill_id, _month in candidates], argument.value
+        )
+    else:
+        months: list[str] = []
+        for _bill_id, month in candidates:
+            if month and month not in months:
+                months.append(month)
+        values = _matching(months, argument.value)
+
+    return types.CompleteResult(
+        completion=types.Completion(
+            values=values, total=len(values), has_more=has_more
+        ),
+        result_type="complete",
+    )
 
 
 def _protocol_error(exc: Exception) -> SessionMessage:
@@ -352,19 +714,60 @@ class _ProtocolErrorReadStream:
         return None
 
 
+def _guarded[P, R](
+    method: str, handler: Callable[[Any, P], Awaitable[R]]
+) -> Callable[[Any, P], Awaitable[R]]:
+    """Last-resort redaction applied to every handler at registration.
+
+    The SDK's JSON-RPC dispatcher answers an uncaught handler exception with
+    `str(exc)` verbatim, so a SQLAlchemy failure would put SQL, bound parameters
+    or the engine URL on the wire. Each handler already redacts its own
+    failures in the shape its result type allows; this wrapper exists so a
+    handler that forgets — or one added later — still cannot leak. It never
+    masks an `MCPError`, which is a deliberate, already-safe protocol answer.
+    """
+
+    async def _run(ctx: Any, params: P) -> R:
+        try:
+            return await handler(ctx, params)
+        except MCPError:
+            raise
+        except Exception as exc:
+            logger.error("MCP Agent handler failed: %s", method)
+            raise MCPError(
+                code=_INTERNAL_ERROR,
+                message="Agent request failed; manual review and check required.",
+            ) from exc
+
+    return _run
+
+
 def create_server() -> Server[Any]:
     """Create a fresh read-only MCP server instance."""
     server = Server(
         "ccas-agent-mcp",
         version=__version__,
         description="Read-only CCAS bill, transaction, budget, and pipeline queries.",
-        on_list_tools=_on_list_tools,
-        on_call_tool=_on_call_tool,
+        on_list_tools=_guarded("tools/list", _on_list_tools),
+        on_call_tool=_guarded("tools/call", _on_call_tool),
+        on_list_resources=_guarded("resources/list", _on_list_resources),
+        on_list_resource_templates=_guarded(
+            "resources/templates/list", _on_list_resource_templates
+        ),
+        on_read_resource=_guarded("resources/read", _on_read_resource),
+        on_list_prompts=_guarded("prompts/list", _on_list_prompts),
+        on_get_prompt=_guarded("prompts/get", _on_get_prompt),
+        on_completion=_guarded("completion/complete", _on_completion),
+        cache_hints=_CACHE_HINTS,
     )
     # The SDK's default modern capability derivation serializes
     # ``listChanged=false``.  This server does not implement change
     # notifications, so omit the hint entirely as required by the contract.
-    server.add_request_handler("server/discover", types.RequestParams, _on_discover)
+    server.add_request_handler(
+        "server/discover",
+        types.RequestParams,
+        _guarded("server/discover", _on_discover),
+    )
     return server
 
 

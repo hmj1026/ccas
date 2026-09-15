@@ -11,7 +11,7 @@ from __future__ import annotations
 from mcp.server.auth.provider import AccessToken
 from mcp.server.auth.settings import AuthSettings
 from mcp.server.transport_security import TransportSecuritySettings
-from pydantic import AnyHttpUrl, TypeAdapter
+from pydantic import AnyHttpUrl, ConfigDict, TypeAdapter
 from starlette.types import ASGIApp
 
 from ccas.api.deps import is_valid_api_token
@@ -21,6 +21,10 @@ from ccas.mcp.server import create_server
 _LOOPBACK_HOSTS: frozenset[str] = frozenset({"127.0.0.1", "::1", "localhost"})
 _STREAMABLE_HTTP_PATH = "/mcp"
 _HTTP_URL = TypeAdapter(AnyHttpUrl)
+# RFC 8414/9207 compare issuers by exact string; pydantic's default AnyHttpUrl
+# appends a trailing slash to a path-less URL, which would silently break that
+# comparison. Preserve the empty path, matching the SDK's own AuthSettings.
+_ISSUER_URL = TypeAdapter(AnyHttpUrl, config=ConfigDict(url_preserve_empty_path=True))
 
 
 def _require_loopback_host(host: str) -> str:
@@ -48,6 +52,36 @@ class _ApiTokenVerifier:
         )
 
 
+def _auth_settings(resource_url: AnyHttpUrl, issuer_url: str) -> AuthSettings:
+    """Build auth settings, publishing RFC 9728 metadata only when honest.
+
+    ``resource_server_url`` is what makes the SDK mount
+    ``/.well-known/oauth-protected-resource`` and add ``resource_metadata`` to
+    the 401 challenge. Pointing that document at CCAS itself would advertise an
+    authorization server CCAS does not run, sending RFC 9728 clients into an
+    OAuth flow that cannot complete — strictly worse than the plain 401 they
+    get from the static-Bearer contract. So discovery is published only once an
+    operator names a real authorization server.
+
+    ``validate_token_resource`` stays explicitly ``False``: ``_ApiTokenVerifier``
+    checks a static token that carries no RFC 8707 resource indicator. Leaving
+    it unset would emit an SDK deprecation warning instead.
+    """
+    if not issuer_url:
+        return AuthSettings(
+            issuer_url=resource_url,
+            resource_server_url=None,
+            required_scopes=[],
+            validate_token_resource=False,
+        )
+    return AuthSettings(
+        issuer_url=_ISSUER_URL.validate_python(issuer_url),
+        resource_server_url=resource_url,
+        required_scopes=[],
+        validate_token_resource=False,
+    )
+
+
 def create_http_app() -> ASGIApp:
     """Build the loopback Streamable HTTP ASGI app, or refuse to start."""
     settings = get_settings()
@@ -67,12 +101,7 @@ def create_http_app() -> ASGIApp:
                 "http://[::1]:*",
             ],
         ),
-        auth=AuthSettings(
-            issuer_url=resource_url,
-            resource_server_url=None,
-            required_scopes=[],
-            validate_token_resource=False,
-        ),
+        auth=_auth_settings(resource_url, settings.mcp_oauth_issuer_url.strip()),
         token_verifier=_ApiTokenVerifier(),
     )
 

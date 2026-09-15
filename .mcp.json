@@ -1,9 +1,16 @@
 {
-  "_comment": "Project-level MCP servers. Currently mirrors the global GitNexus entry so CCAS is reproducible on a fresh machine. Removed plugin-provided servers (github/context7/exa/memory/playwright/sequential-thinking) — those come from the everything-claude-code plugin and would duplicate.",
+  "_comment": "Project-level MCP servers. Mirrors the global GitNexus entry so CCAS is reproducible on a fresh machine, plus CCAS's own read-only agent server. Removed plugin-provided servers (github/context7/exa/memory/playwright/sequential-thinking) — those come from the everything-claude-code plugin and would duplicate. The ccas entry needs `ccas-mcp-http` running on loopback and API_TOKEN in the environment; never commit a real token here.",
   "mcpServers": {
     "gitnexus": {
       "command": "npx",
       "args": ["-y", "gitnexus@1.6.3", "mcp"]
+    },
+    "ccas": {
+      "type": "http",
+      "url": "http://127.0.0.1:8001/mcp",
+      "headers": {
+        "Authorization": "Bearer ${API_TOKEN}"
+      }
     }
   }
 }
