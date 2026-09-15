@@ -1,4 +1,4 @@
-<!-- Verified: 2026-09-10 | Canonical details: ../current-implementation.md -->
+<!-- Verified: 2026-09-15 | Canonical details: ../current-implementation.md -->
 
 # Data
 
@@ -27,6 +27,10 @@ SQLite triggers 同步維護 `updated_at`（避開 ORM `onupdate=` 在 Core-styl
 | is_notified | bool | default False, set after Telegram notify |
 | file_path | str? | |
 | created_at | datetime | |
+| parse_method | str? | parser／OCR 使用方式；解析 metadata migration 後可為 NULL |
+| parse_confidence | float? | parser 對結果的信心分數 |
+| needs_review | bool? | 是否需要人工複核 |
+| review_reasons | JSON? | 人工複核原因清單 |
 | **UQ** | (bank_code, billing_month) | |
 
 ### transactions
@@ -188,3 +192,4 @@ PipelineRun (no FK，獨立紀錄)
 | a344841591e6 | Add bills.due_date_estimated（CTBC estimated due date marker，v0.4.0） |
 | 413739f494ff | Add budget_alerts.notified |
 | 7f3ae66246a3 | Add bank_login_credentials |
+| d4e7f2a1b9c3 | Add bills parse metadata (`parse_method`, `parse_confidence`, `needs_review`, `review_reasons`) |

@@ -2,11 +2,18 @@
 
 本手冊面向非開發者使用者，涵蓋從環境設定到日常操作的完整流程。
 
+本手冊的指令以 repository 根目錄的 `docker compose up --build` 為前提；Compose
+會自動載入開發 override，前端位於 `http://localhost:5173`。若只想使用已發布的
+image，請改讀 [快速安裝](install-quickstart.md)，其對外入口預設為 `8080`。
+
+本機 HTTP 開發請設定 `API_COOKIE_SECURE=false`，否則登入 session cookie
+不會在 HTTP 請求中送出；若前方配置 HTTPS，則維持 `API_COOKIE_SECURE=true`。
+
 ## 前置需求
 
 - Docker 和 Docker Compose（[安裝指南](https://docs.docker.com/get-docker/)）
 - Google Cloud 專案（啟用 Gmail API，下載 OAuth 憑證）
-- Telegram Bot（透過 BotFather 建立）
+- Telegram Bot（只有要發送通知或使用 Bot 指令時需要）
 
 ## 1. 取得專案
 
@@ -21,16 +28,16 @@ cd ccas
 cp .env.example .env
 ```
 
-編輯 `.env`，填入以下必要變數：
+編輯 `.env`。以下欄位依功能選填；Docker entrypoint 會在 `API_TOKEN` 未設定時自動產生並保存至 `backend/data/secrets/api-token`：
 
 | 變數 | 說明 | 範例 |
 |------|------|------|
-| `API_TOKEN` | API 認證 token（自訂一組安全字串） | `my-secret-token-2026` |
+| `API_TOKEN` | API 認證 token；不填則由 entrypoint 自動產生 | `my-secret-token-2026` |
 | `TELEGRAM_BOT_TOKEN` | Telegram Bot token（從 @BotFather 取得） | `123456:ABC-DEF...` |
-| `TELEGRAM_CHAT_ID` | Pipeline 通知目標 chat ID（見[第 4 節](#4-設定-telegram-bot)） | `123456789` |
+| `TELEGRAM_CHAT_ID` | Pipeline 通知目標 chat ID | `123456789` |
 | `TELEGRAM_ALLOWED_CHAT_IDS` | Bot 指令白名單 chat ID，逗號分隔 | `123456789,-1001234567890` |
-| `GMAIL_CREDENTIALS_PATH` | Google OAuth 憑證路徑 | `./data/credentials.json` |
-| `GMAIL_TOKEN_PATH` | Gmail token 儲存路徑 | `./data/token.json` |
+| `GMAIL_CREDENTIALS_PATH` | Google OAuth 憑證路徑；執行 Gmail ingest 時需要 | `./data/credentials.json` |
+| `GMAIL_TOKEN_PATH` | Gmail token 儲存路徑；完成 OAuth 後產生 | `./data/token.json` |
 | `STAGING_DIR` | PDF 暫存目錄 | `./data/staging` |
 
 本機直接執行腳本時，以上 `./data/...` 會解析到 `backend/data/...`。
@@ -55,10 +62,8 @@ cp .env.example .env
 
 ## 3. 設定 Gmail API
 
-1. 前往 [Google Cloud Console](https://console.cloud.google.com/)
-2. 建立專案 → 啟用 Gmail API
-3. 建立 OAuth 2.0 用戶端 ID（桌面應用程式）
-4. 下載 `credentials.json`，放到 `.env` 中 `GMAIL_CREDENTIALS_PATH` 指定的路徑
+依 [Gmail OAuth 設定指南](gmail-setup.md) 建立 Google Cloud 憑證。一般情況請先啟動
+CCAS、登入 Web UI，再從 `/setup/gmail` 上傳 `credentials.json` 並完成授權；CLI 是無法使用 Web flow 時的後援。
 
 ## 4. 設定 Telegram Bot
 
@@ -197,7 +202,7 @@ cp config/banks.example.yaml config/banks.yaml
    民國生日格式為 7 碼：民國年 3 碼 + 月 2 碼 + 日 2 碼（例如民國 88 年 10 月 10 日 = `0881010`）
 4. Gmail filter 會自動匹配寄件者 `rs@cf.taipeifubon.com.tw` 且主旨包含「台北富邦銀行」+「信用卡帳單」的郵件
 
-### FUBON 手動下載步驟（SPA 自動化完成前的 fallback）
+### FUBON 手動下載步驟（web-fetch 失敗時的 fallback）
 
 富邦網銀帳單系統已遷移為 SPA 架構，自動下載可能因驗證碼或 OTP 失敗。此時可改用手動下載：
 
@@ -244,7 +249,7 @@ docker compose up --build
 | `worker` | — | RQ worker（Redis job queue） |
 | `scheduler` | — | APScheduler 週期性任務 |
 | `bot` | — | Telegram Bot daemon |
-| `frontend` | `127.0.0.1:8080` | nginx 靜態站（已 build） |
+| `frontend` | `127.0.0.1:5173` | Vite 開發伺服器（override 自動載入） |
 | `redis` | `127.0.0.1:6379` | job queue + 快取 |
 
 首次啟動 `backend` 時，`scripts/docker-entrypoint.sh` 會在容器內：
@@ -256,8 +261,8 @@ docker compose up --build
 
 驗證服務正常：
 ```bash
-curl http://localhost:8000/health   # backend health check
-open http://localhost:8080          # frontend 儀表板
+curl http://127.0.0.1:8000/health   # backend health check
+open http://localhost:5173          # frontend 儀表板
 ```
 
 > **僅需要伺服器端（不含 frontend）？** 用 `docker compose up backend worker scheduler bot redis`。遠端部署的完整流程見 [部署指南](deployment-guide.md)。
@@ -302,8 +307,8 @@ Pipeline 階段順序：`ingest` → `decrypt` → `parse` → `classify` → `n
 
 ## 8. 查看報表
 
-1. 開啟瀏覽器 http://localhost:8080
-2. 使用 `.env` 中的 `API_TOKEN` 登入
+1. 開啟瀏覽器 http://localhost:5173
+2. 使用 `.env` 中的 `API_TOKEN` 登入；若未設定，讀取 `backend/data/secrets/api-token`
 3. 瀏覽各頁面：帳單列表、交易明細、分析圖表
 
 ## 9. 停止服務

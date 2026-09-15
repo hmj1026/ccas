@@ -7,7 +7,8 @@
 > - **dev（含原始碼）**：見 [docs/developer-guide.md](developer-guide.md)，根目錄 `docker-compose.yaml` + override
 > - **prod（pull-only）**：本文，`docker/docker-compose.yml` 純 image
 >
-> **prod self-build 中間路徑（在根目錄 compose 上 `--target production`）已棄用**。如需本機驗證 production image，請改用 `CCAS_VERSION=local` 搭配 prod compose（見「進階：自建本機 image」段落）。
+> 一般使用者請用本文的 pull-only 路徑；需要自建 production image 時，改讀
+> [進階部署指南](deployment-guide.md)，並明確使用根目錄 `docker-compose.yaml`。
 
 ---
 
@@ -48,7 +49,7 @@ cp example.env .env
 | 變數 | 值 |
 |---|---|
 | `REPO_OWNER` | GHCR namespace（即 release 連結中的 `<owner>`） |
-| `CCAS_VERSION` | 與 release tag 一致（例：`v0.1.0`） |
+| `CCAS_VERSION` | 與 release tag 一致（例：`v0.9.0`；也可直接使用上方 `RELEASE`） |
 
 **可稍後在 Web UI 設定**：
 
@@ -71,6 +72,9 @@ cp example.env .env
 
 > `API_TOKEN` **可不填**：entrypoint 首啟會自動產生 32-byte token 並落地至
 > `${CCAS_DATA_LOCATION}/secrets/api-token`（檔案權限 0600）。若顯式設為空字串會被驗證腳本擋下。
+
+若只以 HTTP 在 localhost 驗證，請另設 `API_COOKIE_SECURE=false`；若前方已有 HTTPS
+TLS，則維持 `true`。
 
 ## 步驟 4：啟動
 
@@ -132,6 +136,7 @@ cat ./data/secrets/api-token   # CCAS_DATA_LOCATION 對應路徑
 | `/setup/gmail` | 上傳 `credentials.json`、確認 redirect URI、點「授權 Google」、查看 connected 狀態或 revoke |
 | `/setup/banks` | 啟用 / 停用銀行，查看已收 PDF 數與最後 ingest 時間 |
 | `/setup/secrets` | 設定各銀行 PDF 密碼；密碼以 `master.key` 加密存入 DB，可一鍵匯入既有 env 密碼 |
+| `/setup/login-credentials` | 管理 FUBON 等銀行 web-fetch 所需的加密登入憑證 |
 | `/setup/admin` | 查看 token last-4 / version，旋轉 API token |
 
 `/setup/secrets` 會永久顯示 master.key 備份提醒。請定期備份整個 `${CCAS_DATA_LOCATION}`

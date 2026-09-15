@@ -9,7 +9,8 @@ CCAS 在 `bills-management-and-insights` change 之後支援以下個人帳務�
 - **Insights**：銀行對比、年度對比、商家排行、類別月對月變化
 - **匯出**：CSV / xlsx 兩種格式，支援日期 / 銀行 / 類別 filter
 
-> 路徑前綴假設為 dashboard 預設 `http://localhost:8080`。
+> 路徑前綴：pull-only／self-build production 預設為 `http://localhost:8080`；根目錄 dev
+> Compose（自動載入 override）則為 `http://localhost:5173`。
 
 ---
 
@@ -178,7 +179,7 @@ curl -fsS -X POST -H "Authorization: Bearer $TOKEN" \
 | 銀行對比（長條圖）| `/api/analytics/compare/banks?year=&month=` | 共用頁面頂部 FilterBar |
 | 年度對比（折線圖）| `/api/analytics/compare/years?metric=total\|count` | metric select |
 | 商家排行（表格）| `/api/analytics/top-merchants?limit=5\|10\|20&period=all\|month\|year` | period / limit select |
-| 類別 vs 上月（list） | `/api/analytics/categories?month=&compare_with_previous=true` | 需先填 month；上月為 0 顯示「—」 |
+| 類別 vs 上月（list） | `/api/analytics/categories/compare?month=` | `month` 必填；上月為 0 顯示「—」 |
 
 > 所有 query 都共用 dashboard 既有 `Authorization: Bearer` token。
 
@@ -211,7 +212,7 @@ curl -fsS -H "Authorization: Bearer $TOKEN" \
 
 1. `docker compose pull && up -d` 自動跑 alembic upgrade head
 2. 既有 transactions 的 `manual_category_override` 欄位預設 `false`、`tags=[]`、`merchant_alias=''`、`note=null`
-3. 既有 `analytics_v1` API 全部保留（`/api/analytics/categories` 不帶 `compare_with_previous` 仍走 legacy schema）
+3. 既有 `analytics_v1` API 全部保留；`/api/analytics/categories` 固定回傳單月分類資料，月對月比較使用獨立的 `/categories/compare`
 4. PaymentReminder 表保留為 sent log；新表 `reminder_settings` 獨立
 
 詳細 migration 影響見 [docs/upgrade-guide.md](upgrade-guide.md)。

@@ -396,7 +396,7 @@ export interface TopMerchantItem {
   readonly count: number
 }
 
-/** Category with month-over-month compare (`compare_with_previous=true`)。 */
+/** Category with month-over-month compare (`/categories/compare?month=...`)。 */
 export interface CategoryWithCompareItem {
   readonly category: string
   readonly total: number
