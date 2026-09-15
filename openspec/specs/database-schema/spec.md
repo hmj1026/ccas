@@ -5,7 +5,7 @@ TBD - created by archiving change foundation-setup. Update Purpose after archive
 ## Requirements
 ### Requirement: 帳單主表資料模型
 
-系統 SHALL 維持 `Bill` 資料模型的既有欄位與唯一約束，新增 `is_notified` 欄位追蹤通知狀態，且 `created_at` 的 Python 端預設值 SHALL 由 naive `datetime.utcnow()` 改為 timezone-aware 的 `datetime.now(UTC)`。
+系統 SHALL 維持 `Bill` 資料模型的既有欄位與唯一約束，新增 `is_notified` 欄位追蹤通知狀態，且 `created_at` 的 Python 端預設值 SHALL 由 naive `datetime.utcnow()` 改為 timezone-aware 的 `datetime.now(UTC)`。系統 SHALL 另外新增四個 nullable DB 欄位承載解析中繼資料：`parse_method`、`parse_confidence`、`needs_review`、`review_reasons`（JSON 陣列）；Python／schema defaults 由 `parse-result-schema` 定義，四者皆不影響既有 `(bank_code, billing_month)` 唯一約束。
 
 #### MODIFIED Scenario: 建立帳單紀錄
 - **WHEN** 建立一筆 `Bill`
@@ -18,6 +18,16 @@ TBD - created by archiving change foundation-setup. Update Purpose after archive
 #### ADDED Scenario: 既有帳單視為已通知
 - **WHEN** Alembic migration 套用至既有資料庫
 - **THEN** 所有現有 Bill 的 `is_notified` SHALL 設為 `True`（避免舊帳單重發通知）
+
+#### ADDED Scenario: 新增解析中繼資料欄位為 nullable 且有預設值
+
+- **WHEN** Alembic migration 套用至既有資料庫
+- **THEN** 既有 `Bill` 紀錄的 `parse_method`/`parse_confidence`/`needs_review`/`review_reasons` SHALL 可為 `NULL`，不需要為既有紀錄回填任何推斷值
+
+#### ADDED Scenario: 新建立的帳單帶入解析中繼資料
+
+- **WHEN** parse orchestration 成功建立一筆新的 `Bill`
+- **THEN** 該筆 `Bill` 的 `parse_method`/`parse_confidence`/`needs_review`/`review_reasons` SHALL 依 `parse-result-schema` 定義的欄位值寫入，不再是 `NULL`
 
 ### Requirement: 消費明細資料表模型
 
