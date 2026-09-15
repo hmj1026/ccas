@@ -23,7 +23,7 @@
 | HTTP bind | 預設 `MCP_HTTP_HOST=127.0.0.1`；非 loopback 在 `create_http_app()` fail-closed，不是 Settings validator（誤設 `0.0.0.0` 不得讓 worker／API 起不來） |
 | HTTP 認證 | `Authorization: Bearer`，token 與 REST 的 `API_TOKEN`／`current_api_token()` 相同；**不接受** REST session cookie |
 | 常駐 | supervisord capability `mcp-http`（比照 `api`）。systemd／launchd **不支援** |
-| Release metadata | 與 `backend/src/ccas/__init__.py` 的 package metadata 同步；目前為 v0.9.0 |
+| Release metadata | 與 `backend/src/ccas/__init__.py` 的 package metadata 同步；目前為 v0.9.1 |
 | Transport | stdio（stdout 僅 MCP JSON）或官方 SDK Streamable HTTP；禁止 deprecated HTTP+SSE |
 | Tools | `list_bills`、`get_bill`、`query_transactions`、`get_payment_due`、`budget_status`、`pipeline_status` |
 | 寫入 | 未提供；`AGENT_WRITE_ENABLED` 不會把目前 server 變成寫入介面 |

@@ -14,7 +14,7 @@
 cd ~/ccas    # 你 docker-compose.yml 所在的目錄
 
 # 1) 修改 .env 的版本
-sed -i 's/^CCAS_VERSION=.*/CCAS_VERSION=v0.9.0/' .env
+sed -i 's/^CCAS_VERSION=.*/CCAS_VERSION=v0.9.1/' .env
 
 # 2) 拉新 image 並重啟
 docker compose -f docker-compose.yml pull
@@ -40,7 +40,7 @@ URL，見 [`mcp-installation.md`](mcp-installation.md)。systemd／launchd **不
 ```bash
 cd /path/to/ccas
 git fetch --tags
-git checkout v0.9.0    # 改成目標 tag
+git checkout v0.9.1    # 改成目標 tag
 
 cd backend
 uv sync --frozen --extra supervisor
@@ -69,8 +69,8 @@ cd ..
 無 systemd 時 Redis 與 supervisord 重開機後都不會自己起來；開機 checklist 見
 [`non-docker-agent-host.md`](non-docker-agent-host.md) 與
 [`non-docker-host-services.md`](non-docker-host-services.md)。
-`host-services.sh` 不會跑 alembic；本次 v0.9.0 包含帳單解析 metadata migration，非 Docker
-升級請先在 `backend/` 執行 `uv run alembic upgrade head`，再安裝或重啟服務。
+`host-services.sh` 不會跑 alembic；有 schema 變更時先在 `backend/` 執行
+`uv run alembic upgrade head`。v0.9.1 無資料庫 schema 變更。
 
 ---
 
@@ -85,6 +85,18 @@ CCAS 採 [SemVer](https://semver.org/)：
 | Major（`v0.x.x` → `v1.0.0`） | 可能 breaking change；release notes 會明示 | 升級前**閱讀 release notes**、備份 |
 
 每次 release 的詳細 changelog 見 [GitHub Releases](https://github.com/<owner>/ccas/releases)。
+
+---
+
+## v0.9.1（Patch）— 2026-09-15 — 系統文件與現有實作全面同步
+
+**適用對象**：v0.9.0 升級至 v0.9.1。無資料庫 schema 變更，不需執行 migration。
+
+**文件與架構同步（#69）**：
+- 全面同步 31 份架構文件、CODEMAPS、部署指南與 API 規格，消除與現有程式碼之落差。
+- 更新 GitNexus 代碼知識庫索引數據。
+
+**升級後**：本版為純文件與索引同步；已部署 v0.9.0 之 Docker 或非 Docker 環境功能行為不受影響，可選擇性更新至 `v0.9.1`。
 
 ---
 
