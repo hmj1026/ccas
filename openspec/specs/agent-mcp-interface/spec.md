@@ -5,14 +5,19 @@ TBD - created by archiving change add-agent-mcp-interface. Update Purpose after 
 ## Requirements
 ### Requirement: MCP 使用現行協定版本、探索與能力宣告
 
-系統 SHALL 以 MCP `2026-07-28` 現行協定作為 wire contract。Server SHALL 實作 `server/discover`，讓 client 在任何其他 MCP request 前取得 `supportedVersions`、`capabilities` 與 server identity。Server SHALL 宣告 `capabilities.tools`；除非實作工具清單變更通知，否則不得宣告 `tools.listChanged`。`server/discover` 與後續 request SHALL 使用 JSON-RPC 2.0，且每個 modern request 的 `_meta` SHALL 包含 `io.modelcontextprotocol/protocolVersion` 與 `io.modelcontextprotocol/clientCapabilities`；`io.modelcontextprotocol/clientInfo` 為 optional，CCAS 自有 client SHOULD 提供但 server 不得因缺少它而拒絕合法 request。Discovery response 的 server identity SHALL 放在 `result._meta["io.modelcontextprotocol/serverInfo"]`，不得放成自訂的頂層 `serverInfo`。
+系統 SHALL 以 MCP `2026-07-28` 現行協定作為 wire contract。Server SHALL 實作 `server/discover`，讓 client 在任何其他 MCP request 前取得 `supportedVersions`、`capabilities` 與 server identity。Server SHALL 宣告 `capabilities.tools`、`capabilities.resources`、`capabilities.prompts` 與 `capabilities.completions`；除非實作對應的變更通知或訂閱，否則不得宣告 `tools.listChanged`、`resources.listChanged`、`resources.subscribe` 或 `prompts.listChanged`。`server/discover` 與後續 request SHALL 使用 JSON-RPC 2.0，且每個 modern request 的 `_meta` SHALL 包含 `io.modelcontextprotocol/protocolVersion` 與 `io.modelcontextprotocol/clientCapabilities`；`io.modelcontextprotocol/clientInfo` 為 optional，CCAS 自有 client SHOULD 提供但 server 不得因缺少它而拒絕合法 request。Discovery response 的 server identity SHALL 放在 `result._meta["io.modelcontextprotocol/serverInfo"]`，不得放成自訂的頂層 `serverInfo`。
 
 所有包含 `result` 的 JSON-RPC result（包含 discovery、`tools/list`、`tools/call` 的成功或 tool execution failure result）SHALL 包含 `resultType="complete"`；本 change 不使用 `input_required`。JSON-RPC protocol error 沒有 `result`，因此不適用 `resultType`。若 SDK 同時支援舊版 client，client SHALL 只在 discovery 回傳其他錯誤或合理逾時／無回應時 fallback 到 legacy `initialize`；若收到 `UnsupportedProtocolVersionError`，代表對端是 modern server，client 應改選 `supportedVersions` 中的版本，不得 fallback 到 `initialize`。本 change 不得把 legacy `initialize` 當成現行協定唯一的 handshake。Server 收到不支援的協定版本時 SHALL 回報 `UnsupportedProtocolVersionError`，且不得執行該 request 的工具副作用。
 
 #### Scenario: 現代 client 先完成 server discovery
 
 - **WHEN** client 以目標協定版本呼叫 `server/discover`
-- **THEN** server SHALL 回傳 `resultType="complete"`、`supportedVersions`、`capabilities.tools` 與 `result._meta["io.modelcontextprotocol/serverInfo"].name`／`.version`，並允許 client 再呼叫 `tools/list`
+- **THEN** server SHALL 回傳 `resultType="complete"`、`supportedVersions`、`capabilities.tools`／`.resources`／`.prompts`／`.completions` 與 `result._meta["io.modelcontextprotocol/serverInfo"].name`／`.version`，並允許 client 再呼叫 `tools/list`、`resources/list`、`prompts/list`
+
+#### Scenario: 不宣告未實作的變更通知
+
+- **WHEN** client 讀取 discovery 回傳的 `capabilities`
+- **THEN** `resources.listChanged`、`resources.subscribe` 與 `prompts.listChanged` SHALL 為未設定；連 `false` 都不得序列化出現（`false` 仍是「已實作但關閉」的假承諾），且 server 不得送出對應的 `notifications/*`
 
 #### Scenario: 不支援的協定版本不執行工具
 
@@ -167,3 +172,172 @@ stdio MCP server SHALL 將每個 JSON-RPC request、notification 或 response �
 - **WHEN** Agent 以本 change 的 server 呼叫任一未列在 `tools/list` 的寫入 tool
 - **THEN** server SHALL 回傳未知 tool 的 protocol error，且保持資料不變；不得以部分實作或開關值推測授權
 
+### Requirement: Resources 以唯讀投影提供可附加的 context
+
+Server SHALL 提供兩個固定 resource：`ccas://pipeline/status` 與 `ccas://payment-due`，以及一個 resource template `ccas://bill/{bill_id}`。三者的 `mimeType` SHALL 為 `application/json`，內容 SHALL 由與 tools 相同的 `ccas.services` 唯讀投影 DTO 序列化，不得新增繞過該投影的查詢路徑。`resources/list` 與 `resources/templates/list` SHALL 使用 deterministic order。Resource 內容 SHALL 受與 tools 相同的 secrets 邊界拘束。
+
+#### Scenario: 讀取單一帳單 resource
+
+- **WHEN** client 以存在的 bill ID 呼叫 `resources/read`，URI 為 `ccas://bill/<id>`
+- **THEN** server SHALL 回傳 `resultType="complete"`，`contents` 只含一個 `mimeType="application/json"` 的 text block，其內容等同 `get_bill` tool 的 structured payload
+
+#### Scenario: 未知的 resource URI 是 client 錯誤
+
+- **WHEN** client 以不符合任何固定 resource 或 template 的 URI 呼叫 `resources/read`
+- **THEN** server SHALL 回傳 JSON-RPC error code `-32602`，不得回傳部分內容
+
+#### Scenario: 業務錯誤保留可判讀的錯誤信封
+
+- **WHEN** client 讀取一個不存在的 `ccas://bill/{bill_id}`
+- **THEN** server SHALL 回傳 code `-32602`，`message` 為已 sanitize 的文字，且 `data` SHALL 含與 tool 路徑相同的 `code`（`resource_not_found`）欄位
+
+#### Scenario: 非預期失敗不得外洩例外文字
+
+- **WHEN** resource 讀取過程發生非業務性的非預期例外（例如資料庫故障）
+- **THEN** server SHALL 回傳 code `-32603` 與固定的安全訊息，且回應內容不得包含原始例外文字、SQL、bound parameter 或資料庫連線字串
+
+### Requirement: Prompts 提供對帳模板並重述信任邊界
+
+Server SHALL 提供兩個 prompt：`reconcile_with_notion` 與 `monthly_budget_review`，各接受必填參數 `month`。`prompts/get` 回傳的訊息內文 SHALL 重述 ADR-0001 的信任邊界：Notion 持有決策權、CCAS 為唯讀驗證來源、差異只回報給人不得自動回寫任一方。`month` 參數在插入訊息前 SHALL 經過與其他回顯路徑相同的 sanitization。未知的 prompt 名稱或缺少 `month` SHALL 回傳 JSON-RPC error。
+
+#### Scenario: 取得對帳 prompt
+
+- **WHEN** client 以 `month="2026-03"` 呼叫 `prompts/get`，name 為 `reconcile_with_notion`
+- **THEN** server SHALL 回傳 `resultType="complete"` 與至少一則 user 訊息，內文含該月份、指向既有唯讀 tools 的步驟，以及 Notion 決策權與 CCAS 唯讀的敘述
+
+#### Scenario: 未知 prompt 被拒絕
+
+- **WHEN** client 以未註冊的 prompt 名稱呼叫 `prompts/get`
+- **THEN** server SHALL 回傳 JSON-RPC error，不得回傳任何訊息內容
+
+### Requirement: Argument completion 僅涵蓋協定允許的參照
+
+Server SHALL 實作 `completion/complete`，並只對 prompt 的 `month` 參數與 resource template `ccas://bill/{bill_id}` 的 `bill_id` 參數提供候選值。MCP 的 `completion/complete` `ref` 只接受 prompt reference 與 resource template reference，沒有 tool reference，因此 tool 參數 SHALL NOT 被視為可補全。候選值 SHALL 由既有 `list_bills` service 的單一頁投影推導，並以 `hasMore` 標示清單被截斷。無法提供候選時 SHALL 回傳空清單，且不得外洩例外文字。
+
+#### Scenario: 補全帳單 ID
+
+- **WHEN** client 以 template reference `ccas://bill/{bill_id}` 與空字串 `bill_id` 呼叫 `completion/complete`
+- **THEN** server SHALL 回傳現有帳單的 ID 字串清單，並在超出單頁時將 `hasMore` 設為 true
+
+#### Scenario: 不可補全的參照回傳空清單
+
+- **WHEN** client 對未註冊的參數或非上述兩種參照呼叫 `completion/complete`
+- **THEN** server SHALL 回傳 `resultType="complete"` 與空的 `values`，不得回傳 JSON-RPC error
+
+#### Scenario: 補全失敗時降級而非外洩
+
+- **WHEN** 補全查詢過程發生非預期例外
+- **THEN** server SHALL 回傳空的 `values`，記錄錯誤，且回應不得包含原始例外文字
+
+### Requirement: 靜態清單結果帶 SEP-2549 快取提示
+
+`server/discover`、`tools/list`、`prompts/list`、`resources/list` 與 `resources/templates/list` 的 result SHALL 包含 `ttlMs` 與 `cacheScope`。這些回應皆在 Bearer 授權之後產生，`cacheScope` SHALL 為 `private`，不得為 `public`。`resources/read` 的內容為即時 CCAS 資料，SHALL NOT 宣告非零的 `ttlMs`。
+
+#### Scenario: 工具清單可被 client 快取
+
+- **WHEN** client 呼叫 `tools/list`
+- **THEN** result SHALL 包含非零 `ttlMs` 與 `cacheScope="private"`
+
+### Requirement: 授權探索文件只在有真實 authorization server 時發布
+
+Server SHALL 以設定 `MCP_OAUTH_ISSUER_URL` 決定是否發布 RFC 9728 protected resource metadata。未設定時 server SHALL NOT 提供 `/.well-known/oauth-protected-resource`，且 401 的 `WWW-Authenticate` SHALL NOT 含 `resource_metadata`——把探索指向一台 CCAS 並不營運的 authorization server，會使遵循規格的 client 進入無法完成的 OAuth 流程，比不發布更糟。設定為合法 HTTP(S) URL 時，server SHALL 發布該文件並在 401 challenge 帶 `resource_metadata`。設定為不合法的 URL 時 SHALL 在啟動即失敗，不得靜默停用探索。無論是否設定，loopback adapter 的 token 驗證語意 SHALL 不變：Bearer 比對既有 API token，且 SHALL NOT 接受 REST session cookie。遠端（非 loopback）暴露的授權模型不在本 capability 範圍內，由後續 ADR 定義。
+
+#### Scenario: 預設不發布探索文件
+
+- **WHEN** `MCP_OAUTH_ISSUER_URL` 未設定，client 未帶 Bearer 呼叫 MCP endpoint
+- **THEN** server SHALL 回 401，`WWW-Authenticate` 不含 `resource_metadata`，且 `/.well-known/oauth-protected-resource` SHALL 回 404
+
+#### Scenario: 設定 issuer 後發布探索文件
+
+- **WHEN** `MCP_OAUTH_ISSUER_URL` 設為合法 URL，client 未帶 Bearer 呼叫 MCP endpoint
+- **THEN** server SHALL 回 401 且 `WWW-Authenticate` 含指向 protected resource metadata 的 `resource_metadata`；該文件的 `resource` 為 MCP endpoint canonical URI，`authorization_servers` 為所設定的 issuer
+
+#### Scenario: 不合法的 issuer 在啟動失敗
+
+- **WHEN** `MCP_OAUTH_ISSUER_URL` 設為不是 HTTP(S) URL 的值
+- **THEN** 建立 MCP HTTP app SHALL 拋出錯誤，不得以停用探索的方式繼續啟動
+
+### Requirement: MCP 可以 loopback Streamable HTTP 提供同一組唯讀工具
+
+系統 SHALL 在既有 stdio MCP server 之外，提供以官方 `mcp` Python SDK
+`StreamableHTTPSessionManager` 實作的 Streamable HTTP transport。此 HTTP adapter
+SHALL 註冊與 stdio 相同的六個唯讀工具，並使用同一份 `create_server()` 與 Agent DTO；
+不得另做第二套 tool 名稱、inputSchema 或 outputSchema。系統 SHALL NOT 實作已
+deprecated 的 HTTP+SSE transport（獨立 SSE endpoint 搭配分開的 message endpoint）。
+
+#### Scenario: HTTP 與 stdio 列出同一組工具
+
+- **WHEN** 外部代理經 loopback Streamable HTTP 完成 session 後呼叫 `tools/list`
+- **THEN** 回應 SHALL 只包含 stdio 路徑相同的六個唯讀工具，名稱與 schema 一致
+
+#### Scenario: 拒絕 deprecated HTTP+SSE transport
+
+- **WHEN** 操作者啟動 MCP HTTP 行程
+- **THEN** 系統 SHALL 不掛載 deprecated HTTP+SSE 的獨立 `/sse` 與 `/messages` 配對
+  endpoint；HTTP 入口 SHALL 是 Streamable HTTP
+
+#### Scenario: 唯讀工具在 HTTP 路徑同樣不受寫入開關阻擋
+
+- **WHEN** 外部代理經 loopback Streamable HTTP 呼叫任一唯讀工具，無論
+  `agent_write_enabled` 為 `False` 或 `True`
+- **THEN** 系統 SHALL 正常回應，不因寫入開關關閉而拒絕唯讀請求
+
+### Requirement: Streamable HTTP MCP 只綁 loopback 並啟用 Host 防護
+
+HTTP MCP 行程 SHALL 只聽 loopback 位址（`127.0.0.1`、`::1` 或 `localhost`）。設定成
+其他 bind 位址時 SHALL 拒絕啟動。系統 SHALL 啟用 DNS rebinding 防護，只接受對應
+loopback Host（含 port）的請求。
+
+#### Scenario: 非 loopback bind 無法啟動
+
+- **WHEN** 設定將 HTTP MCP bind 到非 loopback 位址（例如 `0.0.0.0`）
+- **THEN** 行程 SHALL 在接受連線前失敗並結束，不得開始聽該位址
+
+#### Scenario: 非法 Host 的請求被拒絕
+
+- **WHEN** 對 HTTP MCP endpoint 送出 Host 不在 loopback 白名單內的請求
+- **THEN** 系統 SHALL 拒絕該請求，不得建立 MCP session 或執行工具
+
+#### Scenario: loopback 合法 Host 可進入 MCP
+
+- **WHEN** 客戶端以 `127.0.0.1` 或 `localhost` 加上正確 port 的 Host 連到 HTTP MCP
+  並通過認證
+- **THEN** 系統 SHALL 允許進行 MCP discover／`tools/list`／`tools/call`
+
+### Requirement: Agent datetime uses canonical UTC RFC3339 serialization
+
+所有 Agent MCP success response 中代表 datetime 的欄位 SHALL 以 RFC3339 UTC 字串
+輸出，且固定使用 `Z` suffix。aware datetime SHALL 先轉換為 UTC；沒有 timezone
+資訊的既有 SQLite datetime SHALL 視為 UTC。`null` 欄位 SHALL 保持 JSON null。此規則
+適用於 `AgentBill.created_at` 以及 `PipelineStatus.started_at`、`completed_at`、
+`created_at`、`updated_at`，並適用於所有六個 MCP read tools 的 structured content。
+
+#### Scenario: pipeline status survives SQLite timezone loss
+
+- **WHEN** `pipeline_status` 從 SQLite 讀取含有 naive `started_at`、`completed_at`、
+  `created_at` 與 `updated_at` 的最新 pipeline run
+- **THEN** 每個非 null 時間欄位 SHALL 以 `...Z` 結尾，且 SHALL 通過 MCP tool 的
+  `outputSchema` 與嚴格 RFC3339 date-time validation
+
+#### Scenario: bill created_at is canonical
+
+- **WHEN** `list_bills`、`get_bill` 或 `get_payment_due` 回傳至少一筆帳單
+- **THEN** 每筆 `AgentBill.created_at` SHALL 是帶 `Z` suffix 的 UTC RFC3339 string
+
+#### Scenario: nullable pipeline timestamps remain null
+
+- **WHEN** pipeline run 尚未開始或尚未完成，使 `started_at` 或 `completed_at` 為 null
+- **THEN** 對應欄位 SHALL 保持 JSON null，不得輸出字串 `"None"` 或虛構時間
+
+### Requirement: MCP server identity version matches package metadata
+
+The system MUST expose the released CCAS package version in MCP server identity metadata.
+MCP `server/discover` response 的
+`result._meta["io.modelcontextprotocol/serverInfo"].version` SHALL 與 CCAS package
+metadata 的 release version 相同。v0.8.2 release SHALL 回傳 `0.8.2`；此版本對齊不
+改變 protocol version 或 tool contract。
+
+#### Scenario: discovery exposes the released version
+
+- **WHEN** client 呼叫 `server/discover`
+- **THEN** serverInfo version SHALL 等於 package metadata version `0.8.2`

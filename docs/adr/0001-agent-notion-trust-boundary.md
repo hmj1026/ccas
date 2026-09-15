@@ -40,6 +40,7 @@ CCAS 目前是一套可獨立部署的本機系統：Gmail → 解密 → 解析
 
 - `openspec/specs/agent-mcp-interface/`、`openspec/specs/agent-cli-interface/`、`openspec/specs/reconciliation-identity/` — MCP／CLI 介面規格，實作本 ADR 的邊界
 - `openspec/changes/add-mcp-loopback-streamable-http/` — 本機 loopback Streamable HTTP adapter；修訂第 6 點分期
+- [`0002-remote-mcp-exposure.md`](0002-remote-mcp-exposure.md) — 針對第 6 點第 (3) 項「遠端 Streamable HTTP」的後續 ADR，**目前為 Proposed**；在被 Accept 前本 ADR 第 6 點維持原文
 - `openspec/changes/harden-bill-parsing-pipeline/` — 解析管線強化，與本 ADR 無直接耦合但共享同一份決策文件背景
 - `CONTEXT.md` — 「Agent」「對帳」等詞彙定義
 - [MCP Architecture](https://modelcontextprotocol.io/specification/2026-07-28/architecture) — host／client／server 與能力宣告
