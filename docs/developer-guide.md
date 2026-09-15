@@ -23,12 +23,18 @@ cp .env.example .env
 cp config/banks.example.yaml config/banks.yaml
 ```
 
-編輯 `.env`，填入必要變數（詳見 [使用者操作手冊](user-guide.md#2-設定環境變數)）。
+編輯 `.env`，依要執行的功能填入變數（詳見 [使用者操作手冊](user-guide.md#2-設定環境變數)）。
 
 本機開發時，路徑變數預設使用 `./data/`，實際會解析到 `backend/data/`。
 Docker Compose 啟動時會再覆寫成容器內的 `/data/` 掛載點。
 
-> `API_TOKEN` **可不填**：entrypoint 首啟會自動生成 32-byte token 並落地到 `${CCAS_DATA_LOCATION:-./data}/secrets/api-token`（檔案權限 0600）；該 token 同時是 Web UI 登入憑證與 Bearer 認證。`docker compose exec backend cat /data/secrets/api-token` 可隨時取得。
+> Docker entrypoint 中的 `API_TOKEN` **可不填**：首次啟動會自動生成 32-byte token，root
+> Compose host 對應 `backend/data/secrets/api-token`（容器內 `/data/secrets/api-token`，權限
+> 0600）；pull-only production 則對應 `${CCAS_DATA_LOCATION}/secrets/api-token`。該 token
+> 同時是 Web UI 登入憑證與 Bearer 認證。`docker compose exec backend cat /data/secrets/api-token`
+> 可隨時取得。直接以 uv 執行 `scripts/setup.sh` 時，則須先在 `.env` 或環境中提供 `API_TOKEN`。
+
+本機 HTTP 開發請在 `.env` 設 `API_COOKIE_SECURE=false`；正式 HTTPS 入口維持 `true`。
 
 驗證環境變數：
 ```bash

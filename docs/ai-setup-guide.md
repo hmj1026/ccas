@@ -20,7 +20,7 @@ MCP command、client 設定（含 loopback Streamable HTTP）與委託 AI 安裝
 
 CCAS（Credit Card Automation System）是一套信用卡帳單自動化系統。它會自動從 Gmail 下載信用卡帳單 PDF、解密、解析交易明細、分類消費，最後透過前端儀表板與 Telegram Bot 呈現結果，並依排程每日自動執行。
 
-**服務組成（共 6 個，全部由 Docker Compose 管理）：**
+**服務組成（根目錄開發 Compose 共 6 個，全部由 Docker Compose 管理）：**
 
 | 服務 | 功能 |
 |------|------|
@@ -36,7 +36,7 @@ CCAS（Credit Card Automation System）是一套信用卡帳單自動化系統�
 Gmail PDF → 解密 → 解析 Bill + Transaction → 分類 → REST API / Telegram 通知 → React 儀表板
 ```
 
-**為什麼必須用 Docker：** scheduler、worker、bot 這三個服務需要與 backend、redis 同時運行才能實現完整功能（自動排程、背景任務、Bot 通知）。Docker Compose 是唯一能一次啟動所有服務的方式。
+**選擇 Docker Compose 的原因：** scheduler、worker、bot 這三個服務需要與 backend、redis 同時運行，才能實現完整功能（自動排程、背景任務、Bot 通知）。本文件用 Compose 一次啟動完整本機環境；若只需要 MCP，請改讀 [`non-docker-agent-host.md`](non-docker-agent-host.md)。
 
 ---
 
@@ -134,13 +134,17 @@ cp config/banks.example.yaml config/banks.yaml
 
 用任意文字編輯器開啟 `.env`（macOS/Linux 可用 `nano .env`），填入以下欄位：
 
-**`API_TOKEN`（必填）**
+**`API_TOKEN`（選填）**
 
-這是登入前端儀表板的密碼，自訂任意字串即可：
+這是登入前端儀表板與 HTTP MCP 的共用 Bearer token。留空時，Docker entrypoint 首次啟動會自動產生 32-byte token，寫入 host 的 `backend/data/secrets/api-token`（容器內為 `/data/secrets/api-token`）；若希望固定測試憑證，再自行填入：
 
 ```
 API_TOKEN=你的自訂密碼
 ```
+
+本文件使用未加 TLS 的 localhost；請在 `.env` 取消註解並設定
+`API_COOKIE_SECURE=false`，否則瀏覽器不會在 HTTP 連線送出登入 session cookie。正式
+HTTPS 部署請維持 `true`。
 
 **各銀行 PDF 密碼（依所選銀行填入）**
 
@@ -177,7 +181,10 @@ TELEGRAM_ALLOWED_CHAT_IDS=
 
 目前先留空，Phase 5 完成後再填入。若不設定，這三個變數保持空值，bot 服務會進入 disabled idle（不發送任何通知，但容器仍存活），不影響其他服務。
 
-> **OAuth redirect URI 提示**：Gmail OAuth callback 由 `PUBLIC_BASE_URL` 動態決定。本機 dev 預設用 `http://localhost:${CCAS_PORT:-8080}`，無需手動設定；若改用自訂網域或 port，請同步在 `.env` 加上 `PUBLIC_BASE_URL=...` 並在 GCP Console 加入對應的 redirect URI。
+> **OAuth redirect URI 提示**：Gmail OAuth callback 由 `PUBLIC_BASE_URL` 動態決定。根目錄 dev
+> Compose 的前端是 `http://localhost:5173`，請在 `.env` 設 `PUBLIC_BASE_URL=http://localhost:5173`；
+> pull-only／self-build production 的入口預設是 `http://localhost:8080`。若改用自訂網域或 port，
+> 請同步在 `.env` 加上實際的 `PUBLIC_BASE_URL` 並在 GCP Console 加入對應 redirect URI。
 
 ### 驗證環境變數
 
@@ -241,7 +248,10 @@ cp /path/to/downloaded-credentials.json backend/data/credentials.json
 ls backend/data/credentials.json
 ```
 
-### 步驟 4-6：在 Docker 容器內執行 Gmail OAuth 授權
+### 步驟 4-6：完成 Gmail OAuth 授權
+
+一般安裝請優先依 [`gmail-setup.md`](gmail-setup.md) 的 Web flow：先登入
+`/setup/gmail`、上傳 `credentials.json`，再按「授權 Google」。只有 Web flow 不適用時，才使用下列 CLI fallback。
 
 先做初步 image build（只需 build backend）：
 
@@ -257,7 +267,7 @@ docker compose run --rm backend uv run python -m ccas.tools.gmail_auth
 
 這個指令會輸出一個 URL，請用戶複製後貼入瀏覽器，以 Gmail 帳號登入並授權，授權完成後瀏覽器會顯示「This site can't be reached」或空白頁，這是正常行為（本機應用程式流程）。
 
-> **替代方案（推薦給偏好 GUI 的用戶）**：先依 Phase 6 啟動所有服務後，開啟 `http://localhost:5173/setup/gmail`（dev）或 `http://localhost:${CCAS_PORT:-8080}/setup/gmail`（prod），上傳 `credentials.json` 並走 Web 流程完成授權。setup wizard 會把 token 自動寫入 `/data/`，免進容器跑 CLI。
+> 若 CLI fallback 不適用，先依 Phase 6 啟動服務後，開啟 `http://localhost:5173/setup/gmail`（root dev）或 `http://localhost:${CCAS_PORT:-8080}/setup/gmail`（pull-only），上傳 `credentials.json` 並走 Web flow。setup wizard 會把 token 加密寫入 `/data/`，免進容器跑 CLI。
 
 若出現需要輸入驗證碼的提示，請用戶將瀏覽器網址列的完整 URL 複製回終端機貼上。
 
@@ -315,7 +325,7 @@ TELEGRAM_ALLOWED_CHAT_IDS=你的chat_id（與上面相同；若多人共用，�
 docker compose up --build
 ```
 
-Docker Compose 會同時啟動全部 6 個服務：backend、worker、scheduler、bot（若有設定 token）、frontend、redis。
+Docker Compose 會同時啟動全部 6 個服務：backend、worker、scheduler、bot、frontend、redis。未設定 Telegram token 時，bot 仍會啟動，但進入 disabled idle，不發送通知。
 
 backend 容器啟動時會自動執行：
 - `check-env`：驗證環境變數
@@ -326,28 +336,16 @@ backend 容器啟動時會自動執行：
 
 ### 確認啟動成功
 
-等待日誌穩定後，確認以下三行都出現：
+以服務狀態與可觀察 health 訊號判定完成，不依賴固定 container 名稱或完整 log 字串：
 
-```
-ccas-backend-1    | INFO: Application startup complete.
-ccas-frontend-1   | VITE v... ready in ...ms
-ccas-redis-1      | Ready to accept connections tcp
-```
-
-確認 worker 與 scheduler 也已就緒：
-
-```
-ccas-worker-1     | Worker ... started
-ccas-scheduler-1  | Scheduler started
+```bash
+docker compose ps
+curl -fsS http://127.0.0.1:8000/health
+docker compose logs scheduler --tail=30 | grep -E 'Starting scheduler with 4 jobs|heartbeat'
 ```
 
-若有設定 Telegram token，bot 也應有啟動訊息：
-
-```
-ccas-bot-1        | Application started
-```
-
-若 token 未設定，bot 服務日誌顯示跳過啟動，此為正常行為。
+`backend` health 回 200、frontend 顯示 Vite ready、Redis/worker 正常運作即可；bot
+未設定 token 時顯示 disabled idle 是預期結果。
 
 ---
 
@@ -367,7 +365,7 @@ curl http://127.0.0.1:8000/health
 
 請用戶在瀏覽器開啟 `http://localhost:5173`，應顯示登入頁面。
 
-使用 `.env` 中設定的 `API_TOKEN` 值登入。登入後可看到帳單列表（目前為空，等待第一次 pipeline 執行後會有資料）。
+若 `.env` 有設定 `API_TOKEN`，使用該值登入；否則執行 `cat backend/data/secrets/api-token` 取得 entrypoint 產生的 token。登入後可看到帳單列表（目前為空，等待第一次 pipeline 執行後會有資料）。
 
 ### 確認排程器已設定任務
 
@@ -375,11 +373,11 @@ curl http://127.0.0.1:8000/health
 docker compose logs scheduler --tail=30
 ```
 
-**預期輸出：** 包含以下兩行（代表排程已設定）：
+**通過條件：** log 顯示 scheduler 已以 4 個 jobs 啟動，且 heartbeat 檔案持續更新：
 
-```
-Added job "daily_pipeline" to job store "default"
-Added job "daily_payment_reminders" to job store "default"
+```bash
+docker compose logs scheduler --tail=50 | grep 'Starting scheduler with 4 jobs'
+docker compose exec scheduler test -f /data/scheduler-heartbeat
 ```
 
 ### 確認 worker 正在監聽 Redis queue
@@ -419,7 +417,7 @@ docker compose up -d
 docker compose down
 ```
 
-系統重開機後需手動重新執行 `docker compose up -d`，或依作業系統設定 Docker 開機自啟並加入 `restart: unless-stopped`（進階設定）。
+若 Docker daemon 設定為開機自啟，Compose 的 `restart: unless-stopped` 會讓服務在主機重開機後恢復；否則請手動執行 `docker compose up -d`。
 
 ### 自動排程（無需手動操作）
 
@@ -531,7 +529,7 @@ docker compose version
 
 ### Port 衝突
 
-**症狀：** 啟動時出現 `Bind for 0.0.0.0:8000 failed: port is already allocated`
+**症狀：** 啟動時出現 `Bind for 127.0.0.1:8000 failed: port is already allocated`
 
 **處理：** 建立本機客製覆蓋檔案（已在 .gitignore 中，不會提交）：
 
@@ -570,7 +568,7 @@ docker compose up -d --build backend worker scheduler bot
 
 | 變數 | 必填 | 說明 |
 |------|------|------|
-| `API_TOKEN` | 否 | 不填則 entrypoint 首啟自動生成 32-byte token 並落地至 `${CCAS_DATA_LOCATION}/secrets/api-token`（檔案權限 0600）；該 token 同時是 Web UI 登入憑證與 Bearer 認證 |
+| `API_TOKEN` | 否 | 不填則 entrypoint 首啟自動生成 32-byte token 並落地至容器 `/data/secrets/api-token`（root dev host 對應 `backend/data/secrets/api-token`，權限 0600）；該 token 同時是 Web UI 登入憑證與 Bearer 認證 |
 | `GMAIL_CREDENTIALS_PATH` | 否 | credentials.json 路徑，Docker 自動掛載至 `/data/credentials.json` |
 | `GMAIL_TOKEN_PATH` | 否 | token.json 路徑，Docker 自動掛載至 `/data/token.json` |
 | `PDF_PASSWORD_CTBC` | 依需求 | 中信 PDF 密碼 |
@@ -580,7 +578,7 @@ docker compose up -d --build backend worker scheduler bot
 | `PDF_PASSWORD_UBOT` | 依需求 | 聯邦 PDF 密碼 |
 | `PDF_PASSWORD_CATHAY` | 依需求 | 國泰 PDF 密碼 |
 | `PDF_PASSWORD_FUBON` | 依需求 | 富邦 PDF 密碼 |
-| `TELEGRAM_BOT_TOKEN` | 可選 | Bot token，空值時 Bot 服務不啟動 |
+| `TELEGRAM_BOT_TOKEN` | 可選 | Bot token，空值時 Bot 服務進入 disabled idle |
 | `TELEGRAM_CHAT_ID` | 可選 | 通知目標 chat ID（純數字） |
 | `TELEGRAM_ALLOWED_CHAT_IDS` | 可選 | 允許使用 Bot 指令的 chat ID 白名單（逗號分隔） |
 | `FUBON_NATIONAL_ID` | 可選 | 富邦自動下載用身分證字號 |

@@ -41,13 +41,13 @@ docker exec -it ccas-backend-1 uv run python -m ccas.pipeline --bank <BANK> --fr
 - [ ] **S3 parse**：`parsed_rows > 0`、金額/日期/ROC 年份對得上 PDF
 - [ ] **S4 classify**：DB category 非 null / 非 `unknown`
 - [ ] **S5 notify**：Telegram 收到摘要（可選）
-- [ ] **S6 API**：`GET /api/bills?bank=CTBC` 有本期 bill
-- [ ] **S6 API**：`GET /api/transactions?bank=CTBC` 數量與 parse 一致
-- [ ] **S6 API**：`GET /api/bills/{id}/download` 能下載原 PDF
+- [ ] **S6 API**：`GET /api/bills?bank_code=CTBC` 有本期 bill
+- [ ] **S6 API**：`GET /api/transactions?bank_code=CTBC` 數量與 parse 一致
+- [ ] **S6 API**：`GET /api/bills/{id}/pdf` 能下載原 PDF
 - [ ] **S7 前端 /overview**：CTBC 卡片顯示最新金額
 - [ ] **S7 前端 /bills**：列表有 row、detail 看得到細項
 - [ ] **S7 前端 /transactions**：過濾 CTBC 有資料、金額一致
-- [ ] **S7 前端 /analytics**：圖表包含 CTBC 貢獻
+- [ ] **S7 前端 /insights**：圖表包含 CTBC 貢獻（`/analytics` 僅保留 redirect）
 
 ### SINOPAC — 永豐
 - [ ] S1 ingest / dedup
@@ -56,7 +56,7 @@ docker exec -it ccas-backend-1 uv run python -m ccas.pipeline --bank <BANK> --fr
 - [ ] S4 classify
 - [ ] S5 notify（可選）
 - [ ] S6 API：bills / transactions / download
-- [ ] S7 前端：overview / bills / transactions / analytics
+- [ ] S7 前端：overview / bills / transactions / insights
 
 ### ESUN — 玉山
 - [ ] S1 ingest / dedup
@@ -65,7 +65,7 @@ docker exec -it ccas-backend-1 uv run python -m ccas.pipeline --bank <BANK> --fr
 - [ ] S4 classify
 - [ ] S5 notify（可選）
 - [ ] S6 API：bills / transactions / download
-- [ ] S7 前端：overview / bills / transactions / analytics
+- [ ] S7 前端：overview / bills / transactions / insights
 
 ### UBOT — 聯邦
 - [ ] S1 ingest / dedup
@@ -74,7 +74,7 @@ docker exec -it ccas-backend-1 uv run python -m ccas.pipeline --bank <BANK> --fr
 - [ ] S4 classify
 - [ ] S5 notify（可選）
 - [ ] S6 API：bills / transactions / download
-- [ ] S7 前端：overview / bills / transactions / analytics
+- [ ] S7 前端：overview / bills / transactions / insights
 
 ### CATHAY — 國泰
 - [ ] S1 ingest / dedup
@@ -83,7 +83,7 @@ docker exec -it ccas-backend-1 uv run python -m ccas.pipeline --bank <BANK> --fr
 - [ ] S4 classify
 - [ ] S5 notify（可選）
 - [ ] S6 API：bills / transactions / download
-- [ ] S7 前端：overview / bills / transactions / analytics
+- [ ] S7 前端：overview / bills / transactions / insights
 
 ### TAISHIN — 台新
 - [ ] S1 ingest / dedup
@@ -92,7 +92,7 @@ docker exec -it ccas-backend-1 uv run python -m ccas.pipeline --bank <BANK> --fr
 - [ ] S4 classify
 - [ ] S5 notify（可選）
 - [ ] S6 API：bills / transactions / download
-- [ ] S7 前端：overview / bills / transactions / analytics
+- [ ] S7 前端：overview / bills / transactions / insights
 
 ### FUBON — 台北富邦
 - [ ] S1 ingest / dedup
@@ -101,7 +101,7 @@ docker exec -it ccas-backend-1 uv run python -m ccas.pipeline --bank <BANK> --fr
 - [ ] S4 classify
 - [ ] S5 notify（可選）
 - [ ] S6 API：bills / transactions / download
-- [ ] S7 前端：overview / bills / transactions / analytics
+- [ ] S7 前端：overview / bills / transactions / insights
 
 ---
 
@@ -132,7 +132,7 @@ docker exec -it ccas-backend-1 uv run python -m ccas.pipeline --bank <BANK> --fr
 | 10 | FUBON | S1 ingest | **errorMsg 分類缺類別**：FUBON 對失效 / 查無帳單的 serial_key 回 `登入失敗, 查無資料`，未命中 `_classify_error_msg` 的 `驗證碼/身分證/出生` keyword → 收斂成 `unknown` → flow 誤翻成 `credentials_wrong`。實跑 33 筆中 ~20 筆命中。已於 `_classify_error_msg` 新增 `record_not_found` slug（比對 `查無資料/查無此筆`），flow 迴圈遇此 slug 直接 raise 不重試、不誤報帳密錯。 | codex-adversarial-review-fix | archived |
 | 11 | FUBON | S3 parse | **Parser can_parse=False**：舊 staging dir 的 FUBON PDF 被帶進 parse stage，新版 `FUBONParserV1.can_parse()` 全部拒收。可能是舊 PDF 版型與新 parser mismatch，或 staging 未被清。需另案調查。 | TBD | open |
 | 12 | ALL | S5 notify | 所有銀行 `notify sent=0`，非失敗。原因待查：TELEGRAM_CHAT_ID 未設定或為空時 notify 靜默跳過。需確認是否為預期行為（user-guide 有提到 chat_id 留空則不送）。低優先。 | N/A（預期行為） | skip |
-| 13 | ALL | S7 前端 | 前端靜態站 `http://localhost:8080/` 回 200，但視覺 smoke（/overview, /bills, /transactions, /analytics 是否正確 render）本次未以 browser 驗證。需使用者手動登入確認。 | TBD | manual |
+| 13 | ALL | S7 前端 | 前端靜態站 `http://localhost:8080/` 回 200，但視覺 smoke（/overview, /bills, /transactions, /insights 是否正確 render）本次未以 browser 驗證。需使用者手動登入確認。 | TBD | manual |
 
 狀態欄值：`open` / `spec-ready` / `in-progress` / `applied` / `archived`
 

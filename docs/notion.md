@@ -1,16 +1,18 @@
 # 信用卡帳單自動化管理系統 (CCAS) 專案方向
 
-> **Credit Card Automation System v1.1** | 建立日期：2026-03-26 | 更新日期：2026-04-03
+> **Credit Card Automation System v1.1** | 建立日期：2026-03-26 | 更新日期：2026-09-15
 
 ---
 
 ## 1. 這份文件的定位
 
-本文件用來說明 CCAS 的產品願景、目前落地狀態與近期實作方向。
+本文件用來說明 CCAS 的產品願景、目前落地狀態與下一步方向；它不是逐項 endpoint
+或部署參數的操作手冊。
 
 它**不是**系統行為的最終權威來源。
 
-- `openspec/specs/`：功能行為與系統約束的 SSOT
+- `docs/CODEMAPS/current-implementation.md`：runtime as-built 行為的入口
+- `openspec/specs/`：需求意圖與已接受設計，可能保留歷史命名
 - `CLAUDE.md`：開發流程、指令與 repo 工作方式的 SSOT
 - `docs/notion.md`：產品方向、階段目標、現況摘要
 
@@ -37,37 +39,38 @@ CCAS 的長期目標，是把分散在 Gmail、PDF、聊天提醒與人工記帳
 
 ## 3. 當前產品現況
 
-目前專案**不是**「多家銀行已完整支援的成熟產品」，而是：
+目前專案已具備可自架 MVP 的完整主線，但各銀行 parser 的資料覆蓋率與 QA 成熟度不同：
 
-- 已完成一條以 **CTBC 為主** 的端到端帳單處理主線
-- 已有 Telegram Bot、Dashboard、API、Pipeline、分類與 OCR 基礎能力
-- 正在從「本機可開發」走向「可穩定部署的自架 MVP」
+- Gmail → ingest → decrypt → parse → classify → notify 的端到端 pipeline 已落地
+- 7 家銀行均有 v1 parser；FUBON 另有 web-fetch 與 manual-staging fallback
+- 已有 Telegram Bot、Dashboard、REST API、Agent CLI、stdio MCP 與 loopback HTTP MCP
+- 已提供 Docker dev、self-build production 與 pull-only production 路徑
 
 ### 3.1 目前已落地能力
 
 - Gmail API 抓取 PDF 附件
 - PDF 解密與 staging 流程
-- CTBC parser 與 OCR 商戶辨識
+- 7 家銀行 parser 與 OCR 商戶辨識
 - 消費分類與 seed data
 - Telegram 通知與帳單互動
-- React Dashboard 五頁面
+- React Dashboard、Insights、設定中心與 Gmail OAuth onboarding
 - FastAPI REST API
 - RQ + Redis 背景工作模型
 - SQLite + Alembic schema 管理
-- Docker 本機與生產部署能力正在收斂
+- Docker 本機、self-build production 與 pull-only production 部署
 
 ### 3.2 目前尚未達成的能力
 
 - 已有 7 家銀行 parser 初版（CTBC／CATHAY／ESUN／TAISHIN／FUBON／SINOPAC／UBOT），但 OCR 覆蓋率、分類規則與 QA 資料集仍需補強
 - 人工審查流程目前仍偏底層狀態與記錄，沒有完整操作介面
-- 遠端部署流程仍在整理中
-- 文件仍有部分從早期規劃沿用、尚未完全同步到現況
+- Agent write tools 尚未開放，MCP 仍限定 loopback 與唯讀工具
+- 完整人工審查工作流、跨環境 release sign-off 與各銀行長期 QA 資料集仍需補強
 
 ### 3.3 當前主線判斷
 
 已有 7 家銀行 parser 初版實作，短期焦點不在新增銀行，而在：
 
-**CTBC 生產穩定性、部署能力與維運工具；其餘 6 家 parser 則以穩定性、OCR 準確度、分類規則與 QA 資料集為下一階段重點。**
+**各銀行 parser 的生產穩定性、OCR 準確度、分類規則、QA 資料集與可觀測性；同時維持部署與唯讀 Agent 介面的安全邊界。**
 
 ---
 
@@ -107,11 +110,11 @@ CCAS 的長期目標，是把分散在 Gmail、PDF、聊天提醒與人工記帳
 6. **API**：FastAPI 提供 Dashboard 與外部操作端點
 7. **Bot**：Telegram 指令、通知與帳單狀態互動
 8. **Worker / Scheduler**：RQ worker 執行背景工作；定期觸發可由外部 cron 或獨立 scheduler 負責
-9. **Frontend Dashboard**：Overview、Transactions、Analytics、Bills、Settings
+9. **Frontend Dashboard**：Overview、Transactions、Insights、Bills、Operations、Settings、Setup
 
 ### 5.2 當前標準流程
 
-1. 由 API 觸發 pipeline，或由外部 cron / 獨立 scheduler 觸發
+1. 由 API、CLI 或 scheduler 觸發 pipeline
 2. **Ingest**：根據 `gmail_filter` 抓取附件到 staging
 3. **Decrypt**：依 `pdf_password_rule` 解密
 4. **Parse**：選擇對應 parser；CTBC 已支援 OCR 商戶辨識
@@ -146,6 +149,7 @@ CCAS 的長期目標，是把分散在 Gmail、PDF、聊天提醒與人工記帳
 
 - `is_paid`：繳費狀態
 - `is_notified`：Telegram 通知狀態，避免重複發送
+- `parse_method` / `parse_confidence` / `needs_review` / `review_reasons`：解析結果觀測與人工複核提示
 
 ### 6.2 `transactions`
 
@@ -178,9 +182,9 @@ Parser 保持版本化設計，允許同一家銀行有多個 parser 版本共�
 
 ### 7.2 當前實況
 
-- CTBC 是目前最穩定、最完整的 parser 主線
-- OCR 已用於 CTBC 商戶名稱辨識
-- 其他 6 家銀行（CATHAY／ESUN／TAISHIN／FUBON／SINOPAC／UBOT）已有初版 parser 實作，但穩定性、OCR 覆蓋率與 QA 資料集仍為下一階段重點，尚未與 CTBC 處於同一成熟度
+- 目前有 7 個 v1 parser（CTBC／CATHAY／ESUN／TAISHIN／FUBON／SINOPAC／UBOT）
+- OCR 主要用於需要影像補足的欄位；FUBON CAPTCHA 另有 ddddocr 與可選 LLM fallback
+- parser 均已接入 registry；穩定性、OCR 覆蓋率與 QA 資料集仍按銀行逐步補強
 
 ### 7.3 實作原則
 
@@ -222,7 +226,7 @@ Dashboard 是第二條主要介面，負責：
 
 ## 9. 近期實作方向
 
-### 9.1 Phase 1：CTBC MVP 穩定化
+### 9.1 Phase 1：單一主線與 parser 穩定化（已落地，持續維護）
 
 目標是讓單一銀行流程可以穩定日常使用：
 
@@ -231,7 +235,7 @@ Dashboard 是第二條主要介面，負責：
 - 必要 seed data 與預設 bank config 完整
 - E2E 驗證可重複執行
 
-### 9.2 Phase 2：部署與營運能力
+### 9.2 Phase 2：部署與營運能力（已落地，持續維護）
 
 目標是讓系統可以在遠端主機自架：
 
@@ -241,16 +245,16 @@ Dashboard 是第二條主要介面，負責：
 - deployment guide
 - dev / prod compose 邊界清楚
 
-### 9.3 Phase 3：開發者體驗與維運工具
+### 9.3 Phase 3：開發者體驗與維運工具（已落地，持續維護）
 
 - 本機一鍵啟動與 env validation
 - DB / Redis GUI 工具
 - 更完整的排錯文件
 - 更清楚的 seed / reset / health check 流程
 
-### 9.4 Phase 4：多銀行擴張
+### 9.4 Phase 4：多銀行品質與人工審查（進行中）
 
-- 第二家以上銀行 parser
+- 7 家 parser 的驗證資料集與回歸品質
 - parser 驗證資料集
 - 更完整的人工審查與例外處理流程
 
@@ -265,13 +269,13 @@ backend/src/ccas/
   classifier/         消費分類
   decryptor/          PDF 解密
   ingestor/           Gmail 抓取
-  parser/             parser registry、CTBC parser、OCR
+  parser/             parser registry、各銀行 parser、OCR
   pipeline/           orchestrator、worker、summary、options
   scheduler/          獨立 scheduler 入口
   storage/            database、models、queries
 
 frontend/src/
-  pages/              5 個主要頁面
+  pages/              lazy-loaded route pages（含 setup wizard）
   components/         layout 與共用 UI
   lib/                API client、types、utils
 
@@ -279,7 +283,7 @@ config/
   bank-code-registry.yaml
   banks.example.yaml
 
-scripts/
+scripts/              18 個 shell scripts
   setup.sh
   start.sh
   check-env.sh

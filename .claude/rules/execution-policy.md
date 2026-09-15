@@ -63,7 +63,7 @@ Artifacts directory: `openspec/changes/<name>/` (proposal → specs → design �
 
 ## Agent Roster
 
-> Generic agents use dhpk variants (globally enabled, v0.6.1+). Code review uses `dhpk:code-reviewer` (stack-aware — auto-consults the active python/fastapi modules). Skills (`python-patterns`, `backend-patterns`, etc.) come from `.agents/skills` (npx).
+> Generic agents use dhpk variants (globally enabled, v0.6.1+). Code review uses `dhpk:code-reviewer` (stack-aware — auto-consults the active python/fastapi modules). Generic skills (`python-patterns`, `backend-patterns`, etc.) come from the runtime skill catalog; this repository does not provide a `.agents/skills` directory.
 
 | Phase | Agent | Slash Command | When |
 |-------|-------|--------------|------|
@@ -76,7 +76,7 @@ Artifacts directory: `openspec/changes/<name>/` (proposal → specs → design �
 | Docs | `dhpk:doc-updater` | `/update-docs` | Documentation updates |
 | Refactor | `dhpk:refactor-cleaner` | -- | Dead code removal, file splits |
 
-Relevant skills (npx `.agents/skills`): `python-patterns`, `python-testing`, `backend-patterns`, `api-design`, `database-migrations`, `tdd-workflow`, `security-review`, `docker-patterns`
+Relevant runtime skills: `python-patterns`, `python-testing`, `backend-patterns`, `api-design`, `database-migrations`, `tdd-workflow`, `security-review`, `docker-patterns`
 
 ## Self-Check Checklist (before each task reply)
 

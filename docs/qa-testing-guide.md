@@ -30,18 +30,14 @@ git checkout develop    # 或指定的測試分支
 cp .env.example .env
 ```
 
-編輯 `.env`，填入以下**必要**變數：
+編輯 `.env`。Docker entrypoint 會在 `API_TOKEN` 未設定時自動產生 token；若要固定測試憑證可自行填入。Gmail、Telegram 與銀行密碼只在測試對應功能時需要：
 
 ```ini
-# API 認證（自訂一組安全字串即可）
+# 可選：固定 API 認證；不填則從 data/secrets/api-token 讀取 entrypoint 產生的 token
 API_TOKEN=qa-test-token-2026
+API_COOKIE_SECURE=false
 
-# Telegram（若不測試通知功能，可填任意值）
-TELEGRAM_BOT_TOKEN=placeholder
-TELEGRAM_CHAT_ID=0
-TELEGRAM_ALLOWED_CHAT_IDS=0
-
-# Gmail 路徑（使用預設值，不影響 API/UI 測試）
+# 路徑預設值（不測試 Gmail/pipeline 時不需準備檔案）
 GMAIL_CREDENTIALS_PATH=./data/credentials.json
 GMAIL_TOKEN_PATH=./data/token.json
 STAGING_DIR=./data/staging
@@ -55,7 +51,7 @@ STAGING_DIR=./data/staging
 cp config/banks.example.yaml config/banks.yaml
 ```
 
-### 4. 啟動服務（開發模式含 UI）
+### 4. 啟動服務（根目錄 Compose 開發模式含 UI）
 
 ```bash
 docker compose up --build
@@ -66,10 +62,10 @@ docker compose up --build
 | 服務 | URL | 說明 |
 |------|-----|------|
 | Backend API | http://localhost:8000 | REST API |
-| API 文件 (Swagger) | http://localhost:8000/docs | 互動式 API 測試 |
-| API 文件 (ReDoc) | http://localhost:8000/redoc | API 參考文件 |
+| API 文件 (Swagger) | http://localhost:8000/docs | 先在 `.env` 設 `ENABLE_API_DOCS=true` 才啟用 |
+| API 文件 (ReDoc) | http://localhost:8000/redoc | 同上；預設關閉 |
 | Health Check | http://localhost:8000/health | 健康檢查 |
-| Frontend UI | http://localhost:8080 | Web 操作介面（nginx production build） |
+| Frontend UI | http://localhost:5173 | Vite 開發伺服器（override 自動載入） |
 
 ### 5. 寫入測試資料
 
@@ -87,8 +83,8 @@ docker exec -it ccas-backend-1 uv run python /app/scripts/seed.py --reset
 
 ### 6. 開始測試
 
-- **Web UI**：瀏覽器開啟 http://localhost:8080，使用 `.env` 中的 `API_TOKEN` 登入
-- **Swagger**：瀏覽器開啟 http://localhost:8000/docs，點擊 Authorize 輸入 token
+- **Web UI**：瀏覽器開啟 http://localhost:5173；使用固定的 `.env` token，或 `cat data/secrets/api-token` 取得自動產生的 token
+- **Swagger**：只有 `ENABLE_API_DOCS=true` 時可開啟 http://localhost:8000/docs，再點擊 Authorize 輸入 Bearer token
 
 ---
 
@@ -104,15 +100,15 @@ docker exec -it ccas-backend-1 uv run python /app/scripts/seed.py --reset
 | Bills | 標記已繳 | 切換 is_paid 狀態 |
 | Transactions | 交易列表 | 顯示 5 筆交易、支援分頁 |
 | Transactions | CSV 匯出 | 點擊匯出按鈕下載 CSV 檔案 |
-| Analytics | 分類統計 | 依分類顯示消費金額圖表 |
-| Analytics | 日趨勢 | 顯示消費時間分布 |
-| Analytics | 商家排名 | 按金額排序的商家列表 |
+| Insights | 分類統計 | 依分類顯示消費金額圖表 |
+| Insights | 月趨勢 | 顯示消費時間分布 |
+| Insights | 商家排名 | 按金額排序的商家列表 |
 | Settings | 銀行設定 | 顯示 CTBC 設定，可新增/編輯 |
 | Settings | 分類管理 | 顯示 46 個關鍵字，可新增/編輯/刪除 |
 
 ### B. API 端點測試（透過 Swagger）
 
-所有 API 端點（除 `/health`）需要 Bearer Token 認證。在 Swagger 頁面點擊 **Authorize** 按鈕，輸入 `.env` 中的 `API_TOKEN`。
+健康端點與 `GET/POST /api/auth/session` 不需 Bearer；其餘業務端點需要 Bearer Token。在啟用 OpenAPI 後，於 Swagger 點擊 **Authorize**，輸入固定的 `.env` token，或 entrypoint 產生的 token。
 
 #### 認證
 
@@ -126,7 +122,7 @@ docker exec -it ccas-backend-1 uv run python /app/scripts/seed.py --reset
 
 | 方法 | 端點 | 說明 |
 |------|------|------|
-| GET | `/api/bills` | 帳單列表（支援 month、year、bank_code、status、page、per_page） |
+| GET | `/api/bills` | 帳單列表（支援 month、year、bank_code、status、page、page_size） |
 | PATCH | `/api/bills/{bill_id}` | 更新帳單（標記已繳） |
 | GET | `/api/bills/{bill_id}/pdf` | 下載帳單原始 PDF |
 
@@ -134,8 +130,8 @@ docker exec -it ccas-backend-1 uv run python /app/scripts/seed.py --reset
 
 | 方法 | 端點 | 說明 |
 |------|------|------|
-| GET | `/api/transactions` | 交易列表（支援 page, per_page） |
-| GET | `/api/transactions/export` | 匯出交易明細為 CSV（UTF-8 BOM） |
+| GET | `/api/transactions` | 交易列表（支援 month、year、bank_code、category、q、sort、page、page_size） |
+| GET | `/api/transactions/export` | 匯出交易明細為 CSV 或 xlsx，可用日期、銀行、分類篩選 |
 
 #### 分析
 
@@ -144,7 +140,11 @@ docker exec -it ccas-backend-1 uv run python /app/scripts/seed.py --reset
 | GET | `/api/analytics/years` | 可選年度清單 |
 | GET | `/api/analytics/trend` | 月消費趨勢（最近 N 個月，預設 6） |
 | GET | `/api/analytics/categories` | 分類消費統計（需 `?month=YYYY-MM`） |
+| GET | `/api/analytics/categories/compare` | 類別月對月比較（`month` 必填） |
 | GET | `/api/analytics/banks` | 銀行消費比較（需 `?month=YYYY-MM`） |
+| GET | `/api/analytics/compare/banks` | Insights 銀行比較 |
+| GET | `/api/analytics/compare/years` | Insights 年度比較 |
+| GET | `/api/analytics/top-merchants` | Insights 商家排行 |
 
 #### 設定
 
@@ -164,6 +164,7 @@ docker exec -it ccas-backend-1 uv run python /app/scripts/seed.py --reset
 |------|------|------|
 | GET | `/api/overview` | Dashboard 摘要 |
 | POST | `/api/pipeline/trigger` | 觸發 pipeline 執行（需 Redis） |
+| GET | `/api/pipeline/status` | Pipeline 狀態摘要 |
 
 ### C. Pipeline 功能測試（需真實憑證）
 
@@ -228,8 +229,8 @@ Pipeline 階段順序：`ingest` -> `decrypt` -> `parse` -> `classify` -> `notif
 
 1. **支援 7 家銀行**：CTBC（中國信託）、SINOPAC（永豐）、ESUN（玉山）、UBOT（聯邦）、CATHAY（國泰）、TAISHIN（台新）、FUBON（台北富邦）皆已實作完整 parser
 2. **OCR 需 Docker**：tesseract OCR 僅在 Docker production image 中安裝，本機直接執行需手動安裝
-3. **Frontend 無覆蓋率工具**：前端測試存在但尚未安裝 `@vitest/coverage-v8`
-4. **SQLite 單一連線**：不支援多使用者並行寫入，適合單人測試
+3. **Frontend coverage**：已安裝 `@vitest/coverage-v8`，可在 `frontend/` 執行 `pnpm test:coverage`；CI 也會執行 coverage。
+4. **SQLite 併發邊界**：資料庫是單一檔案，已啟用 WAL 與 30 秒 busy timeout 以支援 backend、worker、scheduler 的程序間協作；仍不定位為高併發多使用者資料庫。
 
 ---
 
@@ -239,7 +240,7 @@ Pipeline 階段順序：`ingest` -> `decrypt` -> `parse` -> `classify` -> `notif
 # 重置 seed 資料（保留 schema）
 docker exec -it ccas-backend-1 uv run python /app/scripts/seed.py --reset
 
-# 完全重建（清除所有容器和資料）
+# 移除容器與 named volumes；根目錄 Compose 的 backend/data 是 bind mount，不會被此命令刪除
 docker compose down -v
 docker compose up --build
 ```
@@ -266,7 +267,7 @@ docker compose logs redis
 ### 前端無法載入資料
 
 1. 確認 backend 正常：`curl http://localhost:8000/health`
-2. 確認已執行 seed：檢查 `http://localhost:8000/docs` 中 `/api/bills` 是否有資料
+2. 確認已執行 seed：若已設 `ENABLE_API_DOCS=true`，檢查 `http://localhost:8000/docs` 的 `/api/bills`；否則使用受保護 API 並帶 Bearer token
 
 ### Seed 失敗
 

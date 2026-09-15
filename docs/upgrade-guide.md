@@ -69,8 +69,8 @@ cd ..
 無 systemd 時 Redis 與 supervisord 重開機後都不會自己起來；開機 checklist 見
 [`non-docker-agent-host.md`](non-docker-agent-host.md) 與
 [`non-docker-host-services.md`](non-docker-host-services.md)。
-`host-services.sh` 不會跑 alembic；有 schema 變更時先在 `backend/` 執行
-`uv run alembic upgrade head`。v0.9.0 無資料庫 schema 變更。
+`host-services.sh` 不會跑 alembic；本次 v0.9.0 包含帳單解析 metadata migration，非 Docker
+升級請先在 `backend/` 執行 `uv run alembic upgrade head`，再安裝或重啟服務。
 
 ---
 
@@ -90,7 +90,7 @@ CCAS 採 [SemVer](https://semver.org/)：
 
 ## v0.9.0（Minor）— 2026-09-15 — Agent MCP loopback Streamable HTTP adapter 與 CI 穩定性強化
 
-**適用對象**：v0.8.5 升級至 v0.9.0。無資料庫 schema 變更，不需執行 migration。
+**適用對象**：v0.8.5 升級至 v0.9.0。包含 `d4e7f2a1b9c3` 帳單解析 metadata migration；啟動時由 entrypoint 自動執行 `alembic upgrade head`。
 
 **新增功能（Agent MCP）**：
 - 新增 loopback Streamable HTTP adapter (`ccas-mcp-http`)，支援以 HTTP 串流方式掛載 MCP 服務（適用於 Grok、Cursor 等現代 MCP clients）。
@@ -371,9 +371,9 @@ force 重新解析。
 
 ---
 
-## 升級前備份（強烈建議）
+## 升級前備份（強烈建議；以下以 pull-only production 為例）
 
-CCAS 所有狀態（SQLite、staging PDF、Gmail token、API token、master.key、redis dump）皆落在
+Pull-only production 的所有狀態（SQLite、staging PDF、Gmail token、API token、master.key、redis dump）皆落在
 `${CCAS_DATA_LOCATION}` 單一目錄。備份只需：
 
 ```bash
@@ -414,8 +414,8 @@ docker compose -f docker-compose.yml start
 # 1) 停服務
 docker compose -f docker-compose.yml down
 
-# 2) 還原資料目錄（若有 schema migration，回滾 image 同時必須還原備份）
-rm -rf data
+# 2) 保留目前資料目錄，再還原備份（若有 schema migration，回滾 image 同時必須還原備份）
+mv data "data.before-restore-$(date +%Y%m%d-%H%M%S)"
 tar -xzf ccas-backup-<舊時間戳>.tar.gz
 
 # 3) 改 .env 的 CCAS_VERSION 回舊版（換成你要回滾到的版號）
@@ -472,4 +472,4 @@ crashloop 設計：未填 `TELEGRAM_BOT_TOKEN` 時 idle，不影響其他 servic
 - **非 Docker uv + supervisord**：用本文件「非 Docker（uv + supervisord）升級」；
   Redis 以 agent-host 為 SSOT；MCP 以 mcp-installation 為 SSOT（HTTP 重裝
   `mcp-http`，stdio PID 回收為後援）
-- **prod self-build 中間路徑（`docker compose -f docker-compose.yaml up -d` 跳 override）已棄用**，若你還在用該路徑，請先依本指南遷移到 prod compose
+- **prod self-build**：根目錄 `docker-compose.yaml` 是受支援的自建 production 路徑；請明確帶 `-f docker-compose.yaml` 以跳過自動載入的 dev override。需要 pull-only 時才切換至 `docker/docker-compose.yml`。

@@ -59,8 +59,8 @@ curl -fsSL -o docker-compose.yml \
 curl -fsSL -o example.env \
   "https://github.com/${REPO_OWNER}/ccas/releases/download/${RELEASE}/example.env"
 cp example.env .env
-# 必填：REPO_OWNER、CCAS_VERSION、CCAS_PORT、PUBLIC_BASE_URL
-# 選填（可稍後在 /setup/secrets 設定）：Telegram、PDF 密碼
+# 必填：REPO_OWNER、CCAS_VERSION
+# 選填：CCAS_PORT（預設 8080）、PUBLIC_BASE_URL（自訂 OAuth URL）、Telegram、PDF 密碼
 docker compose -f docker-compose.yml pull
 docker compose -f docker-compose.yml up -d
 ```
@@ -109,7 +109,7 @@ ccas/
 ├── docker-compose.yaml          # dev compose（從原始碼 build）
 ├── docker-compose.override.yml  # dev 覆寫（bind-mount、hot reload）
 ├── config/            # banks.yaml、categories.yaml、bank-code-registry.yaml
-├── scripts/           # 16 支 shell script：setup、start、lint、test、hooks…
+├── scripts/           # 18 支 shell script：setup、start、lint、test、hooks…
 ├── docs/              # user / developer / deployment / RUNBOOK + CODEMAPS/
 ├── openspec/          # spec-driven change workflow artifacts
 └── .env.example       # 環境變數範本（SSOT）

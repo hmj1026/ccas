@@ -1,4 +1,4 @@
-<!-- Verified: 2026-09-14 | Canonical details: ../current-implementation.md -->
+<!-- Verified: 2026-09-15 | Canonical details: ../current-implementation.md -->
 
 # Dependencies
 
@@ -43,11 +43,11 @@
 ## Docker Compose Services
 
 ```
-backend    port 8000 (127.0.0.1, dev only)，volumes: /data /config /logs，alembic + seed bootstrap
+backend    port 8000 (127.0.0.1, dev/self-build)，volumes: /data /config /logs，alembic + seed bootstrap
 worker     RQ worker，volumes: /data /config /logs，SKIP_DB_BOOTSTRAP=1
 scheduler  APScheduler，volumes: /data /config /logs，SCHEDULER_HEARTBEAT_PATH=/data/scheduler-heartbeat
 bot        Telegram bot (long polling)，volumes: /data /config /logs
-frontend   nginx static (dev: 8080)，depends: backend
+frontend   Vite dev: 5173；self-build production nginx: 8080，depends: backend
 proxy      nginx reverse proxy (prod: ${CCAS_PORT:-8080})，/api → backend、/ → frontend
 redis      port 6379 (127.0.0.1)，named volume: ccas-redis (dev) / bind mount (prod)
 ```
