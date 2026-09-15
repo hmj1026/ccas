@@ -4,4 +4,4 @@
 並透過 Telegram Bot 推送通知。
 """
 
-__version__ = "0.9.0"
+__version__ = "0.9.1"

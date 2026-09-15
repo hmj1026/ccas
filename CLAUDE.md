@@ -50,31 +50,29 @@ Read `docs/CODEMAPS/current-implementation.md` when a task touches pipeline flow
 
 ## Skills & External Deps
 
-Skills come from installed Claude plugin manifests (dhpk, openspec/`opsx`, codex, …), surfaced at runtime — they are **not** vendored in this repo. The only real directory under `.claude/skills/` is `gitnexus/` (GitNexus CLI skill docs); it is not a plugin symlink.
+Skills come from installed Claude plugin manifests (dhpk, openspec/`opsx`, codex, …), surfaced at runtime — they are **not** vendored in this repo. The repository-local `.claude/skills/` directory contains the tracked OpenSpec projections; GitNexus guidance comes from the runtime skill catalog.
 
 Do not vendor or manually sync: `openspec`, `codex`, `pyright-lsp` — managed by their own manifests/lock files.
 
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **ccas** (14028 symbols, 24490 relationships, 262 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **ccas**. Use the GitNexus MCP tools to understand code, assess impact, and navigate safely; index statistics are intentionally not cached in this file.
 
-> If any GitNexus tool warns the index is stale, run `npx gitnexus analyze` in terminal first.
+> If any GitNexus tool warns the index is stale, run `npx gitnexus analyze --no-stats --skip-agents-md` in terminal first.
 
-## Always Do
+## Recommended Checks
 
-- **MUST run impact analysis before editing any symbol.** Before modifying a function, class, or method, run `gitnexus_impact({target: "symbolName", direction: "upstream"})` and report the blast radius (direct callers, affected processes, risk level) to the user.
-- **MUST run `gitnexus_detect_changes()` before committing** to verify your changes only affect expected symbols and execution flows.
-- **MUST warn the user** if impact analysis returns HIGH or CRITICAL risk before proceeding with edits.
+- Before modifying a function, class, or method, run `gitnexus_impact({target: "symbolName", direction: "upstream"})` and report the blast radius (direct callers, affected processes, risk level) to the user. Markdown, config, and other non-symbol changes are exempt.
+- Before committing, run `gitnexus_detect_changes()` to verify that changes affect only expected symbols and execution flows. This is an advisory check; no repository hook enforces it.
+- Warn the user before proceeding when impact analysis returns HIGH or CRITICAL risk.
 - When exploring unfamiliar code, use `gitnexus_query({query: "concept"})` to find execution flows instead of grepping. It returns process-grouped results ranked by relevance.
 - When you need full context on a specific symbol — callers, callees, which execution flows it participates in — use `gitnexus_context({name: "symbolName"})`.
 
-## Never Do
+## Safe Navigation
 
-- NEVER edit a function, class, or method without first running `gitnexus_impact` on it.
-- NEVER ignore HIGH or CRITICAL risk warnings from impact analysis.
-- NEVER rename symbols with find-and-replace — use `gitnexus_rename` which understands the call graph.
-- NEVER commit changes without running `gitnexus_detect_changes()` to check affected scope.
+- Use `gitnexus_rename` for symbol renames so references follow the call graph.
+- Treat HIGH or CRITICAL impact results as a review gate, not as an informational detail.
 
 ## Resources
 
@@ -89,11 +87,11 @@ This project is indexed by GitNexus as **ccas** (14028 symbols, 24490 relationsh
 
 | Task | Read this skill file |
 |------|---------------------|
-| Understand architecture / "How does X work?" | `.claude/skills/gitnexus/gitnexus-exploring/SKILL.md` |
-| Blast radius / "What breaks if I change X?" | `.claude/skills/gitnexus/gitnexus-impact-analysis/SKILL.md` |
-| Trace bugs / "Why is X failing?" | `.claude/skills/gitnexus/gitnexus-debugging/SKILL.md` |
-| Rename / extract / split / refactor | `.claude/skills/gitnexus/gitnexus-refactoring/SKILL.md` |
-| Tools, resources, schema reference | `.claude/skills/gitnexus/gitnexus-guide/SKILL.md` |
-| Index, status, clean, wiki CLI commands | `.claude/skills/gitnexus/gitnexus-cli/SKILL.md` |
+| Understand architecture / "How does X work?" | `gitnexus-exploring` runtime skill |
+| Blast radius / "What breaks if I change X?" | `gitnexus-impact-analysis` runtime skill |
+| Trace bugs / "Why is X failing?" | `gitnexus-debugging` runtime skill |
+| Rename / extract / split / refactor | `gitnexus-refactoring` runtime skill |
+| Tools, resources, schema reference | `gitnexus-guide` runtime skill |
+| Index, status, clean, wiki CLI commands | `gitnexus-cli` runtime skill |
 
 <!-- gitnexus:end -->

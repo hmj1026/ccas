@@ -15,8 +15,8 @@
 
 - Docker Engine 24+ 和 **Docker Compose v2.24+**（`docker-compose.override.yml` 使用 `!override` YAML tag，舊版會 parse 失敗）
 - 至少 2GB RAM（tesseract OCR 需要記憶體）
-- Google Cloud 專案（啟用 Gmail API，OAuth 憑證）
-- Telegram Bot token 和 Chat ID
+- Google Cloud 專案與 OAuth 憑證（執行 Gmail ingest 時需要）
+- Telegram Bot token 和 Chat ID（啟用通知時需要）
 
 驗證版本：
 
@@ -38,22 +38,24 @@ cp .env.example .env
 cp config/banks.example.yaml config/banks.yaml
 ```
 
-編輯 `.env`，填入所有必要變數。詳見 [使用者手冊](user-guide.md#2-設定環境變數)。
+編輯 `.env`，依要啟用的功能填入變數。詳見 [使用者手冊](user-guide.md#2-設定環境變數) 與 `.env.example`。
 
-**self-build prod 必填**（即使本指南面向自建鏡像，部分變數仍由 compose 與 entrypoint 共用）：
-- `REPO_OWNER`：GHCR namespace（即使自建也需設定，避免 image tag 解析失敗）
-- `CCAS_VERSION`：與你 build 的 image tag 對齊
-- `CCAS_PORT`：對外服務 port，預設 8080
-- `PUBLIC_BASE_URL`：OAuth redirect URI 計算基礎；本機驗證可用 `http://localhost:${CCAS_PORT}`
+**self-build production 的必要邊界**：
+- `API_TOKEN` 可省略；entrypoint 會自動產生並保存 token。
+- `PUBLIC_BASE_URL` 只有在改用自訂網域／port 或需要 Gmail Web OAuth 時才需設定。
+- `REPO_OWNER`、`CCAS_VERSION` 僅供 pull-only compose 使用，根目錄 self-build compose 不讀取它們。
 
 > `API_TOKEN` **可不填**：entrypoint 首啟會自動生成 32-byte token 並落地至
-> `${CCAS_DATA_LOCATION}/secrets/api-token`（檔案權限 0600），即可用該 token 登入 Web UI。
+> `/data/secrets/api-token`（root self-build host 對應 `backend/data/secrets/api-token`，檔案權限 0600），即可用該 token 登入 Web UI。
+
+本指南的 self-build frontend 直接以 HTTP 提供服務；若未在前方配置 TLS，請在 `.env`
+設 `API_COOKIE_SECURE=false`。正式 HTTPS 入口請維持 `true`。
 
 ## 3. Gmail 憑證
 
 Production 模式使用 bind mount `./backend/data:/data` 儲存資料（見 `docker-compose.yaml`）。需將 Google OAuth 憑證放入 host 端的 `./backend/data/` 目錄。
 
-**首次設定**：先在本機完成 OAuth 認證流程（`./scripts/setup.sh`）取得 `token.json`，再將憑證複製到伺服器：
+**首次設定**：依 [Gmail 設定指南](gmail-setup.md) 使用 Web flow；若使用 CLI fallback，先取得 `token.json`，再將憑證複製到伺服器：
 
 ```bash
 # 確保目錄存在
@@ -85,7 +87,7 @@ docker compose -f docker-compose.yaml up -d --build
 - **worker**: RQ 2.x worker，跑 pipeline / classifier / notifier 工作
 - **scheduler**: APScheduler cron + heartbeat writer（`/data/scheduler-heartbeat`）
 - **bot**: Telegram long polling（未填 token 則 disabled idle）
-- **frontend**: nginx static（dev: 8080；prod 由 proxy 統一對外）
+- **frontend**: nginx static，直接暴露 `127.0.0.1:8080`（self-build 不含 proxy）
 - **redis**: 非同步工作佇列（RQ + APScheduler 共用）
 
 > release pull-only 部署（`docker/docker-compose.yml`）多一個 `proxy`（nginx reverse proxy），統一以 `${CCAS_PORT}` 對外、`/api → backend`、`/ → frontend`。本指南的 self-build 路徑由 `frontend` 直接對外，不掛 proxy。
@@ -99,13 +101,13 @@ docker compose -f docker-compose.yaml up -d --build
 export COMPOSE_FILE=docker-compose.yaml
 ```
 
-設定後 Compose 會忽略 override 自動發現，無論是否帶 `-f` 都以 base compose 為準。這是一行零成本的 defence-in-depth 防線。
+設定後 Compose 會忽略 override 自動發現；維運指令仍建議保留明確的 `-f docker-compose.yaml`，讓實際使用的 compose 檔可被檢查。
 
 ## 6. 驗證服務
 
 ```bash
 # backend health check
-curl http://localhost:8000/health
+curl http://127.0.0.1:8000/health
 
 # 檢查 OCR 可用性
 docker exec ccas-backend-1 python -c \
@@ -137,7 +139,7 @@ docker compose -f docker-compose.yaml logs -f scheduler
 
 ## 8. 資料備份
 
-SQLite 資料庫儲存在 Docker named volume `ccas-data` 中。
+根目錄 self-build 的 SQLite 與 staging 資料位於 host bind mount `./backend/data`；Redis 才使用 named volume。pull-only production 的資料位置則由 `${CCAS_DATA_LOCATION}` 決定。
 
 ```bash
 # 備份資料庫（直接從 bind mount 目錄複製）
@@ -153,7 +155,7 @@ cp backend/data/ccas.db backups/ccas-$(date +%Y%m%d).db
 # 停止服務
 docker compose -f docker-compose.yaml down
 
-# 停止並移除 volumes（清除所有資料）
+# 停止並移除 named volumes；不會刪除 `backend/data` bind mount 中的資料
 docker compose -f docker-compose.yaml down -v
 
 # 重啟單一服務

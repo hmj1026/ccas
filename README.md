@@ -53,14 +53,14 @@ Requires Docker + Docker Compose. First create a Google Cloud OAuth client — s
 ```bash
 mkdir ~/ccas && cd ~/ccas
 REPO_OWNER=<owner>   # GHCR namespace / GitHub owner (the <owner> in the release URL)
-RELEASE=v0.9.0       # pin a released version
+RELEASE=v0.9.1       # pin a released version
 curl -fsSL -o docker-compose.yml \
   "https://github.com/${REPO_OWNER}/ccas/releases/download/${RELEASE}/docker-compose.yml"
 curl -fsSL -o example.env \
   "https://github.com/${REPO_OWNER}/ccas/releases/download/${RELEASE}/example.env"
 cp example.env .env
-# Required: REPO_OWNER, CCAS_VERSION, CCAS_PORT, PUBLIC_BASE_URL
-# Optional (configurable later via /setup/secrets): Telegram, PDF passwords
+# Required: REPO_OWNER, CCAS_VERSION
+# Optional: CCAS_PORT (default 8080), PUBLIC_BASE_URL (custom OAuth URL), Telegram, PDF passwords
 docker compose -f docker-compose.yml pull
 docker compose -f docker-compose.yml up -d
 ```
@@ -86,7 +86,7 @@ Without Docker — requires Python 3.12+, Node.js 22+, `uv`, and `pnpm`.
 ```bash
 cp .env.example .env
 cp config/banks.example.yaml config/banks.yaml
-./scripts/setup.sh        # one-time: install deps, Gmail OAuth, alembic upgrade head
+./scripts/setup.sh        # direct-host setup: deps, Gmail OAuth, alembic upgrade head
 ./scripts/start.sh        # runs backend (:8000) + frontend (:5173); Ctrl+C stops both
 ./scripts/dev-test.sh     # backend pytest (in-memory SQLite)
 ./scripts/dev-lint.sh     # ruff + pyright

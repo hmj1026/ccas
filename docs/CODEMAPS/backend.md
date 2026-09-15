@@ -1,4 +1,4 @@
-<!-- Verified: 2026-09-14 | Canonical details: ../current-implementation.md -->
+<!-- Verified: 2026-09-15 | Canonical details: ../current-implementation.md -->
 
 # Backend
 
@@ -47,6 +47,7 @@ Analytics v1 (analytics.py):
   GET    /api/analytics/years
   GET    /api/analytics/trend
   GET    /api/analytics/categories
+  GET    /api/analytics/categories/compare
   GET    /api/analytics/banks
 
 Analytics v2 (analytics_v2.py — Insights 頁):
@@ -65,7 +66,7 @@ Settings (settings.py):
 
 Pipeline (pipeline.py):
   POST   /api/pipeline/trigger             (推入 RQ queue → 回傳 run_id)
-  GET    /api/pipeline/runs                (status filter + limit ≤100)
+  GET    /api/pipeline/runs                (status filter + page/page_size，page_size ≤100)
   GET    /api/pipeline/runs/{run_id}       (含 stage_summary 詳情)
   GET    /api/pipeline/status              (agent latest-run projection)
          Requires Bearer/session auth; returns the standard ApiResponse envelope.

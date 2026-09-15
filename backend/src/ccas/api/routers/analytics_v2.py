@@ -6,8 +6,8 @@
 - ``GET /api/analytics/compare/years?metric=total|count``：年度對比
 - ``GET /api/analytics/top-merchants?limit=&period=year|month|all``：商家排行
 
-``categories`` 的 ``?compare_with_previous=true`` 擴充直接修改既有
-``analytics.py`` 中的 endpoint（保持 backward compatibility）。
+``categories`` 的月對月比較已拆成 ``/categories/compare``，既有
+``/categories`` endpoint 維持單一分類統計 schema。
 """
 
 from __future__ import annotations

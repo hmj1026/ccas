@@ -1,4 +1,4 @@
-<!-- Verified: 2026-09-14 | Sources: source tree, tests, compose files, GitNexus -->
+<!-- Verified: 2026-09-15 | Sources: source tree, tests, compose files, GitNexus -->
 
 # 目前實作總覽（As-built）
 
@@ -127,7 +127,8 @@ PipelineRun                  （獨立執行歷史，不與 Bill 建 FK）
 
 重要持久化集合：
 
-- `bills` / `transactions`：解析後的帳單與交易；金額以 NTD 整數元保存。
+- `bills` / `transactions`：解析後的帳單與交易；金額以 NTD 整數元保存。`bills` 另保留
+  `parse_method`、`parse_confidence`、`needs_review`、`review_reasons` 解析觀測欄位。
 - `categories`：seed 與 user keyword 分類資料；`classification_rules` 是支援 keyword/exact/regex/priority 的進階使用者規則。
 - `bank_configs` / `bank_settings`：前者是 parser／Gmail 設定，後者是使用者啟用與顯示偏好，兩者並存。
 - `staged_attachments`：來源文件、相對 staging path、處理狀態與錯誤原因；Gmail 的穩定去重鍵是 `(gmail_message_id, gmail_part_id)`。

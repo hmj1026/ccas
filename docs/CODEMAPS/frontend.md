@@ -1,4 +1,4 @@
-<!-- Verified: 2026-09-10 | Canonical details: ../current-implementation.md -->
+<!-- Verified: 2026-09-15 | Canonical details: ../current-implementation.md -->
 
 # Frontend
 
@@ -55,6 +55,7 @@ App (QueryClient + BrowserRouter)
 components/
 ├── auth-guard.tsx                  Session verification HOC
 ├── layout.tsx                      Sidebar navigation shell
+├── prefetch-link.tsx               Prefetch-aware navigation link
 ├── staged-attachments-warning.tsx  Warning panel for failed attachments
 ├── budget-alert-banner.tsx         Active budget breach banner（overview 頂端）
 ├── budget-progress-card.tsx        Per-budget 進度條 + 警戒色
@@ -62,12 +63,18 @@ components/
 ├── export-dialog.tsx               CSV/Excel export 互動 dialog
 ├── top-merchants-table.tsx         Insights 排行榜
 ├── shared/
-│   ├── filter-bar.tsx              Month/bank/status filter controls
-│   └── states.tsx                  LoadingState, ErrorState, EmptyState
+│   ├── error-boundary.tsx           Render error boundary
+│   ├── filter-bar.tsx               Month/bank/status filter controls
+│   ├── query-section.tsx            Query state wrapper
+│   └── states.tsx                   LoadingState, ErrorState, EmptyState
 └── ui/
+    ├── badge.tsx                   Badge primitive
     ├── button.tsx                  shadcn button
     ├── dialog.tsx                  shadcn dialog / modal
-    └── collapsible.tsx             Collapsible expand/collapse
+    ├── collapsible.tsx             Collapsible expand/collapse
+    ├── progress.tsx                Progress bar
+    ├── select-field.tsx            Select control
+    └── tooltip.tsx                 Tooltip primitive
 ```
 
 ## State Management

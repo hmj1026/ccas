@@ -38,7 +38,8 @@ Cloud Console 取得 `credentials.json`，並使用 `/setup/gmail` Web flow 完�
 2. Application type: **Web application**
 3. Name: `CCAS Web`
 4. Authorized redirect URIs 加入你的 CCAS callback：
-   - 預設：`http://localhost:8080/setup/gmail/callback`
+   - 根目錄 dev Compose（override，前端 5173）：`http://localhost:5173/setup/gmail/callback`
+   - self-build／pull-only production：`http://localhost:8080/setup/gmail/callback`
    - 若 `.env` 設 `CCAS_PORT=12283`：`http://localhost:12283/setup/gmail/callback`
    - 若使用網域：`https://ccas.example.com/setup/gmail/callback`，並同步設定 `.env` 的 `PUBLIC_BASE_URL`
 5. 建立後下載 JSON → 存成 `credentials.json`
@@ -53,7 +54,8 @@ Cloud Console 取得 `credentials.json`，並使用 `/setup/gmail` Web flow 完�
 ### 方式 1：Web flow（推薦）
 
 1. 啟動 CCAS 並登入 Web UI
-2. 開啟 `http://localhost:${CCAS_PORT:-8080}/setup/gmail`
+2. 開啟設定頁：根目錄 dev Compose 使用 `http://localhost:5173/setup/gmail`；self-build／pull-only
+   使用 `http://localhost:${CCAS_PORT:-8080}/setup/gmail`
 3. 上傳從 Google Cloud Console 下載的 `credentials.json`
 4. 確認頁面顯示的 redirect URI 已存在於 OAuth client 的 Authorized redirect URIs
 5. 點「授權 Google」，在 Google consent 頁同意 Gmail 權限

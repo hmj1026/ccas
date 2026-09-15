@@ -60,8 +60,8 @@ cd backend && uv sync --frozen --extra supervisor && cd ..
 `install all` 在 supervisord 下也會安裝 `mcp-http`。沒有 supervisord 時，前景檢查：
 
 ```bash
-uv run ccas-mcp-http
-# 或：uv run python -m ccas.mcp.http
+uv run --directory /absolute/path/to/ccas/backend ccas-mcp-http
+# 或：uv run --directory /absolute/path/to/ccas/backend python -m ccas.mcp.http
 ```
 
 無 Bearer 打 `/mcp` 應為 HTTP 401。然後在 MCP client 寫入（不要填真實 token）：

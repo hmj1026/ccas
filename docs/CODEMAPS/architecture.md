@@ -1,4 +1,4 @@
-<!-- Verified: 2026-09-10 | Canonical as-built reference: current-implementation.md -->
+<!-- Verified: 2026-09-15 | Canonical as-built reference: current-implementation.md -->
 
 # Architecture
 

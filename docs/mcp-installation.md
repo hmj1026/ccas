@@ -23,7 +23,7 @@
 | HTTP bind | 預設 `MCP_HTTP_HOST=127.0.0.1`；非 loopback 在 `create_http_app()` fail-closed，不是 Settings validator（誤設 `0.0.0.0` 不得讓 worker／API 起不來） |
 | HTTP 認證 | `Authorization: Bearer`，token 與 REST 的 `API_TOKEN`／`current_api_token()` 相同；**不接受** REST session cookie |
 | 常駐 | supervisord capability `mcp-http`（比照 `api`）。systemd／launchd **不支援** |
-| Release metadata | v0.8.2；MCP `serverInfo.version` 與 package metadata 同步 |
+| Release metadata | 與 `backend/src/ccas/__init__.py` 的 package metadata 同步；目前為 v0.9.1 |
 | Transport | stdio（stdout 僅 MCP JSON）或官方 SDK Streamable HTTP；禁止 deprecated HTTP+SSE |
 | Tools | `list_bills`、`get_bill`、`query_transactions`、`get_payment_due`、`budget_status`、`pipeline_status` |
 | 寫入 | 未提供；`AGENT_WRITE_ENABLED` 不會把目前 server 變成寫入介面 |
@@ -75,8 +75,8 @@ Redis host service。`install mcp-http` **不需要** Redis。
    不要用 systemd／launchd 跑 MCP HTTP。前景檢查（不經 host-services）可用：
 
    ```bash
-   uv run ccas-mcp-http
-   # 或：uv run python -m ccas.mcp.http
+   uv run --directory /absolute/path/to/ccas/backend ccas-mcp-http
+   # 或：uv run --directory /absolute/path/to/ccas/backend python -m ccas.mcp.http
    ```
 
    smoke 預期：對 `/mcp` **不帶** Bearer 得到 HTTP **401**。
@@ -117,7 +117,7 @@ Redis host service。`install mcp-http` **不需要** Redis。
 stdio 程序，啟動後不會顯示互動提示；按 `Ctrl-C` 結束：
 
 ```bash
-uv run ccas-mcp
+   uv run --directory /absolute/path/to/ccas/backend ccas-mcp
 ```
 
 將 MCP client 的 server command 設為下列形式，並把路徑換成絕對路徑：

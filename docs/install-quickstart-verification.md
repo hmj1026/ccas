@@ -1,11 +1,15 @@
-# Install Quickstart 端對端驗證 Runbook
+# Install Quickstart 端對端驗證 Runbook（歷史 release checklist）
 
-本文件為 `compose-pull-deploy` change 的 §6 端對端驗證清單，於 PR 合入 master、
+本文件保留 `compose-pull-deploy` change 的 §6 端對端驗證清單，於 PR 合入 master、
 release-docker workflow 推送 `v0.1.0-rc.1` image 至 GHCR 後，**release manager
 依本清單跑一輪驗證**。所有項目通過才能升正式 `v0.1.0` tag。
 
 > 本 runbook 中提到的 `${CCAS_PORT}` / `${CCAS_DATA_LOCATION}` 等變數，請以你 `.env`
 > 中的實際值替換；下列範例使用預設 `8080` / `./data`。
+>
+> 這是 v0.1.0 release 的歷史驗證記錄，不是目前 v0.9.0 的 sign-off。新部署請先讀
+> [`install-quickstart.md`](install-quickstart.md)；本文件中的認證與資料路徑檢查已依目前
+> `/api/auth/session` 契約保留，外部 GHCR／OAuth／多架構項目仍需另行重跑。
 
 ## 目前本機預驗證紀錄
 
@@ -122,7 +126,7 @@ docker compose logs backend | grep -i "缺少必要環境變數"
 ## §6.8 — Config seed 自動觸發
 
 ```bash
-rm config/banks.yaml   # 模擬使用者誤刪
+mv config/banks.yaml config/banks.yaml.before-test   # 模擬使用者誤刪並保留備份
 docker compose -f docker-compose.yml restart backend
 docker compose logs backend | grep -i "已從 image 範本複製預設值"
 test -f config/banks.yaml && echo "RESEEDED OK"
@@ -145,13 +149,13 @@ curl -fsS "http://localhost:${CCAS_PORT}/api/health"   # backend 不受影響
 
 ```bash
 sed -i.bak 's/^API_TOKEN=.*/# API_TOKEN=/' .env
-rm -rf data/secrets
+mv data/secrets "data/secrets.before-auto-token-$(date +%Y%m%d-%H%M%S)" 2>/dev/null || true
 docker compose -f docker-compose.yml up -d
 docker compose logs backend | grep "已自動產生 API_TOKEN"
 ls -l data/secrets/api-token       # 權限應為 -rw-------（0600）
 TOKEN=$(cat data/secrets/api-token)
 curl -fsS -H "Authorization: Bearer $TOKEN" \
-  "http://localhost:${CCAS_PORT}/api/auth/whoami"
+  "http://localhost:${CCAS_PORT}/api/overview"
 
 # 冪等性：重啟後 token 不變
 docker compose restart backend
@@ -199,8 +203,8 @@ docker compose logs backend --tail 50 | grep -E "client_addr|X-Forwarded"
 curl -c cookies.txt -b cookies.txt -X POST \
   -H "Content-Type: application/json" \
   -d '{"token":"<api-token>"}' \
-  "http://localhost:${CCAS_PORT}/api/auth/login"
-curl -b cookies.txt "http://localhost:${CCAS_PORT}/api/auth/whoami"
+  "http://localhost:${CCAS_PORT}/api/auth/session"
+curl -b cookies.txt "http://localhost:${CCAS_PORT}/api/auth/session"
 
 # Upgrade header（為 SSE / WebSocket 預留）
 curl -v -H "Connection: Upgrade" -H "Upgrade: websocket" \
