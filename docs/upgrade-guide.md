@@ -14,7 +14,7 @@
 cd ~/ccas    # 你 docker-compose.yml 所在的目錄
 
 # 1) 修改 .env 的版本
-sed -i 's/^CCAS_VERSION=.*/CCAS_VERSION=v0.8.5/' .env
+sed -i 's/^CCAS_VERSION=.*/CCAS_VERSION=v0.9.0/' .env
 
 # 2) 拉新 image 並重啟
 docker compose -f docker-compose.yml pull
@@ -40,7 +40,7 @@ URL，見 [`mcp-installation.md`](mcp-installation.md)。systemd／launchd **不
 ```bash
 cd /path/to/ccas
 git fetch --tags
-git checkout v0.8.5    # 改成目標 tag
+git checkout v0.9.0    # 改成目標 tag
 
 cd backend
 uv sync --frozen --extra supervisor
@@ -70,7 +70,7 @@ cd ..
 [`non-docker-agent-host.md`](non-docker-agent-host.md) 與
 [`non-docker-host-services.md`](non-docker-host-services.md)。
 `host-services.sh` 不會跑 alembic；有 schema 變更時先在 `backend/` 執行
-`uv run alembic upgrade head`。v0.8.5 無資料庫 schema 變更。
+`uv run alembic upgrade head`。v0.9.0 無資料庫 schema 變更。
 
 ---
 
@@ -85,6 +85,22 @@ CCAS 採 [SemVer](https://semver.org/)：
 | Major（`v0.x.x` → `v1.0.0`） | 可能 breaking change；release notes 會明示 | 升級前**閱讀 release notes**、備份 |
 
 每次 release 的詳細 changelog 見 [GitHub Releases](https://github.com/<owner>/ccas/releases)。
+
+---
+
+## v0.9.0（Minor）— 2026-09-15 — Agent MCP loopback Streamable HTTP adapter 與 CI 穩定性強化
+
+**適用對象**：v0.8.5 升級至 v0.9.0。無資料庫 schema 變更，不需執行 migration。
+
+**新增功能（Agent MCP）**：
+- 新增 loopback Streamable HTTP adapter (`ccas-mcp-http`)，支援以 HTTP 串流方式掛載 MCP 服務（適用於 Grok、Cursor 等現代 MCP clients）。
+- 支援 Bearer Token 驗證保護（`http://127.0.0.1:8001/mcp`），無 Token 自動回應 HTTP 401。
+- 整合至 `host-services.sh`（`--driver=supervisord install mcp-http` / `smoke mcp-http`）。
+
+**CI 與系統穩定性**：
+- 強化 FUBON 驗證碼辨識閘門在不同 GitHub Actions runner 與 CPU 拓撲環境下的穩定性。
+
+**升級後**：pull-only Docker 部署請使用 `CCAS_VERSION=v0.9.0`；非 Docker 環境若需使用 Streamable HTTP MCP，請執行 `./scripts/host-services.sh --driver=supervisord install all`。
 
 ---
 
