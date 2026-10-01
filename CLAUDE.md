@@ -9,8 +9,8 @@ Gmail PDF → decrypt → parse → classify → REST API / Telegram notificatio
 | OpenSpec spec-driven workflow | `/opsx:*` series |
 | Bug root-cause investigation | `dhpk:code-trace` (`diagnose` mode; replaces retired `bug-investigation`) |
 | Architecture decisions, module boundaries | `dhpk:dhpk-module-design` (canonical DHPK name; not projected as a local Codex symlink) |
-| Free-text task routing (feature/bug/maintenance) | `/dhpk:do` |
-| Feature development workflow | `/dhpk:feature-dev` |
+| Free-text task routing (feature/bug/maintenance) | `/dhpk:flow-guide` |
+| Feature development workflow | `/dhpk:flow-drive` |
 | Harness audit & optimization | `/dhpk:harness-audit` |
 
 ## Agent skills
