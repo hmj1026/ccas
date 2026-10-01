@@ -1,4 +1,4 @@
-<!-- Verified: 2026-09-15 | Canonical details: ../current-implementation.md -->
+<!-- Verified: 2026-10-01 | Canonical details: ./current-implementation.md -->
 
 # Backend
 
@@ -176,7 +176,21 @@ source tree and the central as-built document for exact current boundaries.
 | `bot` | `job.py`, `notifications.py`, `handlers.py` | Telegram notifications and bot commands |
 | `scheduler` | `__main__.py`, `jobs.py`, `reminders.py`, `budget_evaluator.py` | Daily pipeline, reminders, budget evaluation and heartbeat |
 | `storage` | `models.py`, `database.py`, `queries.py`, `secrets.py` | ORM models, async sessions, queries and encrypted secrets |
-| `services` | `schemas.py`, `bills.py`, `transactions.py`, `budgets.py`, `pipeline.py` | Read-only agent projections shared by REST, CLI and MCP; Agent DTO JSON datetime normalization |
+| `services` | `schemas.py`, `bills.py`, `transactions.py`, `budgets.py`, `pipeline.py` | Read-only agent projections shared by REST, CLI and MCP; UTC datetime, shared safe errors/month validation, requested billing-month budget assessment using current settings |
 | `mcp` | `server.py`, `http.py`, `__main__.py` | Official SDK stdio and loopback Streamable HTTP (`/mcp` on 127.0.0.1:8001) adapters sharing `create_server()`; six read-only tools; HTTP is a separate uvicorn app, not mounted on REST `create_app()` |
 | `cli.py` | `cli.py` | Read-only agent CLI surface |
 | `tools` | `bank_configs.py`, `gmail_auth.py`, maintenance scripts | Bank configuration, Gmail helpers and operational utilities |
+
+Agent `budget_status` accepts optional `month` (`YYYY-MM`) and returns `assessment`
+only for a requested billing month (`budget_basis=current_settings`). Its optional
+`current_period` aggregation continues to mean the current month; REST budget
+responses retain their existing shape. CLI exposes `budget-status --month` and
+labels assessment periods in table output. Business errors in CLI/MCP expose
+only `code`, safe `message`, and optional `needs_human`, excluding internal data.
+
+Loopback MCP HTTP uses only static Bearer authentication. OAuth protected
+resource discovery is disabled; deprecated issuer configuration is ignored with
+a fixed startup warning for a nonempty value. Official SDK 2.2.0 integration
+tests cover stdio and real loopback HTTP under stateless `2026-07-28`, including
+transport interruption and rebuilding with Bearer. No legacy handshake or
+third-party host compatibility is claimed by these tests.
