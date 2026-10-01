@@ -28,7 +28,7 @@ HTTP 只聽 loopback，**不是**遠端公開 MCP。Streamable HTTP
 | 授權探索 | 不發布 RFC 9728 metadata 或 `resource_metadata` challenge；舊 `MCP_OAUTH_ISSUER_URL` 已棄用並忽略 |
 | List 快取 | 五個靜態清單方法（`server/discover`、`tools/list`、`prompts/list`、`resources/list`、`resources/templates/list`）回傳 `ttlMs=300000`、`cacheScope=private`（SEP-2549）；`resources/read` 為即時資料，不帶快取提示 |
 | 常駐 | supervisord capability `mcp-http`（比照 `api`）。systemd／launchd **不支援** |
-| Release metadata | 與 `backend/src/ccas/__init__.py` 的 package metadata 同步；目前為 v0.10.1 |
+| Release metadata | 與 `backend/src/ccas/__init__.py` 的 package metadata 同步；目前為 v0.11.0 |
 | Transport | stdio（stdout 僅 MCP JSON）或官方 SDK Streamable HTTP；禁止 deprecated HTTP+SSE |
 | Tools | `list_bills`、`get_bill`、`query_transactions`、`get_payment_due`、`budget_status`、`pipeline_status` |
 | Resources | `ccas://pipeline/status`、`ccas://payment-due`；template `ccas://bill/{bill_id}`（皆為 `application/json`） |
