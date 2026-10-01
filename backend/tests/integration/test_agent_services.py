@@ -586,3 +586,97 @@ async def test_pipeline_status_without_runs_raises_resource_not_found(
         await pipeline_status(db_session)
 
     _assert_not_found(caught.value)
+
+
+@pytest.mark.parametrize(
+    "scope,scope_ref",
+    [
+        (BudgetScope.MONTHLY_TOTAL, None),
+        (BudgetScope.MONTHLY_CATEGORY, "dining"),
+        (BudgetScope.MONTHLY_BANK, "CTBC"),
+    ],
+)
+async def test_budget_assessment_uses_billing_month_and_current_settings(
+    db_session: AsyncSession, scope: BudgetScope, scope_ref: str | None
+) -> None:
+    today = date.today()
+    current_month = today.strftime("%Y-%m")
+    budget = Budget(
+        scope=scope,
+        scope_ref=scope_ref,
+        amount_ntd=1000,
+        alert_threshold_percent=80,
+        enabled=True,
+    )
+    march = Bill(
+        bank_code="CTBC", billing_month="2024-03", total_amount=850, due_date=today
+    )
+    april = Bill(
+        bank_code="CTBC", billing_month="2024-04", total_amount=200, due_date=today
+    )
+    current = Bill(
+        bank_code="CTBC", billing_month=current_month, total_amount=300, due_date=today
+    )
+    db_session.add_all([budget, march, april, current])
+    await db_session.flush()
+    db_session.add_all(
+        [
+            Transaction(
+                bill_id=march.id,
+                trans_date=date(2024, 2, 28),
+                merchant="Cafe",
+                amount=850,
+                category="dining",
+                currency="TWD",
+            ),
+            Transaction(
+                bill_id=april.id,
+                trans_date=date(2024, 3, 28),
+                merchant="Cafe",
+                amount=200,
+                category="dining",
+                currency="TWD",
+            ),
+            Transaction(
+                bill_id=current.id,
+                trans_date=today,
+                merchant="Cafe",
+                amount=300,
+                category="dining",
+                currency="TWD",
+            ),
+        ]
+    )
+    await db_session.commit()
+    legacy = _dump_projection(await budget_status(db_session, scope=scope.value))
+    assert "assessment" not in legacy["data"][0]
+    for month, spent in [("2024-03", "850"), ("2024-04", "200"), ("2024-05", "0")]:
+        body = _dump_projection(
+            await budget_status(
+                db_session, scope=scope.value, month=month, include_current_period=True
+            )
+        )
+        item = body["data"][0]
+        assert item["assessment"] == {
+            "period_year_month": month,
+            "budget_basis": "current_settings",
+            "amount": {"currency": "TWD", "value": "1000"},
+            "spent_amount": {"currency": "TWD", "value": spent},
+            "percent": float(spent) / 10,
+            "threshold_breached": int(spent) >= 800,
+            "alert_threshold_percent": 80,
+        }
+        assert item["current_period"]["period_year_month"] == current_month
+        assert item["current_period"]["current_amount"] == {
+            "currency": "TWD",
+            "value": "300",
+        }
+    budget.amount_ntd = 2000
+    await db_session.commit()
+    changed = _dump_projection(await budget_status(db_session, month="2024-03"))[
+        "data"
+    ][0]["assessment"]
+    assert changed["amount"]["value"] == "2000"
+    assert changed["spent_amount"]["value"] == "850"
+    assert changed["percent"] == 42.5
+    assert changed["threshold_breached"] is False

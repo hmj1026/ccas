@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ccas.services.identity import contains_sensitive_data
 from ccas.services.schemas import (
     AgentQueryError,
+    BudgetAssessment,
     BudgetCurrentPeriod,
     BudgetStatus,
     BudgetStatusInput,
@@ -30,12 +31,14 @@ async def budget_status(
         Literal["monthly_total", "monthly_category", "monthly_bank"] | str | None
     ) = None,
     include_current_period: bool = False,
+    month: str | None = None,
 ) -> ServiceProjection[BudgetStatusResult]:
     """Fetch budget statuses with optional current period spending aggregation."""
     try:
         input_dto = BudgetStatusInput(
             scope=scope,  # type: ignore[arg-type]
             include_current_period=include_current_period,
+            month=month,
         )
     except ValidationError as exc:
         raise AgentQueryError("invalid_argument", "Invalid argument provided.") from exc
@@ -49,6 +52,11 @@ async def budget_status(
     current_map: dict[int, int] = {}
     if input_dto.include_current_period:
         current_map = await aggregate_current_periods(session, budgets, period)
+    assessment_map = (
+        await aggregate_current_periods(session, budgets, input_dto.month)
+        if input_dto.month is not None
+        else {}
+    )
 
     items: list[BudgetStatus] = []
     rest_metadata: dict[str, Any] = {}
@@ -81,6 +89,19 @@ async def budget_status(
         scope_val = b.scope.value if isinstance(b.scope, BudgetScope) else str(b.scope)
 
         try:
+            assessment = None
+            if input_dto.month is not None:
+                spent = assessment_map.get(b.id, 0)
+                raw_percent = spent / b.amount_ntd * 100.0 if b.amount_ntd > 0 else 0.0
+                assessment = BudgetAssessment(
+                    period_year_month=input_dto.month,
+                    budget_basis="current_settings",
+                    amount=Money(currency="TWD", value=str(int(b.amount_ntd))),
+                    spent_amount=Money(currency="TWD", value=str(int(spent))),
+                    percent=round(raw_percent, 2),
+                    threshold_breached=raw_percent >= b.alert_threshold_percent,
+                    alert_threshold_percent=b.alert_threshold_percent,
+                )
             status_item = BudgetStatus(
                 id=b.id,
                 scope=scope_val,  # type: ignore[arg-type]
@@ -89,6 +110,7 @@ async def budget_status(
                 alert_threshold_percent=b.alert_threshold_percent,
                 enabled=b.enabled,
                 current_period=current_dto,
+                assessment=assessment,
             )
         except ValidationError as exc:
             raise AgentQueryError(

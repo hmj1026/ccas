@@ -25,7 +25,7 @@ HTTP 只聽 loopback，**不是**遠端公開 MCP。Streamable HTTP
 | HTTP 入口 | `http://127.0.0.1:8001/mcp`（port 由 `MCP_HTTP_PORT` 覆寫） |
 | HTTP bind | 預設 `MCP_HTTP_HOST=127.0.0.1`；非 loopback 在 `create_http_app()` fail-closed，不是 Settings validator（誤設 `0.0.0.0` 不得讓 worker／API 起不來） |
 | HTTP 認證 | `Authorization: Bearer`，token 與 REST 的 `API_TOKEN`／`current_api_token()` 相同；**不接受** REST session cookie |
-| 授權探索 | 預設**不發布** RFC 9728 metadata；設定 `MCP_OAUTH_ISSUER_URL` 後才掛上 `/.well-known/oauth-protected-resource` 並在 401 帶 `resource_metadata`。詳見下方「授權探索（選用）」 |
+| 授權探索 | 不發布 RFC 9728 metadata 或 `resource_metadata` challenge；舊 `MCP_OAUTH_ISSUER_URL` 已棄用並忽略 |
 | List 快取 | 五個靜態清單方法（`server/discover`、`tools/list`、`prompts/list`、`resources/list`、`resources/templates/list`）回傳 `ttlMs=300000`、`cacheScope=private`（SEP-2549）；`resources/read` 為即時資料，不帶快取提示 |
 | 常駐 | supervisord capability `mcp-http`（比照 `api`）。systemd／launchd **不支援** |
 | Release metadata | 與 `backend/src/ccas/__init__.py` 的 package metadata 同步；目前為 v0.10.1 |
@@ -194,32 +194,28 @@ Origin／token／scope 設計見
 [`0002-remote-mcp-exposure.md`](adr/0002-remote-mcp-exposure.md)，該 ADR 目前為
 **Proposed**，未被 Accept 前不得依其實作。
 
-## 授權探索（選用）
+## 靜態 Bearer 與升級影響
 
-預設情況下 CCAS 只做靜態 Bearer：沒有 token 就回 401，`WWW-Authenticate` 只有裸的
-`Bearer` challenge，**不會**有 `/.well-known/oauth-protected-resource`。這是刻意的
-——CCAS 自己不是 authorization server，若無條件發布 RFC 9728 metadata 並把
-`authorization_servers` 指向自己，遵循規格的 client 會從「拿到 401、退回人工填
-token」變成「走進一個永遠完成不了的 OAuth 流程」，比現狀更糟。
+HTTP 只接受與 REST 相同來源的靜態 Bearer；缺少或無效 token 回 401，
+`WWW-Authenticate` 為 `Bearer`。OAuth protected resource metadata 一律 404，
+challenge 不帶 `resource_metadata`。舊 `MCP_OAUTH_ISSUER_URL` 保留但忽略，
+非空時 HTTP app 啟動向 stderr 輸出固定棄用警告，不回顯設定值；無效 URL 也不阻止啟動。
+外部 OAuth verifier 與遠端暴露不在本次支援範圍。
 
-當環境裡確實有一台 OAuth 2.1 authorization server 時，才設定：
+CLI 業務錯誤改為最小公開欄位 `code`、安全的 `message`，必要時 `needs_human`，
+並以非零退出碼結束。不再回傳內部 `data`，包括 pipeline 重試耗盡的完整執行 payload；
+依賴舊錯誤 data 的 client 需調整。MCP 保留 tool error 與 protocol error 的分層。
 
-```bash
-MCP_OAUTH_ISSUER_URL=https://auth.example.com
-```
+指定帳單月份的預算評估可使用 `ccas-agent budget-status --month 2026-03`，
+MCP `budget_status` 同樣接受 `month`。結果的 `assessment.period_year_month` 為指定月份，
+`budget_basis=current_settings` 表示使用目前預算設定，消費按帳單月份歸屬，並非歷史快照。
+若同時指定 `--include-current-period`，`current_period` 仍獨立表示本月；未指定月份時
+不輸出 `assessment`，保留原 payload。Prompt 嚴格接受有效 `YYYY-MM`，不解析自然語言。
 
-設定後 `create_http_app()` 會改用 `resource_server_url`，SDK 隨即掛上：
-
-- `GET /.well-known/oauth-protected-resource/mcp` → 回傳 `resource`
-  （`http://127.0.0.1:8001/mcp`）與 `authorization_servers`
-- 401 的 `WWW-Authenticate` 追加
-  `resource_metadata="http://127.0.0.1:8001/.well-known/oauth-protected-resource/mcp"`
-
-**token 驗證方式不變**：仍是 `_ApiTokenVerifier` 比對 `API_TOKEN`，
-`validate_token_resource` 明確為 `False`（靜態 token 不帶 RFC 8707 resource
-indicator）。要真正驗證 audience／scope，屬於遠端 MCP 的後續 ADR 範圍。
-
-URL 請勿加尾斜線：RFC 8414／9207 的 issuer 是逐字串比對。
+官方 Python SDK 2.2.0 驗收範圍是現行 `2026-07-28` 協定的 stdio 與真實 loopback HTTP，
+涵蓋六個 tools、resources、templates、prompts、completions 與 CLI 業務資料一致性。
+HTTP 為逐請求無 session 協定；中斷後重新建立 SDK transport、重新帶 Bearer 完成 discovery
+與查詢。此證據不代表第三方 host 相容性或 legacy 握手支援。
 
 ## 排錯
 
@@ -230,7 +226,7 @@ URL 請勿加尾斜線：RFC 8414／9207 的 issuer 是逐字串比對。
 |---|---|
 | 無 Bearer 的 `/mcp` 回 HTTP 401 | smoke **PASS**（認證閘門活著） |
 | 無 Bearer 卻 200／不是 401 | smoke **FAIL**；不要把 host 指過去 |
-| 有效 Bearer 但 MCP session 404 | idle 逾時後 client 須重新 initialize，不是 query 失敗 |
+| HTTP transport 中斷 | 現行協定無 MCP session；重新建立 SDK transport，帶 Bearer 完成 discovery 與查詢 |
 | stdio `Not connected` 且 wire 無 JSON-RPC | host stale session；見下方 stdio 節 |
 
 ### 升級後改連 loopback HTTP

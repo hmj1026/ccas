@@ -6,11 +6,12 @@ reconciliation-identity specifications with extra="forbid".
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_serializer
+from pydantic import AfterValidator, BaseModel, ConfigDict, Field, field_serializer
 
 from ccas.errors import CcasError
 
@@ -61,6 +62,51 @@ class AgentQueryError(CcasError):
             needs_human if needs_human is not None else (code == "needs_human")
         )
         self.data = data
+
+
+def public_query_error(error: AgentQueryError) -> dict[str, Any]:
+    """Project trusted diagnostic templates, never arbitrary extension data."""
+    safe = re.fullmatch(
+        r"(?:Invalid argument provided\.|No pipeline runs found\.|"
+        # Do not echo PAN-length or larger identifiers in public diagnostics.
+        r"Bill #[0-9]{1,12} not found\.|"
+        r"(?:Bill data|Budget data|Transaction|Query result|Pipeline stage) "
+        r"contains sensitive information requiring human review\.|"
+        r"Database contains malformed (?:billing month|card|bill|budget|"
+        r"transaction|stage summary|pipeline) data; human review required\.|"
+        r"Database contains malformed billing month; human review required\.|"
+        r"Transaction merchant contains sensitive information\.|"
+        r"Pipeline (?:count key|id|job_id|triggered_by|current_stage) "
+        r"contains sensitive information\.|"
+        r"Pipeline counts must be nonnegative integers\.|"
+        r"Pipeline execution failed and requires human intervention\.|"
+        r"Pipeline execution failed after retries were exhausted; "
+        r"manual review and check required\.|"
+        r"The requested resource was not found\.)",
+        error.message,
+    )
+    payload: dict[str, Any] = {
+        "code": error.code,
+        "message": error.message if safe else error.DEFAULT_MESSAGES[error.code],
+    }
+    if error.code == "needs_human":
+        payload["needs_human"] = True
+    return payload
+
+
+def validate_billing_month(value: str) -> str:
+    """Accept a real calendar month, preserving the existing year-query bounds."""
+    if not re.fullmatch(r"[0-9]{4}-(?:0[1-9]|1[0-2])", value):
+        raise ValueError("Invalid billing month")
+    date(int(value[:4]), int(value[5:]), 1)
+    return value
+
+
+BillingMonth = Annotated[
+    str,
+    Field(pattern=r"^[0-9]{4}-(0[1-9]|1[0-2])$"),
+    AfterValidator(validate_billing_month),
+]
 
 
 class AgentModel(BaseModel):
@@ -202,6 +248,18 @@ class BudgetCurrentPeriod(AgentModel):
     alert_threshold_percent: int = Field(ge=1, le=100)
 
 
+class BudgetAssessment(AgentModel):
+    """Requested billing month evaluated against current budget settings."""
+
+    period_year_month: BillingMonth
+    budget_basis: Literal["current_settings"]
+    amount: Money
+    spent_amount: Money
+    percent: float
+    threshold_breached: bool
+    alert_threshold_percent: int = Field(ge=1, le=100)
+
+
 class BudgetStatus(AgentModel):
     """Canonical budget status."""
 
@@ -214,6 +272,9 @@ class BudgetStatus(AgentModel):
     alert_threshold_percent: int = Field(ge=1, le=100)
     enabled: bool
     current_period: BudgetCurrentPeriod | None
+    assessment: BudgetAssessment | None = Field(
+        default=None, exclude_if=lambda value: value is None
+    )
 
 
 class PipelineStageSummary(AgentModel):
@@ -312,7 +373,7 @@ class ListBillsInput(BaseModel):
 
     model_config = ConfigDict(extra="forbid", strict=True)
 
-    month: str | None = Field(default=None, pattern=r"^\d{4}-(0[1-9]|1[0-2])$")
+    month: BillingMonth | None = None
     year: int | None = Field(default=None, ge=2000, le=2099)
     bank_code: str | None = None
     status: Literal["all", "paid", "unpaid"] = "all"
@@ -333,7 +394,7 @@ class QueryTransactionsInput(BaseModel):
 
     model_config = ConfigDict(extra="forbid", strict=True)
 
-    month: str | None = Field(default=None, pattern=r"^\d{4}-(0[1-9]|1[0-2])$")
+    month: BillingMonth | None = None
     year: int | None = Field(default=None, ge=2000, le=2099)
     bank_code: str | None = None
     category: str | None = None
@@ -363,3 +424,4 @@ class BudgetStatusInput(BaseModel):
 
     scope: Literal["monthly_total", "monthly_category", "monthly_bank"] | None = None
     include_current_period: bool = False
+    month: BillingMonth | None = None

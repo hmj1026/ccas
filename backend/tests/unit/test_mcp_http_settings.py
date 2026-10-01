@@ -101,18 +101,26 @@ def test_mcp_oauth_issuer_url_defaults_to_unset(
     assert settings.mcp_oauth_issuer_url == ""
 
 
-def test_create_http_app_rejects_non_http_oauth_issuer_url(
+@pytest.mark.parametrize(
+    "issuer", ["https://auth.example.com", "not-a-url", "password=issuer-secret"]
+)
+def test_create_http_app_ignores_deprecated_oauth_issuer_url(
     monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    issuer: str,
 ) -> None:
-    """A malformed issuer must fail at startup, not silently disable discovery."""
     monkeypatch.setenv("MCP_HTTP_HOST", _DEFAULT_MCP_HTTP_HOST)
-    monkeypatch.setenv("MCP_OAUTH_ISSUER_URL", "not-a-url")
+    monkeypatch.setenv("MCP_OAUTH_ISSUER_URL", issuer)
     get_settings.cache_clear()
     try:
         from ccas.mcp.http import create_http_app
 
-        with pytest.raises(ValueError):
-            create_http_app()
+        create_http_app()
+        captured = capsys.readouterr()
+        assert captured.out == ""
+        assert "deprecated" in captured.err.lower()
+        assert "ignored" in captured.err.lower()
+        assert issuer not in captured.err
     finally:
         get_settings.cache_clear()
 

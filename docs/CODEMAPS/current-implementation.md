@@ -1,4 +1,4 @@
-<!-- Verified: 2026-09-15 | Sources: source tree, tests, compose files, GitNexus -->
+<!-- Verified: 2026-10-01 | Sources: source tree, tests, compose files, GitNexus -->
 
 # 目前實作總覽（As-built）
 
@@ -155,7 +155,9 @@ Server state 使用 TanStack Query；交易、設定與 pipeline progress 的 ca
 
 `Settings` 從 `.env`／環境變數載入；`.env.example` 是變數說明的 SSOT。API token、master key、Gmail credentials/token 與 bank secrets 都有獨立的檔案或加密儲存規則；文件只描述路徑與來源，不記錄實際秘密值。
 
-Agent surfaces 共用 `ccas.services` 的安全投影；REST 提供 `/api/bills/payment-due` 與 `/api/pipeline/status`，CLI/MCP 僅允許唯讀查詢。loopback Streamable HTTP MCP 只接受與 REST 相同來源的 Bearer API token，不接受儀表板 session cookie。Agent response DTO 的 datetime 在 JSON serialization boundary 統一輸出 UTC RFC3339 `Z`；`AGENT_WRITE_ENABLED` 預設為 false，且目前不會暴露任何寫入工具。MCP 的 resources／prompts 與 tools 走同一組 service 投影，同樣唯讀；RFC 9728 的 protected resource metadata 預設不發布（開關條件見 [`mcp-installation.md`](../mcp-installation.md)）。
+Agent surfaces 共用 `ccas.services` 的安全投影；REST 提供 `/api/bills/payment-due` 與 `/api/pipeline/status`，CLI/MCP 僅允許唯讀查詢。loopback Streamable HTTP MCP 只接受與 REST 相同來源的 Bearer API token，不接受儀表板 session cookie。Agent response DTO 的 datetime 在 JSON serialization boundary 統一輸出 UTC RFC3339 `Z`；`AGENT_WRITE_ENABLED` 預設為 false，且目前不會暴露任何寫入工具。MCP 的 resources／prompts 與 tools 走同一組 service 投影，同樣唯讀；RFC 9728 protected resource metadata 一律不發布，舊 issuer 設定忽略並在非空時輸出固定棄用警告。現行 `2026-07-28` HTTP 協定為逐請求無 session；中斷後重建 SDK transport 並重新帶 Bearer（見 [`mcp-installation.md`](../mcp-installation.md)）。
+
+CLI／MCP 業務錯誤共用 `schemas.public_query_error()`，僅公開 code、安全 message 與必要的 needs_human，排除任意內部 data。月份 query DTO 與 prompts 共用有效 ASCII `YYYY-MM` 驗證。`budget_status(month=...)`／CLI `budget-status --month` 增加指定帳單月份的 assessment，以目前設定（budget_basis=current_settings）評估帳單月份消費；current_period 仍獨立表示本月，未指定 month 時不輸出 assessment。REST 本月預算契約保持相容。
 
 MCP client 的人工安裝與委託 AI 安裝步驟集中於 [`docs/mcp-installation.md`](../mcp-installation.md)；本文件只保留 as-built 契約，避免複製易漂移的 client 設定片段。
 
