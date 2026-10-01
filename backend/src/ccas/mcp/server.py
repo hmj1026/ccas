@@ -33,7 +33,6 @@ from ccas.config import get_settings
 from ccas.mcp import __version__
 from ccas.services.bills import get_bill, get_payment_due, list_bills
 from ccas.services.budgets import budget_status
-from ccas.services.identity import sanitize_text
 from ccas.services.pipeline import pipeline_status
 from ccas.services.schemas import (
     AgentQueryError,
@@ -49,6 +48,8 @@ from ccas.services.schemas import (
     QueryTransactionsInput,
     ServiceProjection,
     TransactionsPage,
+    public_query_error,
+    validate_billing_month,
 )
 from ccas.services.transactions import query_transactions
 from ccas.storage.agent_queries import completion_candidates_query
@@ -206,15 +207,9 @@ def _business_error_payload(error: AgentQueryError) -> dict[str, Any]:
 
     ``AgentQueryError.data`` is intentionally omitted: it is an internal
     extension point and may contain resource paths or database details.
-    ``sanitize_text`` is a final defense for messages supplied by a service.
+    The shared projector accepts trusted message templates and safe defaults.
     """
-    payload: dict[str, Any] = {
-        "code": error.code,
-        "message": sanitize_text(error.message),
-    }
-    if error.code == "needs_human":
-        payload["needs_human"] = True
-    return payload
+    return public_query_error(error)
 
 
 def _tool_error(error: AgentQueryError) -> types.CallToolResult:
@@ -491,7 +486,8 @@ _PROMPT_SPECS: tuple[_PromptSpec, ...] = (
         _PROMPT_BUDGET_REVIEW,
         "Review configured CCAS budgets against actual spending for one month.",
         "Review CCAS budgets for {month}.\n\n"
-        "1. Call budget_status with include_current_period set to true.\n"
+        "1. Call budget_status with month set to {month}. The assessment uses "
+        "current_settings, not a historical budget snapshot.\n"
         "2. Call query_transactions for {month} to explain the largest "
         "contributors to each over-budget scope.\n"
         "3. Summarize which budgets are on track, at risk, and exceeded.\n\n"
@@ -539,7 +535,10 @@ async def _on_get_prompt(
         raise MCPError(code=_INVALID_PARAMS, message="Argument 'month' is required")
     # Arguments are host-supplied free text that ends up inside model-facing
     # instructions; sanitize before interpolation like every other echo path.
-    safe_month = sanitize_text(str(month))
+    try:
+        safe_month = validate_billing_month(month)
+    except ValueError as exc:
+        raise MCPError(code=_INVALID_PARAMS, message="Invalid billing month") from exc
 
     return types.GetPromptResult(
         description=spec.summary,

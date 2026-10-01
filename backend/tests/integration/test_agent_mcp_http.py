@@ -264,29 +264,27 @@ async def test_http_mcp_401_omits_resource_metadata_without_issuer() -> None:
     assert "resource_metadata" not in response.headers.get("WWW-Authenticate", "")
 
 
-async def test_http_mcp_publishes_resource_metadata_when_issuer_configured() -> None:
-    async with _mcp_http_client(oauth_issuer_url=_ISSUER_URL) as client:
+@pytest.mark.parametrize("issuer", [_ISSUER_URL, "not-a-url", "password=issuer-secret"])
+async def test_http_mcp_omits_resource_metadata_when_issuer_configured(
+    issuer: str,
+) -> None:
+    async with _mcp_http_client(oauth_issuer_url=issuer) as client:
         response = await client.get(
             _RESOURCE_METADATA_PATH,
             headers=_mcp_headers(auth_headers()),
         )
 
-    assert response.status_code == 200
-    metadata = response.json()
-    assert metadata["resource"] == f"{_LOOPBACK_BASE_URL}{_MCP_PATH}"
-    assert metadata["authorization_servers"] == [_ISSUER_URL]
+    assert response.status_code == 404
 
 
-async def test_http_mcp_401_points_at_resource_metadata_with_issuer() -> None:
+async def test_http_mcp_401_omits_resource_metadata_with_issuer() -> None:
     async with _mcp_http_client(oauth_issuer_url=_ISSUER_URL) as client:
         response = await _post_tools_list(client)
 
     assert response.status_code == _UNAUTHORIZED
     challenge = response.headers["WWW-Authenticate"]
-    assert challenge.startswith("Bearer ")
-    assert f'resource_metadata="{_LOOPBACK_BASE_URL}{_RESOURCE_METADATA_PATH}"' in (
-        challenge
-    )
+    assert challenge.startswith("Bearer")
+    assert "resource_metadata" not in challenge
 
 
 async def test_http_mcp_valid_bearer_still_works_when_issuer_configured() -> None:

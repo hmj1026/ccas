@@ -1,5 +1,7 @@
 # ccas gh cli 無法正確推送 commit 修正方案
 
+> 歷史方案備註：本文件記錄舊版 pre-push plugin pin 流程；目前 Agent 客戶端目錄、已安裝 skills、skill lock 與 plugin pin 均為本機產物，`scripts/pre-push.sh` 已不再執行 plugin pin 檢查。
+
 ## 方案選項
 
 ### 問題一：憑證讀取失敗 (Keychain -25308) 方案
@@ -46,4 +48,3 @@
    ```bash
    git push
    ```
-

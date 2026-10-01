@@ -28,6 +28,7 @@ from ccas.services.schemas import (
     PipelineStatusResult,
     ServiceProjection,
     TransactionsPage,
+    public_query_error,
 )
 from ccas.services.transactions import query_transactions
 
@@ -195,6 +196,7 @@ def _render_payment_due_table(payload: PaymentDueResult) -> str:
 
 
 def _render_budget_status_table(payload: BudgetStatusResult) -> str:
+    has_assessment = any(b.assessment is not None for b in payload.data)
     headers = [
         "ID",
         "Scope",
@@ -206,6 +208,11 @@ def _render_budget_status_table(payload: BudgetStatusResult) -> str:
         "Spent",
         "% Used",
         "Breached",
+        "Assessment Period",
+        "Budget Basis",
+        "Assessment Spent",
+        "Assessment %",
+        "Assessment Breached",
     ]
     rows: list[list[Any]] = []
     for b in payload.data:
@@ -227,8 +234,23 @@ def _render_budget_status_table(payload: BudgetStatusResult) -> str:
                 spent,
                 pct,
                 breached,
+                b.assessment.period_year_month if b.assessment else "-",
+                b.assessment.budget_basis if b.assessment else "-",
+                (
+                    f"{b.assessment.spent_amount.currency} "
+                    f"{b.assessment.spent_amount.value}"
+                )
+                if b.assessment
+                else "-",
+                f"{b.assessment.percent:.1f}%" if b.assessment else "-",
+                ("Yes" if b.assessment.threshold_breached else "No")
+                if b.assessment
+                else "-",
             ]
         )
+    if not has_assessment:
+        headers = headers[:10]
+        rows = [row[:10] for row in rows]
     return _render_table(headers, rows)
 
 
@@ -274,17 +296,7 @@ def _run_command[T: BaseModel](
     try:
         projection = asyncio.run(_execute_with_session(coro_factory))
     except AgentQueryError as exc:
-        payload: dict[str, Any] = {
-            "code": exc.code,
-            "message": exc.message,
-        }
-        if exc.code == "needs_human":
-            payload["needs_human"] = True
-        if exc.data is not None:
-            if isinstance(exc.data, BaseModel):
-                payload["data"] = exc.data.model_dump(mode="json")
-            else:
-                payload["data"] = exc.data
+        payload = public_query_error(exc)
         sys.stdout.write(json.dumps(payload, ensure_ascii=False) + "\n")
         sys.stdout.flush()
         sys.exit(2)
@@ -310,14 +322,13 @@ def _run_command[T: BaseModel](
     # If pipeline retries are exhausted, raise human review error per specification
     if isinstance(projection.payload, PipelineStatusResult):
         if projection.payload.data.needs_human:
-            err_payload = {
-                "code": "needs_human",
-                "message": (
-                    "Pipeline retries are exhausted; inspect the run before retrying."
-                ),
-                "needs_human": True,
-                "data": projection.payload.data.model_dump(mode="json"),
-            }
+            err_payload = public_query_error(
+                AgentQueryError(
+                    "needs_human",
+                    "Pipeline execution failed after retries were exhausted; "
+                    "manual review and check required.",
+                )
+            )
             sys.stdout.write(json.dumps(err_payload, ensure_ascii=False) + "\n")
             sys.stdout.flush()
             sys.exit(2)
@@ -368,17 +379,7 @@ class OrderedGroup(click.Group):
         except SystemExit:
             raise
         except AgentQueryError as exc:
-            payload: dict[str, Any] = {
-                "code": exc.code,
-                "message": exc.message,
-            }
-            if exc.code == "needs_human":
-                payload["needs_human"] = True
-            if exc.data is not None:
-                if isinstance(exc.data, BaseModel):
-                    payload["data"] = exc.data.model_dump(mode="json")
-                else:
-                    payload["data"] = exc.data
+            payload = public_query_error(exc)
             sys.stdout.write(json.dumps(payload, ensure_ascii=False) + "\n")
             sys.stdout.flush()
             sys.exit(2)
@@ -607,10 +608,12 @@ def get_payment_due_command(
     default=False,
     help="Include current period spending aggregation.",
 )
+@click.option("--month", type=str, default=None, help="Billing month (YYYY-MM).")
 def budget_status_command(
     format_type: str,
     scope: str | None,
     include_current_period: bool,
+    month: str | None,
 ) -> None:
     async def _action(
         session: AsyncSession,
@@ -619,6 +622,7 @@ def budget_status_command(
             session,
             scope=scope.lower() if scope else None,
             include_current_period=include_current_period,
+            month=month,
         )
 
     _run_command(

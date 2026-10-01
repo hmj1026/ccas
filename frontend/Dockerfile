@@ -28,7 +28,8 @@ RUN pnpm build
 # Stage: production — nginx serves static files (non-root)
 FROM nginx:alpine AS production
 LABEL org.opencontainers.image.title="ccas-frontend" \
-      org.opencontainers.image.description="CCAS Frontend - React SPA served by nginx"
+      org.opencontainers.image.description="CCAS Frontend - React SPA served by nginx" \
+      org.opencontainers.image.source="https://github.com/hmj1026/ccas"
 RUN addgroup -g 1001 -S appgroup && adduser -S appuser -u 1001 -G appgroup \
     && mkdir -p /tmp/client_temp /tmp/proxy_temp /tmp/fastcgi_temp /tmp/uwsgi_temp /tmp/scgi_temp \
     && chown -R appuser:appgroup /usr/share/nginx/html /var/cache/nginx /var/log/nginx \

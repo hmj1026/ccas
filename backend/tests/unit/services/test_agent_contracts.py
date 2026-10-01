@@ -16,6 +16,7 @@ from ccas.services.schemas import (
     ListBillsInput,
     Money,
     QueryTransactionsInput,
+    public_query_error,
 )
 
 AGENT_INPUT_MODELS = (
@@ -25,6 +26,32 @@ AGENT_INPUT_MODELS = (
     EmptyInput,
     BudgetStatusInput,
 )
+
+
+def test_public_error_preserves_safe_bill_identity_message() -> None:
+    payload = public_query_error(
+        AgentQueryError(
+            "resource_not_found", "Bill #42 not found.", data={"private": "internal"}
+        )
+    )
+    assert payload == {"code": "resource_not_found", "message": "Bill #42 not found."}
+
+
+@pytest.mark.parametrize(
+    "identity", ["4111111111111111", "999999999999999999999999999999"]
+)
+def test_public_error_sanitizes_sensitive_numeric_bill_template(identity: str) -> None:
+    payload = public_query_error(
+        AgentQueryError(
+            "resource_not_found",
+            f"Bill #{identity} not found.",
+            data={"private": identity},
+        )
+    )
+    assert set(payload) == {"code", "message"}
+    assert payload["code"] == "resource_not_found"
+    assert identity not in payload["message"]
+    assert payload["message"].strip()
 
 
 def test_agent_input_defaults_match_tool_contracts() -> None:
@@ -113,6 +140,10 @@ def test_money_preserves_twd_decimal_strings(value: str) -> None:
     assert money.currency == "TWD"
     assert money.value == value
     assert money.model_dump(mode="json") == {"currency": "TWD", "value": value}
+
+
+def test_budget_input_accepts_explicit_billing_month() -> None:
+    assert BudgetStatusInput(month="2026-03").model_dump()["month"] == "2026-03"
 
 
 @pytest.mark.parametrize(

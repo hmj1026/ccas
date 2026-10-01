@@ -14,7 +14,7 @@
 cd ~/ccas    # 你 docker-compose.yml 所在的目錄
 
 # 1) 修改 .env 的版本
-sed -i 's/^CCAS_VERSION=.*/CCAS_VERSION=v0.10.1/' .env
+sed -i 's/^CCAS_VERSION=.*/CCAS_VERSION=v0.11.0/' .env
 
 # 2) 拉新 image 並重啟
 docker compose -f docker-compose.yml pull
@@ -40,7 +40,7 @@ URL，見 [`mcp-installation.md`](mcp-installation.md)。systemd／launchd **不
 ```bash
 cd /path/to/ccas
 git fetch --tags
-git checkout v0.10.1    # 改成目標 tag
+git checkout v0.11.0    # 改成目標 tag
 
 cd backend
 uv sync --frozen --extra supervisor
@@ -70,7 +70,7 @@ cd ..
 [`non-docker-agent-host.md`](non-docker-agent-host.md) 與
 [`non-docker-host-services.md`](non-docker-host-services.md)。
 `host-services.sh` 不會跑 alembic；有 schema 變更時先在 `backend/` 執行
-`uv run alembic upgrade head`。v0.10.1 無資料庫 schema 變更。
+`uv run alembic upgrade head`。v0.11.0 無資料庫 schema 變更。
 
 ---
 
@@ -85,6 +85,24 @@ CCAS 採 [SemVer](https://semver.org/)：
 | Major（`v0.x.x` → `v1.0.0`） | 可能 breaking change；release notes 會明示 | 升級前**閱讀 release notes**、備份 |
 
 每次 release 的詳細 changelog 見 [GitHub Releases](https://github.com/<owner>/ccas/releases)。
+
+---
+
+## v0.11.0（Minor）— 2026-10-01 — Agent 協定契約強化、指定月份預算評估與靜態 Bearer 認證收斂
+
+**適用對象**：v0.10.1 升級至 v0.11.0。無資料庫 schema 變更，不需執行 migration。
+
+**預算評估與查詢能力（#80）**：
+- 擴充 `budget_status` 服務與 CLI `budget-status --month YYYY-MM`，支援指定帳單月份，以目前預算設定（`budget_basis=current_settings`）評估消費佔比與預算告警。
+- 增加 `BillingMonth` 格式與真實曆月檢驗（有效 ASCII `YYYY-MM`），同步應用於 bills 與 transactions 查詢。
+
+**Agent 錯誤處理與安全防護（#80）**：
+- 新增 `schemas.public_query_error()`，CLI 與 MCP 業務錯誤僅暴露安全模板訊息與必要之 `needs_human` 標記，徹底杜絕內部除錯資料與堆疊外洩。
+
+**MCP HTTP 傳輸與認證收斂（#80）**：
+- 棄用並忽略 `MCP_OAUTH_ISSUER_URL`，停用未實裝之 RFC 9728 探索文件發布，收斂至與 REST API 相同之靜態 Bearer 認證機制。
+- 現行 `2026-07-28` 協定採逐請求無 session 模式；中斷後重新建立 SDK transport 並重新提供 Bearer。
+- 補齊官方 Python SDK 2.2.0 stdio 與 loopback HTTP 之完整傳輸斷線重連、資源與跨介面一致性測試。
 
 ---
 
@@ -288,7 +306,7 @@ CCAS 採 [SemVer](https://semver.org/)：
 
 **Agent 與 Harness 維護**：
 - **Agent 規範配置**：配置 Agent 協作規範、議題追蹤指引與更新規格配置。
-- **忽略規則調整**：精細化 `.gitignore` 配置，忽略外部安裝之 Agent 技能與工具生成目錄（`.agents/skills/`、`.agent/`、`.codex/`、`.cursor/`），保留倉庫外掛描述檔。
+- **忽略規則調整**：精細化 `.gitignore` 配置，忽略外部安裝之 Agent 技能與工具生成目錄（`.claude/`、`.agents/`、`.agent/`、`.codex/`、`.cursor/`、`.gemini/`），以及本機 skill lock；專案說明仍保留在根目錄文件。
 
 **升級後**：無額外手動步驟。
 

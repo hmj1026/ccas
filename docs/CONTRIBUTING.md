@@ -58,14 +58,9 @@ test: add stage control unit tests
 
 ## Git Hooks 設定
 
-### Claude Code 使用者（自動）
+### Git hooks
 
-使用 Claude Code 開發時，**無需手動安裝任何 hook**。  
-Session 結束時，若有檔案異動，`.claude/hooks/ccas-pre-push-stop.sh` 會自動執行 `scripts/pre-push.sh`，在 session 關閉前完成完整品質檢查。此機制不依賴 git，Claude 若發現問題仍可在同一 session 內修正。
-
-### 非 Claude 工作流（手動 git push）
-
-若直接使用 `git push` 而非透過 Claude Code，建議安裝 git hooks：
+Agent 客戶端設定與已安裝 skills 不納入版控；所有開發者若要在本機啟用 Git hooks，請執行：
 
 ```bash
 ./scripts/setup-hooks.sh
@@ -85,16 +80,10 @@ Session 結束時，若有檔案異動，`.claude/hooks/ccas-pre-push-stop.sh` �
 
 ### Pre-push hook（`scripts/pre-push.sh`）
 
-模擬完整 CI，執行完整驗證。觸發方式有兩種：
-
-| 觸發 | 條件 |
-|------|------|
-| Claude Code Stop hook（自動） | Session 結束且有檔案異動 |
-| git pre-push hook | 執行 `git push`（需先跑 `setup-hooks.sh`）|
+模擬完整 CI，執行完整驗證；執行 `git push` 前需先跑 `setup-hooks.sh` 安裝 hook。
 
 | 步驟 | 說明 |
 |------|------|
-| verify-claude-plugins | 驗證 Claude plugin pin |
 | ruff check + format + pyright | 完整 backend 靜態分析 |
 | pytest (unit, --cov ≥ 80%) | Unit test coverage 門檻 |
 | pnpm lint + build + test | 前端完整驗證（TypeScript 編譯含其中）|
@@ -115,8 +104,8 @@ Session 結束時，若有檔案異動，`.claude/hooks/ccas-pre-push-stop.sh` �
 | `dev-lint.sh` | `ruff check` + `ruff format --check` + `pyright`（後端完整靜態檢查） |
 | `dev-test.sh` | `uv run pytest "$@"`（in-memory SQLite，免 Docker / Redis） |
 | `pre-commit.sh` | gitleaks + ruff + pyright + eslint（針對 staged 檔案） |
-| `pre-push.sh` | 完整 CI 模擬：plugin pin、ruff、pytest（cov ≥ 80%）、pnpm lint/build/test |
-| `setup-hooks.sh` | 安裝 git pre-commit / pre-push hooks（非 Claude 工作流才需要） |
+| `pre-push.sh` | 完整 CI 模擬：ruff、pytest（cov ≥ 80%）、pnpm lint/build/test |
+| `setup-hooks.sh` | 安裝 git pre-commit / pre-push hooks |
 | `setup.sh` | 互動式環境初始化（依賴、`.env`、Gmail OAuth、banks.yaml 等） |
 | `pipeline.sh` | `docker compose exec backend uv run python -m ccas.pipeline "$@"` |
 | `start.sh` | 啟動本機 dev backend（`uv run uvicorn ccas.api.app:create_app --factory --reload`） |
@@ -124,7 +113,6 @@ Session 結束時，若有檔案異動，`.claude/hooks/ccas-pre-push-stop.sh` �
 | `check-env.sh` | 比對 `.env` 與 `.env.example`，缺漏 / 弱密碼即 fail-fast |
 | `check-env-sync.sh` | CI 用：確認 `.env.example` 與 `Settings` 欄位無漂移 |
 | `sync-docker-image-assets.sh` | SSOT 檔案同步至各 Docker stage（觸發後須一併 commit mirrors） |
-| `verify-claude-plugins.sh` | 驗證 `.claude/plugins.lock` pin 未被竄改 |
 | `get-telegram-chat-id.sh` | `/getUpdates` 解析 chat_id helper |
 
 ### Frontend（`pnpm` in `frontend/`）

@@ -25,11 +25,6 @@
 
 # Linguist overrides (GitHub language stats)
 openspec/** linguist-documentation
-.claude/** linguist-documentation
-.codex/** linguist-documentation
-.gemini/** linguist-documentation
-.agents/** linguist-documentation
 docs/** linguist-documentation
 pnpm-lock.yaml linguist-generated
 uv.lock linguist-generated
-skills-lock.json linguist-generated

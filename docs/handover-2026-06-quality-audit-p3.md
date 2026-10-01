@@ -2,6 +2,8 @@
 
 > 用途：P1+P2 已修復並提交（見下方 commit 群）。本文件供**新對話**接續處理 **P3（9 項）**。
 > 來源：`ccas-quality-audit`（8 維度 + 對抗式驗證，76 子代理）。原始稽核結果與完整路線圖見該次執行輸出。
+>
+> 歷史路徑備註：本文中的 `.claude/...` 指當時本機 Agent harness；目前 Agent 客戶端目錄與安裝 skills 均不納入版控。
 
 ## 背景脈絡
 
@@ -127,4 +129,4 @@ cd backend && uv run alembic upgrade head
 - 回應繁中；branch/change 名 kebab-case；金額全程 NTD 整數元（不乘 100）。
 - 改 symbol 前 `gitnexus_impact`；提交前 `gitnexus_detect_changes`；rename 用 `gitnexus_rename`。
 - 改 SSOT（.env.example/check-env.sh/docker-entrypoint.sh）後跑 `./scripts/sync-docker-image-assets.sh` 並 stage mirror。
-- 強制 post-step（依 `.claude/rules/execution-policy.md` Mandatory Post-steps，順序如下）：bug/feature 先 `dhpk:tdd-guide`；SQL/Alembic→`dhpk:database-reviewer`；auth/輸入驗證/secrets→`dhpk:security-reviewer`；任何 Edit/Write 最後一步→`python-reviewer`(ECC)。`dhpk:code-reviewer` 為建議的最終整體把關（非 execution-policy 強制表列，但 sentinel 流程會提醒）。
+- post-step 慣例（由 runtime Agent workflow 提供，順序如下）：bug/feature 先 `dhpk:tdd-guide`；SQL/Alembic→`dhpk:database-reviewer`；auth/輸入驗證/secrets→`dhpk:security-reviewer`；任何 Edit/Write 最後一步→`python-reviewer`(ECC)。`dhpk:code-reviewer` 為建議的最終整體把關。

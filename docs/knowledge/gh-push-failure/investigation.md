@@ -1,5 +1,7 @@
 # ccas gh cli 無法正確推送 commit 調查紀錄
 
+> 歷史調查備註：下列 `.claude` 與 plugin pin 路徑描述的是舊版 repository 狀態；目前 Agent 客戶端目錄與已安裝 skills 均不納入版控，pre-push 也不再依賴 plugin pin。
+
 ## 問題描述
 - **預期行為**：可以使用 `git push`（或經由相關 CLI、GitHub CLI `gh`）正常將 commit 推送到遠端倉庫。
 - **實際行為**：推送時出錯，報錯訊息主要包含兩個部分：
@@ -42,4 +44,3 @@
 
 ## 阻礙與缺口
 - 暫無。接下來進入 Phase 4，設計修正方案。
-

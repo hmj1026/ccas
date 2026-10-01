@@ -4,12 +4,6 @@ set -euo pipefail
 REPO_ROOT="$(git rev-parse --show-toplevel)"
 RUN_BACKEND="${RUN_BACKEND:-1}"
 RUN_FRONTEND="${RUN_FRONTEND:-1}"
-VERIFY_CLAUDE_PLUGINS="${VERIFY_CLAUDE_PLUGINS:-1}"
-
-if [ "$VERIFY_CLAUDE_PLUGINS" = "1" ]; then
-    echo "=== Claude Plugin Pin Check ==="
-    "$REPO_ROOT/scripts/verify-claude-plugins.sh"
-fi
 
 echo "=== SSOT Sync Checks ==="
 "$REPO_ROOT/scripts/check-env-sync.sh"
@@ -17,12 +11,13 @@ echo "=== SSOT Sync Checks ==="
 "$REPO_ROOT/scripts/sync-docker-image-assets.sh" --check
 
 echo "=== Repo Hygiene Check ==="
-SUSPECT_RE='(^\.claude/scheduled_tasks\.lock$|/\.DS_Store$|/__pycache__/|/\.pytest_cache/|/\.ruff_cache/|/\.mypy_cache/|\.pyc$|^node_modules/|\.pid$|\.sock$|^backend/data/captcha-archive/|^backend/data/staging/|\.bak(\.[^/]*)?$|^\.env$|^\.env\.(local|prod|staging))'
-SUSPECT=$(git -C "$REPO_ROOT" ls-files | grep -E "$SUSPECT_RE" || true)
-if [ -n "$SUSPECT" ]; then
-    echo "ERROR: 偵測到不應追蹤的 runtime / cache / 機敏類型檔：" >&2
-    echo "$SUSPECT" >&2
-    echo "修法：git rm --cached <file> 並更新 .gitignore" >&2
+# Use the repository ignore rules so this gate follows new runtime/cache rules.
+# --cached also catches ignored files added with git add -f.
+IGNORED_TRACKED=$(git -C "$REPO_ROOT" ls-files --cached --ignored --exclude-per-directory=.gitignore)
+if [ -n "$IGNORED_TRACKED" ]; then
+    echo "ERROR: 已追蹤檔案命中忽略規則：" >&2
+    echo "$IGNORED_TRACKED" >&2
+    echo "修法：git rm --cached <file>；應版控的範本則調整 .gitignore" >&2
     exit 1
 fi
 

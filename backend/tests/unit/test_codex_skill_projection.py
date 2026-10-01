@@ -1,4 +1,4 @@
-"""Regression checks for the repository-owned Codex skill projection."""
+"""Regression checks for the runtime-managed Codex skill projection."""
 
 import subprocess
 from pathlib import Path
@@ -7,7 +7,7 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
 def test_codex_skills_has_no_tracked_symlinks() -> None:
-    """DHPK owns runtime projection; CCAS must not track stale symlink aliases."""
+    """DHPK owns runtime projection; CCAS must not track symlink aliases."""
     result = subprocess.run(
         ["git", "ls-files", "-s", "--", ".codex/skills"],
         cwd=REPO_ROOT,
