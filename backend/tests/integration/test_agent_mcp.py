@@ -10,13 +10,57 @@ import subprocess
 import sys
 from datetime import date
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import jsonschema
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from ccas.storage.models import Base, Bill
+
+
+def test_cli_and_mcp_business_error_share_safe_projection(monkeypatch) -> None:
+    from click.testing import CliRunner
+    from mcp import types
+
+    import ccas.cli as agent_cli
+    import ccas.mcp.server as mcp_server
+    from ccas.services.schemas import AgentQueryError
+
+    async def fail_cli(_factory):
+        raise AgentQueryError(
+            "needs_human",
+            "password=error-secret /srv/private/db.sqlite 4111111111111111",
+            needs_human=True,
+            data={"token": "internal-secret"},
+        )
+
+    async def fail_mcp(_name, _arguments):
+        return await fail_cli(None)
+
+    monkeypatch.setattr(agent_cli, "_execute_with_session", fail_cli)
+    monkeypatch.setattr(mcp_server, "_execute_tool", fail_mcp)
+    cli_result = CliRunner().invoke(agent_cli.cli, ["pipeline-status"])
+    entry = mcp_server.create_server().get_request_handler("tools/call")
+    assert entry is not None
+
+    async def call() -> types.CallToolResult:
+        return cast(
+            types.CallToolResult,
+            await entry.handler(
+                cast(Any, None),
+                types.CallToolRequestParams(name="pipeline_status", arguments={}),
+            ),
+        )
+
+    result = asyncio.run(call())
+    assert result.is_error is True
+    assert isinstance(result.content[0], types.TextContent)
+    mcp_payload = json.loads(result.content[0].text)
+    assert set(mcp_payload) == {"code", "message", "needs_human"}
+    assert json.loads(cli_result.stdout) == mcp_payload
+    assert cli_result.exit_code == 2
+
 
 _BACKEND_ROOT = Path(__file__).resolve().parents[2]
 _SOURCE_ROOT = _BACKEND_ROOT / "src"

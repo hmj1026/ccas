@@ -4,7 +4,13 @@ from __future__ import annotations
 
 import asyncio
 import json
+import socket
+import sqlite3
+import subprocess
 import sys
+import time
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any
@@ -108,6 +114,27 @@ async def _seed_transport_fixture(db_path: Path) -> int:
                 card_last4="4242",
                 category="food",
                 note=FULL_PAN_SENTINEL,
+            )
+        )
+        earlier_bill = Bill(
+            bank_code="CTBC",
+            billing_month="2026-02",
+            total_amount=456,
+            due_date=date(2026, 3, 15),
+            is_paid=False,
+        )
+        session.add(earlier_bill)
+        await session.flush()
+        session.add(
+            Transaction(
+                bill_id=earlier_bill.id,
+                trans_date=date(2026, 1, 30),
+                posting_date=date(2026, 2, 1),
+                merchant="Earlier merchant",
+                amount=456,
+                currency="TWD",
+                category="food",
+                card_last4="4242",
             )
         )
         session.add(
@@ -459,3 +486,301 @@ def test_official_mcp_sdk_can_discover_list_and_call_same_host_server(
     _assert_no_sensitive_values(
         json.dumps(discovery) + json.dumps(listed) + json.dumps(call)
     )
+
+
+@contextmanager
+def _loopback_listener(db_path: Path, tmp_path: Path) -> Iterator[str]:
+    """Reserve an ephemeral listener before handing its descriptor to uvicorn."""
+    with socket.socket() as listener:
+        listener.bind(("127.0.0.1", 0))
+        listener.listen()
+        port = listener.getsockname()[1]
+        environment = mcp_wire._test_environment(db_path, tmp_path)
+        environment.update(MCP_HTTP_HOST="127.0.0.1", MCP_HTTP_PORT=str(port))
+        with (tmp_path / "http-diagnostics.log").open("w+") as diagnostics:
+            process = subprocess.Popen(
+                [
+                    sys.executable,
+                    "-m",
+                    "uvicorn",
+                    "ccas.mcp.http:create_http_app",
+                    "--factory",
+                    "--fd",
+                    str(listener.fileno()),
+                    "--log-level",
+                    "warning",
+                ],
+                cwd=mcp_wire._BACKEND_ROOT,
+                env=environment,
+                pass_fds=(listener.fileno(),),
+                stdout=diagnostics,
+                stderr=diagnostics,
+            )
+            try:
+                import httpx
+
+                url = f"http://127.0.0.1:{port}/mcp"
+                deadline = time.monotonic() + 10
+                while time.monotonic() < deadline:
+                    assert process.poll() is None, "HTTP server exited during startup"
+                    try:
+                        response = httpx.get(url, timeout=0.2, trust_env=False)
+                        if response.status_code == 401:
+                            break
+                    except httpx.TransportError:
+                        pass
+                    time.sleep(0.05)
+                else:
+                    raise AssertionError(
+                        "HTTP listener did not start within 10 seconds"
+                    )
+                yield url
+            finally:
+                process.terminate()
+                try:
+                    process.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.wait(timeout=5)
+                diagnostics.seek(0)
+                _assert_no_sensitive_values(diagnostics.read())
+
+
+async def _sdk_contract(session: Any, bill_id: int) -> dict[str, dict[str, Any]]:
+    """Exercise the public SDK against either transport using identical data."""
+    from mcp import types
+    from mcp.shared.exceptions import MCPError
+
+    discovery = await session.discover()
+    assert discovery.result_type == "complete"
+    with pytest.raises(MCPError):
+        await session.send_discover("2099-01-01")
+    listed = await session.list_tools()
+    definitions = {tool.name: tool for tool in listed.tools}
+    assert tuple(definitions) == mcp_wire._READ_TOOLS
+    payloads = {}
+    for name, _command in _READ_COMMANDS:
+        result = await session.call_tool(name, _mcp_call_arguments(name, bill_id))
+        payloads[name] = _mcp_success_payload(
+            result.model_dump(by_alias=True, mode="json"),
+            definitions[name].output_schema,
+        )
+    resources = await session.list_resources()
+    assert {str(resource.uri) for resource in resources.resources} == {
+        "ccas://pipeline/status",
+        "ccas://payment-due",
+    }
+    templates = await session.list_resource_templates()
+    assert [template.uri_template for template in templates.resource_templates] == [
+        "ccas://bill/{bill_id}"
+    ]
+    for uri, tool in [
+        ("ccas://pipeline/status", "pipeline_status"),
+        ("ccas://payment-due", "get_payment_due"),
+        (f"ccas://bill/{bill_id}", "get_bill"),
+    ]:
+        resource = await session.read_resource(uri)
+        assert json.loads(resource.contents[0].text) == payloads[tool]
+    prompts = await session.list_prompts()
+    assert len(prompts.prompts) == 2
+    for prompt in prompts.prompts:
+        rendered = await session.get_prompt(prompt.name, {"month": "2026-03"})
+        assert "2026-03" in rendered.messages[0].content.text
+        completion = await session.complete(
+            types.PromptReference(type="ref/prompt", name=prompt.name),
+            {"name": "month", "value": "2026-"},
+        )
+        assert "2026-03" in completion.completion.values
+        with pytest.raises(MCPError):
+            await session.get_prompt(prompt.name, {"month": "2026-99"})
+    completion = await session.complete(
+        types.ResourceTemplateReference(
+            type="ref/resource", uri="ccas://bill/{bill_id}"
+        ),
+        {"name": "bill_id", "value": ""},
+    )
+    assert str(bill_id) in completion.completion.values
+    for name, arguments, code in [
+        ("get_bill", {"bill_id": 999999}, "resource_not_found"),
+        ("budget_status", {"month": "2026-99"}, "invalid_argument"),
+        ("list_bills", {"unexpected": OAUTH_TOKEN_SENTINEL}, "invalid_argument"),
+    ]:
+        error = await session.call_tool(name, arguments)
+        public = _mcp_error_payload(
+            error.model_dump(by_alias=True, mode="json", exclude_none=True)
+        )
+        assert public["code"] == code
+        assert set(public) == {"code", "message"}
+        payloads[f"error_{name}"] = public
+    for name in ["unknown_tool", "mark_bill_paid"]:
+        with pytest.raises(MCPError):
+            await session.call_tool(name, {"bill_id": bill_id})
+    with pytest.raises(MCPError) as unknown:
+        await session.send_request(
+            types.Request(method="unknown/method", params=None), types.ListToolsResult
+        )
+    assert unknown.value.code == -32601
+    historical = await session.call_tool("budget_status", {"month": "2026-03"})
+    payloads["historical_budget"] = _mcp_success_payload(
+        historical.model_dump(by_alias=True, mode="json"),
+        definitions["budget_status"].output_schema,
+    )
+    _assert_no_sensitive_values(json.dumps(payloads))
+    return payloads
+
+
+def test_official_sdk_stdio_http_and_cli_contract_parity(tmp_path: Path):
+    """Official SDK 2.2.0 covers the current stateless 2026-07-28 protocol."""
+    db_path = tmp_path / "sdk-parity.sqlite3"
+    asyncio.run(mcp_wire._create_schema(db_path))
+    bill_id = asyncio.run(_seed_transport_fixture(db_path))
+    # Runtime enables WAL; compare logical rows rather than SQLite journal bytes.
+    with sqlite3.connect(db_path) as connection:
+        before = list(connection.iterdump())
+
+    async def _stdio() -> dict[str, dict[str, Any]]:
+        from mcp import ClientSession
+        from mcp.client.stdio import StdioServerParameters, stdio_client
+
+        parameters = StdioServerParameters(
+            command=sys.executable,
+            args=["-m", "ccas.mcp"],
+            env=mcp_wire._test_environment(db_path, tmp_path),
+            cwd=str(mcp_wire._BACKEND_ROOT),
+        )
+        async with stdio_client(parameters) as streams:
+            async with ClientSession(*streams) as session:
+                return await _sdk_contract(session, bill_id)
+
+    async def _http(url: str) -> dict[str, dict[str, Any]]:
+        import httpx2
+        from mcp import ClientSession
+        from mcp.client.streamable_http import streamable_http_client
+
+        async with httpx2.AsyncClient(
+            headers={"Authorization": "Bearer test"}, trust_env=False
+        ) as client:
+            async with streamable_http_client(url, http_client=client) as streams:
+                async with ClientSession(*streams) as session:
+                    return await _sdk_contract(session, bill_id)
+
+    stdio = asyncio.run(_stdio())
+    with _loopback_listener(db_path, tmp_path) as url:
+        http = asyncio.run(_http(url))
+    assert http == stdio
+    assert [bill["billing_month"] for bill in stdio["list_bills"]["data"]] == [
+        "2026-03",
+        "2026-02",
+    ]
+    assert [
+        transaction["amount"] for transaction in stdio["query_transactions"]["data"]
+    ] == [
+        {"currency": "TWD", "value": "-123"},
+        {"currency": "TWD", "value": "456"},
+    ]
+    assert stdio["get_bill"]["data"]["total_amount"] == {
+        "currency": "TWD",
+        "value": "1234",
+    }
+    assert stdio["pipeline_status"]["data"]["created_at"] == "2026-04-01T12:00:00Z"
+    for name, command in _READ_COMMANDS:
+        arguments = list(command)
+        if name == "get_bill":
+            arguments += ["--bill-id", str(bill_id)]
+        result = cli_wire._run_cli(db_path, tmp_path, arguments)
+        assert result.returncode == 0, result.stderr
+        assert json.loads(result.stdout) == stdio[name]
+    result = cli_wire._run_cli(
+        db_path, tmp_path, ["budget-status", "--month", "2026-03"]
+    )
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout) == stdio["historical_budget"]
+    for name, arguments in [
+        ("get_bill", ["get-bill", "--bill-id", "999999"]),
+        ("budget_status", ["budget-status", "--month", "2026-99"]),
+    ]:
+        failed = cli_wire._run_cli(db_path, tmp_path, arguments)
+        assert failed.returncode != 0
+        assert json.loads(failed.stdout) == stdio[f"error_{name}"]
+    with sqlite3.connect(db_path) as connection:
+        assert list(connection.iterdump()) == before
+
+
+def test_sdk_http_transport_interruption_rebuilds_with_bearer(tmp_path: Path):
+    """A closed HTTP connection is recovered by creating a new SDK transport."""
+    db_path = tmp_path / "reconnect.sqlite3"
+    asyncio.run(mcp_wire._create_schema(db_path))
+    bill_id = asyncio.run(_seed_transport_fixture(db_path))
+
+    async def _reconnect(url: str) -> None:
+        import httpx2
+        from mcp import ClientSession
+        from mcp.client.streamable_http import streamable_http_client
+        from mcp.shared.exceptions import MCPError
+
+        first = None
+        interruption_observed = False
+        async with httpx2.AsyncClient(
+            headers={"Authorization": "Bearer test"},
+            trust_env=False,
+        ) as client:
+            try:
+                async with streamable_http_client(url, http_client=client) as streams:
+                    async with ClientSession(*streams) as session:
+                        await session.discover()
+                        first = await session.call_tool(
+                            "get_bill", {"bill_id": bill_id}
+                        )
+                        await client.aclose()
+                        await session.call_tool("get_bill", {"bill_id": bill_id})
+            except* RuntimeError as interrupted:
+                assert "client has been closed" in str(interrupted.exceptions[0])
+                interruption_observed = True
+        assert interruption_observed
+        async with httpx2.AsyncClient(
+            headers={"Authorization": "Bearer test"},
+            trust_env=False,
+        ) as client:
+            async with streamable_http_client(url, http_client=client) as streams:
+                async with ClientSession(*streams) as session:
+                    await session.discover()
+                    second = await session.call_tool("get_bill", {"bill_id": bill_id})
+                    assert first is not None
+                    assert second.structured_content == first.structured_content
+        for headers in [{}, {"Authorization": "Bearer wrong"}]:
+            async with httpx2.AsyncClient(headers=headers, trust_env=False) as client:
+                response = await client.get(url)
+                assert response.status_code == 401
+                async with streamable_http_client(url, http_client=client) as streams:
+                    async with ClientSession(*streams) as session:
+                        with pytest.raises(MCPError):
+                            await session.discover()
+
+    with _loopback_listener(db_path, tmp_path) as url:
+        asyncio.run(_reconnect(url))
+
+
+def test_stdio_stdout_frames_and_eof_and_unsupported_version(tmp_path: Path):
+    """Each stdout line is one JSON-RPC frame, and EOF exits promptly."""
+    db_path = tmp_path / "framing.sqlite3"
+    asyncio.run(mcp_wire._create_schema(db_path))
+    before = db_path.read_bytes()
+    request = mcp_wire._request("tools/list", 1)
+    request["params"]["_meta"]["io.modelcontextprotocol/protocolVersion"] = "2099-01-01"
+    process = subprocess.run(
+        [sys.executable, "-m", "ccas.mcp"],
+        input=json.dumps(request) + "\n",
+        capture_output=True,
+        text=True,
+        cwd=mcp_wire._BACKEND_ROOT,
+        env=mcp_wire._test_environment(db_path, tmp_path),
+        timeout=10,
+    )
+    assert process.returncode == 0, process.stderr
+    frames = [json.loads(line) for line in process.stdout.splitlines()]
+    assert len(frames) == 1
+    assert frames[0]["jsonrpc"] == "2.0"
+    assert "error" in frames[0]
+    assert "result" not in frames[0]
+    assert db_path.read_bytes() == before
+    _assert_no_sensitive_values(process.stdout + process.stderr)
