@@ -6,8 +6,36 @@ on:
   pull_request:
     branches: [develop, master]
 
+permissions:
+  contents: read
+
 jobs:
+  plan:
+    name: CI Change Plan
+    runs-on: ubuntu-latest
+    outputs:
+      docs_only: ${{ steps.plan.outputs.docs_only }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Classify change conservatively
+        id: plan
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+        run: python3 scripts/ci_plan.py --base "$BASE_SHA" --head "$HEAD_SHA" --github-output "$GITHUB_OUTPUT"
+
+  docs-check:
+    name: Documentation Links
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - run: python3 scripts/check_docs.py
+
   backend-lint:
+    needs: plan
+    if: needs.plan.outputs.docs_only != 'true'
     name: Backend Lint & Type Check
     runs-on: ubuntu-latest
     defaults:
@@ -36,6 +64,8 @@ jobs:
         run: uv run pyright
 
   backend-test:
+    needs: plan
+    if: needs.plan.outputs.docs_only != 'true'
     name: Backend Tests
     # The unit suite includes the real ONNX Runtime CAPTCHA fixture gate.
     # Keep its CPU topology aligned with the integration evaluator below.
@@ -67,6 +97,8 @@ jobs:
           --cov --cov-report=term-missing --cov-fail-under=80
 
   backend-integration-test:
+    needs: plan
+    if: needs.plan.outputs.docs_only != 'true'
     name: Backend Integration Tests
     # Keep the ONNX Runtime CAPTCHA gate on a pinned image.  Hosted runners can
     # expose different CPU affinity/topology to the ONNX Runtime thread pool.
@@ -172,6 +204,9 @@ jobs:
       - name: check-env.sh unit tests
         run: ./tests/scripts/test_check_env.sh
 
+      - name: CI tooling regression
+        run: python3 -m unittest discover -s tests/scripts -p 'test_*.py'
+
       - name: Pre-commit scope regression
         run: bash tests/scripts/test_pre_commit.sh
 
@@ -179,6 +214,8 @@ jobs:
         run: ./tests/scripts/test_host_services.sh
 
   frontend-lint-test:
+    needs: plan
+    if: needs.plan.outputs.docs_only != 'true'
     name: Frontend Lint & Test
     runs-on: ubuntu-latest
     defaults:
@@ -211,6 +248,8 @@ jobs:
         run: pnpm run test --coverage --coverage.reporter=text-summary
 
   frontend-e2e:
+    needs: plan
+    if: needs.plan.outputs.docs_only != 'true'
     name: Frontend E2E (Playwright, mock specs)
     runs-on: ubuntu-latest
     defaults:
@@ -248,3 +287,15 @@ jobs:
           name: playwright-report
           path: frontend/playwright-report/
           retention-days: 7
+
+  ci-gate:
+    name: CI Gate
+    if: always()
+    needs: [plan, docs-check, scripts-checks, backend-lint, backend-test, backend-integration-test, frontend-lint-test, frontend-e2e]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Require the selected checks to pass
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
+        run: python3 scripts/ci_plan.py --gate
