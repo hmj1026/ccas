@@ -5,7 +5,6 @@
 
 import logging
 from typing import Any, NoReturn, cast
-from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Response
 from fastapi.responses import JSONResponse
@@ -26,7 +25,11 @@ from ccas.api.schemas import (
     PipelineTriggerRequest,
 )
 from ccas.config import get_settings
-from ccas.pipeline.worker import get_retry, on_failure_handler, run_pipeline_sync
+from ccas.pipeline.submission import (
+    PipelineEnqueueError,
+    RqPipelineQueue,
+    submit_pipeline,
+)
 from ccas.services.pipeline import (
     get_pipeline_run as service_get_pipeline_run,
 )
@@ -41,7 +44,6 @@ from ccas.storage.database import get_db_session
 from ccas.storage.models import (
     PipelineRun,
     PipelineRunStatus,
-    PipelineRunTerminalReason,
 )
 
 logger = logging.getLogger(__name__)
@@ -86,63 +88,19 @@ async def trigger_pipeline(
 
     request = body or PipelineTriggerRequest()
     opts = request.model_dump()
-    run_id = str(uuid4())
-    session.add(
-        PipelineRun(
-            id=run_id,
-            job_id=run_id,
-            status=PipelineRunStatus.QUEUED,
-            triggered_by="api",
-            params=opts,
-            stage_summary=[],
-        )
-    )
-    await session.commit()
-
     try:
-        job = queue.enqueue(
-            run_pipeline_sync,
-            opts,
-            run_id=run_id,
-            retry=get_retry(),
-            on_failure=on_failure_handler,
-            job_timeout="30m",
+        result = await submit_pipeline(
+            session, RqPipelineQueue(queue), opts, triggered_by="api"
         )
-    except Exception as exc:
-        # Enqueue failed (RedisError / connection refused / any unexpected
-        # error): the job never entered the queue, so the RQ on_failure
-        # callback can never fire. Mark the orphan QUEUED row FAILED here so it
-        # does not linger forever as "queued". Broad catch is intentional and
-        # logged below (logger.exception) — never a silent failure.
-        logger.exception("Pipeline enqueue failed (run_id=%s)", run_id)
-        error_message = f"Pipeline enqueue failed: {exc}"
-        run = await session.get(PipelineRun, run_id)
-        if run is not None:
-            run.status = PipelineRunStatus.FAILED
-            run.terminal_reason = PipelineRunTerminalReason.ENQUEUE_FAILURE
-            run.error_message = error_message
-            await session.commit()
-        # Return the project's ApiResponse error envelope (success=false)
-        # directly. A raised HTTPException would now also be wrapped into this
-        # envelope by the app-level handler, but building the JSONResponse here
-        # keeps the orphan-row FAILED bookkeeping above in the same code path.
+    except PipelineEnqueueError as exc:
         return JSONResponse(
             status_code=503,
-            content={
-                "success": False,
-                "message": error_message,
-                "data": None,
-            },
+            content={"success": False, "message": str(exc), "data": None},
         )
 
-    run = await session.get(PipelineRun, run_id)
-    if run is not None:
-        run.job_id = job.id
-        await session.commit()
-
-    logger.info("Pipeline job enqueued: %s (opts=%s)", job.id, opts)
+    logger.info("Pipeline job enqueued: %s (opts=%s)", result.job_id, opts)
     return ApiResponse(
-        data=PipelineTriggerData(job_id=job.id, run_id=run_id),
+        data=PipelineTriggerData(job_id=result.job_id, run_id=result.run_id),
         message="Pipeline job enqueued",
     )
 

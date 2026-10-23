@@ -8,6 +8,7 @@ from typing import Any, Literal
 from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ccas.budget_assessment import BudgetAssessmentResult, assess_budgets
 from ccas.services.identity import contains_sensitive_data
 from ccas.services.schemas import (
     AgentQueryError,
@@ -21,7 +22,6 @@ from ccas.services.schemas import (
 )
 from ccas.storage.agent_queries import list_budgets_query
 from ccas.storage.models import BudgetScope
-from ccas.storage.queries import aggregate_current_periods
 
 
 async def budget_status(
@@ -49,11 +49,11 @@ async def budget_status(
     today = date.today()
     period = f"{today.year:04d}-{today.month:02d}"
 
-    current_map: dict[int, int] = {}
+    current_map: dict[int, BudgetAssessmentResult] = {}
     if input_dto.include_current_period:
-        current_map = await aggregate_current_periods(session, budgets, period)
+        current_map = await assess_budgets(session, budgets, period)
     assessment_map = (
-        await aggregate_current_periods(session, budgets, input_dto.month)
+        await assess_budgets(session, budgets, input_dto.month)
         if input_dto.month is not None
         else {}
     )
@@ -71,18 +71,15 @@ async def budget_status(
 
         current_dto: BudgetCurrentPeriod | None = None
         if input_dto.include_current_period:
-            current_val = current_map.get(b.id, 0)
-            raw_percent = (
-                (current_val / b.amount_ntd * 100.0) if b.amount_ntd > 0 else 0.0
-            )
-            threshold_breached = raw_percent >= b.alert_threshold_percent
-            percent = round(raw_percent, 2)
+            current = current_map[b.id]
             current_dto = BudgetCurrentPeriod(
                 period_year_month=period,
                 amount=Money(currency="TWD", value=str(int(b.amount_ntd))),
-                current_amount=Money(currency="TWD", value=str(int(current_val))),
-                percent=percent,
-                threshold_breached=threshold_breached,
+                current_amount=Money(
+                    currency="TWD", value=str(current.spent_amount_ntd)
+                ),
+                percent=current.percent,
+                threshold_breached=current.threshold_breached,
                 alert_threshold_percent=b.alert_threshold_percent,
             )
 
@@ -91,15 +88,16 @@ async def budget_status(
         try:
             assessment = None
             if input_dto.month is not None:
-                spent = assessment_map.get(b.id, 0)
-                raw_percent = spent / b.amount_ntd * 100.0 if b.amount_ntd > 0 else 0.0
+                evaluated = assessment_map[b.id]
                 assessment = BudgetAssessment(
                     period_year_month=input_dto.month,
                     budget_basis="current_settings",
                     amount=Money(currency="TWD", value=str(int(b.amount_ntd))),
-                    spent_amount=Money(currency="TWD", value=str(int(spent))),
-                    percent=round(raw_percent, 2),
-                    threshold_breached=raw_percent >= b.alert_threshold_percent,
+                    spent_amount=Money(
+                        currency="TWD", value=str(evaluated.spent_amount_ntd)
+                    ),
+                    percent=evaluated.percent,
+                    threshold_breached=evaluated.threshold_breached,
                     alert_threshold_percent=b.alert_threshold_percent,
                 )
             status_item = BudgetStatus(
@@ -121,7 +119,9 @@ async def budget_status(
 
         items.append(status_item)
         current_ntd = (
-            current_map.get(b.id) if input_dto.include_current_period else None
+            current_map[b.id].spent_amount_ntd
+            if input_dto.include_current_period
+            else None
         )
         rest_metadata[str(b.id)] = {
             "created_at": b.created_at,

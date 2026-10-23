@@ -3,7 +3,7 @@
 CSV / xlsx 匯出由 ``ccas.api.routers.exports`` 提供（see §8）。
 """
 
-from typing import Any, NoReturn
+from typing import NoReturn
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import asc, desc, select
@@ -16,7 +16,7 @@ from ccas.api.schemas import (
     SortLiteral,
     TransactionItem,
 )
-from ccas.services.schemas import AgentQueryError, AgentTransaction
+from ccas.services.schemas import AgentQueryError
 from ccas.services.transactions import query_transactions
 from ccas.storage.database import get_db_session
 from ccas.storage.models import Bill, Transaction
@@ -30,33 +30,6 @@ def _handle_agent_query_error(exc: AgentQueryError) -> NoReturn:
     if exc.code == "invalid_argument":
         raise HTTPException(status_code=422, detail=exc.message)
     raise HTTPException(status_code=500, detail=exc.message)
-
-
-def _agent_transaction_to_item(
-    item: AgentTransaction,
-    rest_metadata: dict[str, Any],
-) -> TransactionItem:
-    meta = rest_metadata.get(str(item.id), {})
-    currency = meta.get("currency", "TWD")
-    orig_amount = (
-        int(item.original_amount.value) if item.original_amount is not None else None
-    )
-    return TransactionItem(
-        id=item.id,
-        bill_id=item.bill_id,
-        trans_date=item.trans_date,
-        posting_date=item.posting_date,
-        merchant=item.merchant,
-        amount=int(item.amount.value),
-        currency=currency,
-        original_amount=orig_amount,
-        card_last4=item.card_last4,
-        category=item.category,
-        bank_code=item.bank_code,
-        billing_month=item.billing_month,
-        installment_current=item.installment_current,
-        installment_total=item.installment_total,
-    )
 
 
 def _build_filter_stmt(
@@ -139,8 +112,8 @@ async def list_transactions(
         _handle_agent_query_error(exc)
 
     items = [
-        _agent_transaction_to_item(item, projection.rest_metadata)
-        for item in projection.payload.data
+        TransactionItem.model_validate(item, from_attributes=True)
+        for item in projection.rest_items
     ]
     return PaginatedResponse(
         data=items,

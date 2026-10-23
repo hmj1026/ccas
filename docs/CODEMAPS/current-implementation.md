@@ -88,8 +88,8 @@ Scheduler 的固定工作為：每日 00:00 觸發 pipeline、每日 02:00 評�
 
 ### API / Scheduler 路徑
 
-1. API router 或 scheduler 建立 `PipelineRun(status=queued)`。
-2. 將 `run_pipeline_sync` enqueue 至 Redis/RQ，回填 RQ job id。
+1. API router 與 scheduler 呼叫共用 `pipeline.submission.submit_pipeline()`，先提交 `PipelineRun(status=queued)`。
+2. `RqPipelineQueue` 集中 worker 參數、retry、timeout 與 failure callback；入列後由 submission module 回填 job id。入列失敗先寫入 `failed/enqueue_failure`，再由入口轉成 HTTP 503 或重新拋出原始 queue exception。資料庫寫入失敗不冒充入列失敗；scheduler 在成功與失敗時均釋放 engine。
 3. worker 以 `DbLifecycleStore` 將 run 標為 `running`。
 4. `run_pipeline_sync` 在組裝點注入 `run_notify_job`，呼叫與 bot 解耦的 `run_pipeline()`。
 5. `DbProgressReporter` 以短生命週期 session 寫入目前 stage 與 `stage_summary`；item progress 以 250ms 節流，stage finish 立即 flush 並對 SQLite lock 重試三次。
@@ -155,9 +155,20 @@ Server state 使用 TanStack Query；交易、設定與 pipeline progress 的 ca
 
 `Settings` 從 `.env`／環境變數載入；`.env.example` 是變數說明的 SSOT。API token、master key、Gmail credentials/token 與 bank secrets 都有獨立的檔案或加密儲存規則；文件只描述路徑與來源，不記錄實際秘密值。
 
+消費交易查詢由 `services.transactions` 先建立完整、具型別的 `TransactionRead`，再產生
+Agent payload 與原生金額的 `rest_items`。網頁 adapter 直接映射完整交易，無需按 id 拼接
+`rest_metadata` 或將 Money 字串轉回整數；Agent 的 TWD Money、對帳識別鍵與敏感資料檢查
+維持原契約。其他查詢的既有 metadata 契約未在此重構範圍。
+
 Agent surfaces 共用 `ccas.services` 的安全投影；REST 提供 `/api/bills/payment-due` 與 `/api/pipeline/status`，CLI/MCP 僅允許唯讀查詢。loopback Streamable HTTP MCP 只接受與 REST 相同來源的 Bearer API token，不接受儀表板 session cookie。Agent response DTO 的 datetime 在 JSON serialization boundary 統一輸出 UTC RFC3339 `Z`；`AGENT_WRITE_ENABLED` 預設為 false，且目前不會暴露任何寫入工具。MCP 的 resources／prompts 與 tools 走同一組 service 投影，同樣唯讀；RFC 9728 protected resource metadata 一律不發布，舊 issuer 設定忽略並在非空時輸出固定棄用警告。現行 `2026-07-28` HTTP 協定為逐請求無 session；中斷後重建 SDK transport 並重新帶 Bearer（見 [`mcp-installation.md`](../mcp-installation.md)）。
 
 CLI／MCP 業務錯誤共用 `schemas.public_query_error()`，僅公開 code、安全 message 與必要的 needs_human，排除任意內部 data。月份 query DTO 與 prompts 共用有效 ASCII `YYYY-MM` 驗證。`budget_status(month=...)`／CLI `budget-status --month` 增加指定帳單月份的 assessment，以目前設定（budget_basis=current_settings）評估帳單月份消費；current_period 仍獨立表示本月，未指定 month 時不輸出 assessment。REST 本月預算契約保持相容。
+
+預算查詢、本期單筆查詢與排程共用 `budget_assessment.assess_budgets()`，按帳單月份
+批次彙總消費，並以整數交叉相乘判斷閾值；顯示百分比的取整不影響達標判斷。
+退款抵減且允許負淨消費；非正額預算顯示 0% 且不達標。查詢仍包含停用預算，
+排程只處理啟用且金額為正的預算。告警兩階（設定閾值、100%）、去重與傳送由
+排程持有；未通知紀錄只有目前仍達精確門檻才補推，既有紀錄不回溯刪除。
 
 MCP client 的人工安裝與委託 AI 安裝步驟集中於 [`docs/mcp-installation.md`](../mcp-installation.md)；本文件只保留 as-built 契約，避免複製易漂移的 client 設定片段。
 
