@@ -14,7 +14,7 @@
 cd ~/ccas    # 你 docker-compose.yml 所在的目錄
 
 # 1) 修改 .env 的版本
-sed -i 's/^CCAS_VERSION=.*/CCAS_VERSION=v0.11.0/' .env
+sed -i 's/^CCAS_VERSION=.*/CCAS_VERSION=v0.12.0/' .env
 
 # 2) 拉新 image 並重啟
 docker compose -f docker-compose.yml pull
@@ -40,7 +40,7 @@ URL，見 [`mcp-installation.md`](mcp-installation.md)。systemd／launchd **不
 ```bash
 cd /path/to/ccas
 git fetch --tags
-git checkout v0.11.0    # 改成目標 tag
+git checkout v0.12.0    # 改成目標 tag
 
 cd backend
 uv sync --frozen --extra supervisor
@@ -70,7 +70,7 @@ cd ..
 [`non-docker-agent-host.md`](non-docker-agent-host.md) 與
 [`non-docker-host-services.md`](non-docker-host-services.md)。
 `host-services.sh` 不會跑 alembic；有 schema 變更時先在 `backend/` 執行
-`uv run alembic upgrade head`。v0.11.0 無資料庫 schema 變更。
+`uv run alembic upgrade head`。v0.12.0 無資料庫 schema 變更。
 
 ---
 
@@ -85,6 +85,27 @@ CCAS 採 [SemVer](https://semver.org/)：
 | Major（`v0.x.x` → `v1.0.0`） | 可能 breaking change；release notes 會明示 | 升級前**閱讀 release notes**、備份 |
 
 每次 release 的詳細 changelog 見 [GitHub Releases](https://github.com/<owner>/ccas/releases)。
+
+---
+
+## v0.12.0（Minor）— 2026-10-23 — 帳單讀取投影深化、Statement 暫存生命週期收斂與預算評估架構統一
+
+**適用對象**：v0.11.0 升級至 v0.12.0。無資料庫 schema 變更，不需執行 migration。
+
+**帳單讀取投影與查詢深化（#83）**：
+- 深化 native bill 讀取投影與交易查詢相容合約，精確區分純讀取投影（read projection）與領域實體狀態。
+- 集中收斂 Agent tool 查詢結果策略（`query_outcome`），統一處理未就緒、空結果與人為介入標記。
+
+**Statement 暫存與 Pipeline 任務耐久生命週期（#83）**：
+- 抽離 statement staging 耐久性生命週期至獨立模組（`ingestor.lifecycle`），確保附件解密與暫存處理在重試與異常時的狀態一致性。
+- 解耦 Pipeline 任務提交（`pipeline.submission`）與排程器任務邏輯，提升整體 ingestion 流程強健性。
+
+**預算評估架構統一（#82）**：
+- 抽取共用預算評估邏輯至 `budget_assessment` 模組，消除排程評估器與服務層重複計算邏輯，並確保消費比例與告警門檻一致。
+
+**工程品質與 Guardrails 強化（#84, #85）**：
+- 配置儲存庫層級驗證 guardrails，嚴格隔離 staged checks 與驗證腳本執行範疇。
+- 將領域術語情境文件規範化重命名為 `GLOSSARY.md`，維持單一事實來源（SSOT）。
 
 ---
 
