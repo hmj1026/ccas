@@ -214,6 +214,12 @@ responses retain their existing shape. CLI exposes `budget-status --month` and
 labels assessment periods in table output. Business errors in CLI/MCP expose
 only `code`, safe `message`, and optional `needs_human`, excluding internal data.
 
+`services.query_outcome.require_tool_result()` owns the shared CLI/MCP tool policy:
+a pipeline snapshot requiring human review becomes the existing safe business error.
+The CLI retains exit-code/table/JSON handling and MCP retains protocol result handling.
+MCP resource reads deliberately bypass this tool policy and retain their safe status
+snapshot, including `needs_human`, rather than raising the tool error.
+
 Loopback MCP HTTP uses only static Bearer authentication. OAuth protected
 resource discovery is disabled; deprecated issuer configuration is ignored with
 a fixed startup warning for a nonempty value. Official SDK 2.2.0 integration

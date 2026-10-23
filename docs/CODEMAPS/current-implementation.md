@@ -175,6 +175,10 @@ Agent surfaces 共用 `ccas.services` 的安全投影；REST 提供 `/api/bills/
 
 CLI／MCP 業務錯誤共用 `schemas.public_query_error()`，僅公開 code、安全 message 與必要的 needs_human，排除任意內部 data。月份 query DTO 與 prompts 共用有效 ASCII `YYYY-MM` 驗證。`budget_status(month=...)`／CLI `budget-status --month` 增加指定帳單月份的 assessment，以目前設定（budget_basis=current_settings）評估帳單月份消費；current_period 仍獨立表示本月，未指定 month 時不輸出 assessment。REST 本月預算契約保持相容。
 
+CLI 與 MCP tool 透過 `services.query_outcome.require_tool_result()` 共用人工介入
+判定；重試耗盡的流程狀態轉成既有安全業務錯誤。MCP resource 不套用此工具政策，
+仍回傳安全的狀態快照（含 `needs_human`），不公開內部 metadata。
+
 預算查詢、本期單筆查詢與排程共用 `budget_assessment.assess_budgets()`，按帳單月份
 批次彙總消費，並以整數交叉相乘判斷閾值；顯示百分比的取整不影響達標判斷。
 退款抵減且允許負淨消費；非正額預算顯示 0% 且不達標。查詢仍包含停用預算，

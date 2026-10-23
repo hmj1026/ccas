@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ccas.services.bills import get_bill, get_payment_due, list_bills
 from ccas.services.budgets import budget_status
 from ccas.services.pipeline import pipeline_status
+from ccas.services.query_outcome import require_tool_result
 from ccas.services.schemas import (
     AgentQueryError,
     BillResult,
@@ -294,7 +295,7 @@ def _run_command[T: BaseModel](
 ) -> None:
     """Execute service query and output JSON or table with safe error handling."""
     try:
-        projection = asyncio.run(_execute_with_session(coro_factory))
+        result = require_tool_result(asyncio.run(_execute_with_session(coro_factory)))
     except AgentQueryError as exc:
         payload = public_query_error(exc)
         sys.stdout.write(json.dumps(payload, ensure_ascii=False) + "\n")
@@ -319,27 +320,10 @@ def _run_command[T: BaseModel](
         sys.stdout.flush()
         sys.exit(2)
 
-    # If pipeline retries are exhausted, raise human review error per specification
-    if isinstance(projection.payload, PipelineStatusResult):
-        if projection.payload.data.needs_human:
-            err_payload = public_query_error(
-                AgentQueryError(
-                    "needs_human",
-                    "Pipeline execution failed after retries were exhausted; "
-                    "manual review and check required.",
-                )
-            )
-            sys.stdout.write(json.dumps(err_payload, ensure_ascii=False) + "\n")
-            sys.stdout.flush()
-            sys.exit(2)
-
     if format_type.lower() == "table":
-        output = table_renderer(projection.payload)
+        output = table_renderer(result)
     else:
-        output = json.dumps(
-            projection.payload.model_dump(mode="json"),
-            ensure_ascii=False,
-        )
+        output = json.dumps(result.model_dump(mode="json"), ensure_ascii=False)
     sys.stdout.write(output + "\n")
     sys.stdout.flush()
 

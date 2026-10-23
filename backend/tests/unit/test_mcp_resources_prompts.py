@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import AsyncIterator
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
@@ -18,7 +18,13 @@ from mcp import types
 from mcp.shared.exceptions import MCPError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from ccas.storage.models import Base, Bill
+from ccas.storage.models import (
+    Base,
+    Bill,
+    PipelineRun,
+    PipelineRunStatus,
+    PipelineRunTerminalReason,
+)
 
 _PIPELINE_STATUS_URI = "ccas://pipeline/status"
 _PAYMENT_DUE_URI = "ccas://payment-due"
@@ -104,6 +110,45 @@ async def test_read_resource_returns_payment_due_json(seeded_bill_id: int) -> No
 
     payload = json.loads(result.contents[0].text)
     assert [bill["id"] for bill in payload["data"]] == [seeded_bill_id]
+
+
+async def test_pipeline_resource_keeps_needs_human_status_snapshot(
+    seeded_bill_id: int,
+) -> None:
+    import ccas.mcp.server as mcp_server
+
+    now = datetime(2026, 4, 1, 12, 0, 0)
+    run = PipelineRun(
+        id="run-needs-human-resource",
+        job_id="job-needs-human-resource",
+        status=PipelineRunStatus.FAILED,
+        triggered_by="api",
+        params={},
+        current_stage="parse",
+        current_stage_processed=0,
+        current_stage_total=1,
+        stage_summary=[],
+        error_message="private database error",
+        created_at=now,
+    )
+    run.terminal_reason = PipelineRunTerminalReason.RETRIES_EXHAUSTED
+    factory = mcp_server.get_session_factory()
+    async with factory() as session:
+        session.add(run)
+        await session.commit()
+
+    result = await _call(
+        "resources/read",
+        types.ReadResourceRequestParams(uri=_PIPELINE_STATUS_URI),
+    )
+
+    payload = json.loads(result.contents[0].text)
+    assert set(payload) == {"data"}
+    assert payload["data"]["id"] == "run-needs-human-resource"
+    assert payload["data"]["status"] == "failed"
+    assert payload["data"]["needs_human"] is True
+    assert "code" not in payload
+    assert "private database error" not in result.contents[0].text
 
 
 async def test_read_resource_rejects_unknown_uri(seeded_bill_id: int) -> None:
