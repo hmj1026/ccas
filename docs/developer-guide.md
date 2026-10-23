@@ -263,14 +263,37 @@ uv run pyright
 
 ### CI 檢查項目
 
-GitHub Actions（`.github/workflows/ci.yaml`）分四個 job：
+GitHub Actions 的工作定義以 [ci.yaml](../.github/workflows/ci.yaml) 為準。
+`CI Change Plan` 只將根目錄明列的 Markdown 與 `docs/**/*.md` 判定為文件變更；
+程式、設定、未知路徑、symlink 或無法取得 diff 都走完整驗證。重新命名會檢查新舊路徑。
 
-| Job | 內容 |
-|-----|------|
-| backend-lint | ruff check + format + pyright |
-| backend-test | unit tests，`--cov-fail-under=80` |
-| backend-integration-test | integration tests，`--timeout=120` |
-| frontend-lint-test | eslint + tsc build + vitest |
+文件變更仍執行 `Documentation Links` 與 `Scripts & Env Sync Checks`。
+前者檢查所有已追蹤 Markdown 的本機連結目的地（含圖片與 reference links），
+略過 fenced 範例、遠端 URL 與標題 anchor；不是完整 Markdown parser 或外部連結檢查器。
+其他變更另執行 backend lint/unit/integration、frontend lint/build/unit 與 Playwright E2E。
+固定的 `CI Gate` 會驗證所選工作確實成功；完整流程中意外 skipped 的工作不算通過。
+若啟用 branch protection，應以 `CI Gate` 作為必要檢查，避免文件分流等待被跳過的工作。
+
+本機可執行：
+
+```bash
+python3 scripts/check_docs.py
+python3 -m unittest discover -s tests/scripts -p 'test_*.py'
+python3 scripts/ci_plan.py --base origin/develop --head HEAD
+```
+
+監看 PR 預設只讀，只有明確加上 `--merge` 才合併：
+
+```bash
+python3 scripts/watch_pr.py 123 --repo hmj1026/ccas
+python3 scripts/watch_pr.py 123 --repo hmj1026/ccas --merge
+```
+
+工具固定開始時的完整 head SHA，只在狀態改變時輸出摘要；失敗時列出可取得的失敗步驟。
+預設要求 `CI Gate` 成功，合併前重新核對狀態並使用 `--match-head-commit`。
+head 改變會停止，需重新檢驗新版本。觀察逾時回傳非零，不會自行取消或重跑：
+下載延遲與正在執行的測試須分別根據日誌判斷。對其他 repo，可重複使用
+`--required-check` 指定該 repo 的必要檢查名稱。
 
 #### CI 排錯備忘
 
