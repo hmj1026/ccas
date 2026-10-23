@@ -193,6 +193,12 @@ safe Agent payload and typed `rest_items`. Each `TransactionRead` carries native
 original currency and all display fields; the HTTP adapter no longer joins an ID-keyed metadata
 dictionary. CLI/MCP still serialize only `payload`, preserving existing money and identity contracts.
 
+`services.bills` likewise returns a `BillProjection` with immutable `BillRead` values in
+`rest_items`. Native integer amounts and PDF availability stay together; the web list and
+payment-status update share one native-to-response mapping. Agent callers serialize only
+`payload`, retaining Money, card validation and reconciliation identity without exposing
+PDF paths or availability. Payment updates do not acquire Agent-only validation after commit.
+
 Agent `budget_status` accepts optional `month` (`YYYY-MM`) and returns `assessment`
 only for a requested billing month (`budget_basis=current_settings`). Its optional
 `current_period` aggregation continues to mean the current month; REST budget
