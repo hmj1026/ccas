@@ -208,4 +208,4 @@ Backend unit coverage gate 目前由 `backend/pyproject.toml`、CI 與 pre-push 
 | API route / schema | `CODEMAPS/backend.md`、本文件；必要時同步 frontend types |
 | route、page、query cache | `CODEMAPS/frontend.md`、本文件 |
 | env、compose、secret、服務入口 | `CODEMAPS/dependencies.md`、deployment / developer guide |
-| 領域詞彙 | `CONTEXT.md`；不可逆且具取捨的決策才新增 ADR |
+| 領域詞彙 | `GLOSSARY.md`；不可逆且具取捨的決策才新增 ADR |

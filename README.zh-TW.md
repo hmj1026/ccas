@@ -128,7 +128,7 @@ ccas/
 | Gmail OAuth 設定 | [`docs/gmail-setup.md`](docs/gmail-setup.md) |
 | 銀行代碼對照 | [`docs/bank-codes.md`](docs/bank-codes.md) |
 | 貢獻指南 | [`docs/CONTRIBUTING.md`](docs/CONTRIBUTING.md) |
-| 領域上下文 | [`CONTEXT.md`](CONTEXT.md) |
+| 領域上下文 | [`GLOSSARY.md`](GLOSSARY.md) |
 | 目前實作總覽 | [`docs/CODEMAPS/current-implementation.md`](docs/CODEMAPS/current-implementation.md) |
 | MCP 安裝與使用 | [`docs/mcp-installation.md`](docs/mcp-installation.md) |
 

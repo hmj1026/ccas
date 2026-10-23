@@ -300,7 +300,7 @@ CCAS 採 [SemVer](https://semver.org/)：
 **適用對象**：v0.6.1 升級至 v0.6.2。alembic schema 不變，不含破壞性變更。
 
 **規格與架構圖資**：
-- **架構地圖與現行實作總覽**：新增 `docs/CODEMAPS/current-implementation.md` 現行實作總覽，並全面更新整體架構地圖與領域上下文 (`CONTEXT.md`)。
+- **架構地圖與現行實作總覽**：新增 `docs/CODEMAPS/current-implementation.md` 現行實作總覽，並全面更新整體架構地圖與領域上下文 (`GLOSSARY.md`)。
 - **模組深度規格**：歸檔 `deepen-codebase-architecture`，並新增 Gmail 連線管理、帳單收取流程 (Intake)、Pipeline 生命週期與交易編輯深度規格。
 - **開發指南對齊**：更新開發手冊、Runbook 與 README，統一對齊測試覆蓋率門檻與部署設定。
 
