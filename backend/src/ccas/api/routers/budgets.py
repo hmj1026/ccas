@@ -34,6 +34,7 @@ from ccas.api.schemas import (
     BudgetScopeLiteral,
     BudgetUpdateRequest,
 )
+from ccas.budget_assessment import assess_budgets
 from ccas.services.budgets import budget_status
 from ccas.services.schemas import AgentQueryError, BudgetStatus
 from ccas.storage.database import get_db_session
@@ -44,7 +45,6 @@ from ccas.storage.models import (
     BudgetScope,
     Category,
 )
-from ccas.storage.queries import aggregate_current_periods
 
 router = APIRouter(prefix="/api/budgets", tags=["budgets"])
 
@@ -258,22 +258,6 @@ def _current_year_month(today: date | None = None) -> str:
     return f"{today.year:04d}-{today.month:02d}"
 
 
-def _to_current_period(
-    budget: Budget, current: int, period_ym: str
-) -> BudgetCurrentPeriod:
-    """組裝單筆 current-period（百分比 + threshold 狀態）。"""
-    percent = (current / budget.amount_ntd * 100.0) if budget.amount_ntd > 0 else 0.0
-    return BudgetCurrentPeriod(
-        budget_id=budget.id,
-        period_year_month=period_ym,
-        amount_ntd=budget.amount_ntd,
-        current_amount_ntd=current,
-        percent=round(percent, 2),
-        threshold_breached=percent >= budget.alert_threshold_percent,
-        alert_threshold_percent=budget.alert_threshold_percent,
-    )
-
-
 @router.get(
     "/alerts/active",
     response_model=ApiResponse[list[BudgetAlertItem]],
@@ -348,5 +332,15 @@ async def get_current_period(
         raise HTTPException(status_code=404, detail=f"budget_id={budget_id} 不存在")
 
     period = _current_year_month()
-    current_map = await aggregate_current_periods(session, [b], period)
-    return ApiResponse(data=_to_current_period(b, current_map.get(b.id, 0), period))
+    assessment = (await assess_budgets(session, [b], period))[b.id]
+    return ApiResponse(
+        data=BudgetCurrentPeriod(
+            budget_id=assessment.budget_id,
+            period_year_month=assessment.period_year_month,
+            amount_ntd=assessment.amount_ntd,
+            current_amount_ntd=assessment.spent_amount_ntd,
+            percent=assessment.percent,
+            threshold_breached=assessment.threshold_breached,
+            alert_threshold_percent=assessment.alert_threshold_percent,
+        )
+    )

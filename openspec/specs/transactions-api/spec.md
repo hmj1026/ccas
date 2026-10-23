@@ -33,3 +33,21 @@ TBD - created by archiving change backend-api. Update Purpose after archive.
 - **WHEN** 前端下載 CSV 檔案
 - **THEN** Content-Disposition header 的檔名格式為 `ccas-transactions-{YYYY-MM}[-{bank_code}].csv`，其中 bank_code 僅在有指定時加入
 
+
+### Requirement: 消費交易投影知識集中
+
+消費交易查詢 module SHALL 從同一批資料產生完整、具型別的原生交易投影與安全 Agent
+payload；網頁 adapter SHALL 無需以字串 id 拼接 metadata 字典或將 Money 字串還原為整數。
+既有篩選、排序、分頁、對帳識別鍵與敏感資料拒絕規則 SHALL 保持相容。
+
+#### Scenario: 外幣退款與零額交易維持表示法
+
+- **WHEN** 查詢包含外幣退款、零額交易及無原始金額的交易
+- **THEN** 網頁結果 SHALL 保留各交易的原始 currency、整數 amount，以及負值、零值或 null 的 original_amount
+- **THEN** Agent payload SHALL 沿用既有 TWD Money 表示法，且不包含內部原生投影或 metadata
+
+#### Scenario: 排序分頁仍保持交易資料完整
+
+- **WHEN** 同一查詢排序後分成多頁
+- **THEN** 每筆交易 SHALL 帶有自己的完整金額與幣別，不依賴額外字典配對或預設幣別
+- **THEN** 敏感商家資料 SHALL 以安全錯誤拒絕，不回傳完整卡號或私人備註

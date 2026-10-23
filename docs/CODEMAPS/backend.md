@@ -172,14 +172,26 @@ source tree and the central as-built document for exact current boundaries.
 | `decryptor` | `job.py`, `decrypt.py` | Resolve bank secrets and decrypt staged PDFs |
 | `parser` | `intake.py`, `registry.py`, `banks/`, `ocr.py` | Discover bank/version parser, extract PDF data and persist bills/transactions |
 | `classifier` | `job.py`, `engine.py`, `rules.py` | Manual override, user rules, keyword fallback and batch persistence |
-| `pipeline` | `orchestrator.py`, `options.py`, `progress.py`, `worker.py` | Stage orchestration, RQ/CLI entry points and run progress |
+| `pipeline` | `orchestrator.py`, `options.py`, `progress.py`, `worker.py`, `submission.py` | Stage orchestration, shared submission lifecycle/RQ adapter, CLI entry point and run progress |
 | `bot` | `job.py`, `notifications.py`, `handlers.py` | Telegram notifications and bot commands |
 | `scheduler` | `__main__.py`, `jobs.py`, `reminders.py`, `budget_evaluator.py` | Daily pipeline, reminders, budget evaluation and heartbeat |
 | `storage` | `models.py`, `database.py`, `queries.py`, `secrets.py` | ORM models, async sessions, queries and encrypted secrets |
+| `budget_assessment` | `budget_assessment.py` | 帳單月份批次預算評估、顯示百分比、精確整數閾值判斷；由查詢與排程共用 |
 | `services` | `schemas.py`, `bills.py`, `transactions.py`, `budgets.py`, `pipeline.py` | Read-only agent projections shared by REST, CLI and MCP; UTC datetime, shared safe errors/month validation, requested billing-month budget assessment using current settings |
 | `mcp` | `server.py`, `http.py`, `__main__.py` | Official SDK stdio and loopback Streamable HTTP (`/mcp` on 127.0.0.1:8001) adapters sharing `create_server()`; six read-only tools; HTTP is a separate uvicorn app, not mounted on REST `create_app()` |
 | `cli.py` | `cli.py` | Read-only agent CLI surface |
 | `tools` | `bank_configs.py`, `gmail_auth.py`, maintenance scripts | Bank configuration, Gmail helpers and operational utilities |
+
+`pipeline.submission.submit_pipeline()` owns queued-row persistence, enqueue failure compensation,
+and job-id backfill for both HTTP and scheduler callers. `RqPipelineQueue` owns worker arguments,
+retry, timeout and the failure callback. SQLite and Redis remain separate commits; a database
+write error after enqueue is not classified as queue rejection. Scheduler engine disposal runs
+on success and failure.
+
+`services.transactions.query_transactions()` returns a `TransactionProjection` with the existing
+safe Agent payload and typed `rest_items`. Each `TransactionRead` carries native integer amounts,
+original currency and all display fields; the HTTP adapter no longer joins an ID-keyed metadata
+dictionary. CLI/MCP still serialize only `payload`, preserving existing money and identity contracts.
 
 Agent `budget_status` accepts optional `month` (`YYYY-MM`) and returns `assessment`
 only for a requested billing month (`budget_basis=current_settings`). Its optional

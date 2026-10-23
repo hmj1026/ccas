@@ -173,3 +173,31 @@ TBD - created by archiving change bills-management-and-insights. Update Purpose 
 
 - **WHEN** active alerts 列表為空
 - **THEN** banner 區塊 SHALL 不渲染、不佔頁面空間
+
+
+### Requirement: 共用精確預算評估
+
+預算查詢與告警 SHALL 共用帳單月份的消費彙總與閾值判斷；評估歷史月份時 SHALL
+使用目前預算設定。金額為正時，達標 SHALL 以 `累計消費 × 100 >= 預算金額 × 閾值百分比`
+判斷，顯示百分比的四捨五入 SHALL NOT 改變結果。退款 SHALL 抵減累計消費，允許負淨值。
+非正額預算 SHALL 顯示 0%、判定未達標，且不觸發告警；正常建立與修改預算仍要求金額至少 1 元。
+
+#### Scenario: 非整數元門檻不得提早觸發
+
+- **WHEN** 預算為 101 元、閾值為 80%、帳單月份累計消費為 80 元
+- **THEN** 查詢 SHALL 回傳未達標，排程 SHALL NOT 建立或補送 80% 告警
+- **WHEN** 同月份累計消費增加至 81 元
+- **THEN** 查詢 SHALL 回傳已達標，排程 SHALL 依既有去重規則建立或補送 80% 告警
+
+#### Scenario: 顯示取整不改變閾值
+
+- **WHEN** 預算為 100000 元、閾值為 80%、累計消費為 79999 元
+- **THEN** 顯示百分比 SHALL 為 80.0，但達標判斷 SHALL 為 false
+
+#### Scenario: 待補送告警跌破門檻後暫停
+
+- **WHEN** 該預算該月份已有未通知告警，而退款或精確閾值判斷使目前消費未達門檻
+- **THEN** 系統 SHALL 保留該紀錄且不補送
+- **WHEN** 消費重新達標
+- **THEN** 系統 SHALL 重用該紀錄、刷新累計金額並補送，不建立重複告警
+- **THEN** 已通知告警 SHALL 保留且不重送

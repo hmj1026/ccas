@@ -50,3 +50,29 @@ The Pipeline run module SHALL expose a narrow interface suitable for an in-memor
 - **WHEN** CLI, scheduler, or worker invokes the pipeline with its existing options and notify binding
 - **THEN** stage order, stage range validation, summary shape, and retry behavior SHALL remain unchanged
 
+
+### Requirement: Pipeline submission has one lifecycle owner
+
+HTTP and scheduler triggers SHALL share one submission module that commits a queued run before
+submitting work, persists the accepted job id, and records `failed` with `enqueue_failure` when
+the queue call raises. The RQ adapter SHALL retain worker arguments, retry policy, timeout and
+failure callback. HTTP SHALL retain its 503 envelope; the scheduler SHALL re-raise the original
+queue exception and release its database engine on success and failure.
+
+#### Scenario: Worker starts before job id is saved
+
+- **WHEN** the queue accepts a job and the worker updates its run before job-id backfill
+- **THEN** submission SHALL update only the job id and SHALL NOT reset the worker's run status
+
+#### Scenario: Database persistence fails
+
+- **WHEN** the initial queued-run commit fails
+- **THEN** submission SHALL NOT call the queue
+- **WHEN** job-id persistence fails after the queue accepted the job
+- **THEN** submission SHALL propagate the database error and SHALL NOT classify the run as an enqueue failure
+
+#### Scenario: Queue fails after queued-run commit
+
+- **WHEN** the queue call raises and the run still exists
+- **THEN** submission SHALL persist the failed run and enqueue-failure reason before exposing the error
+- **THEN** scheduler execution SHALL release the database engine before its event loop closes
