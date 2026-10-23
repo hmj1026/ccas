@@ -5,6 +5,10 @@ REPO_ROOT="$(git rev-parse --show-toplevel)"
 RUN_BACKEND="${RUN_BACKEND:-1}"
 RUN_FRONTEND="${RUN_FRONTEND:-1}"
 
+echo "=== Documentation & Workflow Tool Checks ==="
+python3 "$REPO_ROOT/scripts/check_docs.py" --root "$REPO_ROOT"
+python3 -m unittest discover -s "$REPO_ROOT/tests/scripts" -p 'test_*.py'
+
 echo "=== SSOT Sync Checks ==="
 "$REPO_ROOT/scripts/check-env-sync.sh"
 "$REPO_ROOT/scripts/check-csp-sync.sh"
