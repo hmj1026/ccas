@@ -168,18 +168,44 @@ source tree and the central as-built document for exact current boundaries.
 | Module | Key files | Responsibility |
 |--------|-----------|----------------|
 | `api` | `app.py`, `deps.py`, `routers/`, `schemas/` | FastAPI composition, auth, business and setup endpoints |
-| `ingestor` | `job.py`, `gmail_client.py`, `gmail_connection.py`, `fetcher/` | Gmail ingestion, staging, FUBON web-fetch and captcha flow |
+| `ingestor` | `job.py`, `lifecycle.py`, `gmail_client.py`, `gmail_connection.py`, `fetcher/` | Gmail ingestion, durable per-item staging, FUBON web-fetch and captcha flow |
 | `decryptor` | `job.py`, `decrypt.py` | Resolve bank secrets and decrypt staged PDFs |
 | `parser` | `intake.py`, `registry.py`, `banks/`, `ocr.py` | Discover bank/version parser, extract PDF data and persist bills/transactions |
 | `classifier` | `job.py`, `engine.py`, `rules.py` | Manual override, user rules, keyword fallback and batch persistence |
-| `pipeline` | `orchestrator.py`, `options.py`, `progress.py`, `worker.py` | Stage orchestration, RQ/CLI entry points and run progress |
+| `pipeline` | `orchestrator.py`, `options.py`, `progress.py`, `worker.py`, `submission.py` | Stage orchestration, shared submission lifecycle/RQ adapter, CLI entry point and run progress |
 | `bot` | `job.py`, `notifications.py`, `handlers.py` | Telegram notifications and bot commands |
 | `scheduler` | `__main__.py`, `jobs.py`, `reminders.py`, `budget_evaluator.py` | Daily pipeline, reminders, budget evaluation and heartbeat |
 | `storage` | `models.py`, `database.py`, `queries.py`, `secrets.py` | ORM models, async sessions, queries and encrypted secrets |
+| `budget_assessment` | `budget_assessment.py` | 帳單月份批次預算評估、顯示百分比、精確整數閾值判斷；由查詢與排程共用 |
 | `services` | `schemas.py`, `bills.py`, `transactions.py`, `budgets.py`, `pipeline.py` | Read-only agent projections shared by REST, CLI and MCP; UTC datetime, shared safe errors/month validation, requested billing-month budget assessment using current settings |
 | `mcp` | `server.py`, `http.py`, `__main__.py` | Official SDK stdio and loopback Streamable HTTP (`/mcp` on 127.0.0.1:8001) adapters sharing `create_server()`; six read-only tools; HTTP is a separate uvicorn app, not mounted on REST `create_app()` |
 | `cli.py` | `cli.py` | Read-only agent CLI surface |
 | `tools` | `bank_configs.py`, `gmail_auth.py`, maintenance scripts | Bank configuration, Gmail helpers and operational utilities |
+
+`pipeline.submission.submit_pipeline()` owns queued-row persistence, enqueue failure compensation,
+and job-id backfill for both HTTP and scheduler callers. `RqPipelineQueue` owns worker arguments,
+retry, timeout and the failure callback. SQLite and Redis remain separate commits; a database
+write error after enqueue is not classified as queue rejection. Scheduler engine disposal runs
+on success and failure.
+
+`ingestor.lifecycle` owns duplicate/backfill handling, source acquisition, file writes,
+record replacement, per-item commit/rollback and post-commit old-file cleanup. Gmail
+attachment and web-fetch adapters supply source details and PDF acquisition; the batch
+loop consumes outcomes and reports progress. Bank settings are copied to plain values
+before processing so rollback cannot expire ORM attributes needed by later items/banks.
+Persistence failures count as failed items, not staged successes; cleanup failure leaves
+an orphan without undoing a committed row. Filesystem and SQLite are not one atomic transaction.
+
+`services.transactions.query_transactions()` returns a `TransactionProjection` with the existing
+safe Agent payload and typed `rest_items`. Each `TransactionRead` carries native integer amounts,
+original currency and all display fields; the HTTP adapter no longer joins an ID-keyed metadata
+dictionary. CLI/MCP still serialize only `payload`, preserving existing money and identity contracts.
+
+`services.bills` likewise returns a `BillProjection` with immutable `BillRead` values in
+`rest_items`. Native integer amounts and PDF availability stay together; the web list and
+payment-status update share one native-to-response mapping. Agent callers serialize only
+`payload`, retaining Money, card validation and reconciliation identity without exposing
+PDF paths or availability. Payment updates do not acquire Agent-only validation after commit.
 
 Agent `budget_status` accepts optional `month` (`YYYY-MM`) and returns `assessment`
 only for a requested billing month (`budget_basis=current_settings`). Its optional
@@ -187,6 +213,12 @@ only for a requested billing month (`budget_basis=current_settings`). Its option
 responses retain their existing shape. CLI exposes `budget-status --month` and
 labels assessment periods in table output. Business errors in CLI/MCP expose
 only `code`, safe `message`, and optional `needs_human`, excluding internal data.
+
+`services.query_outcome.require_tool_result()` owns the shared CLI/MCP tool policy:
+a pipeline snapshot requiring human review becomes the existing safe business error.
+The CLI retains exit-code/table/JSON handling and MCP retains protocol result handling.
+MCP resource reads deliberately bypass this tool policy and retain their safe status
+snapshot, including `needs_human`, rather than raising the tool error.
 
 Loopback MCP HTTP uses only static Bearer authentication. OAuth protected
 resource discovery is disabled; deprecated issuer configuration is ignored with

@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Literal
+from dataclasses import dataclass
+from datetime import date
+from typing import Literal
 
-from pydantic import ValidationError
+from pydantic import BaseModel, ConfigDict, ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ccas.services.identity import (
@@ -24,6 +26,56 @@ from ccas.services.schemas import (
 from ccas.storage.agent_queries import query_transactions_query
 
 MONTH_REGEX = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
+
+
+class TransactionRead(BaseModel):
+    """Complete native transaction read, before transport-specific money encoding.
+
+    Currency travels with its transaction; no adapter has to join an auxiliary
+    metadata dictionary or infer a missing currency. This is internal data,
+    never the public Agent payload.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    id: int
+    bill_id: int
+    trans_date: date
+    posting_date: date | None
+    merchant: str
+    amount: int
+    currency: str
+    original_amount: int | None
+    card_last4: str | None
+    category: str | None
+    bank_code: str
+    billing_month: str
+    installment_current: int | None
+    installment_total: int | None
+    reconciliation_key: str
+
+    def to_agent(self) -> AgentTransaction:
+        """Preserve the existing Agent TWD contract, independently of REST currency."""
+        return AgentTransaction(
+            **self.model_dump(exclude={"amount", "currency", "original_amount"}),
+            amount=Money(currency="TWD", value=str(self.amount)),
+            original_amount=(
+                Money(currency="TWD", value=str(self.original_amount))
+                if self.original_amount is not None
+                else None
+            ),
+        )
+
+
+@dataclass(kw_only=True)
+class TransactionProjection(ServiceProjection[TransactionsPage]):
+    """Safe Agent payload and complete, typed native reads from the same rows.
+
+    The inherited rest_metadata remains empty for generic caller compatibility;
+    transaction adapters consume rest_items exclusively.
+    """
+
+    rest_items: tuple[TransactionRead, ...]
 
 
 async def query_transactions(
@@ -45,7 +97,7 @@ async def query_transactions(
     | str = "trans_date_desc",
     page: int = 1,
     page_size: int = 20,
-) -> ServiceProjection[TransactionsPage]:
+) -> TransactionProjection:
     """Query transactions with filtering, sorting, duplicate ordinals,
     and pagination.
     """
@@ -76,7 +128,7 @@ async def query_transactions(
     )
 
     items: list[AgentTransaction] = []
-    rest_metadata: dict[str, Any] = {}
+    rest_items: list[TransactionRead] = []
 
     for row in rows:
         if not row.bill_billing_month or not MONTH_REGEX.match(row.bill_billing_month):
@@ -118,21 +170,20 @@ async def query_transactions(
             dup_ordinal=row.dup_ordinal,
         )
 
-        orig_amount = (
-            Money(currency="TWD", value=str(int(row.original_amount)))
-            if row.original_amount is not None
-            else None
-        )
-
         try:
-            item = AgentTransaction(
+            native = TransactionRead(
                 id=row.id,
                 bill_id=row.bill_id,
                 trans_date=row.trans_date,
                 posting_date=row.posting_date,
                 merchant=row.merchant,
-                amount=Money(currency="TWD", value=str(int(row.amount))),
-                original_amount=orig_amount,
+                amount=int(row.amount),
+                currency=row.currency,
+                original_amount=(
+                    int(row.original_amount)
+                    if row.original_amount is not None
+                    else None
+                ),
                 card_last4=card_last4,
                 category=row.category,
                 bank_code=row.bill_bank_code,
@@ -141,6 +192,7 @@ async def query_transactions(
                 installment_total=row.installment_total,
                 reconciliation_key=recon_key,
             )
+            item = native.to_agent()
         except ValidationError as exc:
             raise AgentQueryError(
                 "needs_human",
@@ -149,9 +201,7 @@ async def query_transactions(
             ) from exc
 
         items.append(item)
-        rest_metadata[str(row.id)] = {
-            "currency": row.currency,
-        }
+        rest_items.append(native)
 
     page_meta = PageMeta(
         page=input_dto.page,
@@ -161,7 +211,7 @@ async def query_transactions(
         has_next=has_next,
     )
 
-    return ServiceProjection(
+    return TransactionProjection(
         payload=TransactionsPage(data=items, pagination=page_meta),
-        rest_metadata=rest_metadata,
+        rest_items=tuple(rest_items),
     )

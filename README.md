@@ -53,7 +53,7 @@ Requires Docker + Docker Compose. First create a Google Cloud OAuth client — s
 ```bash
 mkdir ~/ccas && cd ~/ccas
 REPO_OWNER=<owner>   # GHCR namespace / GitHub owner (the <owner> in the release URL)
-RELEASE=v0.11.0      # pin a released version
+RELEASE=v0.12.0      # pin a released version
 curl -fsSL -o docker-compose.yml \
   "https://github.com/${REPO_OWNER}/ccas/releases/download/${RELEASE}/docker-compose.yml"
 curl -fsSL -o example.env \
@@ -136,7 +136,7 @@ ccas/
 | Gmail OAuth setup | [`docs/gmail-setup.md`](docs/gmail-setup.md) |
 | Bank code reference | [`docs/bank-codes.md`](docs/bank-codes.md) |
 | Contributing | [`docs/CONTRIBUTING.md`](docs/CONTRIBUTING.md) |
-| Domain context | [`CONTEXT.md`](CONTEXT.md) |
+| Domain context | [`GLOSSARY.md`](GLOSSARY.md) |
 | Current implementation | [`docs/CODEMAPS/current-implementation.md`](docs/CODEMAPS/current-implementation.md) |
 | MCP installation | [`docs/mcp-installation.md`](docs/mcp-installation.md) |
 

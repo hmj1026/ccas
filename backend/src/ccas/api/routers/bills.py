@@ -1,7 +1,7 @@
 """Bills API：帳單列表、狀態更新、PDF 下載。"""
 
 from pathlib import Path
-from typing import Any, NoReturn
+from typing import NoReturn
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from fastapi.responses import FileResponse
@@ -18,7 +18,7 @@ from ccas.api.schemas import (
     TransactionItem,
 )
 from ccas.config import get_settings
-from ccas.services.bills import get_payment_due
+from ccas.services.bills import BillRead, get_payment_due
 from ccas.services.bills import list_bills as service_list_bills
 from ccas.services.schemas import AgentBill, AgentQueryError
 from ccas.storage.database import get_db_session
@@ -40,23 +40,19 @@ def _handle_agent_query_error(exc: AgentQueryError) -> NoReturn:
     raise HTTPException(status_code=500, detail=exc.message)
 
 
-def _agent_bill_to_bill_item(
-    agent_bill: AgentBill,
-    rest_metadata: dict[str, Any],
-) -> BillItem:
-    meta = rest_metadata.get(str(agent_bill.id), {})
-    has_pdf = meta.get("has_pdf", False)
-    pdf_url = f"/api/bills/{agent_bill.id}/pdf" if has_pdf else None
+def _bill_read_to_bill_item(bill: BillRead) -> BillItem:
+    """Map one native bill read into the REST response schema."""
+    pdf_url = f"/api/bills/{bill.id}/pdf" if bill.has_pdf else None
     return BillItem(
-        id=agent_bill.id,
-        bank_code=agent_bill.bank_code,
-        bank_name=agent_bill.bank_name,
-        billing_month=agent_bill.billing_month,
-        total_amount=int(agent_bill.total_amount.value),
-        due_date=agent_bill.due_date,
-        is_paid=agent_bill.is_paid,
+        id=bill.id,
+        bank_code=bill.bank_code,
+        bank_name=bill.bank_name,
+        billing_month=bill.billing_month,
+        total_amount=bill.total_amount,
+        due_date=bill.due_date,
+        is_paid=bill.is_paid,
         pdf_url=pdf_url,
-        created_at=agent_bill.created_at,
+        created_at=bill.created_at,
     )
 
 
@@ -122,10 +118,7 @@ async def list_bills(
         _handle_agent_query_error(exc)
 
     return PaginatedResponse(
-        data=[
-            _agent_bill_to_bill_item(b, projection.rest_metadata)
-            for b in projection.payload.data
-        ],
+        data=[_bill_read_to_bill_item(bill) for bill in projection.rest_items],
         pagination=PaginationMeta(
             page=projection.payload.pagination.page,
             page_size=projection.payload.pagination.page_size,
@@ -162,7 +155,11 @@ async def update_bill(
     await session.commit()
     await session.refresh(bill)
 
-    return ApiResponse(data=_to_bill_item(bill, bank_names))
+    native_bill = BillRead.from_bill(
+        bill,
+        bank_name=bank_names.get(bill.bank_code),
+    )
+    return ApiResponse(data=_bill_read_to_bill_item(native_bill))
 
 
 @router.get(
@@ -246,30 +243,6 @@ async def download_bill_pdf(
         path=pdf_path,
         media_type="application/pdf",
         filename=pdf_path.name,
-    )
-
-
-def _to_bill_item(bill: Bill, bank_names: dict[str, str]) -> BillItem:
-    """Convert a Bill ORM instance to a BillItem response schema.
-
-    Args:
-        bill: SQLAlchemy Bill model instance.
-        bank_names: Mapping of bank_code to display name from BankConfig.
-
-    Returns:
-        BillItem schema with pdf_url set when a file_path is present.
-    """
-    pdf_url = f"/api/bills/{bill.id}/pdf" if bill.file_path else None
-    return BillItem(
-        id=bill.id,
-        bank_code=bill.bank_code,
-        bank_name=bank_names.get(bill.bank_code),
-        billing_month=bill.billing_month,
-        total_amount=bill.total_amount,
-        due_date=bill.due_date,
-        is_paid=bill.is_paid,
-        pdf_url=pdf_url,
-        created_at=bill.created_at,
     )
 
 

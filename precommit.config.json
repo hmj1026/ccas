@@ -1,0 +1,66 @@
+{
+  "stages": {
+    "lint_fix": [
+      {
+        "name": "backend-checks",
+        "cwd": ".",
+        "command": "bash",
+        "args": [
+          "scripts/dev-lint.sh"
+        ]
+      },
+      {
+        "name": "frontend-lint",
+        "cwd": "frontend",
+        "command": "pnpm",
+        "args": [
+          "lint"
+        ]
+      }
+    ],
+    "build": [
+      {
+        "name": "frontend-build",
+        "cwd": "frontend",
+        "command": "pnpm",
+        "args": [
+          "build"
+        ]
+      }
+    ],
+    "test_unit": [
+      {
+        "name": "backend-unit",
+        "cwd": ".",
+        "command": "bash",
+        "args": [
+          "scripts/dev-test.sh",
+          "tests/unit/",
+          "-m",
+          "not live_fubon and not captcha_model",
+          "--cov",
+          "--cov-report=term-missing",
+          "--cov-fail-under=80",
+          "-q"
+        ]
+      },
+      {
+        "name": "frontend-unit",
+        "cwd": "frontend",
+        "command": "pnpm",
+        "args": [
+          "test",
+          "--coverage"
+        ]
+      },
+      {
+        "name": "hook-regression",
+        "cwd": ".",
+        "command": "bash",
+        "args": [
+          "tests/scripts/test_pre_commit.sh"
+        ]
+      }
+    ]
+  }
+}

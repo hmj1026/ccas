@@ -34,6 +34,7 @@ from ccas.mcp import __version__
 from ccas.services.bills import get_bill, get_payment_due, list_bills
 from ccas.services.budgets import budget_status
 from ccas.services.pipeline import pipeline_status
+from ccas.services.query_outcome import require_tool_result
 from ccas.services.schemas import (
     AgentQueryError,
     BillResult,
@@ -303,20 +304,8 @@ async def _on_call_tool(
     """Handle a valid MCP tools/call request with layered error mapping."""
     try:
         projection = await _execute_tool(params.name, params.arguments or {})
-        if (
-            params.name == "pipeline_status"
-            and isinstance(projection.payload, PipelineStatusResult)
-            and projection.payload.data.needs_human
-        ):
-            return _tool_error(
-                AgentQueryError(
-                    "needs_human",
-                    "Pipeline execution failed after retries were exhausted; "
-                    "manual review and check required.",
-                    needs_human=True,
-                )
-            )
-        payload = projection.payload.model_dump(mode="json")
+        payload_model = require_tool_result(projection)
+        payload = payload_model.model_dump(mode="json")
         return types.CallToolResult(
             content=[_text_content(payload)],
             structured_content=payload,

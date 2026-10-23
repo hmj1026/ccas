@@ -4,10 +4,10 @@
 
 * ``_fetch_active_banks`` / ``_apply_bank_settings_filter`` 的 DB 過濾鏈。
 * ``_build_gmail_query`` 的日期子句組合。
-* ``_cleanup_old_staged_file`` 的逃逸防護與刪檔。
+* ``lifecycle.cleanup_staged_file`` 的逃逸防護與刪檔。
 * ``_process_attachment`` 的黑名單跳過。
 * ``_process_web_fetch`` 的完整 web-fetch 流程（成功 / 重試 / 過期 / 失敗）。
-* ``run_ingestion_job`` 的無啟用銀行、搜尋失敗、舊檔清理與 rollback 分支。
+* ``run_ingestion_job`` 的無啟用銀行、搜尋失敗、結果彙整與 rollback 分支。
 """
 
 from __future__ import annotations
@@ -26,14 +26,17 @@ from sqlalchemy.ext.asyncio import (
 from ccas.ingestor.fetcher.base import BankFetcher
 from ccas.ingestor.gmail_client import GmailAttachmentMeta, GmailMessage
 from ccas.ingestor.job import (
-    IngestionSummary,
     _apply_bank_settings_filter,
     _build_gmail_query,
-    _cleanup_old_staged_file,
     _fetch_active_banks,
     _process_attachment,
     _process_web_fetch,
     run_ingestion_job,
+)
+from ccas.ingestor.lifecycle import (
+    StagingDisposition,
+    StagingResult,
+    cleanup_staged_file,
 )
 from ccas.shared.pipeline_types import PipelineOptions
 from ccas.storage.models import BankConfig, BankSettings, Base
@@ -67,11 +70,6 @@ class FakeFetcher(BankFetcher):
         if self._error is not None:
             raise self._error
         return self._pdf
-
-
-@pytest.fixture
-def summary() -> IngestionSummary:
-    return IngestionSummary()
 
 
 @pytest.fixture
@@ -192,12 +190,12 @@ class TestBuildGmailQuery:
 
 
 # --------------------------------------------------------------------------- #
-# _cleanup_old_staged_file
+# lifecycle.cleanup_staged_file
 # --------------------------------------------------------------------------- #
-class TestCleanupOldStagedFile:
+class TestCleanupStagedFile:
     async def test_none_path_is_noop(self) -> None:
-        with patch("ccas.ingestor.job.resolve_staged_path") as mock_resolve:
-            await _cleanup_old_staged_file("/staging", None)
+        with patch("ccas.ingestor.lifecycle.resolve_staged_path") as mock_resolve:
+            await cleanup_staged_file("/staging", None)
             mock_resolve.assert_not_called()
 
     async def test_escape_path_logs_warning_and_skips(
@@ -205,26 +203,26 @@ class TestCleanupOldStagedFile:
     ) -> None:
         with (
             patch(
-                "ccas.ingestor.job.resolve_staged_path",
+                "ccas.ingestor.lifecycle.resolve_staged_path",
                 side_effect=ValueError("escape"),
             ),
-            caplog.at_level(logging.WARNING, logger="ccas.ingestor.job"),
+            caplog.at_level(logging.WARNING, logger="ccas.ingestor.lifecycle"),
         ):
-            await _cleanup_old_staged_file("/staging", "../../etc/passwd")
+            await cleanup_staged_file("/staging", "../../etc/passwd")
         assert "逃逸" in caplog.text
 
     async def test_existing_file_is_unlinked(self, tmp_path) -> None:
         target = tmp_path / "old.pdf"
         target.write_bytes(b"stale")
-        with patch("ccas.ingestor.job.resolve_staged_path", return_value=target):
-            await _cleanup_old_staged_file(str(tmp_path), "old.pdf")
+        with patch("ccas.ingestor.lifecycle.resolve_staged_path", return_value=target):
+            await cleanup_staged_file(str(tmp_path), "old.pdf")
         assert not target.exists()
 
     async def test_missing_file_is_noop(self, tmp_path) -> None:
         target = tmp_path / "ghost.pdf"
-        with patch("ccas.ingestor.job.resolve_staged_path", return_value=target):
+        with patch("ccas.ingestor.lifecycle.resolve_staged_path", return_value=target):
             # 不存在 → 不應 raise。
-            await _cleanup_old_staged_file(str(tmp_path), "ghost.pdf")
+            await cleanup_staged_file(str(tmp_path), "ghost.pdf")
         assert not target.exists()
 
 
@@ -233,10 +231,8 @@ class TestCleanupOldStagedFile:
 # --------------------------------------------------------------------------- #
 class TestProcessAttachmentBlacklist:
     @patch("ccas.ingestor.job.should_skip_attachment", return_value=True)
-    @patch("ccas.ingestor.job.find_existing_staged", new_callable=AsyncMock)
-    async def test_blacklisted_filename_is_skipped(
-        self, mock_find, mock_skip, summary
-    ) -> None:
+    @patch("ccas.ingestor.job.stage_source", new_callable=AsyncMock)
+    async def test_blacklisted_filename_is_skipped(self, mock_stage, mock_skip) -> None:
         attachment = GmailAttachmentMeta(
             message_id="m1",
             attachment_id="a1",
@@ -245,55 +241,59 @@ class TestProcessAttachmentBlacklist:
             size=10,
         )
         result = await _process_attachment(
-            AsyncMock(), MagicMock(), "CTBC", attachment, "/staging", summary
+            AsyncMock(), MagicMock(), "CTBC", attachment, "/staging"
         )
-        assert result is None
-        assert summary.skipped_count == 1
+        assert result.disposition == StagingDisposition.SKIPPED
         # 命中黑名單即返回，不查 DB。
-        mock_find.assert_not_called()
+        mock_stage.assert_not_awaited()
 
 
 # --------------------------------------------------------------------------- #
 # _process_web_fetch
 # --------------------------------------------------------------------------- #
 class TestProcessWebFetch:
-    async def test_no_fetcher_returns_none(self, web_message, summary) -> None:
+    async def test_no_fetcher_returns_none(self, web_message) -> None:
         with patch("ccas.ingestor.fetcher.fetcher_registry") as mock_reg:
             mock_reg.get.return_value = None
             result = await _process_web_fetch(
-                AsyncMock(), "FUBON", web_message, "/staging", MagicMock(), summary
+                AsyncMock(), "FUBON", web_message, "/staging", MagicMock()
             )
         assert result is None
 
-    async def test_cannot_fetch_returns_none(self, web_message, summary) -> None:
+    async def test_cannot_fetch_returns_none(self, web_message) -> None:
         with patch("ccas.ingestor.fetcher.fetcher_registry") as mock_reg:
             mock_reg.get.return_value = FakeFetcher(can=False)
             result = await _process_web_fetch(
-                AsyncMock(), "FUBON", web_message, "/staging", MagicMock(), summary
+                AsyncMock(), "FUBON", web_message, "/staging", MagicMock()
             )
         assert result is None
 
-    @patch("ccas.ingestor.job.backfill_part_id", new_callable=AsyncMock)
-    @patch("ccas.ingestor.job.find_existing_staged", new_callable=AsyncMock)
+    @patch("ccas.ingestor.lifecycle.backfill_part_id", new_callable=AsyncMock)
+    @patch("ccas.ingestor.lifecycle.find_existing_staged", new_callable=AsyncMock)
     async def test_existing_staged_not_force_is_skipped(
-        self, mock_find, mock_backfill, web_message, summary
+        self, mock_find, mock_backfill, web_message
     ) -> None:
         existing = MagicMock(status="staged")
         mock_find.return_value = existing
+        session = AsyncMock()
         with patch("ccas.ingestor.fetcher.fetcher_registry") as mock_reg:
             mock_reg.get.return_value = FakeFetcher()
             result = await _process_web_fetch(
-                AsyncMock(), "FUBON", web_message, "/staging", MagicMock(), summary
+                session, "FUBON", web_message, "/staging", MagicMock()
             )
-        assert result is None
-        assert summary.skipped_count == 1
+        assert result is not None
+        assert result.disposition == StagingDisposition.SKIPPED
+        session.commit.assert_awaited_once()
         mock_backfill.assert_awaited_once()
 
-    @patch("ccas.ingestor.job.staged_path_for_storage", return_value="new/stored.pdf")
-    @patch("ccas.ingestor.job.atomic_write_bytes")
-    @patch("ccas.ingestor.job.build_staged_path")
-    @patch("ccas.ingestor.job.create_staged_record", new_callable=AsyncMock)
-    @patch("ccas.ingestor.job.find_existing_staged", new_callable=AsyncMock)
+    @patch(
+        "ccas.ingestor.lifecycle.staged_path_for_storage",
+        return_value="new/stored.pdf",
+    )
+    @patch("ccas.ingestor.lifecycle.atomic_write_bytes")
+    @patch("ccas.ingestor.lifecycle.build_staged_path")
+    @patch("ccas.ingestor.lifecycle.create_staged_record", new_callable=AsyncMock)
+    @patch("ccas.ingestor.lifecycle.find_existing_staged", new_callable=AsyncMock)
     @patch("ccas.ingestor.job.resolve_bank_credential", new_callable=AsyncMock)
     async def test_success_creates_staged_record(
         self,
@@ -304,7 +304,6 @@ class TestProcessWebFetch:
         mock_write,
         mock_storage,
         web_message,
-        summary,
     ) -> None:
         mock_cred.return_value = ""
         mock_find.return_value = None
@@ -312,25 +311,31 @@ class TestProcessWebFetch:
         mock_path.parent = MagicMock()
         mock_build.return_value = mock_path
 
+        session = AsyncMock()
         with patch("ccas.ingestor.fetcher.fetcher_registry") as mock_reg:
             mock_reg.get.return_value = FakeFetcher(pdf=b"%PDF data")
             result = await _process_web_fetch(
-                AsyncMock(), "FUBON", web_message, "/staging", MagicMock(), summary
+                session, "FUBON", web_message, "/staging", MagicMock()
             )
 
-        assert result is None  # 無既有記錄 → 無舊檔需清理
-        assert summary.staged_count == 1
+        assert result is not None
+        assert result.disposition == StagingDisposition.STAGED
+        session.commit.assert_awaited_once()
         mock_create.assert_awaited_once()
         assert mock_create.call_args.kwargs["source_type"] == "web_fetch"
 
-    @patch("ccas.ingestor.job.staged_path_for_storage", return_value="new/stored.pdf")
-    @patch("ccas.ingestor.job.atomic_write_bytes")
-    @patch("ccas.ingestor.job.build_staged_path")
-    @patch("ccas.ingestor.job.delete_staged_record", new_callable=AsyncMock)
-    @patch("ccas.ingestor.job.create_staged_record", new_callable=AsyncMock)
-    @patch("ccas.ingestor.job.find_existing_staged", new_callable=AsyncMock)
+    @patch("ccas.ingestor.lifecycle.cleanup_staged_file", new_callable=AsyncMock)
+    @patch(
+        "ccas.ingestor.lifecycle.staged_path_for_storage",
+        return_value="new/stored.pdf",
+    )
+    @patch("ccas.ingestor.lifecycle.atomic_write_bytes")
+    @patch("ccas.ingestor.lifecycle.build_staged_path")
+    @patch("ccas.ingestor.lifecycle.delete_staged_record", new_callable=AsyncMock)
+    @patch("ccas.ingestor.lifecycle.create_staged_record", new_callable=AsyncMock)
+    @patch("ccas.ingestor.lifecycle.find_existing_staged", new_callable=AsyncMock)
     @patch("ccas.ingestor.job.resolve_bank_credential", new_callable=AsyncMock)
-    async def test_failed_retry_replaces_and_returns_old_path(
+    async def test_failed_retry_replaces_and_cleans_old_path_after_commit(
         self,
         mock_cred,
         mock_find,
@@ -339,8 +344,8 @@ class TestProcessWebFetch:
         mock_build,
         mock_write,
         mock_storage,
+        mock_cleanup,
         web_message,
-        summary,
     ) -> None:
         mock_cred.return_value = ""
         existing = MagicMock(status="failed", staged_path="old/stored.pdf")
@@ -349,110 +354,102 @@ class TestProcessWebFetch:
         mock_path.parent = MagicMock()
         mock_build.return_value = mock_path
 
+        session = AsyncMock()
         with patch("ccas.ingestor.fetcher.fetcher_registry") as mock_reg:
             mock_reg.get.return_value = FakeFetcher()
             result = await _process_web_fetch(
-                AsyncMock(), "FUBON", web_message, "/staging", MagicMock(), summary
+                session, "FUBON", web_message, "/staging", MagicMock()
             )
 
-        # 舊路徑 != 新路徑 → 回傳供 commit 後清理。
-        assert result == "old/stored.pdf"
+        assert result is not None
+        assert result.disposition == StagingDisposition.STAGED
+        session.commit.assert_awaited_once()
         mock_delete.assert_awaited_once()
-        assert summary.staged_count == 1
+        mock_cleanup.assert_awaited_once_with("/staging", "old/stored.pdf")
 
-    @patch("ccas.ingestor.job.build_staged_path")
-    @patch("ccas.ingestor.job.create_staged_record", new_callable=AsyncMock)
-    @patch("ccas.ingestor.job.find_existing_staged", new_callable=AsyncMock)
+    @patch("ccas.ingestor.lifecycle.create_staged_record", new_callable=AsyncMock)
+    @patch("ccas.ingestor.lifecycle.find_existing_staged", new_callable=AsyncMock)
     @patch("ccas.ingestor.job.resolve_bank_credential", new_callable=AsyncMock)
     async def test_expired_marker_sets_fetch_expired(
         self,
         mock_cred,
         mock_find,
         mock_create,
-        mock_build,
         web_message,
-        summary,
     ) -> None:
         mock_cred.return_value = ""
         mock_find.return_value = None
-        mock_path = MagicMock()
-        mock_path.parent = MagicMock()
-        mock_build.return_value = mock_path
         err = RuntimeError("record_not_found: serial consumed")
 
+        session = AsyncMock()
         with patch("ccas.ingestor.fetcher.fetcher_registry") as mock_reg:
             mock_reg.get.return_value = FakeFetcher(error=err)
             result = await _process_web_fetch(
-                AsyncMock(), "FUBON", web_message, "/staging", MagicMock(), summary
+                session, "FUBON", web_message, "/staging", MagicMock()
             )
 
-        assert result is None
-        # 過期視為 skip，不計入 failed。
-        assert summary.skipped_count == 1
-        assert summary.failed_count == 0
+        assert result is not None
+        assert result.disposition == StagingDisposition.SKIPPED
+        session.commit.assert_awaited_once()
         mock_create.assert_awaited_once()
         assert mock_create.call_args.kwargs["status"].value == "fetch_expired"
 
-    @patch("ccas.ingestor.job.build_staged_path")
-    @patch("ccas.ingestor.job.create_staged_record", new_callable=AsyncMock)
-    @patch("ccas.ingestor.job.find_existing_staged", new_callable=AsyncMock)
+    @patch("ccas.ingestor.lifecycle.create_staged_record", new_callable=AsyncMock)
+    @patch("ccas.ingestor.lifecycle.find_existing_staged", new_callable=AsyncMock)
     @patch("ccas.ingestor.job.resolve_bank_credential", new_callable=AsyncMock)
     async def test_generic_failure_creates_failed_record(
         self,
         mock_cred,
         mock_find,
         mock_create,
-        mock_build,
         web_message,
-        summary,
     ) -> None:
         mock_cred.return_value = ""
         mock_find.return_value = None
-        mock_path = MagicMock()
-        mock_path.parent = MagicMock()
-        mock_build.return_value = mock_path
 
+        session = AsyncMock()
         with patch("ccas.ingestor.fetcher.fetcher_registry") as mock_reg:
             mock_reg.get.return_value = FakeFetcher(error=RuntimeError("boom"))
             result = await _process_web_fetch(
-                AsyncMock(), "FUBON", web_message, "/staging", MagicMock(), summary
+                session, "FUBON", web_message, "/staging", MagicMock()
             )
 
-        assert result is None
-        assert summary.failed_count == 1
-        assert any("Web-fetch 失敗" in e for e in summary.errors)
+        assert result is not None
+        assert result.disposition == StagingDisposition.FAILED
+        assert result.error_message is not None
+        assert "Web-fetch 失敗" in result.error_message
+        session.commit.assert_awaited_once()
         mock_create.assert_awaited_once()
         assert mock_create.call_args.kwargs["status"].value == "failed"
 
-    @patch("ccas.ingestor.job.update_staged_record_failure", new_callable=AsyncMock)
-    @patch("ccas.ingestor.job.build_staged_path")
-    @patch("ccas.ingestor.job.find_existing_staged", new_callable=AsyncMock)
+    @patch(
+        "ccas.ingestor.lifecycle.update_staged_record_failure",
+        new_callable=AsyncMock,
+    )
+    @patch("ccas.ingestor.lifecycle.find_existing_staged", new_callable=AsyncMock)
     @patch("ccas.ingestor.job.resolve_bank_credential", new_callable=AsyncMock)
     async def test_failure_with_existing_updates_record(
         self,
         mock_cred,
         mock_find,
-        mock_build,
         mock_update,
         web_message,
-        summary,
     ) -> None:
         mock_cred.return_value = ""
         existing = MagicMock(status="failed", staged_path="old/stored.pdf")
         mock_find.return_value = existing
-        mock_path = MagicMock()
-        mock_path.parent = MagicMock()
-        mock_build.return_value = mock_path
 
+        session = AsyncMock()
         with patch("ccas.ingestor.fetcher.fetcher_registry") as mock_reg:
             mock_reg.get.return_value = FakeFetcher(error=RuntimeError("boom"))
             result = await _process_web_fetch(
-                AsyncMock(), "FUBON", web_message, "/staging", MagicMock(), summary
+                session, "FUBON", web_message, "/staging", MagicMock()
             )
 
-        assert result is None
+        assert result is not None
+        assert result.disposition == StagingDisposition.FAILED
         mock_update.assert_awaited_once()
-        assert summary.failed_count == 1
+        session.commit.assert_awaited_once()
 
 
 # --------------------------------------------------------------------------- #
@@ -497,12 +494,23 @@ class TestRunIngestionJob:
         assert summary.messages_found == 0
         assert any("Gmail 搜尋失敗" in e for e in summary.errors)
 
-    async def test_attachment_old_path_is_cleaned_after_commit(self) -> None:
-        """附件成功取代舊記錄 → commit 後清理舊磁碟檔。"""
+    async def test_source_results_are_aggregated_into_summary(self) -> None:
+        """每個來源結果由 job 統計，不再由來源 helper 直接改 summary。"""
         session = AsyncMock()
         bank = MagicMock(bank_code="CTBC", gmail_filter="from:ctbc")
-        msg = MagicMock(pdf_attachments=[MagicMock(filename="s.pdf")], html_body=None)
-        cleanup = AsyncMock()
+        attachment_message = MagicMock(
+            pdf_attachments=[MagicMock(filename="s.pdf")], html_body=None
+        )
+        web_message = MagicMock(pdf_attachments=[], html_body="<html>statement</html>")
+        process_attachment = AsyncMock(
+            return_value=StagingResult(StagingDisposition.STAGED)
+        )
+        process_web_fetch = AsyncMock(
+            return_value=StagingResult(
+                StagingDisposition.FAILED,
+                "Web-fetch failed for test fixture",
+            )
+        )
         with (
             patch("ccas.ingestor.job.load_credentials", return_value=MagicMock()),
             patch("ccas.ingestor.job.build_gmail_service", return_value=MagicMock()),
@@ -510,48 +518,21 @@ class TestRunIngestionJob:
                 "ccas.ingestor.job._fetch_active_banks",
                 new=AsyncMock(return_value=[bank]),
             ),
-            patch("ccas.ingestor.job.search_messages", return_value=[msg]),
             patch(
-                "ccas.ingestor.job._process_attachment",
-                new=AsyncMock(return_value="old/stored.pdf"),
+                "ccas.ingestor.job.search_messages",
+                return_value=[attachment_message, web_message],
             ),
-            patch("ccas.ingestor.job._cleanup_old_staged_file", new=cleanup),
+            patch("ccas.ingestor.job._process_attachment", new=process_attachment),
+            patch("ccas.ingestor.job._process_web_fetch", new=process_web_fetch),
         ):
             summary = await run_ingestion_job(session, options=None, reporter=None)
 
-        session.commit.assert_awaited()
-        cleanup.assert_awaited_once()
-        assert cleanup.await_args_list[-1].args[1] == "old/stored.pdf"
+        process_attachment.assert_awaited_once()
+        process_web_fetch.assert_awaited_once()
         assert summary.banks_processed == 1
-
-    async def test_attachment_cleanup_failure_is_logged(
-        self, caplog: pytest.LogCaptureFixture
-    ) -> None:
-        """舊檔清理失敗只留 orphan、記 warning，不中止 loop。"""
-        session = AsyncMock()
-        bank = MagicMock(bank_code="CTBC", gmail_filter="from:ctbc")
-        msg = MagicMock(pdf_attachments=[MagicMock(filename="s.pdf")], html_body=None)
-        with (
-            patch("ccas.ingestor.job.load_credentials", return_value=MagicMock()),
-            patch("ccas.ingestor.job.build_gmail_service", return_value=MagicMock()),
-            patch(
-                "ccas.ingestor.job._fetch_active_banks",
-                new=AsyncMock(return_value=[bank]),
-            ),
-            patch("ccas.ingestor.job.search_messages", return_value=[msg]),
-            patch(
-                "ccas.ingestor.job._process_attachment",
-                new=AsyncMock(return_value="old/stored.pdf"),
-            ),
-            patch(
-                "ccas.ingestor.job._cleanup_old_staged_file",
-                new=AsyncMock(side_effect=OSError("disk")),
-            ),
-            caplog.at_level(logging.WARNING, logger="ccas.ingestor.job"),
-        ):
-            await run_ingestion_job(session, options=None, reporter=None)
-
-        assert "orphan left on disk" in caplog.text
+        assert summary.staged_count == 1
+        assert summary.failed_count == 1
+        assert summary.errors == ["Web-fetch failed for test fixture"]
 
     async def test_attachment_item_failure_triggers_rollback(self) -> None:
         """_process_attachment 拋錯 → rollback 並繼續。"""
@@ -574,33 +555,6 @@ class TestRunIngestionJob:
             await run_ingestion_job(session, options=None, reporter=None)
 
         session.rollback.assert_awaited_once()
-
-    async def test_web_fetch_old_path_is_cleaned_after_commit(self) -> None:
-        """web-fetch 成功取代舊記錄 → commit 後清理舊檔。"""
-        session = AsyncMock()
-        bank = MagicMock(bank_code="FUBON", gmail_filter="from:fubon")
-        msg = MagicMock(pdf_attachments=[], html_body="<html>fubon</html>")
-        cleanup = AsyncMock()
-        with (
-            patch("ccas.ingestor.job.load_credentials", return_value=MagicMock()),
-            patch("ccas.ingestor.job.build_gmail_service", return_value=MagicMock()),
-            patch(
-                "ccas.ingestor.job._fetch_active_banks",
-                new=AsyncMock(return_value=[bank]),
-            ),
-            patch("ccas.ingestor.job.search_messages", return_value=[msg]),
-            patch(
-                "ccas.ingestor.job._process_web_fetch",
-                new=AsyncMock(return_value="old/web.pdf"),
-            ),
-            patch("ccas.ingestor.job._cleanup_old_staged_file", new=cleanup),
-        ):
-            summary = await run_ingestion_job(session, options=None, reporter=None)
-
-        session.commit.assert_awaited()
-        cleanup.assert_awaited_once()
-        assert cleanup.await_args_list[-1].args[1] == "old/web.pdf"
-        assert summary.messages_found == 1
 
     async def test_web_fetch_item_failure_triggers_rollback(self) -> None:
         """_process_web_fetch 拋錯 → rollback 並繼續。"""

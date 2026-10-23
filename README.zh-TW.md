@@ -53,7 +53,7 @@ Pipeline 各階段以狀態機推進：`staged → decrypted → parsed`，遇�
 ```bash
 mkdir ~/ccas && cd ~/ccas
 REPO_OWNER=<owner>   # GHCR namespace / GitHub owner（即 release 連結中的 <owner>）
-RELEASE=v0.11.0      # 改為要安裝的精確版號
+RELEASE=v0.12.0      # 改為要安裝的精確版號
 curl -fsSL -o docker-compose.yml \
   "https://github.com/${REPO_OWNER}/ccas/releases/download/${RELEASE}/docker-compose.yml"
 curl -fsSL -o example.env \
@@ -128,7 +128,7 @@ ccas/
 | Gmail OAuth 設定 | [`docs/gmail-setup.md`](docs/gmail-setup.md) |
 | 銀行代碼對照 | [`docs/bank-codes.md`](docs/bank-codes.md) |
 | 貢獻指南 | [`docs/CONTRIBUTING.md`](docs/CONTRIBUTING.md) |
-| 領域上下文 | [`CONTEXT.md`](CONTEXT.md) |
+| 領域上下文 | [`GLOSSARY.md`](GLOSSARY.md) |
 | 目前實作總覽 | [`docs/CODEMAPS/current-implementation.md`](docs/CODEMAPS/current-implementation.md) |
 | MCP 安裝與使用 | [`docs/mcp-installation.md`](docs/mcp-installation.md) |
 

@@ -5,108 +5,47 @@
 
 import asyncio
 import logging
-from uuid import uuid4
 
 from redis import Redis
 from rq import Queue
 
 from ccas.config import get_settings
+from ccas.pipeline.submission import (
+    PipelineEnqueueError,
+    RqPipelineQueue,
+    submit_pipeline,
+)
 
 logger = logging.getLogger(__name__)
 
 
 def trigger_pipeline_via_rq(opts: dict | None = None) -> str:
-    """直接將 pipeline enqueue 至 RQ（供 APScheduler 呼叫）。
-
-    Mirrors the API trigger endpoint semantics (see
-    ``ccas.api.routers.pipeline.trigger_pipeline``): create the PipelineRun
-    row (status=QUEUED) first, enqueue ``run_pipeline_sync``, then persist
-    the RQ job id back onto the row.
-
-    Args:
-        opts: 可選的 pipeline 參數 dict（force, bank_code, year, month）。
-
-    Returns:
-        The RQ job id.
-    """
-    from ccas.pipeline.worker import get_retry, on_failure_handler, run_pipeline_sync
+    """Submit through the shared lifecycle from APScheduler's sync thread."""
     from ccas.storage.database import get_engine, get_session_factory
-    from ccas.storage.models import (
-        PipelineRun,
-        PipelineRunStatus,
-        PipelineRunTerminalReason,
-    )
 
     params = opts or {}
-    run_id = str(uuid4())
-    queue = Queue(connection=Redis.from_url(get_settings().redis_url))
+    queue = RqPipelineQueue(Queue(connection=Redis.from_url(get_settings().redis_url)))
 
     async def _run() -> str:
-        session_factory = get_session_factory()
-        async with session_factory() as session:
-            session.add(
-                PipelineRun(
-                    id=run_id,
-                    job_id=run_id,
-                    status=PipelineRunStatus.QUEUED,
-                    triggered_by="scheduler",
-                    params=params,
-                    stage_summary=[],
+        try:
+            async with get_session_factory()() as session:
+                result = await submit_pipeline(
+                    session, queue, params, triggered_by="scheduler"
                 )
-            )
-            await session.commit()
+                return result.job_id
+        except PipelineEnqueueError as exc:
+            # Preserve the scheduler's original queue exception contract.
+            raise exc.cause from None
+        finally:
+            # asyncio.run closes its loop; release connections on both outcomes.
+            await get_engine().dispose()
 
-            try:
-                # params must stay the first positional arg: the worker's
-                # on_failure_handler reads bank_code from job.args[0],
-                # identical to the API trigger path.
-                job = queue.enqueue(
-                    run_pipeline_sync,
-                    params,
-                    run_id=run_id,
-                    retry=get_retry(),
-                    on_failure=on_failure_handler,
-                    job_timeout="30m",
-                )
-            except Exception:
-                # Enqueue failed: the job never entered the queue, so the RQ
-                # on_failure callback can never fire. Mark the orphan QUEUED row
-                # FAILED so it does not linger forever (mirrors the API path).
-                run = await session.get(PipelineRun, run_id)
-                if run is not None:
-                    run.status = PipelineRunStatus.FAILED
-                    run.terminal_reason = PipelineRunTerminalReason.ENQUEUE_FAILURE
-                    run.error_message = "Pipeline enqueue failed (scheduler)"
-                    await session.commit()
-                raise
-
-            run = await session.get(PipelineRun, run_id)
-            if run is not None:
-                run.job_id = job.id
-                await session.commit()
-        await get_engine().dispose()
-        return job.id
-
-    # asyncio.run() assumes no running event loop (APScheduler executes this
-    # in a plain sync thread); revisit before moving to an async scheduler.
     try:
         job_id = asyncio.run(_run())
     except Exception:
-        # APScheduler swallows unhandled exceptions into framework logs at a
-        # level operators may not see; log explicitly here. The PipelineRun row
-        # (if created) was already marked FAILED inside _run().
-        logger.exception(
-            "Scheduler pipeline trigger failed (run_id=%s, opts=%s)",
-            run_id,
-            params,
-        )
+        logger.exception("Scheduler pipeline trigger failed (opts=%s)", params)
         raise
-    logger.info(
-        "Pipeline job enqueued by scheduler: %s (run_id=%s, opts=%s)",
-        job_id,
-        run_id,
-        params,
-    )
+    logger.info("Pipeline job enqueued by scheduler: %s (opts=%s)", job_id, params)
     return job_id
 
 

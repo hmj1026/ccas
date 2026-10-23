@@ -25,6 +25,7 @@ from datetime import UTC, date, datetime
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ccas.budget_assessment import assess_budgets
 from ccas.config import get_settings
 from ccas.messaging import send_message
 from ccas.storage.models import (
@@ -32,7 +33,6 @@ from ccas.storage.models import (
     BudgetAlert,
     BudgetScope,
 )
-from ccas.storage.queries import aggregate_current_periods
 
 logger = logging.getLogger(__name__)
 
@@ -108,14 +108,15 @@ async def evaluate_budgets(
     active_budgets = [b for b in budgets if b.amount_ntd > 0]
     active_ids = [b.id for b in active_budgets]
     existing_map = await _existing_alerts_map(session, active_ids, period)
-    current_map = await aggregate_current_periods(session, active_budgets, period)
+    assessments = await assess_budgets(session, active_budgets, period)
 
     for budget in budgets:
         if budget.amount_ntd <= 0:
             skipped += 1
             continue
 
-        current = current_map.get(budget.id, 0)
+        assessment = assessments[budget.id]
+        current = assessment.spent_amount_ntd
 
         # Two-tier ladder: configured threshold + 100% (over-budget)
         thresholds: list[int] = sorted({budget.alert_threshold_percent, 100})
@@ -125,8 +126,7 @@ async def evaluate_budgets(
             # 「已建立但推播未成功」，需重用該 row 補推（不重複建立）。
             if existing_alert is not None and existing_alert.notified:
                 continue
-            tier_amount = budget.amount_ntd * tier // 100
-            if current < tier_amount:
+            if not assessment.reaches(tier):
                 continue
             if existing_alert is not None:
                 # 補推：重用既有未通知 row，刷新累計金額。

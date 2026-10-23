@@ -25,20 +25,17 @@ from ccas.ingestor.gmail_client import (
     download_attachment,
     search_messages,
 )
-from ccas.ingestor.staging import (
-    backfill_part_id,
-    build_staged_path,
-    create_staged_record,
-    delete_staged_record,
-    find_existing_staged,
-    resolve_staged_path,
-    staged_path_for_storage,
-    update_staged_record_failure,
+from ccas.ingestor.lifecycle import (
+    FetchExpiredError,
+    StagedSource,
+    StagingDisposition,
+    StagingResult,
+    StagingRollbackError,
+    stage_source,
 )
 from ccas.shared.pipeline_types import PipelineOptions
 from ccas.shared.progress import NoopProgressReporter, ProgressReporter
-from ccas.storage.atomic import atomic_write_bytes
-from ccas.storage.models import BankConfig, BankSettings, StagedAttachmentStatus
+from ccas.storage.models import BankConfig, BankSettings
 
 logger = logging.getLogger(__name__)
 
@@ -130,154 +127,48 @@ def _build_gmail_query(
     return f"{base_filter} {date_clause}"
 
 
-async def _cleanup_old_staged_file(staging_dir: str, staged_path: str | None) -> None:
-    """刪除舊的 staging 檔案（若存在）。"""
-    if not staged_path:
-        return
-    try:
-        path = resolve_staged_path(staging_dir, staged_path)
-    except ValueError:
-        logger.warning("staged_path 逃逸 staging 根目錄，跳過刪除：%s", staged_path)
-        return
-    if path.exists():
-        await asyncio.to_thread(path.unlink)
-        logger.debug("已刪除舊 staging 檔案：%s", staged_path)
-
-
 async def _process_attachment(
     session: AsyncSession,
     service,
     bank_code: str,
     attachment: GmailAttachmentMeta,
     staging_dir: str,
-    summary: IngestionSummary,
     *,
     force: bool = False,
-) -> str | None:
-    """處理單個 PDF 附件：dedupe 檢查、下載、寫檔、建立記錄。
-
-    Returns:
-        若取代了一筆舊 staged 記錄，回傳「需在 commit 之後刪除的舊磁碟
-        檔案」storage-relative 路徑；否則回傳 ``None``。呼叫端必須先 commit
-        DB，再依此回傳值清理舊檔（DB-first，失敗的磁碟清理只留無參照的
-        orphan 檔，絕不破壞 DB 狀態）。
-    """
+) -> StagingResult:
+    """Adapt one Gmail PDF attachment to the shared statement lifecycle."""
     if should_skip_attachment(bank_code, attachment.filename):
-        summary.skipped_count += 1
         logger.debug(
             "附件檔名命中黑名單，跳過：%s/%s",
             bank_code,
             attachment.filename,
         )
-        return
+        return StagingResult(StagingDisposition.SKIPPED)
 
-    existing = await find_existing_staged(
-        session,
-        attachment.message_id,
-        attachment.part_id,
-        attachment.filename,
-    )
-    if existing is not None:
-        is_failed_retry = existing.status == "failed"
-        if not force and not is_failed_retry:
-            # Opportunistic backfill: if the legacy row lacks gmail_part_id
-            # (pre-migration data matched via filename fallback), write it in
-            # now so future lookups use the primary key path.
-            await backfill_part_id(session, existing, attachment.part_id)
-            summary.skipped_count += 1
-            logger.debug(
-                "略過已存在的附件：%s/%s",
-                attachment.message_id,
-                attachment.attachment_id,
-            )
-            return
-
-        if is_failed_retry:
-            logger.info(
-                "自動重試 failed 附件：%s/%s",
-                attachment.message_id,
-                attachment.attachment_id,
-            )
-        else:
-            # Force mode: defer cleanup until download succeeds
-            logger.info(
-                "Force 模式：重新下載 %s/%s",
-                attachment.message_id,
-                attachment.attachment_id,
-            )
-
-    staged_path = build_staged_path(
-        staging_dir, bank_code, attachment.message_id, attachment.filename
+    source = StagedSource(
+        bank_code=bank_code,
+        message_id=attachment.message_id,
+        part_id=attachment.part_id,
+        attachment_id=attachment.attachment_id,
+        message_date=attachment.message_date,
+        original_filename=attachment.filename,
     )
 
-    try:
-        pdf_bytes = await asyncio.to_thread(
+    async def acquire_pdf() -> bytes:
+        return await asyncio.to_thread(
             download_attachment,
             service,
             attachment.message_id,
             attachment.attachment_id,
         )
 
-        target_dir = staged_path.parent
-        await asyncio.to_thread(lambda: target_dir.mkdir(parents=True, exist_ok=True))
-        await asyncio.to_thread(atomic_write_bytes, staged_path, pdf_bytes)
-
-        # DB-first ordering: persist new record + delete old record (flush),
-        # let the caller commit, THEN clean up the old disk file. Capture the
-        # old path into a local string BEFORE the commit so we never read it off
-        # a possibly-expired ORM attribute afterwards.
-        new_stored = staged_path_for_storage(staging_dir, staged_path)
-        old_staged_path_to_cleanup: str | None = None
-        if existing is not None:
-            if existing.staged_path is not None and existing.staged_path != new_stored:
-                old_staged_path_to_cleanup = existing.staged_path
-            await delete_staged_record(session, existing)
-
-        await create_staged_record(
-            session,
-            bank_code=bank_code,
-            message_id=attachment.message_id,
-            attachment_id=attachment.attachment_id,
-            message_date=attachment.message_date,
-            original_filename=attachment.filename,
-            staged_path=new_stored,
-            status=StagedAttachmentStatus.STAGED,
-            part_id=attachment.part_id,
-        )
-        summary.staged_count += 1
-        logger.info("已 staged 附件：%s -> %s", attachment.filename, staged_path)
-        return old_staged_path_to_cleanup
-
-    except Exception as exc:
-        error_msg = f"附件下載失敗 ({bank_code}/{attachment.filename}): {exc}"
-        summary.failed_count += 1
-        summary.errors.append(error_msg)
-        logger.error(error_msg, exc_info=True)
-
-        if existing is None:
-            await create_staged_record(
-                session,
-                bank_code=bank_code,
-                message_id=attachment.message_id,
-                attachment_id=attachment.attachment_id,
-                message_date=attachment.message_date,
-                original_filename=attachment.filename,
-                staged_path=None,
-                status=StagedAttachmentStatus.FAILED,
-                error_reason=str(exc),
-                part_id=attachment.part_id,
-            )
-        else:
-            # Retry (is_failed_retry) or force re-run that failed again: update
-            # the existing record to the latest failure instead of leaving a
-            # stale error_reason behind (symmetric with _process_web_fetch).
-            await update_staged_record_failure(
-                session,
-                existing,
-                status=StagedAttachmentStatus.FAILED,
-                error_reason=str(exc),
-            )
-        return None
+    return await stage_source(
+        session,
+        staging_dir,
+        source,
+        acquire_pdf,
+        force=force,
+    )
 
 
 async def _process_web_fetch(
@@ -286,19 +177,14 @@ async def _process_web_fetch(
     message: GmailMessage,
     staging_dir: str,
     settings: Settings,
-    summary: IngestionSummary,
     *,
     force: bool = False,
-) -> str | None:
-    """處理無附件郵件的 web-fetch PDF 下載。
+) -> StagingResult | None:
+    """Adapt one web-fetch message to the shared statement lifecycle.
 
-    透過 FetcherRegistry 查找對應的 BankFetcher，
-    從 HTML 郵件內容中下載 PDF 帳單。
-
-    Returns:
-        若取代了一筆舊 staged 記錄，回傳「需在 commit 之後刪除的舊磁碟
-        檔案」storage-relative 路徑；否則回傳 ``None``（語意同
-        ``_process_attachment``）。
+    ``None`` means no registered fetcher or a source message that the fetcher
+    does not accept. Credentials are resolved lazily inside the acquisition
+    callback, after the lifecycle has confirmed that this item needs fetching.
     """
     from ccas.ingestor.fetcher import fetcher_registry
 
@@ -306,126 +192,72 @@ async def _process_web_fetch(
     if fetcher is None:
         return None
 
-    assert message.html_body is not None  # noqa: S101
-    if not fetcher.can_fetch(message.html_body):
+    html_body = message.html_body
+    assert html_body is not None  # noqa: S101
+    if not fetcher.can_fetch(html_body):
         return None
 
     synthetic_attachment_id = f"web_fetch_{message.message_id}"
     synthetic_part_id = f"web:{message.message_id}"
     staged_filename = f"{bank_code}_{message.message_id}.pdf"
+    source = StagedSource(
+        bank_code=bank_code,
+        message_id=message.message_id,
+        part_id=synthetic_part_id,
+        attachment_id=synthetic_attachment_id,
+        message_date=message.message_date,
+        original_filename=staged_filename,
+        source_type="web_fetch",
+    )
 
-    existing = await find_existing_staged(
+    async def acquire_pdf() -> bytes:
+        credentials = {
+            "national_id": await resolve_bank_credential(
+                session, settings, bank_code, "NATIONAL_ID"
+            )
+            or "",
+            "roc_birthday": await resolve_bank_credential(
+                session, settings, bank_code, "ROC_BIRTHDAY"
+            )
+            or "",
+        }
+        try:
+            return await asyncio.to_thread(
+                fetcher.fetch_pdf,
+                html_body,
+                credentials,
+            )
+        except Exception as error:
+            if any(marker in str(error) for marker in _EXPIRED_FETCH_MARKERS):
+                raise FetchExpiredError(
+                    str(error),
+                    error_reason=_EXPIRED_FETCH_REASON,
+                ) from error
+            raise
+
+    return await stage_source(
         session,
-        message.message_id,
-        synthetic_part_id,
-        staged_filename,
-    )
-    if existing is not None:
-        is_failed_retry = existing.status == "failed"
-        if not force and not is_failed_retry:
-            await backfill_part_id(session, existing, synthetic_part_id)
-            summary.skipped_count += 1
-            logger.debug("略過已存在的 web-fetch：%s", message.message_id)
-            return None
-
-        if is_failed_retry:
-            logger.info("自動重試 failed web-fetch：%s", message.message_id)
-        else:
-            logger.info("Force 模式：重新 web-fetch %s", message.message_id)
-
-    # DB-first（Fernet 解密）→ env legacy fallback；見 ccas.ingestor.credentials。
-    credentials = {
-        "national_id": await resolve_bank_credential(
-            session, settings, bank_code, "NATIONAL_ID"
-        )
-        or "",
-        "roc_birthday": await resolve_bank_credential(
-            session, settings, bank_code, "ROC_BIRTHDAY"
-        )
-        or "",
-    }
-
-    staged_path = build_staged_path(
-        staging_dir, bank_code, message.message_id, staged_filename
+        staging_dir,
+        source,
+        acquire_pdf,
+        force=force,
     )
 
-    try:
-        pdf_bytes = await asyncio.to_thread(
-            fetcher.fetch_pdf, message.html_body, credentials
-        )
 
-        target_dir = staged_path.parent
-        await asyncio.to_thread(lambda: target_dir.mkdir(parents=True, exist_ok=True))
-        await asyncio.to_thread(atomic_write_bytes, staged_path, pdf_bytes)
-
-        # DB-first ordering (same as _process_attachment): persist DB, let the
-        # caller commit, THEN clean up the old disk file. Capture the old path
-        # into a local string before the commit.
-        new_stored = staged_path_for_storage(staging_dir, staged_path)
-        old_staged_path_to_cleanup: str | None = None
-        if existing is not None:
-            if existing.staged_path is not None and existing.staged_path != new_stored:
-                old_staged_path_to_cleanup = existing.staged_path
-            await delete_staged_record(session, existing)
-
-        await create_staged_record(
-            session,
-            bank_code=bank_code,
-            message_id=message.message_id,
-            attachment_id=synthetic_attachment_id,
-            message_date=message.message_date,
-            original_filename=staged_filename,
-            staged_path=new_stored,
-            status=StagedAttachmentStatus.STAGED,
-            source_type="web_fetch",
-            part_id=synthetic_part_id,
-        )
+def _record_staging_result(
+    summary: IngestionSummary,
+    result: StagingResult | None,
+) -> None:
+    if result is None:
+        return
+    if result.disposition == StagingDisposition.STAGED:
         summary.staged_count += 1
-        logger.info("已 web-fetch staged：%s -> %s", message.message_id, staged_path)
-        return old_staged_path_to_cleanup
-
-    except Exception as exc:
-        exc_str = str(exc)
-        is_expired = any(marker in exc_str for marker in _EXPIRED_FETCH_MARKERS)
-
-        if is_expired:
-            error_msg = (
-                f"Web-fetch 略過（連結已失效）({bank_code}/{message.message_id}): {exc}"
-            )
-            summary.skipped_count += 1
-            logger.warning(error_msg)
-            new_status = StagedAttachmentStatus.FETCH_EXPIRED
-            new_reason = _EXPIRED_FETCH_REASON
-        else:
-            error_msg = f"Web-fetch 失敗 ({bank_code}/{message.message_id}): {exc}"
-            summary.failed_count += 1
-            summary.errors.append(error_msg)
-            logger.error(error_msg, exc_info=True)
-            new_status = StagedAttachmentStatus.FAILED
-            new_reason = exc_str
-
-        if existing is None:
-            await create_staged_record(
-                session,
-                bank_code=bank_code,
-                message_id=message.message_id,
-                attachment_id=synthetic_attachment_id,
-                message_date=message.message_date,
-                original_filename=staged_filename,
-                staged_path=None,
-                status=new_status,
-                error_reason=new_reason,
-                source_type="web_fetch",
-                part_id=synthetic_part_id,
-            )
-        else:
-            await update_staged_record_failure(
-                session,
-                existing,
-                status=new_status,
-                error_reason=new_reason,
-            )
-        return None
+    elif result.disposition == StagingDisposition.SKIPPED:
+        summary.skipped_count += 1
+    else:
+        summary.failed_count += 1
+        if result.error_message:
+            summary.errors.append(result.error_message)
 
 
 async def run_ingestion_job(
@@ -480,11 +312,15 @@ async def run_ingestion_job(
         return summary
 
     force = options.force if options else False
+    # Copy every ORM-backed config value before item commits/rollbacks can
+    # expire BankConfig instances. Later banks must remain processable after
+    # an earlier item's transaction fails.
+    bank_sources = tuple((bank.bank_code, bank.gmail_filter) for bank in active_banks)
 
-    for bank in active_banks:
+    for bank_code, gmail_filter in bank_sources:
         summary.banks_processed += 1
 
-        gmail_query = _build_gmail_query(bank.gmail_filter, options)
+        gmail_query = _build_gmail_query(gmail_filter, options)
 
         try:
             # summary.errors is mutated inside the worker thread; safe because
@@ -494,11 +330,11 @@ async def run_ingestion_job(
                 search_messages,
                 service,
                 gmail_query,
-                bank_code=bank.bank_code,
+                bank_code=bank_code,
                 partial_errors=summary.errors,
             )
         except Exception as exc:
-            error_msg = f"銀行 {bank.bank_code} Gmail 搜尋失敗: {exc}"
+            error_msg = f"銀行 {bank_code} Gmail 搜尋失敗: {exc}"
             summary.errors.append(error_msg)
             logger.error(error_msg, exc_info=True)
             continue
@@ -519,40 +355,34 @@ async def run_ingestion_job(
             if message.pdf_attachments:
                 for attachment in message.pdf_attachments:
                     try:
-                        old_path = await _process_attachment(
+                        result = await _process_attachment(
                             session,
                             service,
-                            bank.bank_code,
+                            bank_code,
                             attachment,
                             settings.staging_dir,
-                            summary,
                             force=force,
                         )
-                        # Per-item commit: persist this attachment's DB state
-                        # before touching disk, so a mid-batch crash keeps
-                        # committed rows and never desyncs disk vs DB.
-                        await session.commit()
-                        # DB is now durable; cleaning the replaced old file is
-                        # best-effort. A failed cleanup only leaves an
-                        # unreferenced orphan file (logged), never corrupt DB.
-                        if old_path is not None:
-                            try:
-                                await _cleanup_old_staged_file(
-                                    settings.staging_dir, old_path
-                                )
-                            except Exception:
-                                logger.warning(
-                                    "ingest old-file cleanup failed (%s); "
-                                    "orphan left on disk, DB is consistent",
-                                    old_path,
-                                    exc_info=True,
-                                )
-                    except Exception:
-                        await session.rollback()
+                        _record_staging_result(summary, result)
+                    except StagingRollbackError:
+                        raise
+                    except Exception as exc:
+                        try:
+                            await session.rollback()
+                        except Exception as rollback_error:
+                            logger.exception("ingest rollback failed")
+                            raise StagingRollbackError(
+                                "ingest item rollback failed"
+                            ) from rollback_error
+                        error_msg = (
+                            f"附件處理失敗 ({bank_code}/{attachment.filename}): {exc}"
+                        )
+                        summary.failed_count += 1
+                        summary.errors.append(error_msg)
                         logger.exception(
                             "ingest item failed unexpectedly (%s/%s); rolled "
                             "back, continuing",
-                            bank.bank_code,
+                            bank_code,
                             attachment.filename,
                         )
                     finally:
@@ -575,34 +405,34 @@ async def run_ingestion_job(
                             )
             elif message.html_body is not None:
                 try:
-                    old_path = await _process_web_fetch(
+                    result = await _process_web_fetch(
                         session,
-                        bank.bank_code,
+                        bank_code,
                         message,
                         settings.staging_dir,
                         settings,
-                        summary,
                         force=force,
                     )
-                    await session.commit()
-                    if old_path is not None:
-                        try:
-                            await _cleanup_old_staged_file(
-                                settings.staging_dir, old_path
-                            )
-                        except Exception:
-                            logger.warning(
-                                "ingest old-file cleanup failed (%s); orphan "
-                                "left on disk, DB is consistent",
-                                old_path,
-                                exc_info=True,
-                            )
-                except Exception:
-                    await session.rollback()
+                    _record_staging_result(summary, result)
+                except StagingRollbackError:
+                    raise
+                except Exception as exc:
+                    try:
+                        await session.rollback()
+                    except Exception as rollback_error:
+                        logger.exception("ingest rollback failed")
+                        raise StagingRollbackError(
+                            "ingest web-fetch rollback failed"
+                        ) from rollback_error
+                    error_msg = (
+                        f"Web-fetch 處理失敗 ({bank_code}/{message.message_id}): {exc}"
+                    )
+                    summary.failed_count += 1
+                    summary.errors.append(error_msg)
                     logger.exception(
                         "ingest web-fetch item failed unexpectedly (%s/%s); "
                         "rolled back, continuing",
-                        bank.bank_code,
+                        bank_code,
                         message.message_id,
                     )
                 finally:
@@ -621,9 +451,7 @@ async def run_ingestion_job(
                             exc_info=True,
                         )
 
-    # Commits now happen per item inside the loop (item B); a final batch commit
-    # is no longer needed. A trailing no-op commit would be harmless but is
-    # dropped to make the per-item commit boundary the single source of truth.
+    # Each source lifecycle owns its per-item commit; no batch transaction remains.
     logger.info(
         "Ingestion 完成：%d 銀行, %d 郵件, %d staged, %d skipped, %d failed",
         summary.banks_processed,

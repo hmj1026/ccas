@@ -222,6 +222,59 @@ async def test_update_bill_paid(client: AsyncClient, db_session: AsyncSession):
     assert response.json()["data"]["is_paid"] is True
 
 
+async def test_bill_list_matches_update_item_for_bill_without_pdf(
+    client: AsyncClient, db_session: AsyncSession
+):
+    """無 PDF 的帳單在列表與付款狀態更新回應中使用同一 REST 欄位。"""
+    unpaid_id, _ = await _seed_bills(db_session)
+
+    listed = await client.get("/api/bills?month=2026-03", headers=auth_headers())
+    updated = await client.patch(
+        f"/api/bills/{unpaid_id}",
+        json={"is_paid": True},
+        headers=auth_headers(),
+    )
+    listed_after_update = await client.get(
+        "/api/bills?month=2026-03", headers=auth_headers()
+    )
+
+    assert listed.status_code == 200
+    assert updated.status_code == 200
+    assert listed_after_update.status_code == 200
+    assert listed.json()["data"][0]["pdf_url"] is None
+    assert updated.json()["data"] == listed_after_update.json()["data"][0]
+
+
+async def test_update_bill_succeeds_with_invalid_agent_card_metadata(
+    client: AsyncClient, db_session: AsyncSession
+):
+    """REST 付款更新不執行 Agent 對帳卡號檢查。"""
+    from ccas.storage.models import Transaction
+
+    unpaid_id, _ = await _seed_bills(db_session)
+    db_session.add(
+        Transaction(
+            bill_id=unpaid_id,
+            trans_date=date(2026, 3, 1),
+            merchant="Market",
+            amount=100,
+            currency="TWD",
+            card_last4="12",
+        )
+    )
+    await db_session.commit()
+
+    response = await client.patch(
+        f"/api/bills/{unpaid_id}",
+        json={"is_paid": True},
+        headers=auth_headers(),
+    )
+
+    assert response.status_code == 200
+    assert response.json()["data"]["is_paid"] is True
+    assert "card_last4s" not in response.json()["data"]
+
+
 async def test_update_bill_not_found(client: AsyncClient, db_session: AsyncSession):
     """更新不存在的帳單回傳 404。"""
     response = await client.patch(

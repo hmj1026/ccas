@@ -52,6 +52,13 @@ if [ ${#BACKEND_PY_FILES[@]} -gt 0 ]; then
     else
         echo "=== Pre-commit: Backend ==="
 
+        # Auto-fix re-stages these files; reject mixed index/worktree content
+        # rather than silently committing hunks the author did not stage.
+        if ! git -C "$REPO_ROOT" diff --quiet -- "${BACKEND_PY_FILES[@]}"; then
+            echo "[ERROR] Staged Python files also have unstaged changes; stage or separate those changes before auto-fix." >&2
+            exit 1
+        fi
+
         REL_PY_FILES=()
         for f in "${BACKEND_PY_FILES[@]}"; do
             REL_PY_FILES+=("${f#backend/}")
@@ -61,7 +68,7 @@ if [ ${#BACKEND_PY_FILES[@]} -gt 0 ]; then
 
         echo "-> ruff check --fix + format (auto-fix staged files)"
         uv run ruff check --fix "${REL_PY_FILES[@]}" || true
-        uv run ruff format .
+        uv run ruff format "${REL_PY_FILES[@]}"
 
         # Re-stage any files modified by auto-fix
         cd "$REPO_ROOT"

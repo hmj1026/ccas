@@ -55,7 +55,7 @@ class TestIngestStage:
             patch("ccas.ingestor.job.search_messages", return_value=[fake_message]),
             patch("ccas.ingestor.job.download_attachment", return_value=b"%PDF-fake"),
             patch(
-                "ccas.ingestor.job.build_staged_path",
+                "ccas.ingestor.lifecycle.build_staged_path",
                 return_value=staged_file,
             ),
             patch("ccas.ingestor.job.get_settings", return_value=mock_settings),

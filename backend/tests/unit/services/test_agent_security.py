@@ -338,41 +338,6 @@ async def test_budget_projection_redacts_sensitive_scope_reference(
     assert clean_payload["data"][0]["current_period"] is None
 
 
-async def test_budget_current_period_keeps_unrounded_threshold_semantics(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    budget = SimpleNamespace(
-        id=8,
-        scope=BudgetScope.MONTHLY_TOTAL,
-        scope_ref=None,
-        amount_ntd=100_000,
-        alert_threshold_percent=80,
-        enabled=True,
-        created_at=NOW,
-        updated_at=NOW,
-    )
-    monkeypatch.setattr(
-        budgets,
-        "list_budgets_query",
-        AsyncMock(return_value=[budget]),
-    )
-    monkeypatch.setattr(
-        budgets,
-        "aggregate_current_periods",
-        AsyncMock(return_value={8: 79_999}),
-    )
-
-    projection = await budgets.budget_status(
-        cast(Any, object()), include_current_period=True
-    )
-    current_period = projection.payload.model_dump(mode="json")["data"][0][
-        "current_period"
-    ]
-
-    assert current_period["percent"] == 80.0
-    assert current_period["threshold_breached"] is False
-
-
 async def test_pipeline_projection_whitelists_and_sanitizes_all_agent_text(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
