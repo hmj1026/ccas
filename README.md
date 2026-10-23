@@ -136,7 +136,7 @@ ccas/
 | Gmail OAuth setup | [`docs/gmail-setup.md`](docs/gmail-setup.md) |
 | Bank code reference | [`docs/bank-codes.md`](docs/bank-codes.md) |
 | Contributing | [`docs/CONTRIBUTING.md`](docs/CONTRIBUTING.md) |
-| Domain context | [`CONTEXT.md`](CONTEXT.md) |
+| Domain context | [`GLOSSARY.md`](GLOSSARY.md) |
 | Current implementation | [`docs/CODEMAPS/current-implementation.md`](docs/CODEMAPS/current-implementation.md) |
 | MCP installation | [`docs/mcp-installation.md`](docs/mcp-installation.md) |
 

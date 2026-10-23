@@ -25,7 +25,7 @@ Uses the five canonical labels as-is (`needs-triage`, `needs-info`, `ready-for-a
 
 ### Domain docs
 
-Single-context layout (`CONTEXT.md` + `docs/adr/` at repo root, created lazily). Read `CONTEXT.md` before naming domain concepts, writing issue/test names, or changing business language; read relevant ADRs before changing a recorded decision. See `docs/agents/domain.md` for the routing rules.
+Single-context layout (`GLOSSARY.md` + `docs/adr/` at repo root, created lazily). Read `GLOSSARY.md` before naming domain concepts, writing issue/test names, or changing business language; read relevant ADRs before changing a recorded decision. See `docs/agents/domain.md` for the routing rules.
 
 ### Implementation docs
 
