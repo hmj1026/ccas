@@ -9,10 +9,10 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from ccas.ingestor.gmail_client import GmailAttachmentMeta, GmailMessage
 from ccas.ingestor.job import (
-    IngestionSummary,
     _process_attachment,
     run_ingestion_job,
 )
+from ccas.ingestor.lifecycle import StagingDisposition
 from ccas.ingestor.staging import create_staged_record
 from ccas.storage.models import (
     BankConfig,
@@ -318,7 +318,6 @@ class TestRetryFailureUpdatesErrorReason:
                 size=1024,
                 part_id="1",
             )
-            summary = IngestionSummary()
 
             # 重試下載再次失敗。
             async def fail_to_thread(fn, *args, **kwargs):
@@ -333,11 +332,10 @@ class TestRetryFailureUpdatesErrorReason:
                     "UBOT",
                     attachment,
                     "/tmp/test_staging",
-                    summary,
                 )
 
-            assert ret is None
-            assert summary.failed_count == 1
+            assert ret.disposition == StagingDisposition.FAILED
+            assert "NEW download timeout" in (ret.error_message or "")
 
             stmt = select(StagedAttachment).where(StagedAttachment.id == existing_id)
             record = (await session.execute(stmt)).scalar_one()

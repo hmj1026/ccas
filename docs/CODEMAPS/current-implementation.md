@@ -112,6 +112,12 @@ Parser 對外只需要 `BankParser.can_parse()` 與 `BankParser.parse()`，回�
 
 Ingestor 同時支援兩種帳單來源：一般 Gmail MIME PDF attachment，以及從 Gmail HTML 內連結觸發的 web-fetch。web-fetch 目前實作 FUBON，透過 fetcher registry、銀行登入憑證、captcha OCR／可選 LLM fallback 取得 PDF；來源記錄在 `staged_attachments.source_type`。
 
+兩種來源共用 `ingestor.lifecycle` 的逐筆持久化：去重、舊資料 part-id 回填、取得
+PDF、原子寫檔、更新紀錄及 commit；只有提交成功才清理被取代的舊檔。持久化
+失敗會 rollback 並計入失敗，清理失敗則只保留無參照檔案。批次開始前先保存
+銀行代碼與搜尋條件的普通值，避免 rollback 後讀取過期 ORM 欄位而中斷後續項目。
+進度回報仍由批次處理，回報失敗不回滾已提交資料；檔案與 SQLite 不具共同原子性。
+
 ## 5. Domain data 與持久化
 
 SQLite 使用 SQLAlchemy async session、WAL、`synchronous=NORMAL`、每連線 `busy_timeout=30000` 與 foreign keys。`updated_at` 由 SQLite trigger 補足 Core-style bulk UPDATE 不會觸發 ORM `onupdate` 的情況。

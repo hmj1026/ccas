@@ -168,7 +168,7 @@ source tree and the central as-built document for exact current boundaries.
 | Module | Key files | Responsibility |
 |--------|-----------|----------------|
 | `api` | `app.py`, `deps.py`, `routers/`, `schemas/` | FastAPI composition, auth, business and setup endpoints |
-| `ingestor` | `job.py`, `gmail_client.py`, `gmail_connection.py`, `fetcher/` | Gmail ingestion, staging, FUBON web-fetch and captcha flow |
+| `ingestor` | `job.py`, `lifecycle.py`, `gmail_client.py`, `gmail_connection.py`, `fetcher/` | Gmail ingestion, durable per-item staging, FUBON web-fetch and captcha flow |
 | `decryptor` | `job.py`, `decrypt.py` | Resolve bank secrets and decrypt staged PDFs |
 | `parser` | `intake.py`, `registry.py`, `banks/`, `ocr.py` | Discover bank/version parser, extract PDF data and persist bills/transactions |
 | `classifier` | `job.py`, `engine.py`, `rules.py` | Manual override, user rules, keyword fallback and batch persistence |
@@ -187,6 +187,14 @@ and job-id backfill for both HTTP and scheduler callers. `RqPipelineQueue` owns 
 retry, timeout and the failure callback. SQLite and Redis remain separate commits; a database
 write error after enqueue is not classified as queue rejection. Scheduler engine disposal runs
 on success and failure.
+
+`ingestor.lifecycle` owns duplicate/backfill handling, source acquisition, file writes,
+record replacement, per-item commit/rollback and post-commit old-file cleanup. Gmail
+attachment and web-fetch adapters supply source details and PDF acquisition; the batch
+loop consumes outcomes and reports progress. Bank settings are copied to plain values
+before processing so rollback cannot expire ORM attributes needed by later items/banks.
+Persistence failures count as failed items, not staged successes; cleanup failure leaves
+an orphan without undoing a committed row. Filesystem and SQLite are not one atomic transaction.
 
 `services.transactions.query_transactions()` returns a `TransactionProjection` with the existing
 safe Agent payload and typed `rest_items`. Each `TransactionRead` carries native integer amounts,
