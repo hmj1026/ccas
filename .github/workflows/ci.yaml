@@ -172,6 +172,9 @@ jobs:
       - name: check-env.sh unit tests
         run: ./tests/scripts/test_check_env.sh
 
+      - name: Pre-commit scope regression
+        run: bash tests/scripts/test_pre_commit.sh
+
       - name: host-services.sh unit tests
         run: ./tests/scripts/test_host_services.sh
 
