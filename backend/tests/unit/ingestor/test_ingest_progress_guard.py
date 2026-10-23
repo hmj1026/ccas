@@ -13,6 +13,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from ccas.ingestor.job import run_ingestion_job
+from ccas.ingestor.lifecycle import StagingDisposition, StagingResult
 
 
 class RaisingReporter:
@@ -52,8 +53,12 @@ async def test_reporter_failure_does_not_abort_ingest_batch(
     msg_pdf = MagicMock(pdf_attachments=[MagicMock(), MagicMock()], html_body=None)
     msg_html = MagicMock(pdf_attachments=[], html_body="<html>fallback</html>")
 
-    process_attachment_mock = AsyncMock(return_value=None)
-    process_web_fetch_mock = AsyncMock(return_value=None)
+    process_attachment_mock = AsyncMock(
+        return_value=StagingResult(StagingDisposition.STAGED)
+    )
+    process_web_fetch_mock = AsyncMock(
+        return_value=StagingResult(StagingDisposition.STAGED)
+    )
 
     with (
         patch("ccas.ingestor.job.load_credentials", return_value=MagicMock()),
@@ -74,10 +79,10 @@ async def test_reporter_failure_does_not_abort_ingest_batch(
     assert process_web_fetch_mock.await_count == 1
     assert reporter.item_calls == 3
     assert summary.banks_processed == 1
-    # Stage 3 item B: commit is now per item (the reporter raises in the
-    # finally AFTER each per-item commit). Each of the 3 items still committed,
-    # and the progress-reporting failure must never trigger a rollback.
-    assert session.commit.await_count == 3
+    assert summary.staged_count == 3
+    # Per-item commits belong to the shared source lifecycle; reporter errors
+    # in the orchestration loop must never trigger a rollback.
+    session.commit.assert_not_awaited()
     session.rollback.assert_not_awaited()
     # Swallow-with-log: failure is logged, not silent.
     assert "ingest progress reporting failed" in caplog.text

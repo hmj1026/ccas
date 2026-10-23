@@ -121,6 +121,120 @@ async def test_list_bills_projection_omits_paths_and_stabilizes_card_identity(
     )
 
 
+async def test_list_bills_projection_exposes_native_rest_items(
+    db_session: AsyncSession,
+):
+    db_session.add_all(
+        [
+            BankConfig(
+                bank_code="CTBC",
+                bank_name="中國信託",
+                gmail_filter="from:ctbc",
+            ),
+            BankConfig(
+                bank_code="ESUN",
+                bank_name="玉山銀行",
+                gmail_filter="from:esun",
+            ),
+        ]
+    )
+    pdf_bill = Bill(
+        bank_code="CTBC",
+        billing_month="2026-03",
+        total_amount=1234,
+        due_date=date(2026, 4, 15),
+        file_path="/private/statements/ctbc-2026-03.pdf",
+    )
+    no_pdf_bill = Bill(
+        bank_code="ESUN",
+        billing_month="2026-02",
+        total_amount=567,
+        due_date=date(2026, 3, 15),
+    )
+    db_session.add_all([pdf_bill, no_pdf_bill])
+    await db_session.commit()
+
+    projection = await list_bills(db_session)
+
+    assert projection.rest_metadata == {}
+    assert len(projection.rest_items) == 2
+    pdf_item, no_pdf_item = projection.rest_items
+    assert pdf_item.id == pdf_bill.id
+    assert pdf_item.bank_code == "CTBC"
+    assert pdf_item.bank_name == "中國信託"
+    assert pdf_item.billing_month == "2026-03"
+    assert pdf_item.total_amount == 1234
+    assert pdf_item.due_date == date(2026, 4, 15)
+    assert pdf_item.is_paid is False
+    assert pdf_item.has_pdf is True
+    assert pdf_item.created_at == pdf_bill.created_at
+    assert not hasattr(pdf_item, "file_path")
+
+    assert no_pdf_item.id == no_pdf_bill.id
+    assert no_pdf_item.bank_code == "ESUN"
+    assert no_pdf_item.bank_name == "玉山銀行"
+    assert no_pdf_item.billing_month == "2026-02"
+    assert no_pdf_item.total_amount == 567
+    assert no_pdf_item.has_pdf is False
+
+    agent_pdf_bill = projection.payload.data[0]
+    assert agent_pdf_bill.total_amount.value == "1234"
+    assert "has_pdf" not in agent_pdf_bill.model_dump()
+    assert "file_path" not in agent_pdf_bill.model_dump()
+
+
+async def test_get_bill_projection_exposes_native_rest_item(
+    db_session: AsyncSession,
+):
+    db_session.add(
+        BankConfig(
+            bank_code="CTBC",
+            bank_name="中國信託",
+            gmail_filter="from:ctbc",
+        )
+    )
+    bill = Bill(
+        bank_code="CTBC",
+        billing_month="2026-03",
+        total_amount=1234,
+        due_date=date(2026, 4, 15),
+        file_path="/private/statements/ctbc-2026-03.pdf",
+    )
+    db_session.add(bill)
+    await db_session.commit()
+
+    projection = await get_bill(db_session, bill.id)
+
+    assert projection.rest_metadata == {}
+    assert projection.rest_items[0].total_amount == 1234
+    assert projection.rest_items[0].has_pdf is True
+    assert projection.payload.data.total_amount.value == "1234"
+
+
+async def test_payment_due_projection_exposes_native_rest_items(
+    db_session: AsyncSession,
+):
+    bill = Bill(
+        bank_code="CTBC",
+        billing_month="2026-03",
+        total_amount=1234,
+        due_date=date(2026, 4, 15),
+        file_path="/private/statements/ctbc-2026-03.pdf",
+        is_paid=False,
+    )
+    db_session.add(bill)
+    await db_session.commit()
+
+    projection = await get_payment_due(db_session)
+
+    assert projection.rest_metadata == {}
+    assert len(projection.rest_items) == 1
+    assert projection.rest_items[0].id == bill.id
+    assert projection.rest_items[0].total_amount == 1234
+    assert projection.rest_items[0].has_pdf is True
+    assert projection.payload.data[0].total_amount.value == "1234"
+
+
 async def test_list_bills_month_precedes_year_and_filters_bank_and_status(
     db_session: AsyncSession,
 ):

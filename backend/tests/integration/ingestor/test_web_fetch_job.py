@@ -13,7 +13,8 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from ccas.ingestor.fetcher.base import BankFetcher
 from ccas.ingestor.fetcher.registry import _FetcherRegistry
 from ccas.ingestor.gmail_client import GmailMessage
-from ccas.ingestor.job import IngestionSummary, _process_web_fetch
+from ccas.ingestor.job import _process_web_fetch
+from ccas.ingestor.lifecycle import StagingDisposition
 from ccas.storage.models import Base, StagedAttachment
 
 os.environ.setdefault("TELEGRAM_BOT_TOKEN", "test")
@@ -84,20 +85,16 @@ class TestProcessWebFetch:
         settings.staging_dir = str(tmp_path)
 
         async with session_factory() as session:
-            summary = IngestionSummary()
             message = _web_fetch_message()
 
             with patch("ccas.ingestor.fetcher.fetcher_registry", mock_registry):
-                await _process_web_fetch(
+                outcome = await _process_web_fetch(
                     session,
                     "MOCKBANK",
                     message,
                     str(tmp_path),
                     settings,
-                    summary,
                 )
-
-            await session.commit()
 
             stmt = select(StagedAttachment).where(
                 StagedAttachment.bank_code == "MOCKBANK"
@@ -110,7 +107,8 @@ class TestProcessWebFetch:
             assert record.source_type == "web_fetch"
             assert record.status == "staged"
             assert record.gmail_attachment_id == "web_fetch_msg-web-001"
-            assert summary.staged_count == 1
+            assert outcome is not None
+            assert outcome.disposition == StagingDisposition.STAGED
 
         await engine.dispose()
 
@@ -124,20 +122,19 @@ class TestProcessWebFetch:
         settings.staging_dir = str(tmp_path)
 
         async with session_factory() as session:
-            summary = IngestionSummary()
             message = _web_fetch_message("msg-synth-test")
 
             with patch("ccas.ingestor.fetcher.fetcher_registry", mock_registry):
-                await _process_web_fetch(
+                outcome = await _process_web_fetch(
                     session,
                     "MOCKBANK",
                     message,
                     str(tmp_path),
                     settings,
-                    summary,
                 )
 
-            await session.commit()
+            assert outcome is not None
+            assert outcome.disposition == StagingDisposition.STAGED
 
             stmt = select(StagedAttachment)
             result = await session.execute(stmt)
@@ -159,29 +156,26 @@ class TestProcessWebFetch:
             message = _web_fetch_message("msg-dedup")
 
             with patch("ccas.ingestor.fetcher.fetcher_registry", mock_registry):
-                summary1 = IngestionSummary()
-                await _process_web_fetch(
+                outcome1 = await _process_web_fetch(
                     session,
                     "MOCKBANK",
                     message,
                     str(tmp_path),
                     settings,
-                    summary1,
                 )
-                await session.commit()
 
-                summary2 = IngestionSummary()
-                await _process_web_fetch(
+                outcome2 = await _process_web_fetch(
                     session,
                     "MOCKBANK",
                     message,
                     str(tmp_path),
                     settings,
-                    summary2,
                 )
 
-            assert summary1.staged_count == 1
-            assert summary2.skipped_count == 1
+            assert outcome1 is not None
+            assert outcome1.disposition == StagingDisposition.STAGED
+            assert outcome2 is not None
+            assert outcome2.disposition == StagingDisposition.SKIPPED
 
             stmt = select(StagedAttachment)
             result = await session.execute(stmt)
@@ -198,21 +192,18 @@ class TestProcessWebFetch:
         settings = _mock_settings()
 
         async with session_factory() as session:
-            summary = IngestionSummary()
             message = _web_fetch_message()
 
             with patch("ccas.ingestor.fetcher.fetcher_registry", empty_registry):
-                await _process_web_fetch(
+                outcome = await _process_web_fetch(
                     session,
                     "MOCKBANK",
                     message,
                     str(tmp_path),
                     settings,
-                    summary,
                 )
 
-            assert summary.staged_count == 0
-            assert summary.skipped_count == 0
+            assert outcome is None
 
         await engine.dispose()
 
@@ -226,20 +217,19 @@ class TestProcessWebFetch:
         settings.staging_dir = str(tmp_path)
 
         async with session_factory() as session:
-            summary = IngestionSummary()
             message = _web_fetch_message("msg-write-test")
 
             with patch("ccas.ingestor.fetcher.fetcher_registry", mock_registry):
-                await _process_web_fetch(
+                outcome = await _process_web_fetch(
                     session,
                     "MOCKBANK",
                     message,
                     str(tmp_path),
                     settings,
-                    summary,
                 )
 
-            await session.commit()
+            assert outcome is not None
+            assert outcome.disposition == StagingDisposition.STAGED
 
             # Verify a PDF file was written
             pdf_files = list(tmp_path.rglob("*.pdf"))
@@ -268,29 +258,26 @@ class TestProcessWebFetch:
                     message,
                     str(tmp_path),
                     settings,
-                    IngestionSummary(),
                 )
-            await session.commit()
 
             # Second call with force=True: retry to the exact same path
-            second_summary = IngestionSummary()
+
             with patch("ccas.ingestor.fetcher.fetcher_registry", mock_registry):
-                await _process_web_fetch(
+                second_outcome = await _process_web_fetch(
                     session,
                     "MOCKBANK",
                     message,
                     str(tmp_path),
                     settings,
-                    second_summary,
                     force=True,
                 )
-            await session.commit()
 
             # File must still exist on disk after retry
             pdf_files = list(tmp_path.rglob("*.pdf"))
             assert len(pdf_files) == 1
             assert pdf_files[0].read_bytes() == _FAKE_PDF
-            assert second_summary.staged_count == 1
+            assert second_outcome is not None
+            assert second_outcome.disposition == StagingDisposition.STAGED
 
         await engine.dispose()
 
@@ -342,19 +329,16 @@ class TestFetchExpiredStatus:
         settings.staging_dir = str(tmp_path)
 
         async with session_factory() as session:
-            summary = IngestionSummary()
             message = _web_fetch_message("msg-expired-001")
 
             with patch("ccas.ingestor.fetcher.fetcher_registry", mock_registry):
-                await _process_web_fetch(
+                outcome = await _process_web_fetch(
                     session,
                     "MOCKBANK",
                     message,
                     str(tmp_path),
                     settings,
-                    summary,
                 )
-            await session.commit()
 
             stmt = select(StagedAttachment).where(
                 StagedAttachment.gmail_message_id == "msg-expired-001"
@@ -363,9 +347,9 @@ class TestFetchExpiredStatus:
             assert record.status == "fetch_expired"
             assert record.error_reason is not None
             assert "fetch_expired" in record.error_reason
-            assert summary.failed_count == 0
-            assert summary.skipped_count == 1
-            assert len(summary.errors) == 0
+            assert outcome is not None
+            assert outcome.disposition == StagingDisposition.SKIPPED
+            assert outcome.error_message is None
 
         await engine.dispose()
 
@@ -378,19 +362,19 @@ class TestFetchExpiredStatus:
         settings.staging_dir = str(tmp_path)
 
         async with session_factory() as session:
-            summary = IngestionSummary()
             message = _web_fetch_message("msg-generic-fail")
 
             with patch("ccas.ingestor.fetcher.fetcher_registry", mock_registry):
-                await _process_web_fetch(
+                outcome = await _process_web_fetch(
                     session,
                     "MOCKBANK",
                     message,
                     str(tmp_path),
                     settings,
-                    summary,
                 )
-            await session.commit()
+
+            assert outcome is not None
+            assert outcome.disposition == StagingDisposition.FAILED
 
             stmt = select(StagedAttachment).where(
                 StagedAttachment.gmail_message_id == "msg-generic-fail"
@@ -418,9 +402,7 @@ class TestFetchExpiredStatus:
                     _web_fetch_message("msg-retry"),
                     str(tmp_path),
                     settings,
-                    IngestionSummary(),
                 )
-            await session.commit()
 
             # 再用 record_not_found 重試（is_failed_retry path）
             reg2 = _FetcherRegistry()
@@ -432,9 +414,7 @@ class TestFetchExpiredStatus:
                     _web_fetch_message("msg-retry"),
                     str(tmp_path),
                     settings,
-                    IngestionSummary(),
                 )
-            await session.commit()
 
             stmt = select(StagedAttachment).where(
                 StagedAttachment.gmail_message_id == "msg-retry"
@@ -461,24 +441,20 @@ class TestFetchExpiredStatus:
                     _web_fetch_message("msg-no-retry"),
                     str(tmp_path),
                     settings,
-                    IngestionSummary(),
                 )
-            await session.commit()
 
             # 第二次使用 success fetcher，若不當重試會變 staged
             reg_ok = _FetcherRegistry()
             reg_ok.register(_MockFetcher())
-            second_summary = IngestionSummary()
+
             with patch("ccas.ingestor.fetcher.fetcher_registry", reg_ok):
-                await _process_web_fetch(
+                second_outcome = await _process_web_fetch(
                     session,
                     "MOCKBANK",
                     _web_fetch_message("msg-no-retry"),
                     str(tmp_path),
                     settings,
-                    second_summary,
                 )
-            await session.commit()
 
             stmt = select(StagedAttachment).where(
                 StagedAttachment.gmail_message_id == "msg-no-retry"
@@ -486,7 +462,7 @@ class TestFetchExpiredStatus:
             record = (await session.execute(stmt)).scalar_one()
             # 應保留 fetch_expired，不被重新下載覆蓋
             assert record.status == "fetch_expired"
-            assert second_summary.skipped_count == 1
-            assert second_summary.staged_count == 0
+            assert second_outcome is not None
+            assert second_outcome.disposition == StagingDisposition.SKIPPED
 
         await engine.dispose()

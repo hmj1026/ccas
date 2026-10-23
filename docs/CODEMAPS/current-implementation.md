@@ -112,6 +112,12 @@ Parser 對外只需要 `BankParser.can_parse()` 與 `BankParser.parse()`，回�
 
 Ingestor 同時支援兩種帳單來源：一般 Gmail MIME PDF attachment，以及從 Gmail HTML 內連結觸發的 web-fetch。web-fetch 目前實作 FUBON，透過 fetcher registry、銀行登入憑證、captcha OCR／可選 LLM fallback 取得 PDF；來源記錄在 `staged_attachments.source_type`。
 
+兩種來源共用 `ingestor.lifecycle` 的逐筆持久化：去重、舊資料 part-id 回填、取得
+PDF、原子寫檔、更新紀錄及 commit；只有提交成功才清理被取代的舊檔。持久化
+失敗會 rollback 並計入失敗，清理失敗則只保留無參照檔案。批次開始前先保存
+銀行代碼與搜尋條件的普通值，避免 rollback 後讀取過期 ORM 欄位而中斷後續項目。
+進度回報仍由批次處理，回報失敗不回滾已提交資料；檔案與 SQLite 不具共同原子性。
+
 ## 5. Domain data 與持久化
 
 SQLite 使用 SQLAlchemy async session、WAL、`synchronous=NORMAL`、每連線 `busy_timeout=30000` 與 foreign keys。`updated_at` 由 SQLite trigger 補足 Core-style bulk UPDATE 不會觸發 ORM `onupdate` 的情況。
@@ -158,11 +164,20 @@ Server state 使用 TanStack Query；交易、設定與 pipeline progress 的 ca
 消費交易查詢由 `services.transactions` 先建立完整、具型別的 `TransactionRead`，再產生
 Agent payload 與原生金額的 `rest_items`。網頁 adapter 直接映射完整交易，無需按 id 拼接
 `rest_metadata` 或將 Money 字串轉回整數；Agent 的 TWD Money、對帳識別鍵與敏感資料檢查
-維持原契約。其他查詢的既有 metadata 契約未在此重構範圍。
+維持原契約。
+
+信用卡帳單查詢同樣以不可變 `BillRead` 保存原生金額與 PDF 可用性，透過
+`BillProjection.rest_items` 供網頁使用；列表與付款狀態更新共用映射，不再拼接
+metadata。Agent 只序列化安全 `payload`，不包含 PDF 路徑或可用性；付款更新
+不在 commit 後新增 Agent 專用的卡號或月份驗證。
 
 Agent surfaces 共用 `ccas.services` 的安全投影；REST 提供 `/api/bills/payment-due` 與 `/api/pipeline/status`，CLI/MCP 僅允許唯讀查詢。loopback Streamable HTTP MCP 只接受與 REST 相同來源的 Bearer API token，不接受儀表板 session cookie。Agent response DTO 的 datetime 在 JSON serialization boundary 統一輸出 UTC RFC3339 `Z`；`AGENT_WRITE_ENABLED` 預設為 false，且目前不會暴露任何寫入工具。MCP 的 resources／prompts 與 tools 走同一組 service 投影，同樣唯讀；RFC 9728 protected resource metadata 一律不發布，舊 issuer 設定忽略並在非空時輸出固定棄用警告。現行 `2026-07-28` HTTP 協定為逐請求無 session；中斷後重建 SDK transport 並重新帶 Bearer（見 [`mcp-installation.md`](../mcp-installation.md)）。
 
 CLI／MCP 業務錯誤共用 `schemas.public_query_error()`，僅公開 code、安全 message 與必要的 needs_human，排除任意內部 data。月份 query DTO 與 prompts 共用有效 ASCII `YYYY-MM` 驗證。`budget_status(month=...)`／CLI `budget-status --month` 增加指定帳單月份的 assessment，以目前設定（budget_basis=current_settings）評估帳單月份消費；current_period 仍獨立表示本月，未指定 month 時不輸出 assessment。REST 本月預算契約保持相容。
+
+CLI 與 MCP tool 透過 `services.query_outcome.require_tool_result()` 共用人工介入
+判定；重試耗盡的流程狀態轉成既有安全業務錯誤。MCP resource 不套用此工具政策，
+仍回傳安全的狀態快照（含 `needs_human`），不公開內部 metadata。
 
 預算查詢、本期單筆查詢與排程共用 `budget_assessment.assess_budgets()`，按帳單月份
 批次彙總消費，並以整數交叉相乘判斷閾值；顯示百分比的取整不影響達標判斷。

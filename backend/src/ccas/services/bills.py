@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Literal
+from dataclasses import dataclass
+from datetime import date, datetime
+from typing import Literal
 
-from pydantic import ValidationError
+from pydantic import BaseModel, ConfigDict, ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ccas.services.identity import (
@@ -36,56 +38,124 @@ from ccas.storage.queries import fetch_bank_names
 MONTH_REGEX = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
 
 
-def _to_agent_bill(
-    bill: Bill,
-    bank_names: dict[str, str],
-    card_last4s: list[str],
-) -> AgentBill:
-    """Validate and convert Bill ORM to AgentBill DTO."""
-    if not bill.billing_month or not MONTH_REGEX.match(bill.billing_month):
-        raise AgentQueryError(
-            "needs_human",
-            "Database contains malformed billing month; human review required.",
-            needs_human=True,
-        )
+class BillRead(BaseModel):
+    """Immutable native bill data shared by Agent and REST projections.
 
-    bank_name = bank_names.get(bill.bank_code)
-    if contains_sensitive_data(bill.bank_code) or contains_sensitive_data(bank_name):
-        raise AgentQueryError(
-            "needs_human",
-            "Bill data contains sensitive information requiring human review.",
-            needs_human=True,
-        )
+    The model contains no storage path. Its ``has_pdf`` flag is only for the
+    REST adapter, while ``card_last4s`` is consumed when building the safe
+    Agent DTO. Constructing a native read does not run Agent-specific
+    month/card validation, which keeps the post-commit PATCH response
+    compatible with existing data.
+    """
 
-    for card in card_last4s:
-        if len(card) != 4 or not card.isdigit():
-            raise AgentQueryError(
-                "needs_human",
-                "Database contains malformed card data; human review required.",
-                needs_human=True,
-            )
+    model_config = ConfigDict(extra="forbid", frozen=True)
 
-    sorted_cards = sorted(set(card_last4s))
+    id: int
+    bank_code: str
+    bank_name: str | None
+    billing_month: str
+    total_amount: int
+    due_date: date
+    is_paid: bool
+    created_at: datetime
+    has_pdf: bool
+    card_last4s: tuple[str, ...] = ()
 
-    recon_key = build_bill_reconciliation_key(
-        bank_code=bill.bank_code,
-        billing_month=bill.billing_month,
-        card_last4s=sorted_cards,
-        due_date=bill.due_date,
-    )
-
-    try:
-        return AgentBill(
+    @classmethod
+    def from_bill(
+        cls,
+        bill: Bill,
+        *,
+        bank_name: str | None,
+        card_last4s: list[str] | tuple[str, ...] = (),
+    ) -> BillRead:
+        """Map one ORM bill into native values without Agent-only checks."""
+        return cls(
             id=bill.id,
             bank_code=bill.bank_code,
             bank_name=bank_name,
             billing_month=bill.billing_month,
-            total_amount=Money(currency="TWD", value=str(int(bill.total_amount))),
+            total_amount=int(bill.total_amount),
             due_date=bill.due_date,
             is_paid=bill.is_paid,
             created_at=bill.created_at,
+            has_pdf=bool(bill.file_path),
+            card_last4s=tuple(card_last4s),
+        )
+
+    def to_agent(self) -> AgentBill:
+        """Validate Agent-facing fields and retain the canonical payload."""
+        if not self.billing_month or not MONTH_REGEX.match(self.billing_month):
+            raise AgentQueryError(
+                "needs_human",
+                "Database contains malformed billing month; human review required.",
+                needs_human=True,
+            )
+
+        if contains_sensitive_data(self.bank_code) or contains_sensitive_data(
+            self.bank_name
+        ):
+            raise AgentQueryError(
+                "needs_human",
+                "Bill data contains sensitive information requiring human review.",
+                needs_human=True,
+            )
+
+        for card in self.card_last4s:
+            if len(card) != 4 or not card.isdigit():
+                raise AgentQueryError(
+                    "needs_human",
+                    "Database contains malformed card data; human review required.",
+                    needs_human=True,
+                )
+
+        sorted_cards = sorted(set(self.card_last4s))
+        recon_key = build_bill_reconciliation_key(
+            bank_code=self.bank_code,
+            billing_month=self.billing_month,
             card_last4s=sorted_cards,
-            reconciliation_key=recon_key,
+            due_date=self.due_date,
+        )
+
+        try:
+            return AgentBill(
+                id=self.id,
+                bank_code=self.bank_code,
+                bank_name=self.bank_name,
+                billing_month=self.billing_month,
+                total_amount=Money(currency="TWD", value=str(self.total_amount)),
+                due_date=self.due_date,
+                is_paid=self.is_paid,
+                created_at=self.created_at,
+                card_last4s=sorted_cards,
+                reconciliation_key=recon_key,
+            )
+        except ValidationError as exc:
+            raise AgentQueryError(
+                "needs_human",
+                "Database contains malformed bill data; human review required.",
+                needs_human=True,
+            ) from exc
+
+
+@dataclass(kw_only=True)
+class BillProjection[T](ServiceProjection[T]):
+    """Safe Agent result and native bill reads from the same query rows."""
+
+    rest_items: tuple[BillRead, ...]
+
+
+def _bill_read_for_agent(
+    bill: Bill,
+    bank_name: str | None,
+    card_last4s: list[str] | tuple[str, ...],
+) -> BillRead:
+    """Build a query read while keeping malformed database data safe."""
+    try:
+        return BillRead.from_bill(
+            bill,
+            bank_name=bank_name,
+            card_last4s=card_last4s,
         )
     except ValidationError as exc:
         raise AgentQueryError(
@@ -104,7 +174,7 @@ async def list_bills(
     status: Literal["all", "paid", "unpaid"] | str = "all",
     page: int = 1,
     page_size: int = 20,
-) -> ServiceProjection[BillsPage]:
+) -> BillProjection[BillsPage]:
     """List bills with optional filters, bank names lookup, and pagination."""
     try:
         input_dto = ListBillsInput(
@@ -130,19 +200,18 @@ async def list_bills(
         page_size=input_dto.page_size,
     )
 
-    bill_ids = [b.id for b in bills]
+    bill_ids = [bill.id for bill in bills]
     cards_map = await fetch_card_last4s_for_bills(session, bill_ids)
 
-    rest_metadata: dict[str, Any] = {}
-    items: list[AgentBill] = []
-
-    for b in bills:
-        cards = cards_map.get(b.id, [])
-        items.append(_to_agent_bill(b, bank_names, cards))
-        rest_metadata[str(b.id)] = {
-            "has_pdf": bool(b.file_path),
-            "is_paid": b.is_paid,
-        }
+    native_items = tuple(
+        _bill_read_for_agent(
+            bill,
+            bank_names.get(bill.bank_code),
+            cards_map.get(bill.id, []),
+        )
+        for bill in bills
+    )
+    items = [bill.to_agent() for bill in native_items]
 
     page_meta = PageMeta(
         page=input_dto.page,
@@ -152,16 +221,16 @@ async def list_bills(
         has_next=has_next,
     )
 
-    return ServiceProjection(
+    return BillProjection(
         payload=BillsPage(data=items, pagination=page_meta),
-        rest_metadata=rest_metadata,
+        rest_items=native_items,
     )
 
 
 async def get_bill(
     session: AsyncSession,
     bill_id: int,
-) -> ServiceProjection[BillResult]:
+) -> BillProjection[BillResult]:
     """Fetch single bill by ID."""
     try:
         input_dto = GetBillInput(bill_id=bill_id)
@@ -174,44 +243,39 @@ async def get_bill(
 
     bank_names = await fetch_bank_names(session)
     cards_map = await fetch_card_last4s_for_bills(session, [bill.id])
-    cards = cards_map.get(bill.id, [])
+    native_bill = _bill_read_for_agent(
+        bill,
+        bank_names.get(bill.bank_code),
+        cards_map.get(bill.id, []),
+    )
 
-    agent_bill = _to_agent_bill(bill, bank_names, cards)
-    rest_metadata: dict[str, Any] = {
-        str(bill.id): {
-            "has_pdf": bool(bill.file_path),
-            "is_paid": bill.is_paid,
-        }
-    }
-
-    return ServiceProjection(
-        payload=BillResult(data=agent_bill),
-        rest_metadata=rest_metadata,
+    return BillProjection(
+        payload=BillResult(data=native_bill.to_agent()),
+        rest_items=(native_bill,),
     )
 
 
 async def get_payment_due(
     session: AsyncSession,
-) -> ServiceProjection[PaymentDueResult]:
+) -> BillProjection[PaymentDueResult]:
     """Fetch all unpaid bills ordered by due_date ascending."""
     unpaid_bills = await get_payment_due_query(session)
     bank_names = await fetch_bank_names(session)
 
-    bill_ids = [b.id for b in unpaid_bills]
+    bill_ids = [bill.id for bill in unpaid_bills]
     cards_map = await fetch_card_last4s_for_bills(session, bill_ids)
 
-    items: list[AgentBill] = []
-    rest_metadata: dict[str, Any] = {}
+    native_items = tuple(
+        _bill_read_for_agent(
+            bill,
+            bank_names.get(bill.bank_code),
+            cards_map.get(bill.id, []),
+        )
+        for bill in unpaid_bills
+    )
+    items = [bill.to_agent() for bill in native_items]
 
-    for b in unpaid_bills:
-        cards = cards_map.get(b.id, [])
-        items.append(_to_agent_bill(b, bank_names, cards))
-        rest_metadata[str(b.id)] = {
-            "has_pdf": bool(b.file_path),
-            "is_paid": b.is_paid,
-        }
-
-    return ServiceProjection(
+    return BillProjection(
         payload=PaymentDueResult(data=items),
-        rest_metadata=rest_metadata,
+        rest_items=native_items,
     )
