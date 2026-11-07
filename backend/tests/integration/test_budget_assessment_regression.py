@@ -94,7 +94,7 @@ async def test_80_percent_alert_waits_for_exact_integer_threshold(
     budget, bill = await _create_budget_and_bill(db_session, amounts=[80])
 
     with patch(
-        "ccas.scheduler.budget_evaluator.send_message",
+        "ccas.outbox.send_message",
         new=AsyncMock(return_value=None),
     ) as send_message:
         at_80 = await evaluate_budgets(db_session, today=ASSESSMENT_DATE)
@@ -133,7 +133,7 @@ async def test_pending_alert_is_reused_only_after_exact_threshold_is_met(
     pending_id = pending.id
 
     with patch(
-        "ccas.scheduler.budget_evaluator.send_message",
+        "ccas.outbox.send_message",
         new=AsyncMock(return_value=None),
     ) as send_message:
         below_threshold = await evaluate_budgets(db_session, today=ASSESSMENT_DATE)
@@ -175,7 +175,7 @@ async def test_refund_delays_pending_alert_until_spending_recovers(
     pending_id = pending.id
 
     with patch(
-        "ccas.scheduler.budget_evaluator.send_message",
+        "ccas.outbox.send_message",
         new=AsyncMock(return_value=None),
     ) as send_message:
         below_threshold_after_refund = await evaluate_budgets(

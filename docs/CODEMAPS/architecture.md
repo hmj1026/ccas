@@ -51,7 +51,8 @@ backend/src/ccas/
 ├── decryptor/  PDF 密碼解析與解密
 ├── parser/     銀行 parser registry、PDF/OCR intake
 ├── classifier/ 使用者規則與內建關鍵字分類
-├── bot/        Telegram commands、帳單與預算通知
+├── bot/        Telegram commands、notify stage（新帳單、解析失敗通知）
+├── outbox.py   通知投遞：先認領再送、失敗釋放認領
 ├── pipeline/   orchestrator、RQ jobs、progress reporter
 ├── scheduler/  APScheduler jobs 與 heartbeat
 ├── storage/    SQLAlchemy models、queries、secrets

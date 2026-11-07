@@ -7,10 +7,9 @@
 """
 
 from datetime import date
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock
 
 import pytest
-from pydantic import SecretStr
 from sqlalchemy import select
 from sqlalchemy import update as sa_update
 from sqlalchemy.ext.asyncio import (
@@ -20,6 +19,7 @@ from sqlalchemy.ext.asyncio import (
 )
 
 from ccas.bot.job import NEW_BILL_REMINDER_TYPE, run_notify_job
+from ccas.outbox import Outbox
 from ccas.storage.models import Base, Bill, PaymentReminder
 
 
@@ -32,13 +32,6 @@ async def session():
     async with factory() as s:
         yield s
     await engine.dispose()
-
-
-def _fake_settings() -> MagicMock:
-    settings = MagicMock()
-    settings.telegram_bot_token = SecretStr("test-token")
-    settings.telegram_chat_id = "12345"
-    return settings
 
 
 async def _seed_bill(session: AsyncSession) -> int:
@@ -71,20 +64,17 @@ class TestNotifyIdempotency:
         bill_id = await _seed_bill(session)
         mock_send = AsyncMock(return_value={"ok": True})
 
-        with (
-            patch("ccas.bot.job.get_settings", return_value=_fake_settings()),
-            patch("ccas.bot.notifications.send_message", mock_send),
-        ):
-            first = await run_notify_job(session)
+        outbox = Outbox(session, mock_send)
+        first = await run_notify_job(session, outbox=outbox)
 
-            # Simulate the worst case: send succeeded but the is_notified
-            # update was lost, so the bill is re-queried on the next run.
-            await session.execute(
-                sa_update(Bill).where(Bill.id == bill_id).values(is_notified=False)
-            )
-            await session.commit()
+        # Simulate the worst case: send succeeded but the is_notified
+        # update was lost, so the bill is re-queried on the next run.
+        await session.execute(
+            sa_update(Bill).where(Bill.id == bill_id).values(is_notified=False)
+        )
+        await session.commit()
 
-            second = await run_notify_job(session)
+        second = await run_notify_job(session, outbox=outbox)
 
         assert first.sent_count == 1
         assert second.sent_count == 0
@@ -105,11 +95,8 @@ class TestNotifyIdempotency:
 
         monkeypatch.setattr(session, "commit", _boom)
 
-        with (
-            patch("ccas.bot.job.get_settings", return_value=_fake_settings()),
-            patch("ccas.bot.notifications.send_message", mock_send),
-        ):
-            summary = await run_notify_job(session)
+        outbox = Outbox(session, mock_send)
+        summary = await run_notify_job(session, outbox=outbox)
 
         mock_send.assert_not_awaited()
         assert summary.sent_count == 0
@@ -121,12 +108,9 @@ class TestNotifyIdempotency:
         bill_id = await _seed_bill(session)
         mock_send = AsyncMock(side_effect=[RuntimeError("telegram down"), {"ok": True}])
 
-        with (
-            patch("ccas.bot.job.get_settings", return_value=_fake_settings()),
-            patch("ccas.bot.notifications.send_message", mock_send),
-        ):
-            first = await run_notify_job(session)
-            second = await run_notify_job(session)
+        outbox = Outbox(session, mock_send)
+        first = await run_notify_job(session, outbox=outbox)
+        second = await run_notify_job(session, outbox=outbox)
 
         assert first.sent_count == 0
         assert first.failed_count == 1
