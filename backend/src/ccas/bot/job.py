@@ -7,7 +7,7 @@
 import logging
 from typing import Any, cast
 
-from sqlalchemy import CursorResult, select
+from sqlalchemy import CursorResult, delete, select
 from sqlalchemy import update as sa_update
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -37,8 +37,8 @@ async def run_notify_job(
     """查詢未通知帳單並發送 Telegram 通知。
 
     自動查詢 is_notified=False 的帳單，發送成功後標記為已通知。
-    發送前先以 PaymentReminder (bill_id, "new_bill") 唯一鍵 claim，
-    確保重複執行不會重複發送（at-most-once）。
+    發送前先以 PaymentReminder (bill_id, "new_bill") 唯一鍵 claim：
+    成功送出的通知不會重送；發送失敗會釋放 claim，下次執行重試。
 
     Args:
         session: 非同步 DB Session。
@@ -95,11 +95,13 @@ async def run_notify_job(
             insert_result = cast(CursorResult[Any], await session.execute(insert_stmt))
             await session.commit()
             if insert_result.rowcount == 0:
-                # Already claimed by a previous run (is_notified update must
-                # have failed last time); skip without sending again and
-                # repair the flag so the bill stops being re-scanned.
+                # Already claimed by a previous run: either the send succeeded
+                # but the is_notified update was lost, or releasing a failed
+                # send's claim failed (logged by _release_claim). Skip without
+                # sending again and repair the flag so the bill stops being
+                # re-scanned.
                 logger.info(
-                    "通知已發送過，跳過: bill #%d (%s/%s)",
+                    "通知 claim 已存在，跳過: bill #%d (%s/%s)",
                     bill_id,
                     bill_code,
                     bill_month,
@@ -111,15 +113,21 @@ async def run_notify_job(
                 continue
 
             bank_name = bank_names.get(bill_code, bill_code)
-            await notify_new_bill(
-                settings.telegram_bot_token.get_secret_value(),
-                settings.telegram_chat_id,
-                bank_name=bank_name,
-                billing_month=bill_month,
-                total_amount=bill_total,
-                due_date=bill_due,
-                bill_id=bill_id,
-            )
+            try:
+                await notify_new_bill(
+                    settings.telegram_bot_token.get_secret_value(),
+                    settings.telegram_chat_id,
+                    bank_name=bank_name,
+                    billing_month=bill_month,
+                    total_amount=bill_total,
+                    due_date=bill_due,
+                    bill_id=bill_id,
+                )
+            except Exception:
+                # The claim is already committed, so rollback cannot undo it;
+                # release it explicitly so the next run retries the send.
+                await _release_claim(session, bill_id)
+                raise
             summary.sent_count += 1
             logger.info(
                 "通知成功: bill #%d (%s/%s)",
@@ -135,8 +143,8 @@ async def run_notify_job(
             logger.error(error_msg)
         else:
             # Mark notified after a successful send. Failure here is
-            # tolerable: idempotency is carried by the PaymentReminder
-            # unique key, so the next run skips instead of re-sending.
+            # tolerable: the claim is kept (only a failed send releases it),
+            # so the next run skips instead of re-sending.
             try:
                 # UPDATE query avoids touching expired ORM objects.
                 await session.execute(
@@ -162,3 +170,26 @@ async def run_notify_job(
                 )
 
     return summary
+
+
+async def _release_claim(session: AsyncSession, bill_id: int) -> None:
+    """發送失敗時釋放本次取得的 claim，讓下次 notify stage 可重試。
+
+    ``rollback()`` 無法撤銷 claim 時已 commit 的 PaymentReminder 列；若不釋放，
+    下次執行會把「從未送達」誤判為「已送過」而永久遺失通知。釋放本身失敗時
+    記錄例外但不中斷批次（該帳單需人工確認）。
+    """
+    try:
+        await session.execute(
+            delete(PaymentReminder).where(
+                PaymentReminder.bill_id == bill_id,
+                PaymentReminder.reminder_type == NEW_BILL_REMINDER_TYPE,
+            )
+        )
+        await session.commit()
+    except Exception:
+        await session.rollback()
+        logger.exception(
+            "釋放通知 claim 失敗 (bill #%d)，該帳單將不會自動重送，需人工確認",
+            bill_id,
+        )
