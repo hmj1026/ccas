@@ -251,7 +251,10 @@ jobs:
     needs: plan
     if: needs.plan.outputs.docs_only != 'true'
     name: Frontend E2E (Playwright, mock specs)
-    runs-on: ubuntu-latest
+    # ubuntu-latest moved to 26.04, where Playwright cannot install chromium
+    # ("Playwright does not support chromium on ubuntu26.04-x64"). Pin until a
+    # Playwright release supports it.
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: frontend
