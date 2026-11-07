@@ -1,8 +1,9 @@
 """run_notify_job 通知冪等性測試。
 
 驗證以 PaymentReminder (bill_id, "new_bill") 唯一鍵作為 send 前 claim：
-1. 重複執行不會重複發送（at-most-once）
+1. 成功送出後重複執行不會重複發送
 2. claim insert/commit 失敗時不發送
+3. 發送失敗會釋放 claim，下次執行補送剛好一次
 """
 
 from datetime import date
@@ -52,6 +53,18 @@ async def _seed_bill(session: AsyncSession) -> int:
     return bill.id
 
 
+async def _assert_claimed_and_notified(session: AsyncSession, bill_id: int) -> None:
+    """恰有一筆 claim 列，且帳單已標記 is_notified。"""
+    reminders = (await session.execute(select(PaymentReminder))).scalars().all()
+    assert [(r.bill_id, r.reminder_type) for r in reminders] == [
+        (bill_id, NEW_BILL_REMINDER_TYPE)
+    ]
+    is_notified = (
+        await session.execute(select(Bill.is_notified).where(Bill.id == bill_id))
+    ).scalar_one()
+    assert is_notified is True
+
+
 class TestNotifyIdempotency:
     async def test_duplicate_run_does_not_send_twice(self, session: AsyncSession):
         """重複執行（is_notified 更新遺失）時不得重複發送。"""
@@ -77,18 +90,8 @@ class TestNotifyIdempotency:
         assert second.sent_count == 0
         assert second.failed_count == 0
         assert mock_send.await_count == 1
-
-        # Exactly one claim row carries the idempotency key.
-        reminders = (await session.execute(select(PaymentReminder))).scalars().all()
-        assert [(r.bill_id, r.reminder_type) for r in reminders] == [
-            (bill_id, NEW_BILL_REMINDER_TYPE)
-        ]
-
         # The skip path repairs the flag so the bill stops being re-scanned.
-        is_notified = (
-            await session.execute(select(Bill.is_notified).where(Bill.id == bill_id))
-        ).scalar_one()
-        assert is_notified is True
+        await _assert_claimed_and_notified(session, bill_id)
 
     async def test_claim_commit_failure_does_not_send(
         self, session: AsyncSession, monkeypatch: pytest.MonkeyPatch
@@ -112,3 +115,22 @@ class TestNotifyIdempotency:
         assert summary.sent_count == 0
         assert summary.failed_count == 1
         assert "db commit failed" in summary.errors[0]
+
+    async def test_send_failure_releases_claim_for_retry(self, session: AsyncSession):
+        """發送失敗必須釋放 claim，下次執行要補送剛好一次。"""
+        bill_id = await _seed_bill(session)
+        mock_send = AsyncMock(side_effect=[RuntimeError("telegram down"), {"ok": True}])
+
+        with (
+            patch("ccas.bot.job.get_settings", return_value=_fake_settings()),
+            patch("ccas.bot.notifications.send_message", mock_send),
+        ):
+            first = await run_notify_job(session)
+            second = await run_notify_job(session)
+
+        assert first.sent_count == 0
+        assert first.failed_count == 1
+        assert second.sent_count == 1
+        assert second.failed_count == 0
+        assert mock_send.await_count == 2
+        await _assert_claimed_and_notified(session, bill_id)
