@@ -85,7 +85,7 @@ Pipeline classify 階段針對每筆 transaction SHALL 檢查 `manual_category_o
 
 ### Requirement: 交易詳情頁含分類來源徽章
 
-系統 SHALL 提供 `frontend/src/pages/transactions/[id].tsx` 詳情頁，含「分類來源」徽章，依優先序顯示：(a) `manual_override`（紫）、(b) `user_rule#<id>`（藍）、(c) `engine`（綠）、(d) `default`（灰）。徽章 hover SHALL 顯示 tooltip 解釋來源。
+系統 SHALL 提供 `frontend/src/pages/transactions/[id].tsx` 詳情頁，含「分類來源」徽章，依優先序顯示：(a) `manual_override`（紫）、(b) `user_rule#<id>`（藍）、(c) `keyword`（綠）、(d) `default`（灰）。徽章 hover SHALL 顯示 tooltip 解釋來源。
 
 #### Scenario: 各層來源徽章正確
 

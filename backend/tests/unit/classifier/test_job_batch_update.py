@@ -7,21 +7,20 @@
 
 from __future__ import annotations
 
-from typing import Any
 from unittest.mock import AsyncMock, patch
 
 import pytest
 
+from ccas.classifier import Classifier
 from ccas.classifier.job import (
     _flush_category_updates,
     run_classify_job,
     run_reclassify_job,
 )
+from ccas.classifier.rules import ClassificationRule, RuleSet
 from ccas.classifier.user_rules import UserRuleMatcher
 from ccas.errors import ClassifyError
 from ccas.storage.models import Transaction
-
-_EMPTY_MATCHER = UserRuleMatcher([])
 
 
 def _txn(
@@ -78,6 +77,15 @@ async def test_flush_with_no_pending_updates_executes_nothing() -> None:
     session.execute.assert_not_awaited()
 
 
+def _classifier(keyword_categories: dict[str, str]) -> Classifier:
+    """In-memory Classifier: no user rules, one keyword rule per merchant."""
+    rules = tuple(
+        ClassificationRule(rule_id=i, keyword=keyword, category=category)
+        for i, (keyword, category) in enumerate(keyword_categories.items(), start=1)
+    )
+    return Classifier(UserRuleMatcher([]), RuleSet(rules=rules))
+
+
 async def test_classify_batches_rows_into_one_update_per_category() -> None:
     """4 rows / 2 categories → 2 UPDATEs; summary counts unchanged."""
     session = AsyncMock()
@@ -88,29 +96,15 @@ async def test_classify_batches_rows_into_one_update_per_category() -> None:
         _txn(3, "台灣大哥大"),
         _txn(4, "中華電信"),
     ]
-    categories = {
-        "星巴克": "餐飲",
-        "路易莎": "餐飲",
-        "台灣大哥大": "通訊",
-        "中華電信": "通訊",
-    }
+    classifier = _classifier(
+        {"星巴克": "餐飲", "路易莎": "餐飲", "台灣大哥大": "通訊", "中華電信": "通訊"}
+    )
 
-    with (
-        patch(
-            "ccas.classifier.job.UserRuleMatcher.load",
-            new=AsyncMock(return_value=_EMPTY_MATCHER),
-        ),
-        patch("ccas.classifier.job.load_rules", new=AsyncMock(return_value={})),
-        patch(
-            "ccas.classifier.job.fetch_unclassified_transactions",
-            new=AsyncMock(return_value=txns),
-        ),
-        patch(
-            "ccas.classifier.job.classify",
-            new=lambda merchant, _rules: categories[merchant],
-        ),
+    with patch(
+        "ccas.classifier.job.fetch_unclassified_transactions",
+        new=AsyncMock(return_value=txns),
     ):
-        summary = await run_classify_job(session)
+        summary = await run_classify_job(session, classifier=classifier)
 
     assert session.execute.await_count == 2
     assert _executed_updates(session) == {"餐飲": [1, 2], "通訊": [3, 4]}
@@ -127,31 +121,20 @@ async def test_reclassify_batches_and_preserves_skip_logic() -> None:
     session = AsyncMock()
 
     txns = [
-        # Unchanged: classify yields the current category → skip.
+        # Unchanged: the decision yields the current category → skip.
         _txn(1, "星巴克", category="餐飲"),
         # Changed: 餐飲 → 通訊.
         _txn(2, "台灣大哥大", category="餐飲"),
         # Manual override: always skipped.
         _txn(3, "路易莎", category="自訂", manual_override=True),
     ]
-    categories = {"星巴克": "餐飲", "台灣大哥大": "通訊"}
+    classifier = _classifier({"星巴克": "餐飲", "台灣大哥大": "通訊"})
 
-    def fake_classify(merchant: str, _rules: Any) -> str:
-        return categories[merchant]
-
-    with (
-        patch(
-            "ccas.classifier.job.UserRuleMatcher.load",
-            new=AsyncMock(return_value=_EMPTY_MATCHER),
-        ),
-        patch("ccas.classifier.job.load_rules", new=AsyncMock(return_value={})),
-        patch(
-            "ccas.classifier.job.fetch_all_transactions",
-            new=AsyncMock(return_value=txns),
-        ),
-        patch("ccas.classifier.job.classify", new=fake_classify),
+    with patch(
+        "ccas.classifier.job.fetch_all_transactions",
+        new=AsyncMock(return_value=txns),
     ):
-        summary = await run_reclassify_job(session)
+        summary = await run_reclassify_job(session, classifier=classifier)
 
     assert session.execute.await_count == 1
     assert _executed_updates(session) == {"通訊": [2]}
@@ -168,20 +151,15 @@ async def test_classify_flush_failure_rolls_back_and_raises(caplog) -> None:
     session.commit.side_effect = RuntimeError("database is locked")
 
     txns = [_txn(1, "星巴克"), _txn(2, "路易莎")]
+    classifier = _classifier({"星巴克": "餐飲", "路易莎": "餐飲"})
     with (
-        patch(
-            "ccas.classifier.job.UserRuleMatcher.load",
-            new=AsyncMock(return_value=_EMPTY_MATCHER),
-        ),
-        patch("ccas.classifier.job.load_rules", new=AsyncMock(return_value={})),
         patch(
             "ccas.classifier.job.fetch_unclassified_transactions",
             new=AsyncMock(return_value=txns),
         ),
-        patch("ccas.classifier.job.classify", new=lambda _m, _r: "餐飲"),
         pytest.raises(ClassifyError),
     ):
-        await run_classify_job(session)
+        await run_classify_job(session, classifier=classifier)
 
     session.rollback.assert_awaited_once()
     # affected count (2 pending) appears in the error log
@@ -194,20 +172,15 @@ async def test_reclassify_flush_failure_rolls_back_and_raises(caplog) -> None:
     session.commit.side_effect = RuntimeError("database is locked")
 
     txns = [_txn(1, "台灣大哥大", category="餐飲")]
+    classifier = _classifier({"台灣大哥大": "通訊"})
     with (
-        patch(
-            "ccas.classifier.job.UserRuleMatcher.load",
-            new=AsyncMock(return_value=_EMPTY_MATCHER),
-        ),
-        patch("ccas.classifier.job.load_rules", new=AsyncMock(return_value={})),
         patch(
             "ccas.classifier.job.fetch_all_transactions",
             new=AsyncMock(return_value=txns),
         ),
-        patch("ccas.classifier.job.classify", new=lambda _m, _r: "通訊"),
         pytest.raises(ClassifyError),
     ):
-        await run_reclassify_job(session)
+        await run_reclassify_job(session, classifier=classifier)
 
     session.rollback.assert_awaited_once()
     assert "1 筆" in caplog.text

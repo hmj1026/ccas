@@ -19,8 +19,8 @@ import pytest
 from pydantic import SecretStr
 
 from ccas.bot.job import run_notify_job
+from ccas.classifier import CategoryDecision, Classifier, DecisionSource
 from ccas.classifier.job import run_classify_job
-from ccas.classifier.user_rules import UserRuleMatcher
 from ccas.decryptor.job import run_decryption_job
 from ccas.ingestor.job import run_ingestion_job
 from ccas.parser.job import run_parse_job
@@ -29,11 +29,24 @@ from .conftest import FakeReporter
 from .conftest import items as _items
 from .conftest import started_total as _started_total
 
-# Empty user-rule matcher; bills-management-and-insights §2.4 注入點，
-# 既有 stage progress 測試只在乎 keyword engine 流程，user rules 走 noop。
-_EMPTY_MATCHER = UserRuleMatcher([])
-
 # --- classify ---------------------------------------------------------------
+
+
+class _FixedClassifier(Classifier):
+    """Classifier stub: every merchant gets ``category``; ``fail_on`` raises.
+
+    ``decide`` is overridden, so no rules are loaded (the parent ``__init__``
+    is intentionally not called). Progress tests only care about the loop.
+    """
+
+    def __init__(self, category: str = "其他", *, fail_on: str | None = None) -> None:
+        self._category = category
+        self._fail_on = fail_on
+
+    async def decide(self, txn: Any) -> CategoryDecision:
+        if txn.merchant == self._fail_on:
+            raise RuntimeError("classify boom")
+        return CategoryDecision(self._category, DecisionSource.KEYWORD)
 
 
 async def test_classify_emits_started_total_and_monotonic_processed() -> None:
@@ -46,19 +59,13 @@ async def test_classify_emits_started_total_and_monotonic_processed() -> None:
         MagicMock(id=3, merchant="UBER EATS", manual_category_override=False),
     ]
 
-    with (
-        patch(
-            "ccas.classifier.job.UserRuleMatcher.load",
-            new=AsyncMock(return_value=_EMPTY_MATCHER),
-        ),
-        patch("ccas.classifier.job.load_rules", new=AsyncMock(return_value={})),
-        patch(
-            "ccas.classifier.job.fetch_unclassified_transactions",
-            new=AsyncMock(return_value=txns),
-        ),
-        patch("ccas.classifier.job.classify", new=lambda m, r: "其他"),
+    with patch(
+        "ccas.classifier.job.fetch_unclassified_transactions",
+        new=AsyncMock(return_value=txns),
     ):
-        result = await run_classify_job(session, reporter=reporter)
+        result = await run_classify_job(
+            session, reporter=reporter, classifier=_FixedClassifier()
+        )
 
     assert _started_total(reporter, "classify") == 3
     assert _items(reporter, "classify") == [1, 2, 3]
@@ -69,18 +76,13 @@ async def test_classify_empty_emits_started_zero_no_items() -> None:
     reporter = FakeReporter()
     session = AsyncMock()
 
-    with (
-        patch(
-            "ccas.classifier.job.UserRuleMatcher.load",
-            new=AsyncMock(return_value=_EMPTY_MATCHER),
-        ),
-        patch("ccas.classifier.job.load_rules", new=AsyncMock(return_value={})),
-        patch(
-            "ccas.classifier.job.fetch_unclassified_transactions",
-            new=AsyncMock(return_value=[]),
-        ),
+    with patch(
+        "ccas.classifier.job.fetch_unclassified_transactions",
+        new=AsyncMock(return_value=[]),
     ):
-        await run_classify_job(session, reporter=reporter)
+        await run_classify_job(
+            session, reporter=reporter, classifier=_FixedClassifier()
+        )
 
     assert _started_total(reporter, "classify") == 0
     assert _items(reporter, "classify") == []
@@ -97,25 +99,16 @@ async def test_classify_item_failure_does_not_stall_processed() -> None:
         MagicMock(id=3, merchant="C", manual_category_override=False),
     ]
 
-    def raising_classify(merchant: str, _rules: Any) -> str:
-        if merchant == "B":
-            raise RuntimeError("classify boom")
-        return "OK"
-
-    with (  # noqa: SIM117
-        patch(
-            "ccas.classifier.job.UserRuleMatcher.load",
-            new=AsyncMock(return_value=_EMPTY_MATCHER),
-        ),
-        patch("ccas.classifier.job.load_rules", new=AsyncMock(return_value={})),
+    with (
         patch(
             "ccas.classifier.job.fetch_unclassified_transactions",
             new=AsyncMock(return_value=txns),
         ),
-        patch("ccas.classifier.job.classify", new=raising_classify),
+        pytest.raises(RuntimeError),
     ):
-        with pytest.raises(RuntimeError):
-            await run_classify_job(session, reporter=reporter)
+        await run_classify_job(
+            session, reporter=reporter, classifier=_FixedClassifier("OK", fail_on="B")
+        )
 
     # Processed counter advances even when the raising item triggers finally.
     items = _items(reporter, "classify")
