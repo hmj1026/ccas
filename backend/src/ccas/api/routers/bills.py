@@ -7,6 +7,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ccas.api.agent_route import AgentQueryRoute
 from ccas.api.deps import PaginationParams
 from ccas.api.schemas import (
     ApiResponse,
@@ -24,7 +25,7 @@ from ccas.storage.database import get_db_session
 from ccas.storage.models import Bill, Transaction
 from ccas.storage.queries import fetch_bank_names
 
-router = APIRouter(prefix="/api/bills", tags=["bills"])
+router = APIRouter(prefix="/api/bills", tags=["bills"], route_class=AgentQueryRoute)
 
 # 防護上限：單一帳單交易明細一次最多回傳的筆數，避免異常帳單拖垮回應。
 # 正常帳單遠低於此值；完整筆數另透過 X-Total-Count header 暴露。

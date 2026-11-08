@@ -5,7 +5,8 @@
 """
 
 import os
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, AsyncIterator, Callable
+from contextlib import asynccontextmanager
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -51,24 +52,32 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
     await engine.dispose()
 
 
-@pytest.fixture
-async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
-    """提供連接 FastAPI 測試應用程式的 httpx AsyncClient（含 DB 注入）。"""
+@asynccontextmanager
+async def app_client(
+    session_provider: Callable[[], AsyncIterator[AsyncSession]],
+) -> AsyncIterator[AsyncClient]:
+    """FastAPI 測試 client，`get_db_session` 改由 ``session_provider`` 提供。"""
     from ccas.api.app import create_app
     from ccas.storage.database import get_db_session
 
     app = create_app()
-
-    async def _override_db():
-        yield db_session
-
-    app.dependency_overrides[get_db_session] = _override_db
-
+    app.dependency_overrides[get_db_session] = session_provider
     transport = ASGITransport(app=app)
     # https scheme: the session cookie defaults to Secure=True (api_cookie_secure),
     # so httpx only stores/returns it over a secure-context base_url. http:// would
     # silently drop the cookie and break session-auth round-trips in tests.
     async with AsyncClient(transport=transport, base_url="https://test") as ac:
+        yield ac
+
+
+@pytest.fixture
+async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
+    """提供連接 FastAPI 測試應用程式的 httpx AsyncClient（含 DB 注入）。"""
+
+    async def _override_db() -> AsyncIterator[AsyncSession]:
+        yield db_session
+
+    async with app_client(_override_db) as ac:
         yield ac
 
 

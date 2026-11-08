@@ -9,7 +9,7 @@ import sqlite3
 import subprocess
 import sys
 import time
-from collections.abc import Iterator
+from collections.abc import AsyncIterator, Iterator
 from contextlib import contextmanager
 from datetime import date, datetime
 from pathlib import Path
@@ -784,3 +784,89 @@ def test_stdio_stdout_frames_and_eof_and_unsupported_version(tmp_path: Path):
     assert "result" not in frames[0]
     assert db_path.read_bytes() == before
     _assert_no_sensitive_values(process.stdout + process.stderr)
+
+
+# --- Error projection parity (agent-query-errors spec) ---------------------
+
+
+def _seed_malformed_billing_month(db_path: Path) -> None:
+    with sqlite3.connect(db_path) as connection:
+        connection.execute(
+            "INSERT INTO bills (bank_code, billing_month, total_amount, due_date, "
+            "due_date_estimated, is_paid, is_notified, created_at) VALUES "
+            "('CTBC', '2026-13', 100, '2026-04-15', 0, 0, 0, '2026-04-01 00:00:00')"
+        )
+
+
+def _projection(payload: dict[str, Any]) -> tuple[str, str, bool]:
+    return (payload["code"], payload["message"], payload.get("needs_human", False))
+
+
+def _cli_error(db_path: Path, tmp_path: Path, args: list[str]) -> dict[str, Any]:
+    completed = cli_wire._run_cli(db_path, tmp_path, args)
+    assert completed.returncode == 2, completed.stderr
+    return json.loads(completed.stdout.strip().splitlines()[-1])
+
+
+async def _rest_error(db_path: Path, path: str) -> tuple[int, dict[str, Any]]:
+    from tests.integration.conftest import app_client, auth_headers
+
+    engine = create_async_engine(cli_wire._database_url(db_path))
+    factory = async_sessionmaker(engine, expire_on_commit=False)
+
+    async def _override_db() -> AsyncIterator[AsyncSession]:
+        async with factory() as session:
+            yield session
+
+    try:
+        async with app_client(_override_db) as client:
+            response = await client.get(path, headers=auth_headers())
+    finally:
+        await engine.dispose()
+    return response.status_code, response.json()
+
+
+def test_query_errors_match_across_adapters(tmp_path: Path) -> None:
+    """Same failure, same public projection on every adapter that exposes it.
+
+    One database (holding a malformed billing month) and one MCP process serve
+    all cases: the missing bill and the invalid month fail the same way with or
+    without that row.
+    """
+    db_path = tmp_path / "errors.sqlite3"
+    asyncio.run(mcp_wire._create_schema(db_path))
+    _seed_malformed_billing_month(db_path)
+    malformed = (
+        "needs_human",
+        "Database contains malformed billing month; human review required.",
+        True,
+    )
+
+    with mcp_wire._McpProcess(db_path, tmp_path) as server:
+        server.request(mcp_wire._request("server/discover", 1))
+
+        def mcp(request_id: int, tool: str, arguments: dict[str, Any]) -> tuple:
+            result = server.request(mcp_wire._tool_call(tool, request_id, arguments))
+            return _projection(mcp_wire._mcp_error_payload(result["result"]))
+
+        mcp_missing = mcp(2, "get_bill", {"bill_id": 999})
+        mcp_invalid = mcp(3, "list_bills", {"month": "2026-13"})
+        mcp_malformed = mcp(4, "list_bills", {})
+
+    # Missing bill and invalid argument: MCP and CLI (REST has no get-bill route
+    # and rejects a bad month in FastAPI request validation).
+    assert mcp_missing == _projection(
+        _cli_error(db_path, tmp_path, ["get-bill", "--bill-id", "999"])
+    )
+    assert mcp_missing == ("resource_not_found", "Bill #999 not found.", False)
+    assert mcp_invalid == _projection(
+        _cli_error(db_path, tmp_path, ["list-bills", "--month", "2026-13"])
+    )
+    assert mcp_invalid == ("invalid_argument", "Invalid argument provided.", False)
+
+    # Malformed stored data: all three adapters.
+    assert mcp_malformed == malformed
+    assert _projection(_cli_error(db_path, tmp_path, ["list-bills"])) == malformed
+    status, rest = asyncio.run(_rest_error(db_path, "/api/bills"))
+    assert status == 500
+    assert rest == {"success": False, "message": malformed[1], "data": None}

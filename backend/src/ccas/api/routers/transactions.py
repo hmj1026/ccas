@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import asc, desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ccas.api.agent_route import AgentQueryRoute
 from ccas.api.deps import PaginationParams
 from ccas.api.schemas import (
     PaginatedResponse,
@@ -18,7 +19,9 @@ from ccas.services.transactions import query_transactions
 from ccas.storage.database import get_db_session
 from ccas.storage.models import Bill, Transaction
 
-router = APIRouter(prefix="/api/transactions", tags=["transactions"])
+router = APIRouter(
+    prefix="/api/transactions", tags=["transactions"], route_class=AgentQueryRoute
+)
 
 
 def _build_filter_stmt(

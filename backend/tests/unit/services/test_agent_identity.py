@@ -13,7 +13,7 @@ from ccas.services.identity import (
     build_transaction_reconciliation_key,
     canonical_quote,
 )
-from ccas.services.schemas import AgentQueryError
+from ccas.services.query_errors import AgentQueryError
 
 
 async def test_canonical_quote_escapes_utf8_and_reserved_delimiters() -> None:

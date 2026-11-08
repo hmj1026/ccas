@@ -6,9 +6,9 @@ from datetime import datetime
 
 import pytest
 
+from ccas.services.query_errors import AgentQueryError
 from ccas.services.query_outcome import require_tool_result
 from ccas.services.schemas import (
-    AgentQueryError,
     PipelineStatus,
     PipelineStatusResult,
     ServiceProjection,

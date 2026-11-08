@@ -14,9 +14,9 @@ from ccas.services.identity import (
     build_bill_reconciliation_key,
     contains_sensitive_data,
 )
+from ccas.services.query_errors import AgentQueryError, QueryErrorKind
 from ccas.services.schemas import (
     AgentBill,
-    AgentQueryError,
     BillResult,
     BillsPage,
     GetBillInput,
@@ -86,28 +86,16 @@ class BillRead(BaseModel):
     def to_agent(self) -> AgentBill:
         """Validate Agent-facing fields and retain the canonical payload."""
         if not self.billing_month or not MONTH_REGEX.match(self.billing_month):
-            raise AgentQueryError(
-                "needs_human",
-                "Database contains malformed billing month; human review required.",
-                needs_human=True,
-            )
+            raise AgentQueryError(QueryErrorKind.MALFORMED_BILLING_MONTH)
 
         if contains_sensitive_data(self.bank_code) or contains_sensitive_data(
             self.bank_name
         ):
-            raise AgentQueryError(
-                "needs_human",
-                "Bill data contains sensitive information requiring human review.",
-                needs_human=True,
-            )
+            raise AgentQueryError(QueryErrorKind.SENSITIVE_BILL_DATA)
 
         for card in self.card_last4s:
             if len(card) != 4 or not card.isdigit():
-                raise AgentQueryError(
-                    "needs_human",
-                    "Database contains malformed card data; human review required.",
-                    needs_human=True,
-                )
+                raise AgentQueryError(QueryErrorKind.MALFORMED_CARD_DATA)
 
         sorted_cards = sorted(set(self.card_last4s))
         recon_key = build_bill_reconciliation_key(
@@ -131,11 +119,7 @@ class BillRead(BaseModel):
                 reconciliation_key=recon_key,
             )
         except ValidationError as exc:
-            raise AgentQueryError(
-                "needs_human",
-                "Database contains malformed bill data; human review required.",
-                needs_human=True,
-            ) from exc
+            raise AgentQueryError(QueryErrorKind.MALFORMED_BILL_DATA) from exc
 
 
 @dataclass(kw_only=True)
@@ -158,11 +142,7 @@ def _bill_read_for_agent(
             card_last4s=card_last4s,
         )
     except ValidationError as exc:
-        raise AgentQueryError(
-            "needs_human",
-            "Database contains malformed bill data; human review required.",
-            needs_human=True,
-        ) from exc
+        raise AgentQueryError(QueryErrorKind.MALFORMED_BILL_DATA) from exc
 
 
 async def list_bills(
@@ -186,7 +166,7 @@ async def list_bills(
             page_size=page_size,
         )
     except ValidationError as exc:
-        raise AgentQueryError("invalid_argument", "Invalid argument provided.") from exc
+        raise AgentQueryError(QueryErrorKind.INVALID_ARGUMENT) from exc
 
     bank_names = await fetch_bank_names(session)
 
@@ -235,11 +215,11 @@ async def get_bill(
     try:
         input_dto = GetBillInput(bill_id=bill_id)
     except ValidationError as exc:
-        raise AgentQueryError("invalid_argument", "Invalid argument provided.") from exc
+        raise AgentQueryError(QueryErrorKind.INVALID_ARGUMENT) from exc
 
     bill = await get_bill_by_id(session, input_dto.bill_id)
     if bill is None:
-        raise AgentQueryError("resource_not_found", f"Bill #{bill_id} not found.")
+        raise AgentQueryError(QueryErrorKind.BILL_NOT_FOUND, id=bill_id)
 
     bank_names = await fetch_bank_names(session)
     cards_map = await fetch_card_last4s_for_bills(session, [bill.id])

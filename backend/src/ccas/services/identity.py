@@ -11,7 +11,7 @@ import urllib.parse
 from collections.abc import Sequence
 from datetime import date
 
-from ccas.services.schemas import AgentQueryError
+from ccas.services.query_errors import AgentQueryError, QueryErrorKind
 
 # Matches full PAN (13 to 19 digits, possibly with separators like spaces or hyphens)
 PAN_REGEX = re.compile(r"\b(?:\d[ -]?){12,18}\d\b")
@@ -84,11 +84,7 @@ def build_bill_reconciliation_key(
     - No cards:   {bank_code}:{billing_month}:due-{due_date.isoformat()}
     """
     if contains_sensitive_data(bank_code) or contains_sensitive_data(billing_month):
-        raise AgentQueryError(
-            "needs_human",
-            "Bill data contains sensitive information requiring human review.",
-            needs_human=True,
-        )
+        raise AgentQueryError(QueryErrorKind.SENSITIVE_BILL_DATA)
 
     encoded_bank = canonical_quote(bank_code)
     encoded_month = canonical_quote(billing_month)
@@ -118,11 +114,7 @@ def build_transaction_reconciliation_key(
     - Duplicate: {base}#{dup_ordinal} for dup_ordinal >= 2
     """
     if contains_sensitive_data(merchant):
-        raise AgentQueryError(
-            "needs_human",
-            "Transaction merchant contains sensitive information.",
-            needs_human=True,
-        )
+        raise AgentQueryError(QueryErrorKind.SENSITIVE_TRANSACTION_MERCHANT)
 
     encoded_bill_id = canonical_quote(str(bill_id))
     encoded_date = canonical_quote(trans_date.isoformat())

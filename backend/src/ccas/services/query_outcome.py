@@ -1,10 +1,7 @@
 """Shared result policy for read-only Agent tool adapters."""
 
-from ccas.services.schemas import (
-    AgentQueryError,
-    PipelineStatusResult,
-    ServiceProjection,
-)
+from ccas.services.query_errors import AgentQueryError, QueryErrorKind
+from ccas.services.schemas import PipelineStatusResult, ServiceProjection
 
 
 def require_tool_result[T](projection: ServiceProjection[T]) -> T:
@@ -16,10 +13,5 @@ def require_tool_result[T](projection: ServiceProjection[T]) -> T:
     """
     payload = projection.payload
     if isinstance(payload, PipelineStatusResult) and payload.data.needs_human:
-        raise AgentQueryError(
-            "needs_human",
-            "Pipeline execution failed after retries were exhausted; "
-            "manual review and check required.",
-            needs_human=True,
-        )
+        raise AgentQueryError(QueryErrorKind.PIPELINE_RETRIES_EXHAUSTED)
     return payload
