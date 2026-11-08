@@ -94,7 +94,7 @@ async def test_triggers_at_80_percent(db_session: AsyncSession) -> None:
     await _seed_bank_bill(db_session, txns=[(8500, "M1", "餐飲")])
 
     with patch(
-        "ccas.scheduler.budget_evaluator.send_message",
+        "ccas.outbox.send_message",
         new=AsyncMock(return_value=None),
     ) as mock_send:
         result = await evaluate_budgets(db_session)
@@ -121,7 +121,7 @@ async def test_does_not_double_trigger_same_month_same_threshold(
     await _seed_bank_bill(db_session, txns=[(8500, "M1", "餐飲")])
 
     with patch(
-        "ccas.scheduler.budget_evaluator.send_message",
+        "ccas.outbox.send_message",
         new=AsyncMock(return_value=None),
     ) as mock_send:
         await evaluate_budgets(db_session)
@@ -144,7 +144,7 @@ async def test_disabled_budget_skipped(db_session: AsyncSession) -> None:
     await _seed_bank_bill(db_session, txns=[(9500, "M1", None)])
 
     with patch(
-        "ccas.scheduler.budget_evaluator.send_message",
+        "ccas.outbox.send_message",
         new=AsyncMock(return_value=None),
     ) as mock_send:
         result = await evaluate_budgets(db_session)
@@ -203,7 +203,7 @@ async def test_aggregates_multiple_alerts_into_single_message(
     await _seed_bank_bill(db_session, bank_code="CTBC", txns=[(8500, "M1", "餐飲")])
 
     with patch(
-        "ccas.scheduler.budget_evaluator.send_message",
+        "ccas.outbox.send_message",
         new=AsyncMock(return_value=None),
     ) as mock_send:
         await evaluate_budgets(db_session)
@@ -231,7 +231,7 @@ async def test_higher_threshold_triggers_after_lower(
     bill = await _seed_bank_bill(db_session, txns=[(8500, "M1", None)])
 
     with patch(
-        "ccas.scheduler.budget_evaluator.send_message",
+        "ccas.outbox.send_message",
         new=AsyncMock(return_value=None),
     ):
         await evaluate_budgets(db_session)
@@ -249,7 +249,7 @@ async def test_higher_threshold_triggers_after_lower(
     await db_session.commit()
 
     with patch(
-        "ccas.scheduler.budget_evaluator.send_message",
+        "ccas.outbox.send_message",
         new=AsyncMock(return_value=None),
     ) as mock_send:
         result = await evaluate_budgets(db_session)

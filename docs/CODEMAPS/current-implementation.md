@@ -67,7 +67,7 @@ Scheduler 的固定工作為：每日 00:00 觸發 pipeline、每日 02:00 評�
         └─> decrypt：解析銀行密碼，必要時產生解密檔
               └─> parse：選擇銀行 parser，產生 Bill + Transaction
                     └─> classify：套用手動覆寫保護、使用者規則、內建關鍵字
-                          └─> notify：對尚未通知的 Bill 發 Telegram
+                          └─> notify：對尚未通知的 Bill 與解析失敗附件發 Telegram
 ```
 
 `run_pipeline()` 固定依序執行 `ingest → decrypt → parse → classify → notify`。每個 stage 以獨立 job 負責自己的資料查詢、逐項處理與摘要，orchestrator 只負責順序、stage 範圍、錯誤隔離與摘要彙整。
@@ -80,7 +80,7 @@ Scheduler 的固定工作為：每日 00:00 觸發 pipeline、每日 02:00 評�
 | decrypt | 取 `staged` 附件，依銀行解析 DB 密碼與 env fallback；未加密 PDF 直接透通 | `decrypted` | 單附件失敗記為 `decrypt_failed`；每銀行只解析一次密碼，逐項提交 | `decryptor/job.py`, `decrypt.py`, `password.py` |
 | parse | 取 `decrypted` 附件；依 bank code 與 active parser version 嘗試候選 parser；必要時使用 OCR | 建立 `Bill` 與 `Transaction`，附件成為 `parsed` | 單附件失敗記為 `parse_failed`；零額歷史帳單為 `parse_skipped`；單項提交；`force` 可刪除同銀行同月份舊 Bill 重建 | `parser/intake.py`, `parser/registry.py`, `parser/banks/*_vN.py` |
 | classify | 取未分類交易；保留手動覆寫；依 user rules 再走內建 keyword engine | 寫入 category；回傳 user/engine/default 統計 | 整批寫入為 all-or-nothing；flush/commit 失敗會 rollback 並使 stage 失敗 | `classifier/job.py`, `engine.py`, `user_rules.py` |
-| notify | 查詢 `is_notified=false` 的 Bill；先 claim `PaymentReminder(bill_id, new_bill)` 再送 Telegram | 成功後設 `Bill.is_notified=true` | 缺 Telegram 設定時跳過；單筆失敗記錄並繼續；claim 保護重複送出 | `bot/job.py`, `bot/notifications.py` |
+| notify | 查詢 `is_notified=false` 的 Bill 與 `parse_failed` 且 `failure_notified_at` 為空的附件；經 `Outbox` 投遞（先認領再送，失敗釋放認領） | 成功後設 `Bill.is_notified=true`；解析失敗合併一則訊息並設 `failure_notified_at` | 缺 Telegram 設定時跳過且不認領；單筆失敗記錄並繼續，下次重試 | `bot/job.py`, `outbox.py` |
 
 每個 stage crash 都會被 `_run_stage()` 轉為 `StageSummary`，後續 stage 仍會執行。ingest/decrypt/parse 的已提交項目會保留；RQ job 若達到重試上限，worker 會把仍處於 `staged` 或 `decrypted` 的項目標為 `manual_review_needed`。
 

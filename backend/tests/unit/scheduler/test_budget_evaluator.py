@@ -24,6 +24,7 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
+from ccas.outbox import Outbox
 from ccas.scheduler.budget_evaluator import (
     _current_year_month,
     _format_aggregated_message,
@@ -188,13 +189,10 @@ async def _seed_bill_with_txns(
     return bill
 
 
-# NOTE: budget_evaluator 刻意直連 `ccas.messaging.send_message`（未走 P3-2 的
-# bot.notifications 高階層），故 patch target 為本模組內查找的名字
-# `ccas.scheduler.budget_evaluator.send_message`。若日後 budget 通知也遷入
-# bot.notifications，此處 target 須同步改為 `ccas.bot.notifications.send_message`，
-# 否則 patch 會指向已不存在的引用而靜默失效。
-@patch("ccas.scheduler.budget_evaluator.send_message", new_callable=AsyncMock)
-async def test_triggers_alert_at_80_percent(mock_send, session: AsyncSession):
+# 推播經 `ccas.outbox.Outbox` 投遞；測試以 `Outbox(session, mock_send)` 注入
+# fake transport（mock_send 收到單一參數：訊息文字），不 patch 模組名稱。
+async def test_triggers_alert_at_80_percent(session: AsyncSession):
+    mock_send = AsyncMock()
     today, period = _today_period()
     await _seed_bill_with_txns(session, period_ym=period, txns=[(8500, "餐飲")])
 
@@ -209,7 +207,9 @@ async def test_triggers_alert_at_80_percent(mock_send, session: AsyncSession):
     )
     await session.commit()
 
-    out = await evaluate_budgets(session, today=today)
+    out = await evaluate_budgets(
+        session, today=today, outbox=Outbox(session, mock_send)
+    )
     assert out["alerts_triggered"] == 1
     rows = (
         await session.execute(
@@ -220,10 +220,8 @@ async def test_triggers_alert_at_80_percent(mock_send, session: AsyncSession):
     mock_send.assert_called_once()
 
 
-@patch("ccas.scheduler.budget_evaluator.send_message", new_callable=AsyncMock)
-async def test_does_not_duplicate_alert_for_same_threshold(
-    mock_send, session: AsyncSession
-):
+async def test_does_not_duplicate_alert_for_same_threshold(session: AsyncSession):
+    mock_send = AsyncMock()
     today, period = _today_period()
     await _seed_bill_with_txns(session, period_ym=period, txns=[(8500, "餐飲")])
 
@@ -238,17 +236,17 @@ async def test_does_not_duplicate_alert_for_same_threshold(
     )
     await session.commit()
 
-    await evaluate_budgets(session, today=today)
-    out2 = await evaluate_budgets(session, today=today)
+    await evaluate_budgets(session, today=today, outbox=Outbox(session, mock_send))
+    out2 = await evaluate_budgets(
+        session, today=today, outbox=Outbox(session, mock_send)
+    )
     assert out2["alerts_triggered"] == 0
     rows = (await session.execute(BudgetAlert.__table__.select())).all()
     assert len(rows) == 1
 
 
-@patch("ccas.scheduler.budget_evaluator.send_message", new_callable=AsyncMock)
-async def test_triggers_higher_tier_after_breaching_100_percent(
-    mock_send, session: AsyncSession
-):
+async def test_triggers_higher_tier_after_breaching_100_percent(session: AsyncSession):
+    mock_send = AsyncMock()
     today, period = _today_period()
     bill = await _seed_bill_with_txns(session, period_ym=period, txns=[(8500, "餐飲")])
 
@@ -264,7 +262,9 @@ async def test_triggers_higher_tier_after_breaching_100_percent(
     await session.commit()
 
     # First run triggers 80%
-    out1 = await evaluate_budgets(session, today=today)
+    out1 = await evaluate_budgets(
+        session, today=today, outbox=Outbox(session, mock_send)
+    )
     assert out1["alerts_triggered"] == 1
 
     # Add more spend to cross 100%
@@ -280,15 +280,17 @@ async def test_triggers_higher_tier_after_breaching_100_percent(
     )
     await session.commit()
 
-    out2 = await evaluate_budgets(session, today=today)
+    out2 = await evaluate_budgets(
+        session, today=today, outbox=Outbox(session, mock_send)
+    )
     assert out2["alerts_triggered"] == 1
     rows = (await session.execute(BudgetAlert.__table__.select())).all()
     # 80% + 100% — both recorded
     assert len(rows) == 2
 
 
-@patch("ccas.scheduler.budget_evaluator.send_message", new_callable=AsyncMock)
-async def test_skips_disabled_budgets_and_zero_amount(mock_send, session: AsyncSession):
+async def test_skips_disabled_budgets_and_zero_amount(session: AsyncSession):
+    mock_send = AsyncMock()
     today, period = _today_period()
     await _seed_bill_with_txns(session, period_ym=period, txns=[(9000, None)])
 
@@ -312,16 +314,17 @@ async def test_skips_disabled_budgets_and_zero_amount(mock_send, session: AsyncS
     )
     await session.commit()
 
-    out = await evaluate_budgets(session, today=today)
+    out = await evaluate_budgets(
+        session, today=today, outbox=Outbox(session, mock_send)
+    )
     assert out["alerts_triggered"] == 0
     # zero-amount budget counted as skipped
     assert out["skipped"] == 1
     mock_send.assert_not_called()
 
 
-@patch("ccas.scheduler.budget_evaluator.send_message", new_callable=AsyncMock)
 async def test_does_not_raise_when_telegram_disabled(
-    mock_send, session: AsyncSession, monkeypatch
+    session: AsyncSession, monkeypatch
 ):
     today, period = _today_period()
     await _seed_bill_with_txns(session, period_ym=period, txns=[(9000, "餐飲")])
@@ -343,7 +346,9 @@ async def test_does_not_raise_when_telegram_disabled(
 
     get_settings.cache_clear()
 
-    out = await evaluate_budgets(session, today=today)
+    # 不注入 outbox：走 Outbox.from_settings 的未設定路徑（不呼叫 Telegram）。
+    with patch("ccas.outbox.send_message", new_callable=AsyncMock) as mock_send:
+        out = await evaluate_budgets(session, today=today)
     assert out["alerts_triggered"] == 1
     mock_send.assert_not_called()
     # Telegram disabled = push skipped → alert stays notified=False so a later
@@ -352,12 +357,8 @@ async def test_does_not_raise_when_telegram_disabled(
     assert all(r.notified is False for r in rows)
 
 
-@patch(
-    "ccas.scheduler.budget_evaluator.send_message",
-    new_callable=AsyncMock,
-    side_effect=RuntimeError("boom"),
-)
-async def test_swallows_telegram_send_errors(mock_send, session: AsyncSession):
+async def test_swallows_telegram_send_errors(session: AsyncSession):
+    mock_send = AsyncMock(side_effect=RuntimeError("boom"))
     today, period = _today_period()
     await _seed_bill_with_txns(session, period_ym=period, txns=[(9000, "餐飲")])
 
@@ -373,20 +374,16 @@ async def test_swallows_telegram_send_errors(mock_send, session: AsyncSession):
     await session.commit()
 
     # send_message raises but evaluate_budgets must not propagate
-    out = await evaluate_budgets(session, today=today)
+    out = await evaluate_budgets(
+        session, today=today, outbox=Outbox(session, mock_send)
+    )
     assert out["alerts_triggered"] == 1
     mock_send.assert_called_once()
 
 
-@patch(
-    "ccas.scheduler.budget_evaluator.send_message",
-    new_callable=AsyncMock,
-    side_effect=RuntimeError("boom"),
-)
-async def test_send_failure_leaves_notified_false_and_reattempts(
-    mock_send, session: AsyncSession
-):
+async def test_send_failure_leaves_notified_false_and_reattempts(session: AsyncSession):
     """推播失敗 → notified 留 False → 下次重跑會補推（不再永久跳過）。"""
+    mock_send = AsyncMock(side_effect=RuntimeError("boom"))
     today, period = _today_period()
     bill = await _seed_bill_with_txns(session, period_ym=period, txns=[(9000, "餐飲")])
 
@@ -402,7 +399,9 @@ async def test_send_failure_leaves_notified_false_and_reattempts(
     await session.commit()
 
     # First run: alert created but send fails → notified stays False
-    out1 = await evaluate_budgets(session, today=today)
+    out1 = await evaluate_budgets(
+        session, today=today, outbox=Outbox(session, mock_send)
+    )
     assert out1["alerts_triggered"] == 1
     rows = (await session.execute(BudgetAlert.__table__.select())).all()
     assert len(rows) == 1
@@ -426,7 +425,9 @@ async def test_send_failure_leaves_notified_false_and_reattempts(
     # (no duplicate row), its current_amount_ntd is refreshed, and it is
     # marked notified=True.
     mock_send.side_effect = None
-    out2 = await evaluate_budgets(session, today=today)
+    out2 = await evaluate_budgets(
+        session, today=today, outbox=Outbox(session, mock_send)
+    )
     assert out2["alerts_triggered"] == 1
     rows = (await session.execute(BudgetAlert.__table__.select())).all()
     assert len(rows) == 1
@@ -434,11 +435,9 @@ async def test_send_failure_leaves_notified_false_and_reattempts(
     assert rows[0].current_amount_ntd == 9500
 
 
-@patch("ccas.scheduler.budget_evaluator.send_message", new_callable=AsyncMock)
-async def test_send_success_marks_notified_and_no_redispatch(
-    mock_send, session: AsyncSession
-):
+async def test_send_success_marks_notified_and_no_redispatch(session: AsyncSession):
     """推播成功 → notified=True → 下次不重推。"""
+    mock_send = AsyncMock()
     today, period = _today_period()
     await _seed_bill_with_txns(session, period_ym=period, txns=[(9000, "餐飲")])
 
@@ -453,24 +452,28 @@ async def test_send_success_marks_notified_and_no_redispatch(
     )
     await session.commit()
 
-    out1 = await evaluate_budgets(session, today=today)
+    out1 = await evaluate_budgets(
+        session, today=today, outbox=Outbox(session, mock_send)
+    )
     assert out1["alerts_triggered"] == 1
     rows = (await session.execute(BudgetAlert.__table__.select())).all()
     assert len(rows) == 1
     assert all(r.notified is True for r in rows)
 
     # Second run: already notified → nothing new, no extra send.
-    out2 = await evaluate_budgets(session, today=today)
+    out2 = await evaluate_budgets(
+        session, today=today, outbox=Outbox(session, mock_send)
+    )
     assert out2["alerts_triggered"] == 0
     assert mock_send.call_count == 1
     rows = (await session.execute(BudgetAlert.__table__.select())).all()
     assert len(rows) == 1
 
 
-@patch("ccas.scheduler.budget_evaluator.send_message", new_callable=AsyncMock)
 async def test_aggregates_alerts_from_multiple_budgets_into_one_message(
-    mock_send, session: AsyncSession
+    session: AsyncSession,
 ):
+    mock_send = AsyncMock()
     today, period = _today_period()
     await _seed_bill_with_txns(
         session,
@@ -499,10 +502,12 @@ async def test_aggregates_alerts_from_multiple_budgets_into_one_message(
     )
     await session.commit()
 
-    out = await evaluate_budgets(session, today=today)
+    out = await evaluate_budgets(
+        session, today=today, outbox=Outbox(session, mock_send)
+    )
     # Total 12000：MONTHLY_TOTAL 80%(8000)+100%(10000) 雙觸發；交通 4500 跨 80%
     assert out["alerts_triggered"] == 3
     # Single send_message call combining all alerts
     assert mock_send.call_count == 1
-    text = mock_send.call_args.args[2]
+    text = mock_send.call_args.args[0]
     assert "整月支出" in text and "類別「交通」" in text

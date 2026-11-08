@@ -75,6 +75,7 @@ bank_code (str, UQ), bank_name, gmail_filter, pdf_password_rule?, active_parser_
 | staged_path | str? | 相對 STAGING_DIR 路徑 |
 | status | str | staged/decrypted/decrypt_failed/parsed/parse_skipped/parse_failed/manual_review_needed/failed/fetch_expired |
 | error_reason | str? | |
+| failure_notified_at | datetime? | 解析失敗通知的認領紀錄（`ParseFailureClaim`）；非空代表已通知 |
 | **UQ** | (gmail_message_id, gmail_part_id) | |
 
 ### payment_reminders
@@ -193,3 +194,4 @@ PipelineRun (no FK，獨立紀錄)
 | 413739f494ff | Add budget_alerts.notified |
 | 7f3ae66246a3 | Add bank_login_credentials |
 | d4e7f2a1b9c3 | Add bills parse metadata (`parse_method`, `parse_confidence`, `needs_review`, `review_reasons`) |
+| a8c3f1d7e520 | Add staged_attachments.failure_notified_at（既有 parse_failed 回填為已通知） |
