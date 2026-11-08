@@ -44,6 +44,7 @@ from ccas.api.routers.setup import gmail as setup_gmail
 from ccas.api.routers.setup import login_credentials as setup_login_credentials
 from ccas.api.routers.setup import secrets as setup_secrets
 from ccas.config import get_settings
+from ccas.services.schemas import AgentQueryError, public_query_error
 from ccas.storage.database import get_db_session
 
 logger = logging.getLogger(__name__)
@@ -80,6 +81,12 @@ class _SecurityHeadersMiddleware(BaseHTTPMiddleware):
         if not (self._docs_enabled and request.url.path in _CSP_EXEMPT_PATHS):
             response.headers["Content-Security-Policy"] = _CONTENT_SECURITY_POLICY
         return response
+
+
+_AGENT_QUERY_ERROR_STATUS: dict[str, int] = {
+    "resource_not_found": 404,
+    "invalid_argument": 422,
+}
 
 
 def create_app() -> FastAPI:
@@ -129,6 +136,22 @@ def create_app() -> FastAPI:
         return JSONResponse(
             status_code=422,
             content={"success": False, "message": message, "data": None},
+        )
+
+    @app.exception_handler(AgentQueryError)
+    async def _agent_query_error_handler(
+        request: Request, exc: AgentQueryError
+    ) -> JSONResponse:
+        """Agent 查詢錯誤統一經 ``public_query_error`` 投影後回應。
+
+        與 MCP / CLI 共用同一個 sanitizer：只回傳受信任的訊息範本，呼叫端輸入
+        （例如 run_id）不會被原樣回顯（ADR-0001 第 5 點）。狀態碼：
+        resource_not_found → 404、invalid_argument → 422、其他 → 500。
+        """
+        public = public_query_error(exc)
+        return JSONResponse(
+            status_code=_AGENT_QUERY_ERROR_STATUS.get(exc.code, 500),
+            content={"success": False, "message": public["message"], "data": None},
         )
 
     @app.exception_handler(StarletteHTTPException)

@@ -19,7 +19,7 @@ scope_ref 驗證規則：
 from __future__ import annotations
 
 from datetime import UTC, date, datetime
-from typing import Any, NoReturn, cast, get_args
+from typing import Any, cast, get_args
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import delete, select
@@ -36,7 +36,7 @@ from ccas.api.schemas import (
 )
 from ccas.budget_assessment import assess_budgets
 from ccas.services.budgets import budget_status
-from ccas.services.schemas import AgentQueryError, BudgetStatus
+from ccas.services.schemas import BudgetStatus
 from ccas.storage.database import get_db_session
 from ccas.storage.models import (
     BankConfig,
@@ -47,14 +47,6 @@ from ccas.storage.models import (
 )
 
 router = APIRouter(prefix="/api/budgets", tags=["budgets"])
-
-
-def _handle_agent_query_error(exc: AgentQueryError) -> NoReturn:
-    if exc.code == "resource_not_found":
-        raise HTTPException(status_code=404, detail=exc.message)
-    if exc.code == "invalid_argument":
-        raise HTTPException(status_code=422, detail=exc.message)
-    raise HTTPException(status_code=500, detail=exc.message)
 
 
 def _agent_budget_to_item(
@@ -160,14 +152,11 @@ async def list_budgets(
     ``include_current_period=true`` 時內聯每筆當月累計（O(1) 批次查詢），
     讓前端免逐筆呼叫 ``/current-period`` 端點（消除 1+N）；預設 false 維持向下相容。
     """
-    try:
-        projection = await budget_status(
-            session,
-            scope=scope,
-            include_current_period=include_current_period,
-        )
-    except AgentQueryError as exc:
-        _handle_agent_query_error(exc)
+    projection = await budget_status(
+        session,
+        scope=scope,
+        include_current_period=include_current_period,
+    )
 
     return ApiResponse(
         data=[

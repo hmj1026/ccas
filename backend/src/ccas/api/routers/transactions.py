@@ -3,9 +3,7 @@
 CSV / xlsx 匯出由 ``ccas.api.routers.exports`` 提供（see §8）。
 """
 
-from typing import NoReturn
-
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy import asc, desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -16,20 +14,11 @@ from ccas.api.schemas import (
     SortLiteral,
     TransactionItem,
 )
-from ccas.services.schemas import AgentQueryError
 from ccas.services.transactions import query_transactions
 from ccas.storage.database import get_db_session
 from ccas.storage.models import Bill, Transaction
 
 router = APIRouter(prefix="/api/transactions", tags=["transactions"])
-
-
-def _handle_agent_query_error(exc: AgentQueryError) -> NoReturn:
-    if exc.code == "resource_not_found":
-        raise HTTPException(status_code=404, detail=exc.message)
-    if exc.code == "invalid_argument":
-        raise HTTPException(status_code=422, detail=exc.message)
-    raise HTTPException(status_code=500, detail=exc.message)
 
 
 def _build_filter_stmt(
@@ -96,20 +85,17 @@ async def list_transactions(
     session: AsyncSession = Depends(get_db_session),
 ) -> PaginatedResponse[TransactionItem]:
     """查詢交易明細，支援月份、年度、銀行、分類篩選與分頁。"""
-    try:
-        projection = await query_transactions(
-            session,
-            month=month,
-            year=year,
-            bank_code=bank_code,
-            category=category,
-            q=q,
-            sort=sort,
-            page=pagination.page,
-            page_size=pagination.page_size,
-        )
-    except AgentQueryError as exc:
-        _handle_agent_query_error(exc)
+    projection = await query_transactions(
+        session,
+        month=month,
+        year=year,
+        bank_code=bank_code,
+        category=category,
+        q=q,
+        sort=sort,
+        page=pagination.page,
+        page_size=pagination.page_size,
+    )
 
     items = [
         TransactionItem.model_validate(item, from_attributes=True)
