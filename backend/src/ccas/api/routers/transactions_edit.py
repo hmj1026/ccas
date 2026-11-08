@@ -8,8 +8,8 @@
   若 body 包含 ``category_id``，同步將 ``manual_category_override`` 設為 ``True``，
   使後續 ``run_classify_job`` 自動跳過該筆，保留使用者編輯結果。
 - ``POST /api/transactions/{id}/note``：簡化常用 note 編輯（不影響 manual_override）。
-- ``DELETE /api/transactions/{id}/manual-override``：清除 flag 並即時走一次
-  ``user_rules → engine`` 的 classify 邏輯，與 pipeline 完全一致。
+- ``DELETE /api/transactions/{id}/manual-override``：清除 flag 並即時取得一次
+  分類判定（``ccas.classifier.Classifier``），與 pipeline 共用同一份判定邏輯。
 
 所有端點都套上 ``verify_token`` dependency（透過 router 全域 dependency）。
 """
@@ -26,9 +26,7 @@ from ccas.api.schemas import (
     TransactionNoteRequest,
     TransactionUpdateRequest,
 )
-from ccas.classifier.engine import classify
-from ccas.classifier.rules import load_rules
-from ccas.classifier.user_rules import UserRuleMatcher
+from ccas.classifier import Classifier
 from ccas.storage.database import get_db_session
 from ccas.storage.models import Bill, Category, Transaction
 
@@ -155,22 +153,20 @@ async def clear_manual_override(
     transaction_id: int,
     session: AsyncSession = Depends(get_db_session),
 ) -> ApiResponse[TransactionDetailItem]:
-    """清除 manual_override flag，並即時重新走 user_rules → engine classify。
+    """清除 manual_override flag，並以分類判定即時重新分類。
 
-    與 pipeline 中 ``run_classify_job`` 行為完全一致，確保使用者按下重置後
-    立即看到的分類結果，會等於下次 pipeline 跑出的結果。
+    與 pipeline classify 階段共用同一個 :class:`ccas.classifier.Classifier`，
+    使用者按下重置後立即看到的分類結果，即等於下次 pipeline 跑出的結果。
     """
     txn, bill = await _load_with_bill(session, transaction_id)
 
     txn.manual_category_override = False
 
-    user_matcher = await UserRuleMatcher.load(session)
-    user_category = await user_matcher.match(txn.merchant)
-    if user_category is not None:
-        txn.category = user_category
-    else:
-        rule_set = await load_rules(session)
-        txn.category = classify(txn.merchant, rule_set)
+    classifier = await Classifier.load(session)
+    decision = await classifier.decide(txn)
+    # The override flag was cleared above, so the decision always carries one.
+    assert decision.category is not None
+    txn.category = decision.category
 
     await session.commit()
     await session.refresh(txn)

@@ -1,5 +1,9 @@
-"""關鍵字分類模組。
+"""消費類別分類。
 
-以 categories 資料表為規則來源，
-根據商家名稱自動分類消費交易。
+對外介面是 :class:`Classifier`（分類判定）；``engine`` / ``rules`` /
+``user_rules`` 是它的內部組成。
 """
+
+from ccas.classifier.decision import CategoryDecision, Classifier, DecisionSource
+
+__all__ = ["CategoryDecision", "Classifier", "DecisionSource"]

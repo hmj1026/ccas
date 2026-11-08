@@ -1,13 +1,11 @@
 """Classifier 流程的 staging 資料存取層。
 
-提供查詢未分類交易、查詢全部交易，
-以及更新交易分類欄位的函式。
-只更新 category 欄位，不改寫原始交易資料。
+提供查詢未分類交易與查詢全部交易的函式（分類寫入由 ``job`` 批次處理）。
 """
 
 from collections.abc import Sequence
 
-from sqlalchemy import select, update
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ccas.storage.models import Transaction
@@ -43,26 +41,3 @@ async def fetch_all_transactions(
     stmt = select(Transaction)
     result = await session.execute(stmt)
     return result.scalars().all()
-
-
-async def update_transaction_category(
-    session: AsyncSession,
-    transaction_id: int,
-    category: str,
-) -> None:
-    """僅更新指定交易的 category 欄位。
-
-    只修改 category，不改寫其他原始交易欄位
-    （merchant、trans_date、amount 等）。
-
-    Args:
-        session: 非同步 DB Session。
-        transaction_id: 交易 ID。
-        category: 分類結果。
-    """
-    stmt = (
-        update(Transaction)
-        .where(Transaction.id == transaction_id)
-        .values(category=category)
-    )
-    await session.execute(stmt)
