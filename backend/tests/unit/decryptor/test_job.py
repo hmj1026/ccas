@@ -251,10 +251,10 @@ class TestRunDecryptionJob:
         assert att.status == StagedAttachmentStatus.DECRYPTED
 
     async def test_item_exception_rolls_back_and_continues(self):
-        # 用 fake session：真實 AsyncSession 在 rollback 後會 expire 屬性，
-        # 後續 logger.exception 存取 attachment.bank_code 會觸發 sync lazy-load
-        # （MissingGreenlet）。fake session 讓 transient 物件屬性保持可讀，
-        # 聚焦驗證「per-item except → rollback → 批次續行」的分支邏輯。
+        # 真實 AsyncSession 的情境（commit 失敗後 rollback 會 expire 物件）由
+        # tests/integration/decryptor/test_job.py::TestCommitFailure 覆蓋；
+        # 此處用 fake session 聚焦分支邏輯：rollback → 撤回該筆計數 → 記為失敗 →
+        # 寫入 decrypt_failed → 批次續行。
         att = _make_attachment()
         session = MagicMock()
         session.commit = AsyncMock()
@@ -273,18 +273,25 @@ class TestRunDecryptionJob:
             patch(
                 UPDATE_STATUS,
                 new_callable=AsyncMock,
-                side_effect=RuntimeError("db write boom"),
+                side_effect=[RuntimeError("db write boom"), None],
             ) as mock_update,
         ):
             # 不應對外拋出：例外被 per-item except 捕捉並 rollback 後續行。
             summary = await run_decryption_job(session)
 
         assert isinstance(summary, DecryptionSummary)
-        assert mock_update.await_count == 1
+        # 第一次寫 decrypted 失敗；第二次寫 decrypt_failed 並 commit。
+        assert mock_update.await_count == 2
+        assert (
+            mock_update.await_args_list[1].kwargs["status"]
+            == StagedAttachmentStatus.DECRYPT_FAILED
+        )
         session.rollback.assert_awaited_once()
-        session.commit.assert_not_awaited()
-        # decrypted_count 在 update 失敗前已自增，rollback 不影響記憶體計數。
-        assert summary.decrypted_count == 1
+        session.commit.assert_awaited_once()
+        # 該筆的部分計數被撤回，改計為失敗。
+        assert summary.decrypted_count == 0
+        assert summary.failed_count == 1
+        assert "db write boom" in summary.errors[0]
 
     async def test_reporter_failure_does_not_abort_batch(self, db_session):
         att = await _add(db_session, _make_attachment())

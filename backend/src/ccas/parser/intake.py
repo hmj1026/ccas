@@ -15,6 +15,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Protocol
 
+from sqlalchemy import inspect
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ccas.config import get_settings
@@ -598,6 +599,11 @@ class ParserIntake:
 
         processed = 0
         for attachment in attachments:
+            # A rollback for an earlier item expires every object in the
+            # session; reload this one before reading it (see decryptor.job).
+            if inspect(attachment).expired:
+                await session.refresh(attachment)
+            label = f"{attachment.bank_code}/{attachment.original_filename}"
             counts_before = (
                 summary.parsed_count,
                 summary.skipped_count,
@@ -616,8 +622,9 @@ class ParserIntake:
                 # rows (and must not desync disk vs DB).
                 await session.commit()
             except Exception as exc:
-                # Roll back only this item's uncommitted changes, then continue to
-                # the next attachment (item B: partial success persists).
+                # Roll back only this item's uncommitted changes, count it as a
+                # failure (undoing this item's partial counts), persist
+                # parse_failed, then continue with the next attachment.
                 await session.rollback()
                 (
                     summary.parsed_count,
@@ -627,18 +634,17 @@ class ParserIntake:
                 ) = counts_before
                 del summary.errors[errors_before:]
                 error_msg = (
-                    "parse persistence failed "
-                    f"({attachment.bank_code}/{attachment.original_filename}): "
-                    f"{type(exc).__name__}: {exc}"
+                    f"parse persistence failed ({label}): {type(exc).__name__}: {exc}"
                 )
                 summary.failed_count += 1
                 summary.errors.append(error_msg)
                 logger.exception(
-                    "parse item failed unexpectedly (%s/%s); rolled back, continuing",
-                    attachment.bank_code,
-                    attachment.original_filename,
+                    "parse item failed unexpectedly (%s); rolled back, continuing",
+                    label,
                 )
                 try:
+                    # Setting attributes on the expired object is safe (only
+                    # reads lazy-load); the flush writes by primary key.
                     await self.persistence.set_status(
                         session,
                         attachment,
@@ -649,9 +655,8 @@ class ParserIntake:
                 except Exception:
                     await session.rollback()
                     logger.exception(
-                        "failed to persist parse_failed status (%s/%s); continuing",
-                        attachment.bank_code,
-                        attachment.original_filename,
+                        "failed to persist parse_failed status (%s); continuing",
+                        label,
                     )
             finally:
                 processed += 1
