@@ -10,18 +10,24 @@ import asyncio
 import json
 import sys
 from collections.abc import Awaitable, Callable, Sequence
-from typing import Any
+from typing import Any, NoReturn
 
 import click
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ccas.services.bills import get_bill, get_payment_due, list_bills
 from ccas.services.budgets import budget_status
 from ccas.services.pipeline import pipeline_status
+from ccas.services.query_errors import (
+    AgentQueryError,
+    QueryErrorKind,
+    public_query_error,
+    public_unexpected_error,
+    unexpected_error_kind,
+)
 from ccas.services.query_outcome import require_tool_result
 from ccas.services.schemas import (
-    AgentQueryError,
     BillResult,
     BillsPage,
     BudgetStatusResult,
@@ -29,7 +35,6 @@ from ccas.services.schemas import (
     PipelineStatusResult,
     ServiceProjection,
     TransactionsPage,
-    public_query_error,
 )
 from ccas.services.transactions import query_transactions
 
@@ -293,32 +298,12 @@ def _run_command[T: BaseModel](
     format_type: str,
     table_renderer: Callable[[T], str],
 ) -> None:
-    """Execute service query and output JSON or table with safe error handling."""
-    try:
-        result = require_tool_result(asyncio.run(_execute_with_session(coro_factory)))
-    except AgentQueryError as exc:
-        payload = public_query_error(exc)
-        sys.stdout.write(json.dumps(payload, ensure_ascii=False) + "\n")
-        sys.stdout.flush()
-        sys.exit(2)
-    except ValidationError:
-        payload = {
-            "code": "needs_human",
-            "message": "Database contains invalid data; human review required.",
-            "needs_human": True,
-        }
-        sys.stdout.write(json.dumps(payload, ensure_ascii=False) + "\n")
-        sys.stdout.flush()
-        sys.exit(2)
-    except Exception:
-        payload = {
-            "code": "needs_human",
-            "message": "Query failed; check local database configuration and retry.",
-            "needs_human": True,
-        }
-        sys.stdout.write(json.dumps(payload, ensure_ascii=False) + "\n")
-        sys.stdout.flush()
-        sys.exit(2)
+    """Execute a service query and print JSON or a table.
+
+    Errors propagate to :meth:`OrderedGroup.main`, the single place that turns
+    them into the public error envelope.
+    """
+    result = require_tool_result(asyncio.run(_execute_with_session(coro_factory)))
 
     if format_type.lower() == "table":
         output = table_renderer(result)
@@ -351,42 +336,30 @@ class OrderedGroup(click.Group):
                 **extra,
             )
         except click.ClickException:
-            err_payload = {
-                "code": "invalid_argument",
-                "message": (
-                    "Invalid command arguments; use --help for supported options."
-                ),
-            }
-            sys.stdout.write(json.dumps(err_payload, ensure_ascii=False) + "\n")
-            sys.stdout.flush()
-            sys.exit(2)
+            _emit_error(
+                {
+                    "code": "invalid_argument",
+                    "message": (
+                        "Invalid command arguments; use --help for supported options."
+                    ),
+                }
+            )
         except SystemExit:
             raise
         except AgentQueryError as exc:
-            payload = public_query_error(exc)
-            sys.stdout.write(json.dumps(payload, ensure_ascii=False) + "\n")
-            sys.stdout.flush()
-            sys.exit(2)
-        except ValidationError:
-            payload = {
-                "code": "needs_human",
-                "message": "Database contains invalid data; human review required.",
-                "needs_human": True,
-            }
-            sys.stdout.write(json.dumps(payload, ensure_ascii=False) + "\n")
-            sys.stdout.flush()
-            sys.exit(2)
-        except Exception:
-            payload = {
-                "code": "needs_human",
-                "message": (
-                    "Query failed; check local database configuration and retry."
-                ),
-                "needs_human": True,
-            }
-            sys.stdout.write(json.dumps(payload, ensure_ascii=False) + "\n")
-            sys.stdout.flush()
-            sys.exit(2)
+            _emit_error(public_query_error(exc))
+        except Exception as exc:
+            if unexpected_error_kind(exc) is QueryErrorKind.QUERY_FAILED:
+                sys.stderr.write("Check local database configuration and retry.\n")
+                sys.stderr.flush()
+            _emit_error(public_unexpected_error(exc))
+
+
+def _emit_error(payload: dict[str, Any]) -> NoReturn:
+    """Write the public error envelope as JSON to stdout and exit with code 2."""
+    sys.stdout.write(json.dumps(payload, ensure_ascii=False) + "\n")
+    sys.stdout.flush()
+    sys.exit(2)
 
 
 @click.group(

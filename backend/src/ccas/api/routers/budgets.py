@@ -25,6 +25,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ccas.api.agent_route import AgentQueryRoute
 from ccas.api.schemas import (
     ApiResponse,
     BudgetAlertItem,
@@ -46,7 +47,7 @@ from ccas.storage.models import (
     Category,
 )
 
-router = APIRouter(prefix="/api/budgets", tags=["budgets"])
+router = APIRouter(prefix="/api/budgets", tags=["budgets"], route_class=AgentQueryRoute)
 
 
 def _agent_budget_to_item(

@@ -8,7 +8,7 @@ import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from ccas.services.schemas import AgentQueryError
+from ccas.services.query_errors import AgentQueryError
 from ccas.services.transactions import query_transactions
 from ccas.storage.models import BankConfig, Bill, Transaction
 from tests.integration.conftest import auth_headers

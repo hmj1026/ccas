@@ -310,3 +310,11 @@ async def test_triggered_by_literal_is_api(
         await db_session.execute(select(PipelineRun).where(PipelineRun.id == run_id))
     ).scalar_one()
     assert row.triggered_by == "api"
+
+
+@pytest.mark.asyncio
+async def test_pipeline_run_detail_not_found_shows_safe_numeric_id(client: AsyncClient):
+    response = await client.get("/api/pipeline/runs/999999", headers=auth_headers())
+
+    assert response.status_code == 404
+    assert response.json()["message"] == "Pipeline run #999999 not found."

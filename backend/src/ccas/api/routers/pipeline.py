@@ -12,6 +12,7 @@ from redis import Redis
 from rq import Queue
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ccas.api.agent_route import AgentQueryRoute
 from ccas.api.deps import PaginationParams
 from ccas.api.schemas import (
     ApiResponse,
@@ -48,7 +49,9 @@ from ccas.storage.models import (
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/pipeline", tags=["pipeline"])
+router = APIRouter(
+    prefix="/api/pipeline", tags=["pipeline"], route_class=AgentQueryRoute
+)
 
 # Process-wide Redis connection (lazy singleton)；避免每次 trigger 都新建
 # TCP 連線。RQ enqueue 為 sync 操作，沿用 sync client。

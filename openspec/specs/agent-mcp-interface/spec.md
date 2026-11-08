@@ -38,7 +38,7 @@ TBD - created by archiving change add-agent-mcp-interface. Update Purpose after 
 | `get_bill` | `bill_id: integer`（≥1） | 找不到時使用 `resource_not_found`，不得以 reconciliation key 猜測另一筆帳單 |
 | `query_transactions` | `month?: string`、`year?: integer`（2000–2099）、`bank_code?: string`、`category?: string`、`q?: string`（至少 2 字元）、`sort?: "trans_date_asc"\|"trans_date_desc"\|"amount_asc"\|"amount_desc"\|"merchant_asc"\|"merchant_desc"`（default `trans_date_desc`）、`page?: integer`（≥1，default 1）、`page_size?: integer`（1–100，default 20） | 沿用 transactions API 篩選、排序與分頁語意 |
 | `get_payment_due` | `{}` | 回傳所有未繳帳單的到期彙總，依 `due_date` 由近到遠排序；不得要求 `run_id` |
-| `budget_status` | `scope?: "monthly_total"\|"monthly_category"\|"monthly_bank"`、`include_current_period?: boolean`（default `false`） | 沿用 budgets API 的 scope 與 current-period 語意 |
+| `budget_status` | `scope?: "monthly_total"\|"monthly_category"\|"monthly_bank"`、`include_current_period?: boolean`（default `false`）、`month?: string`（有效 `YYYY-MM`） | 沿用 budgets API 的 scope 與 current-period 語意 |
 | `pipeline_status` | `{}` | 只查最近一次執行；不得要求呼叫方先提供 `run_id` |
 
 以下是本 change 的 canonical structured payload；欄位未標示 `?` 即為 required，`null` 表示可為 JSON null。這是六個工具的 project schema source，實作階段 SHALL 由 Agent Pydantic DTO 產生對應 `outputSchema`，不可另外發明欄位名稱。
@@ -50,7 +50,8 @@ TBD - created by archiving change add-agent-mcp-interface. Update Purpose after 
 | `AgentBill` | `id: integer`、`bank_code: string`、`bank_name: string|null`、`billing_month: YYYY-MM string`、`total_amount: Money`、`due_date: date string`、`is_paid: boolean`、`created_at: date-time string`、`card_last4s: four-digit string[]`（去重排序，無卡為空陣列）、`reconciliation_key: string`；不得包含 `pdf_url` 或本機檔案路徑 |
 | `AgentTransaction` | `id: integer`、`bill_id: integer`、`trans_date: date string`、`posting_date: date string|null`、`merchant: string`、`amount: Money`、`original_amount: Money|null`、`card_last4: four-digit string|null`、`category: string|null`、`bank_code: string`、`billing_month: YYYY-MM string`、`installment_current: integer|null`、`installment_total: integer|null`、`reconciliation_key: string` |
 | `BudgetCurrentPeriod` | `period_year_month: YYYY-MM string`、`amount: Money`、`current_amount: Money`、`percent: number`、`threshold_breached: boolean`、`alert_threshold_percent: integer 1..100` |
-| `BudgetStatus` | `id: integer`、`scope: monthly_total\|monthly_category\|monthly_bank`、`scope_ref: string|null`、`amount: Money`、`alert_threshold_percent: integer 1..100`、`enabled: boolean`、`current_period: BudgetCurrentPeriod|null` |
+| `BudgetStatus` | `id: integer`、`scope: monthly_total\|monthly_category\|monthly_bank`、`scope_ref: string|null`、`amount: Money`、`alert_threshold_percent: integer 1..100`、`enabled: boolean`、`current_period: BudgetCurrentPeriod|null`、`assessment?: BudgetAssessment`（指定 month 時提供） |
+| `BudgetAssessment` | `period_year_month: YYYY-MM string`、`budget_basis: "current_settings"`、`amount: Money`、`spent_amount: Money`、`percent: number`、`threshold_breached: boolean`、`alert_threshold_percent: integer 1..100` |
 | `PipelineStageSummary` | `stage: string`、`ok: integer >= 0`、`fail: integer >= 0`、`elapsed_ms: integer >= 0`、`counts: object<string, integer >= 0>`、`errors: string[]`；所有錯誤文字不得含 secrets |
 | `PipelineStatus` | `id: string`、`job_id: string`、`status: queued\|running\|succeeded\|failed\|cancelled`、`triggered_by: string`、`params: object`（已脫敏）、`current_stage: string|null`、`current_stage_processed: integer >= 0`、`current_stage_total: integer >= 0`、`stage_summary: PipelineStageSummary[]`、`error_message: string|null`、`started_at: date-time string|null`、`completed_at: date-time string|null`、`created_at: date-time string`、`updated_at: date-time string`、`needs_human: boolean` |
 
@@ -198,7 +199,7 @@ Server SHALL 提供兩個固定 resource：`ccas://pipeline/status` 與 `ccas://
 
 ### Requirement: Prompts 提供對帳模板並重述信任邊界
 
-Server SHALL 提供兩個 prompt：`reconcile_with_notion` 與 `monthly_budget_review`，各接受必填參數 `month`。`prompts/get` 回傳的訊息內文 SHALL 重述 ADR-0001 的信任邊界：Notion 持有決策權、CCAS 為唯讀驗證來源、差異只回報給人不得自動回寫任一方。`month` 參數在插入訊息前 SHALL 經過與其他回顯路徑相同的 sanitization。未知的 prompt 名稱或缺少 `month` SHALL 回傳 JSON-RPC error。
+Server SHALL 提供兩個 prompt：`reconcile_with_notion` 與 `monthly_budget_review`，各接受必填參數 `month`。`prompts/get` 回傳的訊息內文 SHALL 重述 ADR-0001 的信任邊界：Notion 持有決策權、CCAS 為唯讀驗證來源、差異只回報給人不得自動回寫任一方。`month` 參數在插入訊息前 SHALL 經過與其他回顯路徑相同的 sanitization。month SHALL 以與查詢相同的有效 YYYY-MM 規則驗證；未知的 prompt 名稱、缺少、空白或無效 month SHALL 回傳 JSON-RPC error。monthly_budget_review SHALL 指示以 month 呼叫 budget_status，並說明使用目前預算設定。
 
 #### Scenario: 取得對帳 prompt
 
@@ -209,6 +210,10 @@ Server SHALL 提供兩個 prompt：`reconcile_with_notion` 與 `monthly_budget_r
 
 - **WHEN** client 以未註冊的 prompt 名稱呼叫 `prompts/get`
 - **THEN** server SHALL 回傳 JSON-RPC error，不得回傳任何訊息內容
+
+#### Scenario: 無效月份拒絕
+- **WHEN** month 為空白、2024-99 或含額外指令文字
+- **THEN** server SHALL 回傳 JSON-RPC error，不產生 prompt 或執行查詢
 
 ### Requirement: Argument completion 僅涵蓋協定允許的參照
 
@@ -240,22 +245,15 @@ Server SHALL 實作 `completion/complete`，並只對 prompt 的 `month` 參數�
 
 ### Requirement: 授權探索文件只在有真實 authorization server 時發布
 
-Server SHALL 以設定 `MCP_OAUTH_ISSUER_URL` 決定是否發布 RFC 9728 protected resource metadata。未設定時 server SHALL NOT 提供 `/.well-known/oauth-protected-resource`，且 401 的 `WWW-Authenticate` SHALL NOT 含 `resource_metadata`——把探索指向一台 CCAS 並不營運的 authorization server，會使遵循規格的 client 進入無法完成的 OAuth 流程，比不發布更糟。設定為合法 HTTP(S) URL 時，server SHALL 發布該文件並在 401 challenge 帶 `resource_metadata`。設定為不合法的 URL 時 SHALL 在啟動即失敗，不得靜默停用探索。無論是否設定，loopback adapter 的 token 驗證語意 SHALL 不變：Bearer 比對既有 API token，且 SHALL NOT 接受 REST session cookie。遠端（非 loopback）暴露的授權模型不在本 capability 範圍內，由後續 ADR 定義。
+在外部 token verifier 接通前，server SHALL NOT 發布 RFC 9728 protected resource metadata，401 challenge SHALL NOT 含 resource_metadata。MCP_OAUTH_ISSUER_URL SHALL 保留為棄用設定但忽略其值；非空時 HTTP app 啟動 SHALL 向 stderr 發出固定、不含設定值的棄用警告，不驗證 URL。Bearer SHALL 仍比對既有 API token，不接受 REST session cookie；遠端授權模型由後續 ADR 定義。
 
-#### Scenario: 預設不發布探索文件
+#### Scenario: 有或無 issuer 均停用 discovery
+- **WHEN** issuer 未設定或設定為任意非空值，包括合法／不合法 URL
+- **THEN** server SHALL 啟動，metadata endpoint 回 404，未帶 Bearer 回 401 且不含 resource_metadata；非空設定產生安全棄用警告
 
-- **WHEN** `MCP_OAUTH_ISSUER_URL` 未設定，client 未帶 Bearer 呼叫 MCP endpoint
-- **THEN** server SHALL 回 401，`WWW-Authenticate` 不含 `resource_metadata`，且 `/.well-known/oauth-protected-resource` SHALL 回 404
-
-#### Scenario: 設定 issuer 後發布探索文件
-
-- **WHEN** `MCP_OAUTH_ISSUER_URL` 設為合法 URL，client 未帶 Bearer 呼叫 MCP endpoint
-- **THEN** server SHALL 回 401 且 `WWW-Authenticate` 含指向 protected resource metadata 的 `resource_metadata`；該文件的 `resource` 為 MCP endpoint canonical URI，`authorization_servers` 為所設定的 issuer
-
-#### Scenario: 不合法的 issuer 在啟動失敗
-
-- **WHEN** `MCP_OAUTH_ISSUER_URL` 設為不是 HTTP(S) URL 的值
-- **THEN** 建立 MCP HTTP app SHALL 拋出錯誤，不得以停用探索的方式繼續啟動
+#### Scenario: 靜態 Bearer 不變
+- **WHEN** client 帶有效 API token，或帶缺少／無效 Bearer，或只帶 session cookie
+- **THEN** server SHALL 只接受有效 API token，其他情境回 401
 
 ### Requirement: MCP 可以 loopback Streamable HTTP 提供同一組唯讀工具
 
@@ -341,3 +339,32 @@ metadata 的 release version 相同。v0.8.2 release SHALL 回傳 `0.8.2`；此�
 
 - **WHEN** client 呼叫 `server/discover`
 - **THEN** serverInfo version SHALL 等於 package metadata version `0.8.2`
+
+### Requirement: 指定帳單月份的預算評估
+budget_status SHALL 接受 optional month，按 bills.billing_month 彙總指定月份，使用目前預算設定。指定 month 時每筆 BudgetStatus SHALL 包含 assessment，其 budget_basis SHALL 為 current_settings；其餘欄位依 BudgetAssessment schema。未指定 month SHALL 不輸出 assessment。current_period SHALL 維持原本本月語意；兩個參數同時指定 SHALL 分別計算兩個期間。無交易月份消費 SHALL 為零；month SHALL 與其他月份查詢使用同一有效 YYYY-MM 驗證。全部／類別／銀行三種 scope SHALL 遵守相同期間規則。
+
+#### Scenario: 跨月與目前設定
+- **WHEN** 2 月交易列入 3 月帳單，以 month=3 月查詢，且預算已變更
+- **THEN** assessment SHALL 包含該交易，使用目前設定，明確回報月份與 budget_basis，不宣稱歷史快照
+
+#### Scenario: 保留舊呼叫與兩種期間
+- **WHEN** 未指定 month，或指定歷史 month 且 include_current_period=true
+- **THEN** 前者 SHALL 保持既有 payload；後者 assessment SHALL 為歷史月份而 current_period SHALL 仍為本月
+
+### Requirement: 共用安全公開錯誤契約
+CLI 與 MCP SHALL 使用同一公開業務錯誤投影，只含 code、安全 message，needs_human 時包含 needs_human=true，不公開任意內部 data。MCP SHALL 保留 tool execution error 與 JSON-RPC protocol error 分層。
+
+#### Scenario: 注入內部敏感資料
+- **WHEN** 業務錯誤 message 或 data 含敏感資料，或 pipeline retries exhausted
+- **THEN** 公開錯誤 SHALL 不含秘密、內部 data 或完整 pipeline payload，並保留可辨識 code；stdout／stderr SHALL 不洩漏秘密
+
+### Requirement: 官方 SDK 驗收共同協定
+系統 SHALL 以官方 Python SDK 驗證 stdio 與實際 loopback Streamable HTTP 的現行 2026-07-28 協定。測試 SHALL 涵蓋 discovery、版本拒絕、六個 tools、resources、template、prompts、completions 與錯誤分層；同一 fixture SHALL 比較兩種 transport 與 CLI 的成功資料、排序、Money 與 UTC datetime。驗收 SHALL 不宣稱第三方 host 或 legacy 相容性。
+
+#### Scenario: 兩種 transport 正常與失敗
+- **WHEN** SDK 連線並執行能力查詢、合法及非法輸入、未知工具與寫入嘗試
+- **THEN** 系統 SHALL 回傳對應能力與安全錯誤，非法請求不修改業務資料；CLI 成功資料與 MCP structuredContent 一致
+
+#### Scenario: 連線生命週期
+- **WHEN** stdio EOF，或 HTTP transport 中斷後重新建立 SDK transport
+- **THEN** stdio SHALL 乾淨結束且 stdout 只含協定訊息，HTTP SHALL 重新帶 Bearer 完成 discovery 與查詢；現行 2026-07-28 SHALL 視為無 session 的逐請求協定，不宣稱 session 失效或 legacy 握手驗收

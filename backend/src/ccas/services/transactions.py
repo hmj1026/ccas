@@ -14,8 +14,8 @@ from ccas.services.identity import (
     build_transaction_reconciliation_key,
     contains_sensitive_data,
 )
+from ccas.services.query_errors import AgentQueryError, QueryErrorKind
 from ccas.services.schemas import (
-    AgentQueryError,
     AgentTransaction,
     Money,
     PageMeta,
@@ -113,7 +113,7 @@ async def query_transactions(
             page_size=page_size,
         )
     except ValidationError as exc:
-        raise AgentQueryError("invalid_argument", "Invalid argument provided.") from exc
+        raise AgentQueryError(QueryErrorKind.INVALID_ARGUMENT) from exc
 
     rows, total, total_pages, has_next = await query_transactions_query(
         session,
@@ -132,11 +132,7 @@ async def query_transactions(
 
     for row in rows:
         if not row.bill_billing_month or not MONTH_REGEX.match(row.bill_billing_month):
-            raise AgentQueryError(
-                "needs_human",
-                "Database contains malformed billing month; human review required.",
-                needs_human=True,
-            )
+            raise AgentQueryError(QueryErrorKind.MALFORMED_BILLING_MONTH)
 
         card_last4 = row.card_last4
         if card_last4 == "":
@@ -144,11 +140,7 @@ async def query_transactions(
         elif card_last4 is not None:
             card_str = str(card_last4)
             if len(card_str) != 4 or not card_str.isdigit():
-                raise AgentQueryError(
-                    "needs_human",
-                    "Database contains malformed card data; human review required.",
-                    needs_human=True,
-                )
+                raise AgentQueryError(QueryErrorKind.MALFORMED_CARD_DATA)
             card_last4 = card_str
 
         if (
@@ -156,11 +148,7 @@ async def query_transactions(
             or contains_sensitive_data(row.category)
             or contains_sensitive_data(row.bill_bank_code)
         ):
-            raise AgentQueryError(
-                "needs_human",
-                "Transaction contains sensitive information requiring human review.",
-                needs_human=True,
-            )
+            raise AgentQueryError(QueryErrorKind.SENSITIVE_TRANSACTION)
 
         recon_key = build_transaction_reconciliation_key(
             bill_id=row.bill_id,
@@ -194,11 +182,7 @@ async def query_transactions(
             )
             item = native.to_agent()
         except ValidationError as exc:
-            raise AgentQueryError(
-                "needs_human",
-                "Database contains malformed transaction data; human review required.",
-                needs_human=True,
-            ) from exc
+            raise AgentQueryError(QueryErrorKind.MALFORMED_TRANSACTION_DATA) from exc
 
         items.append(item)
         rest_items.append(native)

@@ -9,8 +9,8 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ccas.services.identity import contains_sensitive_data, sanitize_text
+from ccas.services.query_errors import AgentQueryError, QueryErrorKind
 from ccas.services.schemas import (
-    AgentQueryError,
     PipelineStageSummary,
     PipelineStatus,
     PipelineStatusResult,
@@ -72,11 +72,7 @@ def _sanitize_stage_summary(raw_summary: Any) -> list[PipelineStageSummary]:
 
         stage = str(item.get("stage", ""))
         if contains_sensitive_data(stage):
-            raise AgentQueryError(
-                "needs_human",
-                "Pipeline stage contains sensitive information requiring human review.",
-                needs_human=True,
-            )
+            raise AgentQueryError(QueryErrorKind.SENSITIVE_PIPELINE_STAGE)
 
         ok = int(item.get("ok", 0))
         fail = int(item.get("fail", 0))
@@ -88,17 +84,9 @@ def _sanitize_stage_summary(raw_summary: Any) -> list[PipelineStageSummary]:
             for k, v in raw_counts.items():
                 k_str = str(k)
                 if contains_sensitive_data(k_str):
-                    raise AgentQueryError(
-                        "needs_human",
-                        "Pipeline count key contains sensitive information.",
-                        needs_human=True,
-                    )
+                    raise AgentQueryError(QueryErrorKind.SENSITIVE_PIPELINE_COUNT_KEY)
                 if not isinstance(v, int) or isinstance(v, bool) or v < 0:
-                    raise AgentQueryError(
-                        "needs_human",
-                        "Pipeline counts must be nonnegative integers.",
-                        needs_human=True,
-                    )
+                    raise AgentQueryError(QueryErrorKind.PIPELINE_COUNTS_INVALID)
                 counts[k_str] = v
 
         raw_errors = item.get("errors", [])
@@ -127,14 +115,7 @@ def _sanitize_stage_summary(raw_summary: Any) -> list[PipelineStageSummary]:
                 )
             )
         except Exception as exc:
-            raise AgentQueryError(
-                "needs_human",
-                (
-                    "Database contains malformed stage summary data; "
-                    "human review required."
-                ),
-                needs_human=True,
-            ) from exc
+            raise AgentQueryError(QueryErrorKind.MALFORMED_STAGE_SUMMARY) from exc
 
     return results
 
@@ -178,7 +159,7 @@ async def pipeline_status(
     """Fetch status of the most recent pipeline run."""
     run = await get_latest_pipeline_run(session)
     if run is None:
-        raise AgentQueryError("resource_not_found", "No pipeline runs found.")
+        raise AgentQueryError(QueryErrorKind.NO_PIPELINE_RUNS)
 
     status_val = (
         run.status.value
@@ -194,18 +175,14 @@ async def pipeline_status(
 
     needs_human = status_val == "failed" and term_val == "retries_exhausted"
 
-    for field_name, field_val in [
-        ("id", run.id),
-        ("job_id", run.job_id),
-        ("triggered_by", run.triggered_by),
-        ("current_stage", run.current_stage),
-    ]:
+    for kind, field_val in (
+        (QueryErrorKind.SENSITIVE_PIPELINE_ID, run.id),
+        (QueryErrorKind.SENSITIVE_PIPELINE_JOB_ID, run.job_id),
+        (QueryErrorKind.SENSITIVE_PIPELINE_TRIGGERED_BY, run.triggered_by),
+        (QueryErrorKind.SENSITIVE_PIPELINE_CURRENT_STAGE, run.current_stage),
+    ):
         if field_val and contains_sensitive_data(field_val):
-            raise AgentQueryError(
-                "needs_human",
-                f"Pipeline {field_name} contains sensitive information.",
-                needs_human=True,
-            )
+            raise AgentQueryError(kind)
 
     safe_params = _sanitize_pipeline_params(run.params)
     stage_summary_list = _sanitize_stage_summary(run.stage_summary)
@@ -233,11 +210,7 @@ async def pipeline_status(
             needs_human=needs_human,
         )
     except Exception as exc:
-        raise AgentQueryError(
-            "needs_human",
-            "Database contains malformed pipeline data; human review required.",
-            needs_human=True,
-        ) from exc
+        raise AgentQueryError(QueryErrorKind.MALFORMED_PIPELINE_DATA) from exc
 
     rest_metadata = {
         "raw_params": run.params,
@@ -350,7 +323,7 @@ async def get_pipeline_run(
     """Fetch single pipeline run by ID for REST compatibility."""
     run = await get_pipeline_run_by_id(session, run_id)
     if run is None:
-        raise AgentQueryError("resource_not_found", f"找不到執行紀錄 #{run_id}")
+        raise AgentQueryError(QueryErrorKind.PIPELINE_RUN_NOT_FOUND, id=run_id)
 
     snapshot = _to_run_snapshot(run)
     rest_metadata = {

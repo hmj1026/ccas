@@ -8,15 +8,18 @@ import pytest
 from pydantic import ValidationError
 
 from ccas.config import Settings
-from ccas.services.schemas import (
+from ccas.services.query_errors import (
     AgentQueryError,
+    QueryErrorKind,
+    public_query_error,
+)
+from ccas.services.schemas import (
     BudgetStatusInput,
     EmptyInput,
     GetBillInput,
     ListBillsInput,
     Money,
     QueryTransactionsInput,
-    public_query_error,
 )
 
 AGENT_INPUT_MODELS = (
@@ -29,11 +32,7 @@ AGENT_INPUT_MODELS = (
 
 
 def test_public_error_preserves_safe_bill_identity_message() -> None:
-    payload = public_query_error(
-        AgentQueryError(
-            "resource_not_found", "Bill #42 not found.", data={"private": "internal"}
-        )
-    )
+    payload = public_query_error(AgentQueryError(QueryErrorKind.BILL_NOT_FOUND, id=42))
     assert payload == {"code": "resource_not_found", "message": "Bill #42 not found."}
 
 
@@ -42,11 +41,7 @@ def test_public_error_preserves_safe_bill_identity_message() -> None:
 )
 def test_public_error_sanitizes_sensitive_numeric_bill_template(identity: str) -> None:
     payload = public_query_error(
-        AgentQueryError(
-            "resource_not_found",
-            f"Bill #{identity} not found.",
-            data={"private": identity},
-        )
+        AgentQueryError(QueryErrorKind.BILL_NOT_FOUND, id=identity)
     )
     assert set(payload) == {"code", "message"}
     assert payload["code"] == "resource_not_found"
@@ -160,48 +155,6 @@ def test_money_rejects_non_twd_scientific_and_float_values(
 ) -> None:
     with pytest.raises(ValidationError):
         Money(**kwargs)
-
-
-@pytest.mark.parametrize(
-    ("code", "needs_human"),
-    [
-        ("resource_not_found", False),
-        ("invalid_argument", False),
-        ("needs_human", True),
-    ],
-)
-def test_agent_query_error_exposes_allowed_code_and_optional_data(
-    code: str, needs_human: bool
-) -> None:
-    error = AgentQueryError(
-        code=code,
-        message="Use a valid query or inspect the source record.",
-        needs_human=needs_human,
-        data={"resource": "bill"},
-    )
-
-    assert error.code == code
-    assert error.message
-    assert error.needs_human is needs_human
-    assert error.data == {"resource": "bill"}
-
-
-@pytest.mark.parametrize("code", ["unknown", ""])
-def test_agent_query_error_rejects_unknown_codes(code: str) -> None:
-    with pytest.raises(ValueError):
-        AgentQueryError(code=code, message="not actionable")
-
-
-@pytest.mark.parametrize("code", ["resource_not_found", "invalid_argument"])
-def test_agent_query_error_cannot_mark_nonhuman_codes_for_human_review(
-    code: str,
-) -> None:
-    with pytest.raises(ValueError):
-        AgentQueryError(
-            code=code,
-            message="not actionable",
-            needs_human=True,
-        )
 
 
 def test_settings_agent_write_enabled_defaults_to_false(

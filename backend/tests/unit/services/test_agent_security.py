@@ -12,9 +12,9 @@ import pytest
 from pydantic import ValidationError
 
 from ccas.services import bills, budgets, pipeline, transactions
+from ccas.services.query_errors import AgentQueryError
 from ccas.services.schemas import (
     AgentBill,
-    AgentQueryError,
     AgentTransaction,
     BudgetCurrentPeriod,
     BudgetStatus,

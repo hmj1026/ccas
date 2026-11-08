@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from ccas.services.bills import get_bill, get_payment_due, list_bills
 from ccas.services.budgets import budget_status
 from ccas.services.pipeline import pipeline_status
-from ccas.services.schemas import AgentQueryError
+from ccas.services.query_errors import AgentQueryError
 from ccas.services.transactions import query_transactions
 from ccas.storage.models import (
     BankConfig,
@@ -34,7 +34,6 @@ def _assert_not_found(error: AgentQueryError) -> None:
     assert error.code == "resource_not_found"
     assert error.message.strip()
     assert error.needs_human is False
-    assert error.data is None
 
 
 async def test_list_bills_projection_omits_paths_and_stabilizes_card_identity(

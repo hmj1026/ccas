@@ -54,3 +54,21 @@ value 轉為 UTC，SQLite 讀回的 naive value 視為 UTC，nullable datetime �
 
 - **WHEN** 對同一 SQLite fixture 分別執行 CLI 與 MCP 的對應 read query
 - **THEN** 兩者 datetime 欄位 SHALL 完全一致，並都以 `Z` suffix 輸出
+
+### Requirement: CLI 公開錯誤使用共用最小投影
+CLI SHALL 使用與 MCP 相同的公開業務錯誤白名單：code、安全 message、必要時 needs_human=true。CLI SHALL NOT 輸出任意內部 data，包括 retries-exhausted 的完整 pipeline payload；失敗 SHALL 以非零退出碼及可解析 JSON 回報。
+
+#### Scenario: 錯誤安全投影
+- **WHEN** 查詢失敗或 retries exhausted，內部錯誤帶有敏感 message 與 data
+- **THEN** CLI SHALL 非零退出，公開 JSON 不含敏感字串與內部 data，stdout／stderr 均安全
+
+### Requirement: CLI 支援指定帳單月份預算評估
+budget-status SHALL 接受 --month，使用 MCP 的共用月份驗證、預算查詢與 Agent DTO；JSON SHALL 與對應 MCP structuredContent 一致。指定月份 SHALL 使用目前預算設定及帳單月份歸屬，新增 assessment；未指定月份 SHALL 保持既有行為。--include-current-period SHALL 繼續只代表本月；table SHALL 明確呈現評估月份與目前設定基準。
+
+#### Scenario: 指定歷史月份
+- **WHEN** CLI 以 --month 查詢歷史帳單月份
+- **THEN** JSON SHALL 與對應 MCP 一致，table SHALL 標示評估月份及使用目前預算設定
+
+#### Scenario: 舊呼叫及無效月份
+- **WHEN** 沒有 --month，或 month 格式無效
+- **THEN** 前者 SHALL 保留舊行為；後者 SHALL 非零退出且回報安全 invalid_argument
