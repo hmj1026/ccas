@@ -1,0 +1,59 @@
+name: Release Tag
+
+# 觸發：標題為 `Release vX.Y.Z` 的 PR 合併進 master。
+#   1. scripts/release_tag.py 驗證三處 RELEASE= pin 與標題一致（不一致即失敗、不打 tag）
+#   2. 在 merge commit 建 annotated tag 並推送
+#   3. GITHUB_TOKEN 推的 tag 不會觸發其他 workflow，故以 workflow_dispatch
+#      在該 tag 上啟動 release-docker.yaml（建 image + 建立 GitHub Release）
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [master]
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: release-tag
+  cancel-in-progress: false
+
+jobs:
+  tag:
+    name: Tag Release
+    if: github.event.pull_request.merged == true && startsWith(github.event.pull_request.title, 'Release v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
+          fetch-depth: 0
+
+      - name: Resolve tag and verify version pins
+        id: resolve
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+        run: python3 scripts/release_tag.py --title "$TITLE" --root . --github-output "$GITHUB_OUTPUT"
+
+      - name: Create and push annotated tag
+        if: steps.resolve.outputs.tag != ''
+        env:
+          TAG: ${{ steps.resolve.outputs.tag }}
+          SHA: ${{ github.event.pull_request.merge_commit_sha }}
+        run: |
+          if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null; then
+            echo "::error::tag $TAG already exists on origin"
+            exit 1
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" -m "$TAG" "$SHA"
+          git push origin "refs/tags/$TAG"
+
+      - name: Dispatch release images and GitHub Release
+        if: steps.resolve.outputs.tag != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.resolve.outputs.tag }}
+        run: gh workflow run release-docker.yaml --repo "$GITHUB_REPOSITORY" --ref "$TAG"

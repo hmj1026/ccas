@@ -3,7 +3,10 @@ name: Release Docker Images
 # 觸發：
 #   - push tag v*  → 建 multi-arch（amd64+arm64）image，並上傳 docker-compose.yml /
 #                    docker/example.env 為 GitHub Release artifact
+#   - workflow_dispatch --ref vX.Y.Z → 等同 tag push（release-tag.yaml 自動打 tag 後走此路徑，
+#                    因 GITHUB_TOKEN 推的 tag 不會觸發本 workflow）
 #   - push main / master → 僅 amd64，floating tag `release` + `sha-<short>`
+#   - workflow_dispatch（--ref vX.Y.Z）→ 等同 tag push；release-tag.yaml 自動打 tag 後用此路徑
 #
 # Tag 策略（D3）：
 #   main / master 推送 → release, sha-<short>
@@ -13,6 +16,7 @@ on:
   push:
     branches: [main, master]
     tags: ["v*"]
+  workflow_dispatch:
 
 permissions:
   contents: write
