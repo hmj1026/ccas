@@ -9,6 +9,7 @@ import asyncio
 import logging
 from dataclasses import dataclass, field
 
+from sqlalchemy import inspect
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ccas.config import get_settings
@@ -195,16 +196,26 @@ async def run_decryption_job(
 
     processed = 0
     for attachment in attachments:
+        # A rollback for an earlier item expires every object in the session;
+        # reload this one before reading it (a lazy-load here would raise
+        # MissingGreenlet and abort the batch). The label is captured now
+        # because this item's own rollback expires it again.
+        if inspect(attachment).expired:
+            await session.refresh(attachment)
+        label = f"{attachment.bank_code}/{attachment.original_filename}"
+        counts_before = (
+            summary.decrypted_count,
+            summary.passthrough_count,
+            summary.failed_count,
+            len(summary.errors),
+        )
         try:
             cached = password_cache[attachment.bank_code]
             if isinstance(cached, DecryptError):
                 # Pre-resolution failed for this bank: record the failure once
                 # per attachment and skip decryption (no double-counting — the
                 # per-item path is never entered for this attachment).
-                error_msg = (
-                    f"密碼解析失敗 ({attachment.bank_code}/"
-                    f"{attachment.original_filename}): {cached}"
-                )
+                error_msg = f"密碼解析失敗 ({label}): {cached}"
                 summary.failed_count += 1
                 summary.errors.append(error_msg)
                 logger.error(error_msg)
@@ -219,15 +230,42 @@ async def run_decryption_job(
             # Per-item commit: a mid-batch crash must not lose already-processed
             # rows (and must not desync disk vs DB).
             await session.commit()
-        except Exception:
-            # Roll back only this item's uncommitted changes, then continue to
-            # the next attachment (item B: partial success persists).
+        except Exception as exc:
+            # Roll back only this item's uncommitted changes, count it as a
+            # failure (undoing this item's partial counts), persist
+            # decrypt_failed, then continue with the next attachment.
             await session.rollback()
-            logger.exception(
-                "decrypt item failed unexpectedly (%s/%s); rolled back, continuing",
-                attachment.bank_code,
-                attachment.original_filename,
+            (
+                summary.decrypted_count,
+                summary.passthrough_count,
+                summary.failed_count,
+                errors_before,
+            ) = counts_before
+            del summary.errors[errors_before:]
+            error_msg = (
+                f"decrypt persistence failed ({label}): {type(exc).__name__}: {exc}"
             )
+            summary.failed_count += 1
+            summary.errors.append(error_msg)
+            logger.exception(
+                "decrypt item failed unexpectedly (%s); rolled back, continuing",
+                label,
+            )
+            try:
+                # Setting attributes on the expired object is safe (only reads
+                # lazy-load); the flush writes by primary key.
+                await update_attachment_status(
+                    session,
+                    attachment,
+                    status=StagedAttachmentStatus.DECRYPT_FAILED,
+                    error_reason=error_msg,
+                )
+                await session.commit()
+            except Exception:
+                await session.rollback()
+                logger.exception(
+                    "failed to persist decrypt_failed status (%s); continuing", label
+                )
         finally:
             processed += 1
             try:

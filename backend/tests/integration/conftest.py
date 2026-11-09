@@ -89,3 +89,24 @@ def auth_headers(token: str = TEST_TOKEN) -> dict[str, str]:
 def make_ctbc_bank_config() -> BankConfig:
     """建立標準 CTBC 測試用 BankConfig。"""
     return BankConfig(bank_code="CTBC", bank_name="中國信託", gmail_filter="from:ctbc")
+
+
+def fail_first_commit(
+    monkeypatch: pytest.MonkeyPatch,
+    session: AsyncSession,
+    exc: Exception | None = None,
+) -> None:
+    """讓 ``session.commit`` 第一次呼叫拋出 ``exc``，之後恢復正常。
+
+    以 monkeypatch 替換，測試結束（含失敗）時自動還原。
+    """
+    real_commit = session.commit
+    calls = {"n": 0}
+
+    async def _commit() -> None:
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise exc or RuntimeError("database is locked")
+        await real_commit()
+
+    monkeypatch.setattr(session, "commit", _commit)
