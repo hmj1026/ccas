@@ -14,7 +14,7 @@
 cd ~/ccas    # 你 docker-compose.yml 所在的目錄
 
 # 1) 修改 .env 的版本
-sed -i 's/^CCAS_VERSION=.*/CCAS_VERSION=v0.13.0/' .env
+sed -i 's/^CCAS_VERSION=.*/CCAS_VERSION=v0.13.1/' .env
 
 # 2) 拉新 image 並重啟
 docker compose -f docker-compose.yml pull
@@ -40,7 +40,7 @@ URL，見 [`mcp-installation.md`](mcp-installation.md)。systemd／launchd **不
 ```bash
 cd /path/to/ccas
 git fetch --tags
-git checkout v0.13.0    # 改成目標 tag
+git checkout v0.13.1    # 改成目標 tag
 
 cd backend
 uv sync --frozen --extra supervisor
@@ -70,7 +70,7 @@ cd ..
 [`non-docker-agent-host.md`](non-docker-agent-host.md) 與
 [`non-docker-host-services.md`](non-docker-host-services.md)。
 `host-services.sh` 不會跑 alembic；有 schema 變更時先在 `backend/` 執行
-`uv run alembic upgrade head`。v0.13.0 含資料庫 schema 變更（新增 `staged_attachments.failure_notified_at` 欄位）。
+`uv run alembic upgrade head`。v0.13.1 無資料庫 schema 變更（自 v0.12.x 升級者仍須套用 v0.13.0 的 `staged_attachments.failure_notified_at` migration）。
 
 ---
 
@@ -85,6 +85,16 @@ CCAS 採 [SemVer](https://semver.org/)：
 | Major（`v0.x.x` → `v1.0.0`） | 可能 breaking change；release notes 會明示 | 升級前**閱讀 release notes**、備份 |
 
 每次 release 的詳細 changelog 見 [GitHub Releases](https://github.com/<owner>/ccas/releases)。
+
+---
+
+## v0.13.1（Patch）— 2026-11-09 — Pre-push 只推 ref 時略過檢查、Release PR 自動打 tag
+
+**適用對象**：v0.13.0 升級至 v0.13.1。無資料庫 schema 變更，不需執行 migration。執行期程式與 image 行為與 v0.13.0 相同，僅版號 metadata 更新；已在 v0.13.0 的部署可選擇不升級。
+
+**開發與發佈流程（#96）**：
+- `scripts/pre-push.sh` 在只推 ref（刪除分支、tag 指向已在 remote 分支上的 commit）時略過完整檢查；coverage 輸出精簡為未全覆蓋檔案與摘要，門檻不變。
+- 新增 `.github/workflows/release-tag.yaml`：標題為 `Release vX.Y.Z` 的 PR 合併進 `master` 後，驗證三處 `RELEASE=` pin、在 merge commit 打 annotated tag，並以 `workflow_dispatch` 啟動 `release-docker.yaml` 建 image 與 GitHub Release。
 
 ---
 
