@@ -142,7 +142,7 @@ GitHub Actions 於 push 與 PR 至 `develop` / `master` 時觸發：
 - **backend-test** —— `pytest tests/unit/`，覆蓋率 ≥ 80%
 - **frontend-lint-test** —— `pnpm lint` + `pnpm build`（含 `tsc`） + `pnpm test`
 
-發佈流程（`release-docker.yaml`）在打 tag 時 build & push 容器 image 到 GHCR。
+發佈流程：`Release vX.Y.Z` PR 合併進 `master` 後自動打 tag（`release-tag.yaml`），再 build & push 容器 image 到 GHCR（`release-docker.yaml`）。
 
 ## 貢獻
 

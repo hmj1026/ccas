@@ -150,7 +150,7 @@ GitHub Actions on push & PR to `develop` / `master`:
 - **backend-test** — `pytest tests/unit/` with coverage ≥ 80%
 - **frontend-lint-test** — `pnpm lint` + `pnpm build` (includes `tsc`) + `pnpm test`
 
-Release pipeline (`release-docker.yaml`) builds and pushes container images to GHCR on tagged releases.
+Release pipeline: merging a `Release vX.Y.Z` PR into `master` auto-tags it (`release-tag.yaml`), which builds and pushes container images to GHCR (`release-docker.yaml`).
 
 ## Contributing
 

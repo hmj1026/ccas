@@ -89,6 +89,7 @@ Agent 客戶端設定與已安裝 skills 不納入版控；所有開發者若要
 | pnpm lint + build + test | 前端完整驗證（TypeScript 編譯含其中）|
 
 注意：
+- 只推 ref 時（刪除分支、tag 指向已在 remote 分支上的 commit，例如 release tag）會印 `pre-push: ref-only push; skipping checks` 並略過全部檢查；其餘推送照常完整執行
 - `pnpm test` 是 Vitest 單元測試，不應執行 `frontend/e2e/*.spec.ts`
 - Playwright E2E 測試請用 `pnpm e2e`；若 CI 在前端 `Test` 步驟出現 `test.describe()` 錯誤，通常是 Vitest 設定誤收了 `e2e/**`
 - Python 變更請同時注意 `ruff check` 與 `ruff format --check`；長行或格式偏差常在後者才被擋下
