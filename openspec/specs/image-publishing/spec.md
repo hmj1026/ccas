@@ -20,9 +20,9 @@ proxy 三件套的角色分工。落地於 compose-pull-deploy change（v0.1.0 G
 
 #### Scenario: Release PR 合併自動打 tag 並發布
 
-- **WHEN** 標題為 `Release vX.Y.Z` 的 PR 合併進 `master`，且 `README.md`、`README.zh-TW.md`、`docs/install-quickstart.md` 的 `RELEASE=` 皆為 `vX.Y.Z`
+- **WHEN** 標題為 `Release vX.Y.Z` 的 PR 合併進 `master`，且 `scripts/release_tag.py` 的 `PINS` 所列版號位置（含三處 `RELEASE=`、`__version__`、upgrade-guide 範例）皆為 `vX.Y.Z`
 - **THEN** `.github/workflows/release-tag.yaml` SHALL 在 merge commit 建立 annotated tag `vX.Y.Z`，並以 `workflow_dispatch --ref vX.Y.Z` 啟動本 workflow（`GITHUB_TOKEN` 推送的 tag 不觸發 push 事件）
-- **AND** 任一 pin 與標題不符，或 tag 已存在時 SHALL 失敗且不建立 tag
+- **AND** 任一 pin 與標題不符、缺漏或重複，或 tag 已存在時 SHALL 失敗且不建立 tag
 
 #### Scenario: main 分支觸發 release floating tag
 

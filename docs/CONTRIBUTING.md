@@ -16,7 +16,7 @@
 | `feat/<name>` | 新功能 |
 | `fix/<name>` | Bug 修正 |
 
-從 `develop` 建立 branch，PR 目標也是 `develop`。
+從 `develop` 建立 branch，PR 目標也是 `develop`。發版（`develop` → `master`、tag、image）流程見 [`RELEASE.md`](../RELEASE.md)。
 
 ## Commit Message 格式
 
