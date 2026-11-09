@@ -16,6 +16,14 @@
         "args": [
           "lint"
         ]
+      },
+      {
+        "name": "documentation-links",
+        "cwd": ".",
+        "command": "python3",
+        "args": [
+          "scripts/check_docs.py"
+        ]
       }
     ],
     "build": [
@@ -59,6 +67,20 @@
         "command": "bash",
         "args": [
           "tests/scripts/test_pre_commit.sh"
+        ]
+      },
+      {
+        "name": "workflow-tools",
+        "cwd": ".",
+        "command": "python3",
+        "args": [
+          "-m",
+          "unittest",
+          "discover",
+          "-s",
+          "tests/scripts",
+          "-p",
+          "test_*.py"
         ]
       }
     ]

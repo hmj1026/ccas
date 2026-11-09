@@ -140,7 +140,7 @@ Health:
 | 2 | Decrypt | `decryptor/` | `job.py`, `decrypt.py`；staged_path 以 STAGING_DIR 相對路徑儲存 |
 | 3 | Parse | `parser/` | `job.py`, `registry.py`, `banks/{ctbc,esun,taishin,ubot,cathay,sinopac,fubon}_v1.py`, `ocr.py` fallback |
 | 4 | Classify | `classifier/` | `job.py`, `engine.py`（先匹配使用者 ClassificationRule，未命中再 keyword） |
-| 5 | Notify | `bot/` | `notifications.py`, `job.py`（auto-query is_notified=False） |
+| 5 | Notify | `bot/` | `job.py`（auto-query is_notified=False + 未通知的 parse_failed 附件），投遞經 `outbox.py` |
 
 ## Configuration (config.py Settings)
 
@@ -173,7 +173,8 @@ source tree and the central as-built document for exact current boundaries.
 | `parser` | `intake.py`, `registry.py`, `banks/`, `ocr.py` | Discover bank/version parser, extract PDF data and persist bills/transactions |
 | `classifier` | `job.py`, `engine.py`, `rules.py` | Manual override, user rules, keyword fallback and batch persistence |
 | `pipeline` | `orchestrator.py`, `options.py`, `progress.py`, `worker.py`, `submission.py` | Stage orchestration, shared submission lifecycle/RQ adapter, CLI entry point and run progress |
-| `bot` | `job.py`, `notifications.py`, `handlers.py` | Telegram notifications and bot commands |
+| `bot` | `job.py`, `handlers.py` | Notify stage (new bills, parse failures) and bot commands |
+| `outbox.py` | `Outbox`, `PaymentReminderClaim`, `BudgetAlertsClaim`, `ParseFailureClaim` | Notification delivery: claim before send, release on failure, skip when Telegram unset |
 | `scheduler` | `__main__.py`, `jobs.py`, `reminders.py`, `budget_evaluator.py` | Daily pipeline, reminders, budget evaluation and heartbeat |
 | `storage` | `models.py`, `database.py`, `queries.py`, `secrets.py` | ORM models, async sessions, queries and encrypted secrets |
 | `budget_assessment` | `budget_assessment.py` | 帳單月份批次預算評估、顯示百分比、精確整數閾值判斷；由查詢與排程共用 |

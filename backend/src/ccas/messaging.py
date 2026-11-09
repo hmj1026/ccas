@@ -11,7 +11,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import TYPE_CHECKING
+from collections.abc import Sequence
+from typing import TYPE_CHECKING, NamedTuple
 
 import httpx
 
@@ -159,26 +160,37 @@ def render_due_reminder(
     )
 
 
-def render_parse_failure_notification(
-    bank_name: str,
-    filename: str,
-    error_reason: str | None,
-) -> str:
-    """格式化解析失敗通知。
+class ParseFailureLine(NamedTuple):
+    """一份解析失敗的帳單附件在通知中的一行。"""
+
+    bank_name: str
+    filename: str
+    error_reason: str | None
+
+
+_PARSE_FAILURE_MAX_LINES = 20
+_PARSE_FAILURE_REASON_MAX_CHARS = 200
+
+
+def render_parse_failure_notification(failures: Sequence[ParseFailureLine]) -> str:
+    """格式化解析失敗通知：多份帳單附件合併為一則訊息。
+
+    最多列出 20 份（其餘以「…及其他 N 份」帶過），每份失敗原因截斷為 200 字，
+    確保訊息低於 Telegram 4096 字元上限。
 
     Args:
-        bank_name: 銀行名稱。
-        filename: 原始檔案名稱。
-        error_reason: 失敗原因（可為 None）。
+        failures: 本次負責通知的解析失敗附件。
 
     Returns:
         異常通知訊息文字。
     """
-    reason = error_reason or "未知錯誤"
-    return (
-        f"帳單解析失敗\n\n"
-        f"銀行：{bank_name}\n"
-        f"檔案：{filename}\n"
-        f"原因：{reason}\n\n"
-        f"請人工確認並重新處理。"
-    )
+    lines = [f"帳單解析失敗（{len(failures)} 份）", ""]
+    for index, failure in enumerate(failures[:_PARSE_FAILURE_MAX_LINES], start=1):
+        reason = (failure.error_reason or "未知錯誤")[:_PARSE_FAILURE_REASON_MAX_CHARS]
+        lines.append(f"{index}. {failure.bank_name}｜{failure.filename}")
+        lines.append(f"   原因：{reason}")
+    remaining = len(failures) - _PARSE_FAILURE_MAX_LINES
+    if remaining > 0:
+        lines.append(f"…及其他 {remaining} 份")
+    lines.extend(["", "請人工確認並重新處理。"])
+    return "\n".join(lines)

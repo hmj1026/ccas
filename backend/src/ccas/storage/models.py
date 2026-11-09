@@ -246,6 +246,11 @@ class StagedAttachment(Base):
         Text, server_default="attachment", nullable=False
     )
     error_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # 解析失敗通知的認領紀錄（見 ccas.outbox.ParseFailureClaim）：非空代表該附件
+    # 的解析失敗已通知（或正由某次投遞認領），parser 重試仍失敗時不重送。
+    failure_notified_at: Mapped[datetime | None] = mapped_column(
+        DateTime, nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow)
 
 

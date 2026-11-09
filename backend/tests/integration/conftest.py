@@ -5,7 +5,8 @@
 """
 
 import os
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, AsyncIterator, Callable
+from contextlib import asynccontextmanager
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -51,24 +52,32 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
     await engine.dispose()
 
 
-@pytest.fixture
-async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
-    """提供連接 FastAPI 測試應用程式的 httpx AsyncClient（含 DB 注入）。"""
+@asynccontextmanager
+async def app_client(
+    session_provider: Callable[[], AsyncIterator[AsyncSession]],
+) -> AsyncIterator[AsyncClient]:
+    """FastAPI 測試 client，`get_db_session` 改由 ``session_provider`` 提供。"""
     from ccas.api.app import create_app
     from ccas.storage.database import get_db_session
 
     app = create_app()
-
-    async def _override_db():
-        yield db_session
-
-    app.dependency_overrides[get_db_session] = _override_db
-
+    app.dependency_overrides[get_db_session] = session_provider
     transport = ASGITransport(app=app)
     # https scheme: the session cookie defaults to Secure=True (api_cookie_secure),
     # so httpx only stores/returns it over a secure-context base_url. http:// would
     # silently drop the cookie and break session-auth round-trips in tests.
     async with AsyncClient(transport=transport, base_url="https://test") as ac:
+        yield ac
+
+
+@pytest.fixture
+async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
+    """提供連接 FastAPI 測試應用程式的 httpx AsyncClient（含 DB 注入）。"""
+
+    async def _override_db() -> AsyncIterator[AsyncSession]:
+        yield db_session
+
+    async with app_client(_override_db) as ac:
         yield ac
 
 
@@ -80,3 +89,24 @@ def auth_headers(token: str = TEST_TOKEN) -> dict[str, str]:
 def make_ctbc_bank_config() -> BankConfig:
     """建立標準 CTBC 測試用 BankConfig。"""
     return BankConfig(bank_code="CTBC", bank_name="中國信託", gmail_filter="from:ctbc")
+
+
+def fail_first_commit(
+    monkeypatch: pytest.MonkeyPatch,
+    session: AsyncSession,
+    exc: Exception | None = None,
+) -> None:
+    """讓 ``session.commit`` 第一次呼叫拋出 ``exc``，之後恢復正常。
+
+    以 monkeypatch 替換，測試結束（含失敗）時自動還原。
+    """
+    real_commit = session.commit
+    calls = {"n": 0}
+
+    async def _commit() -> None:
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise exc or RuntimeError("database is locked")
+        await real_commit()
+
+    monkeypatch.setattr(session, "commit", _commit)

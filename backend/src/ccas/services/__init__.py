@@ -8,9 +8,9 @@ from ccas.services.identity import (
     canonical_quote,
 )
 from ccas.services.pipeline import pipeline_status
+from ccas.services.query_errors import AgentQueryError
 from ccas.services.schemas import (
     AgentBill,
-    AgentQueryError,
     AgentTransaction,
     BillResult,
     BillsPage,

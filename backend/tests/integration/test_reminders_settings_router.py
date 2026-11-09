@@ -179,7 +179,7 @@ class TestPushReminderTest:
         bill = await _seed_bill(db_session)
 
         with patch(
-            "ccas.bot.notifications.send_message",
+            "ccas.api.routers.reminders_settings.send_message",
             new=AsyncMock(return_value=None),
         ) as mock_send:
             resp = await client.post(
@@ -190,6 +190,9 @@ class TestPushReminderTest:
         assert resp.json()["data"]["sent"] is True
         assert resp.json()["data"]["channel"] == "telegram"
         assert mock_send.await_count == 1
+        assert mock_send.await_args is not None
+        _, _, text = mock_send.await_args.args
+        assert text.startswith("[測試] ")
 
     async def test_skips_send_for_ui_banner_channel(
         self, client: AsyncClient, db_session: AsyncSession
@@ -206,7 +209,7 @@ class TestPushReminderTest:
         await db_session.commit()
 
         with patch(
-            "ccas.bot.notifications.send_message",
+            "ccas.api.routers.reminders_settings.send_message",
             new=AsyncMock(return_value=None),
         ) as mock_send:
             resp = await client.post(

@@ -15,6 +15,7 @@ from ccas.decryptor.decrypt import DecryptionError, DecryptResult
 from ccas.decryptor.job import run_decryption_job
 from ccas.ingestor.staging import resolve_staged_path
 from ccas.storage.models import Base, StagedAttachment
+from tests.integration.conftest import fail_first_commit
 
 os.environ.setdefault("TELEGRAM_BOT_TOKEN", "test")
 os.environ.setdefault("TELEGRAM_CHAT_ID", "12345")
@@ -269,5 +270,90 @@ class TestMixedBatchScenario:
             assert summary.failed_count == 0
             assert summary.skipped_count == 0
             mock_to_thread.assert_not_called()
+
+        await engine.dispose()
+
+
+class TestCommitFailure:
+    """Per-item commit 失敗：計入失敗並寫入 decrypt_failed，不得默默停在 staged。"""
+
+    @patch("ccas.decryptor.job.asyncio.to_thread")
+    @patch("ccas.decryptor.job.get_settings")
+    async def test_commit_failure_is_counted_and_persisted_as_decrypt_failed(
+        self, mock_get_settings, mock_to_thread, monkeypatch
+    ):
+        engine, session_factory = await _create_test_session()
+        async with session_factory() as session:
+            session.add(
+                _make_attachment("CTBC", "msg-c", "att-c", staged_path="/tmp/c.pdf")
+            )
+            await session.commit()
+
+            mock_settings = MagicMock()
+            mock_settings.get_pdf_password.return_value = "pw"
+            mock_settings.staging_dir = TEST_STAGING_DIR
+            mock_get_settings.return_value = mock_settings
+
+            async def fake_to_thread(fn, *args):
+                return DecryptResult(needed_decryption=True)
+
+            mock_to_thread.side_effect = fake_to_thread
+
+            fail_first_commit(monkeypatch, session)
+            summary = await run_decryption_job(session)
+
+            assert summary.decrypted_count == 0
+            assert summary.failed_count == 1
+            assert len(summary.errors) == 1
+            assert "database is locked" in summary.errors[0]
+
+            record = (
+                await session.execute(
+                    select(StagedAttachment).where(
+                        StagedAttachment.gmail_attachment_id == "att-c"
+                    )
+                )
+            ).scalar_one()
+            assert record.status == "decrypt_failed"
+            assert record.error_reason is not None
+
+        await engine.dispose()
+
+    @patch("ccas.decryptor.job.asyncio.to_thread")
+    @patch("ccas.decryptor.job.get_settings")
+    async def test_commit_failure_does_not_break_following_attachments(
+        self, mock_get_settings, mock_to_thread, monkeypatch
+    ):
+        """rollback expires every ORM object; the next attachment must still run."""
+        engine, session_factory = await _create_test_session()
+        async with session_factory() as session:
+            session.add(
+                _make_attachment("CTBC", "msg-1", "att-1", staged_path="/tmp/1.pdf")
+            )
+            session.add(
+                _make_attachment("CTBC", "msg-2", "att-2", staged_path="/tmp/2.pdf")
+            )
+            await session.commit()
+
+            mock_settings = MagicMock()
+            mock_settings.get_pdf_password.return_value = "pw"
+            mock_settings.staging_dir = TEST_STAGING_DIR
+            mock_get_settings.return_value = mock_settings
+
+            async def fake_to_thread(fn, *args):
+                return DecryptResult(needed_decryption=True)
+
+            mock_to_thread.side_effect = fake_to_thread
+
+            fail_first_commit(monkeypatch, session)
+            summary = await run_decryption_job(session)
+
+            assert summary.failed_count == 1
+            assert summary.decrypted_count == 1
+            rows = await session.execute(
+                select(StagedAttachment.gmail_attachment_id, StagedAttachment.status)
+            )
+            statuses = {att_id: status for att_id, status in rows.all()}
+            assert statuses == {"att-1": "decrypt_failed", "att-2": "decrypted"}
 
         await engine.dispose()

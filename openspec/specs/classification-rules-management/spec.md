@@ -19,45 +19,45 @@ TBD - created by archiving change bills-management-and-insights. Update Purpose 
 
 ### Requirement: 三種 pattern_type 匹配語意
 
-系統 SHALL 支援三種 pattern_type 匹配 `transaction.description` 欄位（既有，從 PDF parse 出的商家描述）：
-- `keyword`：`description.lower()` 包含 `pattern.lower()` 子字串（最常見）
-- `exact`：`description.lower()` 等於 `pattern.lower()`
-- `regex`：`re.search(pattern, description, re.IGNORECASE)`
+系統 SHALL 支援三種 pattern_type 匹配 `transaction.merchant` 欄位（原始商家名稱，從 PDF parse 出的商家描述）：
+- `keyword`：`merchant.lower()` 包含 `pattern.lower()` 子字串（最常見）
+- `exact`：`merchant.lower()` 等於 `pattern.lower()`
+- `regex`：`re.search(pattern, merchant, re.IGNORECASE)`
 
 每條規則匹配 SHALL 加 100ms timeout（防止 catastrophic regex backtracking 拖累 pipeline）。
 
 #### Scenario: keyword 包含匹配
 
-- **WHEN** rule pattern = "STARBUCKS"、type = keyword、transaction.description = "STARBUCKS COFFEE TPE BR"
+- **WHEN** rule pattern = "STARBUCKS"、type = keyword、transaction.merchant = "STARBUCKS COFFEE TPE BR"
 - **THEN** matcher SHALL 回 true
 
 #### Scenario: exact 完全相等
 
-- **WHEN** rule pattern = "STARBUCKS"、type = exact、transaction.description = "STARBUCKS COFFEE TPE BR"
+- **WHEN** rule pattern = "STARBUCKS"、type = exact、transaction.merchant = "STARBUCKS COFFEE TPE BR"
 - **THEN** matcher SHALL 回 false（包含但不相等）
 
 #### Scenario: regex 套用 IGNORECASE
 
-- **WHEN** rule pattern = `^uber\s+(eats|moto)`、type = regex、description = "UBER EATS TAIPEI"
+- **WHEN** rule pattern = `^uber\s+(eats|moto)`、type = regex、merchant = "UBER EATS TAIPEI"
 - **THEN** matcher SHALL 回 true（不分大小寫）
 
 #### Scenario: regex catastrophic backtracking 觸發 timeout
 
-- **WHEN** rule pattern = `(a+)+$`、description = "aaaaaaaaaaaaaaaaaa!"（會 backtrack 爆炸）
+- **WHEN** rule pattern = `(a+)+$`、merchant = "aaaaaaaaaaaaaaaaaa!"（會 backtrack 爆炸）
 - **THEN** matcher SHALL 在 100ms 內 timeout、log warning「規則 #N 匹配逾時，已跳過」、繼續處理下一規則；該 transaction 走後續規則或預設分類
 
 ### Requirement: classify 階段優先序
 
-Pipeline classify 階段針對每筆 `manual_category_override = false` 的 transaction SHALL 依序：(1) query `classification_rules WHERE enabled = true ORDER BY priority DESC` → 對每條規則嘗試 match、命中第一條 SHALL 寫入 `category_id` 並停止匹配、(2) 若無 user rule 命中 → 走既有 `classifier/engine.py` 內建規則 → (3) 若皆無 → 寫入「未分類」 category。`manual_category_override` SHALL 保持 false（除非使用者自己編輯）。
+分類判定（pipeline classify 階段、全量重新分類、清除手動分類覆寫皆適用）針對每筆 `manual_category_override = false` 的 transaction SHALL 以原始商家名稱（`merchant`）依序：(1) query `classification_rules WHERE enabled = true ORDER BY priority DESC, id ASC` → 對每條規則嘗試 match、命中第一條 SHALL 寫入 `category_id` 並停止匹配、(2) 若無 user rule 命中 → 走內建關鍵字規則（`categories` 表）→ (3) 若皆無 → 寫入「未分類」 category。`manual_category_override` SHALL 保持 false（除非使用者自己編輯）。
 
 #### Scenario: user rule 優先於 engine
 
-- **WHEN** transaction.description = "UBER"、user rule（pattern="UBER", category=餐飲, priority=10）、engine 內建規則（UBER → 交通）
+- **WHEN** transaction.merchant = "UBER"、user rule（pattern="UBER", category=餐飲, priority=10）、engine 內建規則（UBER → 交通）
 - **THEN** classify 結果 SHALL 為「餐飲」（user rule 勝出）、stage_summary 計入 `user_rule_hits`
 
 #### Scenario: 多條 user rule 按 priority 排序
 
-- **WHEN** rule A（priority=100, pattern="UBER", category=餐飲）、rule B（priority=50, pattern="UBER", category=交通）、description = "UBER EATS"
+- **WHEN** rule A（priority=100, pattern="UBER", category=餐飲）、rule B（priority=50, pattern="UBER", category=交通）、merchant = "UBER EATS"
 - **THEN** classify SHALL 命中 rule A 寫入「餐飲」，rule B 不評估
 
 #### Scenario: enabled=false 的規則跳過
@@ -67,7 +67,7 @@ Pipeline classify 階段針對每筆 `manual_category_override = false` 的 tran
 
 #### Scenario: 無 user rule 命中走 engine
 
-- **WHEN** description = "7-ELEVEN"、無 user rule 命中
+- **WHEN** merchant = "7-ELEVEN"、無 user rule 命中
 - **THEN** classify SHALL 走 engine 內建規則（如歸類「便利商店」），stage_summary 計入 `engine_hits`
 
 ### Requirement: GET /api/rules 列出與 filter

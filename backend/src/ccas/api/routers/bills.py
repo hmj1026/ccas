@@ -1,13 +1,13 @@
 """Bills API：帳單列表、狀態更新、PDF 下載。"""
 
 from pathlib import Path
-from typing import NoReturn
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from fastapi.responses import FileResponse
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ccas.api.agent_route import AgentQueryRoute
 from ccas.api.deps import PaginationParams
 from ccas.api.schemas import (
     ApiResponse,
@@ -20,24 +20,16 @@ from ccas.api.schemas import (
 from ccas.config import get_settings
 from ccas.services.bills import BillRead, get_payment_due
 from ccas.services.bills import list_bills as service_list_bills
-from ccas.services.schemas import AgentBill, AgentQueryError
+from ccas.services.schemas import AgentBill
 from ccas.storage.database import get_db_session
 from ccas.storage.models import Bill, Transaction
 from ccas.storage.queries import fetch_bank_names
 
-router = APIRouter(prefix="/api/bills", tags=["bills"])
+router = APIRouter(prefix="/api/bills", tags=["bills"], route_class=AgentQueryRoute)
 
 # 防護上限：單一帳單交易明細一次最多回傳的筆數，避免異常帳單拖垮回應。
 # 正常帳單遠低於此值；完整筆數另透過 X-Total-Count header 暴露。
 TRANSACTIONS_HARD_LIMIT = 500
-
-
-def _handle_agent_query_error(exc: AgentQueryError) -> NoReturn:
-    if exc.code == "resource_not_found":
-        raise HTTPException(status_code=404, detail=exc.message)
-    if exc.code == "invalid_argument":
-        raise HTTPException(status_code=422, detail=exc.message)
-    raise HTTPException(status_code=500, detail=exc.message)
 
 
 def _bill_read_to_bill_item(bill: BillRead) -> BillItem:
@@ -104,18 +96,15 @@ async def list_bills(
     session: AsyncSession = Depends(get_db_session),
 ) -> PaginatedResponse[BillItem]:
     """取得帳單清單，可依月份、年度、銀行與付款狀態篩選，支援分頁。"""
-    try:
-        projection = await service_list_bills(
-            session,
-            month=month,
-            year=year,
-            bank_code=bank_code,
-            status=status,
-            page=pagination.page,
-            page_size=pagination.page_size,
-        )
-    except AgentQueryError as exc:
-        _handle_agent_query_error(exc)
+    projection = await service_list_bills(
+        session,
+        month=month,
+        year=year,
+        bank_code=bank_code,
+        status=status,
+        page=pagination.page,
+        page_size=pagination.page_size,
+    )
 
     return PaginatedResponse(
         data=[_bill_read_to_bill_item(bill) for bill in projection.rest_items],
@@ -133,10 +122,7 @@ async def list_payment_due(
     session: AsyncSession = Depends(get_db_session),
 ) -> ApiResponse[list[AgentBill]]:
     """取得未繳帳單到期清單。"""
-    try:
-        projection = await get_payment_due(session)
-    except AgentQueryError as exc:
-        _handle_agent_query_error(exc)
+    projection = await get_payment_due(session)
 
     return ApiResponse(data=projection.payload.data)
 

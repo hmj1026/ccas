@@ -1,15 +1,15 @@
 """run_notify_job 通知冪等性測試。
 
 驗證以 PaymentReminder (bill_id, "new_bill") 唯一鍵作為 send 前 claim：
-1. 重複執行不會重複發送（at-most-once）
+1. 成功送出後重複執行不會重複發送
 2. claim insert/commit 失敗時不發送
+3. 發送失敗會釋放 claim，下次執行補送剛好一次
 """
 
 from datetime import date
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock
 
 import pytest
-from pydantic import SecretStr
 from sqlalchemy import select
 from sqlalchemy import update as sa_update
 from sqlalchemy.ext.asyncio import (
@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import (
 )
 
 from ccas.bot.job import NEW_BILL_REMINDER_TYPE, run_notify_job
+from ccas.outbox import Outbox
 from ccas.storage.models import Base, Bill, PaymentReminder
 
 
@@ -33,13 +34,6 @@ async def session():
     await engine.dispose()
 
 
-def _fake_settings() -> MagicMock:
-    settings = MagicMock()
-    settings.telegram_bot_token = SecretStr("test-token")
-    settings.telegram_chat_id = "12345"
-    return settings
-
-
 async def _seed_bill(session: AsyncSession) -> int:
     bill = Bill(
         bank_code="CTBC",
@@ -52,43 +46,42 @@ async def _seed_bill(session: AsyncSession) -> int:
     return bill.id
 
 
+async def _assert_claimed_and_notified(session: AsyncSession, bill_id: int) -> None:
+    """恰有一筆 claim 列，且帳單已標記 is_notified。"""
+    reminders = (await session.execute(select(PaymentReminder))).scalars().all()
+    assert [(r.bill_id, r.reminder_type) for r in reminders] == [
+        (bill_id, NEW_BILL_REMINDER_TYPE)
+    ]
+    is_notified = (
+        await session.execute(select(Bill.is_notified).where(Bill.id == bill_id))
+    ).scalar_one()
+    assert is_notified is True
+
+
 class TestNotifyIdempotency:
     async def test_duplicate_run_does_not_send_twice(self, session: AsyncSession):
         """重複執行（is_notified 更新遺失）時不得重複發送。"""
         bill_id = await _seed_bill(session)
         mock_send = AsyncMock(return_value={"ok": True})
 
-        with (
-            patch("ccas.bot.job.get_settings", return_value=_fake_settings()),
-            patch("ccas.bot.notifications.send_message", mock_send),
-        ):
-            first = await run_notify_job(session)
+        outbox = Outbox(session, mock_send)
+        first = await run_notify_job(session, outbox=outbox)
 
-            # Simulate the worst case: send succeeded but the is_notified
-            # update was lost, so the bill is re-queried on the next run.
-            await session.execute(
-                sa_update(Bill).where(Bill.id == bill_id).values(is_notified=False)
-            )
-            await session.commit()
+        # Simulate the worst case: send succeeded but the is_notified
+        # update was lost, so the bill is re-queried on the next run.
+        await session.execute(
+            sa_update(Bill).where(Bill.id == bill_id).values(is_notified=False)
+        )
+        await session.commit()
 
-            second = await run_notify_job(session)
+        second = await run_notify_job(session, outbox=outbox)
 
         assert first.sent_count == 1
         assert second.sent_count == 0
         assert second.failed_count == 0
         assert mock_send.await_count == 1
-
-        # Exactly one claim row carries the idempotency key.
-        reminders = (await session.execute(select(PaymentReminder))).scalars().all()
-        assert [(r.bill_id, r.reminder_type) for r in reminders] == [
-            (bill_id, NEW_BILL_REMINDER_TYPE)
-        ]
-
         # The skip path repairs the flag so the bill stops being re-scanned.
-        is_notified = (
-            await session.execute(select(Bill.is_notified).where(Bill.id == bill_id))
-        ).scalar_one()
-        assert is_notified is True
+        await _assert_claimed_and_notified(session, bill_id)
 
     async def test_claim_commit_failure_does_not_send(
         self, session: AsyncSession, monkeypatch: pytest.MonkeyPatch
@@ -102,13 +95,26 @@ class TestNotifyIdempotency:
 
         monkeypatch.setattr(session, "commit", _boom)
 
-        with (
-            patch("ccas.bot.job.get_settings", return_value=_fake_settings()),
-            patch("ccas.bot.notifications.send_message", mock_send),
-        ):
-            summary = await run_notify_job(session)
+        outbox = Outbox(session, mock_send)
+        summary = await run_notify_job(session, outbox=outbox)
 
         mock_send.assert_not_awaited()
         assert summary.sent_count == 0
         assert summary.failed_count == 1
         assert "db commit failed" in summary.errors[0]
+
+    async def test_send_failure_releases_claim_for_retry(self, session: AsyncSession):
+        """發送失敗必須釋放 claim，下次執行要補送剛好一次。"""
+        bill_id = await _seed_bill(session)
+        mock_send = AsyncMock(side_effect=[RuntimeError("telegram down"), {"ok": True}])
+
+        outbox = Outbox(session, mock_send)
+        first = await run_notify_job(session, outbox=outbox)
+        second = await run_notify_job(session, outbox=outbox)
+
+        assert first.sent_count == 0
+        assert first.failed_count == 1
+        assert second.sent_count == 1
+        assert second.failed_count == 0
+        assert mock_send.await_count == 2
+        await _assert_claimed_and_notified(session, bill_id)

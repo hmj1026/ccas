@@ -167,40 +167,6 @@ def test_cli_hides_write_commands_regardless_of_flag(
         assert command not in result.stdout
 
 
-@pytest.mark.parametrize("command", ["get-bill", "pipeline-status"])
-def test_cli_business_error_drops_internal_data_and_secrets(
-    monkeypatch: pytest.MonkeyPatch, command: str
-) -> None:
-    from click.testing import CliRunner
-
-    import ccas.cli as agent_cli
-    from ccas.services.schemas import AgentQueryError
-
-    async def fail_query(_factory):
-        raise AgentQueryError(
-            "needs_human",
-            "password=error-secret /srv/private/db.sqlite 4111111111111111",
-            needs_human=True,
-            data={"token": "internal-secret"},
-        )
-
-    monkeypatch.setattr(agent_cli, "_execute_with_session", fail_query)
-    args = [command] + (["--bill-id", "1"] if command == "get-bill" else [])
-    result = CliRunner().invoke(agent_cli.cli, args)
-    assert result.exit_code == 2
-    payload = json.loads(result.stdout)
-    assert set(payload) == {"code", "message", "needs_human"}
-    assert payload["code"] == "needs_human"
-    assert payload["needs_human"] is True
-    for secret in [
-        "error-secret",
-        "internal-secret",
-        "/srv/private/db.sqlite",
-        "4111111111111111",
-    ]:
-        assert secret not in result.output
-
-
 def test_cli_retries_exhausted_omits_full_pipeline_payload(tmp_path: Path) -> None:
     from datetime import UTC, datetime
 
@@ -308,21 +274,16 @@ def test_cli_month_budget_matches_mcp_and_labels_table(
     assert "current_settings" in table.stdout
 
 
-def test_cli_outer_group_business_error_uses_safe_projection(
+def test_cli_outer_group_turns_unexpected_failure_into_safe_projection(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     import click
     from click.testing import CliRunner
 
     import ccas.cli as agent_cli
-    from ccas.services.schemas import AgentQueryError
 
     def fail_command() -> None:
-        raise AgentQueryError(
-            "invalid_argument",
-            "password=outer-secret /srv/private/db.sqlite",
-            data={"token": "internal-secret"},
-        )
+        raise RuntimeError("password=outer-secret /srv/private/db.sqlite")
 
     monkeypatch.setattr(
         agent_cli.cli,
@@ -331,8 +292,11 @@ def test_cli_outer_group_business_error_uses_safe_projection(
     )
     result = CliRunner().invoke(agent_cli.cli, ["test-error"])
     assert result.exit_code == 2
-    payload = json.loads(result.stdout)
-    assert set(payload) == {"code", "message"}
-    assert payload["code"] == "invalid_argument"
-    for secret in ["outer-secret", "internal-secret", "/srv/private/db.sqlite"]:
+    assert json.loads(result.stdout) == {
+        "code": "needs_human",
+        "message": "Agent query failed; manual review and check required.",
+        "needs_human": True,
+    }
+    assert "Check local database configuration and retry." in result.stderr
+    for secret in ["outer-secret", "/srv/private/db.sqlite"]:
         assert secret not in result.output

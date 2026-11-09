@@ -4,14 +4,15 @@
 """
 
 import logging
-from typing import Any, NoReturn, cast
+from typing import Any, cast
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, Response
 from fastapi.responses import JSONResponse
 from redis import Redis
 from rq import Queue
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ccas.api.agent_route import AgentQueryRoute
 from ccas.api.deps import PaginationParams
 from ccas.api.schemas import (
     ApiResponse,
@@ -39,7 +40,7 @@ from ccas.services.pipeline import (
 from ccas.services.pipeline import (
     pipeline_status,
 )
-from ccas.services.schemas import AgentQueryError, PipelineStatus
+from ccas.services.schemas import PipelineStatus
 from ccas.storage.database import get_db_session
 from ccas.storage.models import (
     PipelineRun,
@@ -48,7 +49,9 @@ from ccas.storage.models import (
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/pipeline", tags=["pipeline"])
+router = APIRouter(
+    prefix="/api/pipeline", tags=["pipeline"], route_class=AgentQueryRoute
+)
 
 # Process-wide Redis connection (lazy singleton)；避免每次 trigger 都新建
 # TCP 連線。RQ enqueue 為 sync 操作，沿用 sync client。
@@ -61,14 +64,6 @@ def get_redis_client() -> Redis:
     if _redis_pool is None:
         _redis_pool = Redis.from_url(get_settings().redis_url)
     return _redis_pool
-
-
-def _handle_agent_query_error(exc: AgentQueryError) -> NoReturn:
-    if exc.code == "resource_not_found":
-        raise HTTPException(status_code=404, detail=exc.message)
-    if exc.code == "invalid_argument":
-        raise HTTPException(status_code=422, detail=exc.message)
-    raise HTTPException(status_code=500, detail=exc.message)
 
 
 @router.post("/trigger", response_model=ApiResponse[PipelineTriggerData])
@@ -154,10 +149,7 @@ async def get_pipeline_status(
     session: AsyncSession = Depends(get_db_session),
 ) -> ApiResponse[PipelineStatus]:
     """取得最新一次 pipeline 執行狀態。"""
-    try:
-        projection = await pipeline_status(session)
-    except AgentQueryError as exc:
-        _handle_agent_query_error(exc)
+    projection = await pipeline_status(session)
 
     return ApiResponse(data=projection.payload.data)
 
@@ -176,15 +168,12 @@ async def list_pipeline_runs(
     回應採統一 ``PaginatedResponse`` 信封。為向下相容仍保留 ``X-Total-Count``
     header（未過濾的總筆數）。page < 1 或 page_size 超出 1-100 回 422。
     """
-    try:
-        projection = await service_list_pipeline_runs(
-            session,
-            status=status,
-            page=pagination.page,
-            page_size=pagination.page_size,
-        )
-    except AgentQueryError as exc:
-        _handle_agent_query_error(exc)
+    projection = await service_list_pipeline_runs(
+        session,
+        status=status,
+        page=pagination.page,
+        page_size=pagination.page_size,
+    )
 
     total = projection.rest_metadata["total"]
     raw_summaries = projection.rest_metadata["raw_summaries"]
@@ -208,10 +197,7 @@ async def get_pipeline_run(
     session: AsyncSession = Depends(get_db_session),
 ) -> ApiResponse[PipelineRunDetail]:
     """取得單筆 pipeline 執行紀錄詳情。"""
-    try:
-        projection = await service_get_pipeline_run(session, run_id)
-    except AgentQueryError as exc:
-        _handle_agent_query_error(exc)
+    projection = await service_get_pipeline_run(session, run_id)
 
     raw = projection.rest_metadata["raw_summary"]
     summary = _raw_summary_to_item(raw)

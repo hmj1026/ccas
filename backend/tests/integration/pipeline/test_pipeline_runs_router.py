@@ -242,8 +242,23 @@ async def test_pipeline_run_detail_not_found(client: AsyncClient):
     response = await client.get("/api/pipeline/runs/missing", headers=auth_headers())
 
     assert response.status_code == 404
-    # 404 message is Traditional Chinese and echoes the requested run_id.
-    assert response.json()["message"] == "找不到執行紀錄 #missing"
+    # Agent query errors go through the public sanitizer: caller input that is
+    # not on the trusted template list is never echoed back.
+    assert response.json() == {
+        "success": False,
+        "message": "The requested resource was not found.",
+        "data": None,
+    }
+
+
+@pytest.mark.asyncio
+async def test_pipeline_run_detail_does_not_echo_pan_like_run_id(client: AsyncClient):
+    response = await client.get(
+        "/api/pipeline/runs/4111111111111111", headers=auth_headers()
+    )
+
+    assert response.status_code == 404
+    assert "4111111111111111" not in response.text
 
 
 @pytest.mark.asyncio
@@ -295,3 +310,11 @@ async def test_triggered_by_literal_is_api(
         await db_session.execute(select(PipelineRun).where(PipelineRun.id == run_id))
     ).scalar_one()
     assert row.triggered_by == "api"
+
+
+@pytest.mark.asyncio
+async def test_pipeline_run_detail_not_found_shows_safe_numeric_id(client: AsyncClient):
+    response = await client.get("/api/pipeline/runs/999999", headers=auth_headers())
+
+    assert response.status_code == 404
+    assert response.json()["message"] == "Pipeline run #999999 not found."

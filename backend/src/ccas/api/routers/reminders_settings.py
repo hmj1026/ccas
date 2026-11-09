@@ -27,8 +27,8 @@ from ccas.api.schemas import (
     ReminderSettingUpdateRequest,
     ReminderTestResult,
 )
-from ccas.bot.notifications import notify_due_reminder
 from ccas.config import get_settings
+from ccas.messaging import render_due_reminder, send_message
 from ccas.storage.database import get_db_session
 from ccas.storage.models import (
     Bill,
@@ -229,15 +229,14 @@ async def push_reminder_test(
     bank_names = await fetch_bank_names(session)
     bank_name = bank_names.get(bill.bank_code, bill.bank_code)
     try:
-        await notify_due_reminder(
+        # 測試推播不是通知投遞事件（不認領、不去重），直接送出。
+        text = "[測試] " + render_due_reminder(
+            bank_name, bill.total_amount, bill.due_date, bill.id, 3
+        )
+        await send_message(
             settings.telegram_bot_token.get_secret_value(),
             settings.telegram_chat_id,
-            bank_name=bank_name,
-            total_amount=bill.total_amount,
-            due_date=bill.due_date,
-            bill_id=bill.id,
-            days_until_due=3,
-            prefix="[測試] ",
+            text,
         )
     except Exception as exc:  # noqa: BLE001
         logger.warning("Test reminder push failed: %s", exc)

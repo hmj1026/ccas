@@ -5,6 +5,7 @@ from datetime import date, datetime
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import (
     AsyncSession,
@@ -24,6 +25,7 @@ from ccas.storage.models import (
     StagedAttachment,
     Transaction,
 )
+from tests.integration.conftest import fail_first_commit
 
 os.environ.setdefault("TELEGRAM_BOT_TOKEN", "test")
 os.environ.setdefault("TELEGRAM_CHAT_ID", "12345")
@@ -457,5 +459,75 @@ class TestDeduplication:
             assert summary.parsed_count == 0
             assert summary.skipped_count == 0
             assert summary.failed_count == 0
+
+        await engine.dispose()
+
+
+class TestCommitFailure:
+    """Per-item commit 失敗：計入失敗並寫入 parse_failed，批次不得中斷。"""
+
+    async def test_commit_failure_is_counted_and_persisted_as_parse_failed(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        test_registry = _ParserRegistry()
+
+        engine, session_factory = await _create_test_session()
+        async with session_factory() as session:
+            session.add(_make_bank_config("UNKNOWN"))
+            session.add(
+                _make_attachment(
+                    "UNKNOWN", "msg-c", "att-c", staged_path="/tmp/unk-c.pdf"
+                )
+            )
+            await session.commit()
+
+            fail_first_commit(monkeypatch, session)
+            with patch("ccas.parser.intake.registry", test_registry):
+                summary = await run_parse_job(session)
+
+            assert summary.failed_count == 1
+            assert len(summary.errors) == 1
+            assert "database is locked" in summary.errors[0]
+
+            att = (
+                await session.execute(
+                    select(StagedAttachment).where(
+                        StagedAttachment.gmail_attachment_id == "att-c"
+                    )
+                )
+            ).scalar_one()
+            assert att.status == "parse_failed"
+            assert "database is locked" in (att.error_reason or "")
+
+        await engine.dispose()
+
+    async def test_commit_failure_does_not_break_following_attachments(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """rollback expires every ORM object; the next attachment must still run."""
+        test_registry = _ParserRegistry()
+
+        engine, session_factory = await _create_test_session()
+        async with session_factory() as session:
+            session.add(_make_bank_config("UNKNOWN"))
+            for n in (1, 2):
+                session.add(
+                    _make_attachment(
+                        "UNKNOWN", f"msg-{n}", f"att-{n}", staged_path=f"/tmp/u{n}.pdf"
+                    )
+                )
+            await session.commit()
+
+            fail_first_commit(monkeypatch, session)
+            with patch("ccas.parser.intake.registry", test_registry):
+                summary = await run_parse_job(session)
+
+            # Both fail (no parser registered); the first one via the commit error.
+            assert summary.failed_count == 2
+            rows = await session.execute(
+                select(StagedAttachment.gmail_attachment_id, StagedAttachment.status)
+            )
+            statuses = {att_id: status for att_id, status in rows.all()}
+            assert statuses == {"att-1": "parse_failed", "att-2": "parse_failed"}
 
         await engine.dispose()

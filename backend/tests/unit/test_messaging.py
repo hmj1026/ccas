@@ -10,6 +10,7 @@ import httpx
 import pytest
 
 from ccas.messaging import (
+    ParseFailureLine,
     render_due_reminder,
     render_new_bill_notification,
     render_parse_failure_notification,
@@ -174,11 +175,11 @@ class TestRenderDueReminder:
 
 
 class TestRenderParseFailureNotification:
-    """解析失敗通知 rendering 測試。"""
+    """解析失敗通知 rendering 測試（多份帳單附件合併為一則訊息）。"""
 
     def test_contains_failure_info(self):
         result = render_parse_failure_notification(
-            "中國信託", "statement_2026_03.pdf", "PDF 格式無法辨識"
+            [ParseFailureLine("中國信託", "statement_2026_03.pdf", "PDF 格式無法辨識")]
         )
         assert "中國信託" in result
         assert "statement_2026_03.pdf" in result
@@ -186,5 +187,35 @@ class TestRenderParseFailureNotification:
         assert "解析失敗" in result
 
     def test_none_error_reason(self):
-        result = render_parse_failure_notification("中國信託", "file.pdf", None)
+        result = render_parse_failure_notification(
+            [ParseFailureLine("中國信託", "file.pdf", None)]
+        )
         assert "未知錯誤" in result
+
+    def test_lists_every_failure_with_count(self):
+        result = render_parse_failure_notification(
+            [
+                ParseFailureLine("中國信託", "a.pdf", "x"),
+                ParseFailureLine("玉山", "b.pdf", "y"),
+                ParseFailureLine("台新", "c.pdf", "z"),
+            ]
+        )
+        assert "3 份" in result
+        for name in ("a.pdf", "b.pdf", "c.pdf", "玉山", "台新"):
+            assert name in result
+
+    def test_truncates_long_error_reason(self):
+        result = render_parse_failure_notification(
+            [ParseFailureLine("中國信託", "a.pdf", "E" * 500)]
+        )
+        assert "E" * 200 in result
+        assert "E" * 201 not in result
+
+    def test_caps_list_at_twenty_entries(self):
+        failures = [ParseFailureLine("中國信託", f"f{i}.pdf", "x") for i in range(25)]
+        result = render_parse_failure_notification(failures)
+        assert "f19.pdf" in result
+        assert "f20.pdf" not in result
+        assert "…及其他 5 份" in result
+        assert "25 份" in result
+        assert len(result) < 4096

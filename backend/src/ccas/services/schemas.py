@@ -13,85 +13,7 @@ from typing import Annotated, Any, Literal
 
 from pydantic import AfterValidator, BaseModel, ConfigDict, Field, field_serializer
 
-from ccas.errors import CcasError
-
-ALLOWED_QUERY_ERROR_CODES: set[str] = {
-    "resource_not_found",
-    "invalid_argument",
-    "needs_human",
-}
-
-
-class AgentQueryError(CcasError):
-    """Business query error for Agent service queries.
-
-    Uses standardized machine-readable codes (resource_not_found,
-    invalid_argument, needs_human) with safe, sanitized human-readable
-    messages that never leak credentials or internal paths.
-    """
-
-    DEFAULT_MESSAGES: dict[str, str] = {
-        "resource_not_found": "The requested resource was not found.",
-        "invalid_argument": "Invalid argument provided.",
-        "needs_human": "Pipeline execution failed and requires human intervention.",
-    }
-
-    def __init__(
-        self,
-        code: str,
-        message: str | None = None,
-        *,
-        needs_human: bool | None = None,
-        data: Any = None,
-        context: dict[str, Any] | None = None,
-    ) -> None:
-        if code not in ALLOWED_QUERY_ERROR_CODES:
-            raise ValueError(f"Unknown AgentQueryError code: {code!r}")
-        if needs_human is True and code != "needs_human":
-            raise ValueError(f"needs_human=True is not permitted for code {code!r}")
-
-        resolved_message = (
-            message
-            if message is not None
-            else self.DEFAULT_MESSAGES.get(code, "An error occurred.")
-        )
-        super().__init__(resolved_message, context=context)
-        self.code = code
-        self.message = resolved_message
-        self.needs_human = (
-            needs_human if needs_human is not None else (code == "needs_human")
-        )
-        self.data = data
-
-
-def public_query_error(error: AgentQueryError) -> dict[str, Any]:
-    """Project trusted diagnostic templates, never arbitrary extension data."""
-    safe = re.fullmatch(
-        r"(?:Invalid argument provided\.|No pipeline runs found\.|"
-        # Do not echo PAN-length or larger identifiers in public diagnostics.
-        r"Bill #[0-9]{1,12} not found\.|"
-        r"(?:Bill data|Budget data|Transaction|Query result|Pipeline stage) "
-        r"contains sensitive information requiring human review\.|"
-        r"Database contains malformed (?:billing month|card|bill|budget|"
-        r"transaction|stage summary|pipeline) data; human review required\.|"
-        r"Database contains malformed billing month; human review required\.|"
-        r"Transaction merchant contains sensitive information\.|"
-        r"Pipeline (?:count key|id|job_id|triggered_by|current_stage) "
-        r"contains sensitive information\.|"
-        r"Pipeline counts must be nonnegative integers\.|"
-        r"Pipeline execution failed and requires human intervention\.|"
-        r"Pipeline execution failed after retries were exhausted; "
-        r"manual review and check required\.|"
-        r"The requested resource was not found\.)",
-        error.message,
-    )
-    payload: dict[str, Any] = {
-        "code": error.code,
-        "message": error.message if safe else error.DEFAULT_MESSAGES[error.code],
-    }
-    if error.code == "needs_human":
-        payload["needs_human"] = True
-    return payload
+from ccas.services.query_errors import AgentQueryError, QueryErrorKind
 
 
 def validate_billing_month(value: str) -> str:
@@ -132,25 +54,14 @@ def validate_payload_safety(obj: Any) -> None:
 
     if isinstance(obj, str):
         if contains_sensitive_data(obj):
-            raise AgentQueryError(
-                "needs_human",
-                "Query result contains sensitive information requiring human review.",
-                needs_human=True,
-            )
+            raise AgentQueryError(QueryErrorKind.SENSITIVE_QUERY_RESULT)
     elif isinstance(obj, BaseModel):
         for field_name in type(obj).model_fields:
             validate_payload_safety(getattr(obj, field_name))
     elif isinstance(obj, dict):
         for k, v in obj.items():
             if isinstance(k, str) and contains_sensitive_data(k):
-                raise AgentQueryError(
-                    "needs_human",
-                    (
-                        "Query result contains sensitive information "
-                        "requiring human review."
-                    ),
-                    needs_human=True,
-                )
+                raise AgentQueryError(QueryErrorKind.SENSITIVE_QUERY_RESULT)
             validate_payload_safety(v)
     elif isinstance(obj, (list, tuple, set)):
         for item in obj:

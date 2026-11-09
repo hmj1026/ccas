@@ -5,20 +5,18 @@
 """
 
 import logging
-from collections import defaultdict
+from collections import Counter, defaultdict
 from dataclasses import dataclass
 
 from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm.attributes import set_committed_value
 
-from ccas.classifier.engine import DEFAULT_CATEGORY, classify
-from ccas.classifier.rules import load_rules
+from ccas.classifier.decision import Classifier, DecisionSource
 from ccas.classifier.staging import (
     fetch_all_transactions,
     fetch_unclassified_transactions,
 )
-from ccas.classifier.user_rules import UserRuleMatcher
 from ccas.errors import ClassifyError
 from ccas.shared.progress import NoopProgressReporter, ProgressReporter
 from ccas.storage.models import Transaction
@@ -85,14 +83,14 @@ class ClassifySummary:
     """分類批次的統計摘要（bills-management-and-insights §2.6）。
 
     Attributes:
-        classified_count: 成功分類的交易數量（user_rule_hits + engine_hits）。
-        skipped_count: 因 manual_category_override 而略過的數量。
+        classified_count: 寫入消費類別的交易數量（user_rule_hits + engine_hits +
+            unclassified；重新分類時為實際變更的數量）。
+        skipped_count: 未寫入的數量（手動分類覆寫；重新分類時另含未變動者）。
         total_count: 處理的交易總數。
-        manual_override_count: manual_category_override=true 的略過數
-            （與 skipped_count 相同，便於 stage_summary 顯示）。
-        user_rule_hits: 由 UserRuleMatcher 命中的數量。
-        engine_hits: 由內建 keyword engine 命中的數量。
-        unclassified: 全部規則皆未命中、落到 ``DEFAULT_CATEGORY`` 的數量。
+        manual_override_count: 分類判定來源為 ``manual_override`` 的數量。
+        user_rule_hits: 分類判定來源為 ``user_rule`` 的數量。
+        engine_hits: 分類判定來源為 ``keyword`` 的數量。
+        unclassified: 分類判定來源為 ``default``（預設消費類別）的數量。
     """
 
     classified_count: int
@@ -107,19 +105,22 @@ class ClassifySummary:
 async def run_classify_job(
     session: AsyncSession,
     reporter: ProgressReporter | None = None,
+    *,
+    classifier: Classifier | None = None,
 ) -> ClassifySummary:
-    """對所有未分類交易執行關鍵字分類。
+    """對所有未分類交易取得分類判定並寫入消費類別。
 
     流程：
-    1. 從 categories 資料表載入分類規則
+    1. 載入分類判定（分類規則 + 關鍵字規則）
     2. 查詢所有 category 為 NULL 的交易
-    3. 逐筆以分類引擎判定分類後寫入
+    3. 逐筆取得分類判定後批次寫入
     4. 回傳統計摘要
 
     Args:
         session: 非同步 DB Session（由呼叫端注入）。
         reporter: 進度回報（pipeline-operations-center §3A.4）。``None``
             時走 NoopProgressReporter。
+        classifier: 分類判定（測試注入用）；``None`` 時從 DB 載入。
 
     Returns:
         ClassifySummary 統計摘要。
@@ -127,8 +128,8 @@ async def run_classify_job(
     if reporter is None:
         reporter = NoopProgressReporter()
 
-    user_matcher = await UserRuleMatcher.load(session)
-    rule_set = await load_rules(session)
+    if classifier is None:
+        classifier = await Classifier.load(session)
 
     transactions = await fetch_unclassified_transactions(session)
     await reporter.stage_started("classify", total=len(transactions))
@@ -136,10 +137,7 @@ async def run_classify_job(
         logger.info("沒有未分類的交易，跳過分類")
         return ClassifySummary(classified_count=0, skipped_count=0, total_count=0)
 
-    manual_override_count = 0
-    user_rule_hits = 0
-    engine_hits = 0
-    unclassified = 0
+    counts: Counter[DecisionSource] = Counter()
     processed = 0
 
     # Accumulate {category: [transactions]} so writes collapse into one UPDATE
@@ -148,24 +146,10 @@ async def run_classify_job(
 
     for txn in transactions:
         try:
-            # bills-management-and-insights §2.4 優先序：
-            # manual_override → user_rules → 既有 engine → 預設
-            if txn.manual_category_override:
-                manual_override_count += 1
-                continue
-
-            user_category = await user_matcher.match(txn.merchant)
-            if user_category is not None:
-                pending_updates[user_category].append(txn)
-                user_rule_hits += 1
-                continue
-
-            category = classify(txn.merchant, rule_set)
-            pending_updates[category].append(txn)
-            if category == DEFAULT_CATEGORY:
-                unclassified += 1
-            else:
-                engine_hits += 1
+            decision = await classifier.decide(txn)
+            counts[decision.source] += 1
+            if decision.category is not None:
+                pending_updates[decision.category].append(txn)
         finally:
             processed += 1
             # Progress reporting is pure UI and non-business-critical: a reporter
@@ -183,11 +167,15 @@ async def run_classify_job(
 
     await _flush_commit_or_rollback(session, pending_updates)
 
+    manual_override_count = counts[DecisionSource.MANUAL_OVERRIDE]
+    user_rule_hits = counts[DecisionSource.USER_RULE]
+    engine_hits = counts[DecisionSource.KEYWORD]
+    unclassified = counts[DecisionSource.DEFAULT]
     # 與既有契約相容：classified_count 含所有寫入 category 的 row（即使是
     # DEFAULT_CATEGORY 也算，與 manual_override 的 skip 區分）
     classified_count = user_rule_hits + engine_hits + unclassified
     logger.info(
-        "classify done: manual=%d user=%d engine=%d unclassified=%d total=%d",
+        "classify done: manual=%d user=%d keyword=%d unclassified=%d total=%d",
         manual_override_count,
         user_rule_hits,
         engine_hits,
@@ -205,22 +193,25 @@ async def run_classify_job(
     )
 
 
-async def run_reclassify_job(session: AsyncSession) -> ClassifySummary:
-    """對所有交易重跑分類（bills-management-and-insights §2.4 優先序）。
+async def run_reclassify_job(
+    session: AsyncSession, *, classifier: Classifier | None = None
+) -> ClassifySummary:
+    """對所有交易重新取得分類判定，只寫入消費類別有變動者。
 
-    重新載入最新規則後，逐筆依 ``manual_override → user_rules → engine`` 順序重算。
-    ``manual_category_override = true`` 的交易一律跳過，保留使用者編輯結果
+    分類判定（:class:`ccas.classifier.Classifier`）以最新規則逐筆重算；
+    手動分類覆寫的交易一律跳過，保留使用者編輯結果
     （§15.1：「手動改 category → 重跑 pipeline 5 次 → category 不變」）。
 
     Args:
         session: 非同步 DB Session（由呼叫端注入）。
+        classifier: 分類判定（測試注入用）；``None`` 時從 DB 載入。
 
     Returns:
         ClassifySummary 統計摘要；``skipped_count`` / ``manual_override_count``
         會包含被 manual_override 跳過的交易數。
     """
-    user_matcher = await UserRuleMatcher.load(session)
-    rule_set = await load_rules(session)
+    if classifier is None:
+        classifier = await Classifier.load(session)
 
     transactions = await fetch_all_transactions(session)
     if not transactions:
@@ -228,28 +219,21 @@ async def run_reclassify_job(session: AsyncSession) -> ClassifySummary:
         return ClassifySummary(classified_count=0, skipped_count=0, total_count=0)
 
     classified_count = 0
-    skipped_count = 0
+    unchanged_count = 0
     manual_override_count = 0
     # Accumulate {category: [transactions]} so writes collapse into one UPDATE
     # per distinct category instead of one per row.
     pending_updates: defaultdict[str, list[Transaction]] = defaultdict(list)
     for txn in transactions:
-        if txn.manual_category_override:
+        decision = await classifier.decide(txn)
+        if decision.category is None:
             manual_override_count += 1
-            skipped_count += 1
-            continue
-
-        user_category = await user_matcher.match(txn.merchant)
-        new_category = (
-            user_category
-            if user_category is not None
-            else classify(txn.merchant, rule_set)
-        )
-        if txn.category == new_category:
-            skipped_count += 1
-            continue
-        pending_updates[new_category].append(txn)
-        classified_count += 1
+        elif txn.category == decision.category:
+            unchanged_count += 1
+        else:
+            pending_updates[decision.category].append(txn)
+            classified_count += 1
+    skipped_count = manual_override_count + unchanged_count
 
     await _flush_commit_or_rollback(session, pending_updates)
 

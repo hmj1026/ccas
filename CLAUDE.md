@@ -11,7 +11,6 @@ Gmail PDF → decrypt → parse → classify → REST API / Telegram notificatio
 | Architecture decisions, module boundaries | `dhpk:dhpk-module-design` (canonical DHPK name; not projected as a local Codex symlink) |
 | Free-text task routing (feature/bug/maintenance) | `/dhpk:flow-guide` |
 | Feature development workflow | `/dhpk:flow-drive` |
-| Harness audit & optimization | `/dhpk:harness-audit` |
 
 ## Agent skills
 

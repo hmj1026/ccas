@@ -10,8 +10,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ccas.budget_assessment import BudgetAssessmentResult, assess_budgets
 from ccas.services.identity import contains_sensitive_data
+from ccas.services.query_errors import AgentQueryError, QueryErrorKind
 from ccas.services.schemas import (
-    AgentQueryError,
     BudgetAssessment,
     BudgetCurrentPeriod,
     BudgetStatus,
@@ -41,7 +41,7 @@ async def budget_status(
             month=month,
         )
     except ValidationError as exc:
-        raise AgentQueryError("invalid_argument", "Invalid argument provided.") from exc
+        raise AgentQueryError(QueryErrorKind.INVALID_ARGUMENT) from exc
 
     scope_filter = input_dto.scope
     budgets = await list_budgets_query(session, scope=scope_filter)
@@ -63,11 +63,7 @@ async def budget_status(
 
     for b in budgets:
         if b.scope_ref and contains_sensitive_data(b.scope_ref):
-            raise AgentQueryError(
-                "needs_human",
-                "Budget data contains sensitive information requiring human review.",
-                needs_human=True,
-            )
+            raise AgentQueryError(QueryErrorKind.SENSITIVE_BUDGET_DATA)
 
         current_dto: BudgetCurrentPeriod | None = None
         if input_dto.include_current_period:
@@ -111,11 +107,7 @@ async def budget_status(
                 assessment=assessment,
             )
         except ValidationError as exc:
-            raise AgentQueryError(
-                "needs_human",
-                "Database contains malformed budget data; human review required.",
-                needs_human=True,
-            ) from exc
+            raise AgentQueryError(QueryErrorKind.MALFORMED_BUDGET_DATA) from exc
 
         items.append(status_item)
         current_ntd = (

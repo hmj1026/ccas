@@ -5,12 +5,13 @@
 """
 
 from datetime import date, timedelta
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock
 
 import pytest
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ccas.outbox import Outbox
 from ccas.scheduler.reminders import send_payment_reminders
 from ccas.storage.models import BankConfig, Bill, PaymentReminder
 
@@ -40,17 +41,42 @@ class TestClaimBeforeSend:
 
         # 第一次：send 失敗 → 不留下 claim
         failing = AsyncMock(side_effect=RuntimeError("telegram down"))
-        with patch("ccas.bot.notifications.send_message", failing):
-            result1 = await send_payment_reminders(db_session, today=today)
+        result1 = await send_payment_reminders(
+            db_session, today=today, outbox=Outbox(db_session, failing)
+        )
         assert result1["sent"] == 0
         assert await _reminder_count(db_session, bill.id) == 0, "失敗後不應殘留 claim"
 
         # 第二次：send 成功 → 補送並留下記錄
         ok = AsyncMock(return_value={"ok": True})
-        with patch("ccas.bot.notifications.send_message", ok):
-            result2 = await send_payment_reminders(db_session, today=today)
+        result2 = await send_payment_reminders(
+            db_session, today=today, outbox=Outbox(db_session, ok)
+        )
         assert result2["sent"] == 1
         assert await _reminder_count(db_session, bill.id) == 1
+
+    @pytest.mark.asyncio
+    async def test_send_failure_does_not_break_following_bills(
+        self, db_session: AsyncSession
+    ) -> None:
+        """一筆發送失敗後，同批後續帳單仍須正常送出（session 狀態不得被破壞）。"""
+        today = date(2026, 3, 31)
+        await _seed_bank(db_session)
+        await _seed_bank(db_session, "ESUN")
+        first = await _seed_bill(db_session, due_date=today + timedelta(days=3))
+        second = await _seed_bill(
+            db_session, bank_code="ESUN", due_date=today + timedelta(days=3)
+        )
+        transport = AsyncMock(side_effect=[RuntimeError("telegram down"), None])
+
+        result = await send_payment_reminders(
+            db_session, today=today, outbox=Outbox(db_session, transport)
+        )
+
+        assert result["sent"] == 1
+        assert transport.await_count == 2
+        assert await _reminder_count(db_session, first.id) == 0
+        assert await _reminder_count(db_session, second.id) == 1
 
 
 async def _seed_bank(session: AsyncSession, bank_code: str = "CTBC") -> None:
@@ -97,8 +123,9 @@ class TestPaymentReminderQuery:
         await _seed_bill(db_session, due_date=today + timedelta(days=3))
 
         mock_send = AsyncMock(return_value={"ok": True})
-        with patch("ccas.bot.notifications.send_message", mock_send):
-            result = await send_payment_reminders(db_session, today=today)
+        result = await send_payment_reminders(
+            db_session, today=today, outbox=Outbox(db_session, mock_send)
+        )
 
         assert result["sent"] == 1
         mock_send.assert_called_once()
@@ -111,8 +138,9 @@ class TestPaymentReminderQuery:
         await _seed_bill(db_session, due_date=today + timedelta(days=1))
 
         mock_send = AsyncMock(return_value={"ok": True})
-        with patch("ccas.bot.notifications.send_message", mock_send):
-            result = await send_payment_reminders(db_session, today=today)
+        result = await send_payment_reminders(
+            db_session, today=today, outbox=Outbox(db_session, mock_send)
+        )
 
         assert result["sent"] == 1
 
@@ -124,8 +152,9 @@ class TestPaymentReminderQuery:
         await _seed_bill(db_session, due_date=today + timedelta(days=3), is_paid=True)
 
         mock_send = AsyncMock(return_value={"ok": True})
-        with patch("ccas.bot.notifications.send_message", mock_send):
-            result = await send_payment_reminders(db_session, today=today)
+        result = await send_payment_reminders(
+            db_session, today=today, outbox=Outbox(db_session, mock_send)
+        )
 
         assert result["sent"] == 0
         mock_send.assert_not_called()
@@ -138,8 +167,9 @@ class TestPaymentReminderQuery:
         await _seed_bill(db_session, due_date=today + timedelta(days=2))
 
         mock_send = AsyncMock(return_value={"ok": True})
-        with patch("ccas.bot.notifications.send_message", mock_send):
-            result = await send_payment_reminders(db_session, today=today)
+        result = await send_payment_reminders(
+            db_session, today=today, outbox=Outbox(db_session, mock_send)
+        )
 
         assert result["sent"] == 0
 
@@ -150,8 +180,9 @@ class TestPaymentReminderQuery:
         await _seed_bank(db_session)
 
         mock_send = AsyncMock(return_value={"ok": True})
-        with patch("ccas.bot.notifications.send_message", mock_send):
-            result = await send_payment_reminders(db_session, today=today)
+        result = await send_payment_reminders(
+            db_session, today=today, outbox=Outbox(db_session, mock_send)
+        )
 
         assert result["sent"] == 0
         assert result["skipped"] == 0
@@ -176,8 +207,9 @@ class TestPaymentReminderQuery:
         )
 
         mock_send = AsyncMock(return_value={"ok": True})
-        with patch("ccas.bot.notifications.send_message", mock_send):
-            result = await send_payment_reminders(db_session, today=today)
+        result = await send_payment_reminders(
+            db_session, today=today, outbox=Outbox(db_session, mock_send)
+        )
 
         assert result["sent"] == 2
 
@@ -197,8 +229,9 @@ class TestDuplicateReminderProtection:
         await db_session.commit()
 
         mock_send = AsyncMock(return_value={"ok": True})
-        with patch("ccas.bot.notifications.send_message", mock_send):
-            result = await send_payment_reminders(db_session, today=today)
+        result = await send_payment_reminders(
+            db_session, today=today, outbox=Outbox(db_session, mock_send)
+        )
 
         assert result["sent"] == 0
         assert result["skipped"] == 1
@@ -216,8 +249,9 @@ class TestDuplicateReminderProtection:
         await db_session.commit()
 
         mock_send = AsyncMock(return_value={"ok": True})
-        with patch("ccas.bot.notifications.send_message", mock_send):
-            result = await send_payment_reminders(db_session, today=today)
+        result = await send_payment_reminders(
+            db_session, today=today, outbox=Outbox(db_session, mock_send)
+        )
 
         # 1day 提醒仍應發送
         assert result["sent"] == 1
@@ -230,9 +264,12 @@ class TestDuplicateReminderProtection:
         await _seed_bill(db_session, due_date=today + timedelta(days=3))
 
         mock_send = AsyncMock(return_value={"ok": True})
-        with patch("ccas.bot.notifications.send_message", mock_send):
-            result1 = await send_payment_reminders(db_session, today=today)
-            result2 = await send_payment_reminders(db_session, today=today)
+        result1 = await send_payment_reminders(
+            db_session, today=today, outbox=Outbox(db_session, mock_send)
+        )
+        result2 = await send_payment_reminders(
+            db_session, today=today, outbox=Outbox(db_session, mock_send)
+        )
 
         assert result1["sent"] == 1
         assert result2["sent"] == 0
@@ -260,8 +297,9 @@ class TestEstimatedDueDateWidenedWindow:
         )
 
         mock_send = AsyncMock(return_value={"ok": True})
-        with patch("ccas.bot.notifications.send_message", mock_send):
-            result = await send_payment_reminders(db_session, today=today)
+        result = await send_payment_reminders(
+            db_session, today=today, outbox=Outbox(db_session, mock_send)
+        )
 
         assert result["sent"] >= 1
 
@@ -279,8 +317,9 @@ class TestEstimatedDueDateWidenedWindow:
         )
 
         mock_send = AsyncMock(return_value={"ok": True})
-        with patch("ccas.bot.notifications.send_message", mock_send):
-            result = await send_payment_reminders(db_session, today=today)
+        result = await send_payment_reminders(
+            db_session, today=today, outbox=Outbox(db_session, mock_send)
+        )
 
         assert result["sent"] == 0
         mock_send.assert_not_called()
@@ -299,9 +338,12 @@ class TestEstimatedDueDateWidenedWindow:
         )
 
         mock_send = AsyncMock(return_value={"ok": True})
-        with patch("ccas.bot.notifications.send_message", mock_send):
-            result1 = await send_payment_reminders(db_session, today=today)
-            result2 = await send_payment_reminders(db_session, today=today)
+        result1 = await send_payment_reminders(
+            db_session, today=today, outbox=Outbox(db_session, mock_send)
+        )
+        result2 = await send_payment_reminders(
+            db_session, today=today, outbox=Outbox(db_session, mock_send)
+        )
 
         assert result1["sent"] >= 1
         # 第二次同 (bill, reminder_type) 已被 claim，不重送。
@@ -320,8 +362,9 @@ class TestEstimatedDueDateWidenedWindow:
         )
 
         mock_send = AsyncMock(return_value={"ok": True})
-        with patch("ccas.bot.notifications.send_message", mock_send):
-            result = await send_payment_reminders(db_session, today=today)
+        result = await send_payment_reminders(
+            db_session, today=today, outbox=Outbox(db_session, mock_send)
+        )
 
         assert result["sent"] == 0
         mock_send.assert_not_called()

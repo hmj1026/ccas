@@ -7,7 +7,7 @@
 3. 若百分比 ≥ ``alert_threshold_percent`` 且更高 threshold 尚未觸發，
    寫入 ``budget_alerts`` row + 加入待推訊息 buffer
 4. 觸發 100% 也視為更高 threshold（即 80% 已通知後再越 100% 仍會推一次）
-5. Telegram 訊息聚合：所有當次新增 alerts 合併為單則訊息再 ``send_message``
+5. Telegram 訊息聚合：所有當次新增 alerts 合併為單則訊息，經 ``ccas.outbox`` 投遞
 
 去重邏輯：以 ``(budget_id, period_year_month, threshold_breached_percent)``
 查詢 ``budget_alerts``；存在則跳過。實際 threshold ladder 為
@@ -27,7 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ccas.budget_assessment import assess_budgets
 from ccas.config import get_settings
-from ccas.messaging import send_message
+from ccas.outbox import BudgetAlertsClaim, DeliveryStatus, Outbox
 from ccas.storage.models import (
     Budget,
     BudgetAlert,
@@ -90,8 +90,17 @@ async def evaluate_budgets(
     session: AsyncSession,
     *,
     today: date | None = None,
+    outbox: Outbox | None = None,
 ) -> dict[str, int]:
     """Evaluate all enabled budgets for the current period.
+
+    Alert rows are committed first (``notified=False``); delivery then goes
+    through :class:`ccas.outbox.Outbox` with :class:`BudgetAlertsClaim`, which
+    marks them ``notified=True`` only after a successful send.
+
+    Args:
+        outbox: notification delivery (injected by tests); ``None`` builds one
+            from settings.
 
     Returns:
         ``{"alerts_triggered": N, "skipped": M}``
@@ -151,33 +160,25 @@ async def evaluate_budgets(
     # 先 commit alert rows（notified 仍為 False）以保證持久化，再嘗試推播。
     await session.commit()
 
-    settings_obj = get_settings()
-    if (
-        not settings_obj.telegram_bot_token.get_secret_value()
-        or not settings_obj.telegram_chat_id
-    ):
-        logger.info(
-            "Telegram disabled; %d budget alert(s) recorded without push",
-            len(triggered),
-        )
-        return {"alerts_triggered": len(triggered), "skipped": skipped}
-
-    text = _format_aggregated_message(period, triggered)
-    try:
-        await send_message(
-            settings_obj.telegram_bot_token.get_secret_value(),
-            settings_obj.telegram_chat_id,
-            text,
-        )
-    except Exception as exc:  # noqa: BLE001
-        # 推播失敗：notified 留 False，alert rows 已持久化，下次重跑會補推。
-        logger.warning("Failed to send budget alert message: %s", exc)
-        return {"alerts_triggered": len(triggered), "skipped": skipped}
-
-    # 推播成功才標記 notified=True（補推時亦同），並 commit。
-    for _budget, alert in triggered:
-        alert.notified = True
-    await session.commit()
-    logger.info("Sent aggregated budget alert message (%d alerts)", len(triggered))
+    if outbox is None:
+        outbox = Outbox.from_settings(get_settings(), session)
+    alerts = [alert for _budget, alert in triggered]
+    outcome = await outbox.deliver(
+        BudgetAlertsClaim(alerts),
+        lambda: _format_aggregated_message(period, triggered),
+    )
+    match outcome.status:
+        case DeliveryStatus.SENT:
+            logger.info("Sent aggregated budget alert message (%d alerts)", len(alerts))
+        case DeliveryStatus.SKIPPED_UNCONFIGURED:
+            logger.info(
+                "Telegram disabled; %d budget alert(s) recorded without push",
+                len(alerts),
+            )
+        case DeliveryStatus.FAILED:
+            # notified 留 False，alert rows 已持久化，下次重跑會補推。
+            logger.warning("Failed to send budget alert message: %s", outcome.error)
+        case DeliveryStatus.ALREADY_DELIVERED:
+            pass  # triggered 皆為 notified=False，不會發生。
 
     return {"alerts_triggered": len(triggered), "skipped": skipped}

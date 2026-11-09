@@ -34,9 +34,14 @@ from ccas.mcp import __version__
 from ccas.services.bills import get_bill, get_payment_due, list_bills
 from ccas.services.budgets import budget_status
 from ccas.services.pipeline import pipeline_status
+from ccas.services.query_errors import (
+    AgentQueryError,
+    QueryErrorKind,
+    public_query_error,
+    public_unexpected_error,
+)
 from ccas.services.query_outcome import require_tool_result
 from ccas.services.schemas import (
-    AgentQueryError,
     BillResult,
     BillsPage,
     BudgetStatusInput,
@@ -49,7 +54,6 @@ from ccas.services.schemas import (
     QueryTransactionsInput,
     ServiceProjection,
     TransactionsPage,
-    public_query_error,
     validate_billing_month,
 )
 from ccas.services.transactions import query_transactions
@@ -203,33 +207,12 @@ def _text_content(payload: dict[str, Any]) -> types.TextContent:
     return types.TextContent(type="text", text=_compact_json(payload))
 
 
-def _business_error_payload(error: AgentQueryError) -> dict[str, Any]:
-    """Serialize only the public business-error envelope.
-
-    ``AgentQueryError.data`` is intentionally omitted: it is an internal
-    extension point and may contain resource paths or database details.
-    The shared projector accepts trusted message templates and safe defaults.
-    """
-    return public_query_error(error)
-
-
-def _tool_error(error: AgentQueryError) -> types.CallToolResult:
-    payload = _business_error_payload(error)
+def _tool_error(payload: dict[str, Any]) -> types.CallToolResult:
+    """Wrap a public business-error envelope as an MCP tool execution error."""
     return types.CallToolResult(
         content=[_text_content(payload)],
         is_error=True,
         result_type="complete",
-    )
-
-
-def _generic_tool_error() -> types.CallToolResult:
-    """Return a safe, actionable error for unexpected service failures."""
-    return _tool_error(
-        AgentQueryError(
-            "needs_human",
-            "Agent query failed; manual review and check required.",
-            needs_human=True,
-        )
     )
 
 
@@ -242,7 +225,7 @@ async def _execute_tool(name: str, arguments: dict[str, Any]) -> ServiceProjecti
     try:
         input_dto = spec.input_model.model_validate(arguments, strict=True)
     except ValidationError as exc:
-        raise AgentQueryError("invalid_argument", "Invalid argument provided.") from exc
+        raise AgentQueryError(QueryErrorKind.INVALID_ARGUMENT) from exc
 
     session_factory = get_session_factory()
     async with session_factory() as session:
@@ -260,7 +243,7 @@ async def _execute_tool(name: str, arguments: dict[str, Any]) -> ServiceProjecti
             projection = await query_transactions(session, **dto.model_dump())
         elif name == "get_payment_due":
             if not isinstance(input_dto, EmptyInput):  # pragma: no cover - type guard
-                raise AgentQueryError("invalid_argument", "Invalid argument provided.")
+                raise AgentQueryError(QueryErrorKind.INVALID_ARGUMENT)
             projection = await get_payment_due(session)
         elif name == "budget_status":
             dto = input_dto
@@ -268,7 +251,7 @@ async def _execute_tool(name: str, arguments: dict[str, Any]) -> ServiceProjecti
             projection = await budget_status(session, **dto.model_dump())
         elif name == "pipeline_status":
             if not isinstance(input_dto, EmptyInput):  # pragma: no cover - type guard
-                raise AgentQueryError("invalid_argument", "Invalid argument provided.")
+                raise AgentQueryError(QueryErrorKind.INVALID_ARGUMENT)
             projection = await pipeline_status(session)
         else:  # pragma: no cover - registry and branch are intentionally exhaustive
             raise MCPError(code=_METHOD_NOT_FOUND, message="Tool not found")
@@ -315,12 +298,12 @@ async def _on_call_tool(
         # Unknown tools are JSON-RPC protocol errors, not business failures.
         raise
     except AgentQueryError as exc:
-        return _tool_error(exc)
-    except Exception:
+        return _tool_error(public_query_error(exc))
+    except Exception as exc:
         # Never log the exception object: SQLAlchemy/Pydantic exceptions may
         # echo sensitive database values or paths to stderr.
         logger.error("MCP Agent tool failed: %s", params.name)
-        return _generic_tool_error()
+        return _tool_error(public_unexpected_error(exc))
 
 
 # --- Resources -------------------------------------------------------------
@@ -401,7 +384,7 @@ async def _on_read_resource(
 
     ``ReadResourceResult`` has no error channel of its own (unlike
     ``CallToolResult.is_error``), so a business failure has to surface as a
-    protocol error. The message still goes through ``_business_error_payload``
+    protocol error. The message still goes through ``public_query_error``
     so the same sanitization applies as on the tool path.
     """
     uri = str(params.uri)
@@ -412,7 +395,7 @@ async def _on_read_resource(
     except AgentQueryError as exc:
         # Carry the same public envelope the tool path returns, so a host can
         # still tell `needs_human` apart from a plain not-found.
-        payload = _business_error_payload(exc)
+        payload = public_query_error(exc)
         raise MCPError(
             code=_INVALID_PARAMS, message=payload["message"], data=payload
         ) from exc
@@ -425,7 +408,7 @@ async def _on_read_resource(
         logger.error("MCP Agent resource read failed: %s", uri)
         raise MCPError(
             code=_INTERNAL_ERROR,
-            message="Agent query failed; manual review and check required.",
+            message=public_unexpected_error(exc)["message"],
         ) from exc
 
     return types.ReadResourceResult(
@@ -724,7 +707,7 @@ def _guarded[P, R](
             logger.error("MCP Agent handler failed: %s", method)
             raise MCPError(
                 code=_INTERNAL_ERROR,
-                message="Agent request failed; manual review and check required.",
+                message=public_unexpected_error(exc)["message"],
             ) from exc
 
     return _run

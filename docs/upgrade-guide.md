@@ -14,7 +14,7 @@
 cd ~/ccas    # 你 docker-compose.yml 所在的目錄
 
 # 1) 修改 .env 的版本
-sed -i 's/^CCAS_VERSION=.*/CCAS_VERSION=v0.12.0/' .env
+sed -i 's/^CCAS_VERSION=.*/CCAS_VERSION=v0.13.0/' .env
 
 # 2) 拉新 image 並重啟
 docker compose -f docker-compose.yml pull
@@ -40,7 +40,7 @@ URL，見 [`mcp-installation.md`](mcp-installation.md)。systemd／launchd **不
 ```bash
 cd /path/to/ccas
 git fetch --tags
-git checkout v0.12.0    # 改成目標 tag
+git checkout v0.13.0    # 改成目標 tag
 
 cd backend
 uv sync --frozen --extra supervisor
@@ -70,7 +70,7 @@ cd ..
 [`non-docker-agent-host.md`](non-docker-agent-host.md) 與
 [`non-docker-host-services.md`](non-docker-host-services.md)。
 `host-services.sh` 不會跑 alembic；有 schema 變更時先在 `backend/` 執行
-`uv run alembic upgrade head`。v0.12.0 無資料庫 schema 變更。
+`uv run alembic upgrade head`。v0.13.0 含資料庫 schema 變更（新增 `staged_attachments.failure_notified_at` 欄位）。
 
 ---
 
@@ -85,6 +85,31 @@ CCAS 採 [SemVer](https://semver.org/)：
 | Major（`v0.x.x` → `v1.0.0`） | 可能 breaking change；release notes 會明示 | 升級前**閱讀 release notes**、備份 |
 
 每次 release 的詳細 changelog 見 [GitHub Releases](https://github.com/<owner>/ccas/releases)。
+
+---
+
+## v0.13.0（Minor）— 2026-11-09 — Outbox 通知收斂、交易分類器整合、Agent 查詢錯誤閉合與 Pipeline 批次容錯
+
+**適用對象**：v0.12.0 升級至 v0.13.0。含資料庫 schema 變更（新增 `staged_attachments.failure_notified_at`），升級時需執行 alembic migration（`uv run alembic upgrade head`）或重啟 Docker Compose 服務自動遷移。
+
+**通知交付收斂與 Outbox 模組（#89, #90）**：
+- 將 Telegram 通知推送與狀態重試收斂深化至單一 Outbox 模組（`ccas.outbox`），集中管理失敗重試與交付可靠性。
+- 新增 `staged_attachments.failure_notified_at` 欄位與對應 migration，精確追蹤附件解密失敗通知狀態。
+- 修正 Telegram 發送失敗時釋放 new-bill claim，防止帳單被永久鎖定。
+
+**Agent 查詢錯誤閉合與安全防護（#91, #92）**：
+- 將 Agent 查詢錯誤架構深化為封閉錯誤枚舉與類型（`services.query_errors`），消除脆弱的字串匹配與非預期例外暴露。
+- 統一 REST API、MCP 與 CLI 的錯誤消毒（sanitize）邏輯，確保安全訊息回傳一致且不洩漏內部細節。
+
+**交易分類架構收斂（#93）**：
+- 將交易分類推論決策整合收斂至單一 `Classifier` 模組，提升分類規則評估效率與一致性。
+
+**Pipeline 批次容錯與持續推進（#94）**：
+- 修正單一 statement 解密/解析 commit 失敗時中斷批次的行為，確保批次內其餘有效項目持續處理並正確統計錯誤計數。
+
+**工程品質與 CI 監控強化（#87, #88）**：
+- 實裝保守 docs 路由與 fixed-head PR 監控腳本（`ci_plan.py`, `watch_pr.py`），優化 CI 觸發判定。
+- 固定 Playwright E2E 測試工作流於 `ubuntu-24.04` 環境。
 
 ---
 

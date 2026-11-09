@@ -67,7 +67,7 @@ Scheduler 的固定工作為：每日 00:00 觸發 pipeline、每日 02:00 評�
         └─> decrypt：解析銀行密碼，必要時產生解密檔
               └─> parse：選擇銀行 parser，產生 Bill + Transaction
                     └─> classify：套用手動覆寫保護、使用者規則、內建關鍵字
-                          └─> notify：對尚未通知的 Bill 發 Telegram
+                          └─> notify：對尚未通知的 Bill 與解析失敗附件發 Telegram
 ```
 
 `run_pipeline()` 固定依序執行 `ingest → decrypt → parse → classify → notify`。每個 stage 以獨立 job 負責自己的資料查詢、逐項處理與摘要，orchestrator 只負責順序、stage 範圍、錯誤隔離與摘要彙整。
@@ -80,7 +80,7 @@ Scheduler 的固定工作為：每日 00:00 觸發 pipeline、每日 02:00 評�
 | decrypt | 取 `staged` 附件，依銀行解析 DB 密碼與 env fallback；未加密 PDF 直接透通 | `decrypted` | 單附件失敗記為 `decrypt_failed`；每銀行只解析一次密碼，逐項提交 | `decryptor/job.py`, `decrypt.py`, `password.py` |
 | parse | 取 `decrypted` 附件；依 bank code 與 active parser version 嘗試候選 parser；必要時使用 OCR | 建立 `Bill` 與 `Transaction`，附件成為 `parsed` | 單附件失敗記為 `parse_failed`；零額歷史帳單為 `parse_skipped`；單項提交；`force` 可刪除同銀行同月份舊 Bill 重建 | `parser/intake.py`, `parser/registry.py`, `parser/banks/*_vN.py` |
 | classify | 取未分類交易；保留手動覆寫；依 user rules 再走內建 keyword engine | 寫入 category；回傳 user/engine/default 統計 | 整批寫入為 all-or-nothing；flush/commit 失敗會 rollback 並使 stage 失敗 | `classifier/job.py`, `engine.py`, `user_rules.py` |
-| notify | 查詢 `is_notified=false` 的 Bill；先 claim `PaymentReminder(bill_id, new_bill)` 再送 Telegram | 成功後設 `Bill.is_notified=true` | 缺 Telegram 設定時跳過；單筆失敗記錄並繼續；claim 保護重複送出 | `bot/job.py`, `bot/notifications.py` |
+| notify | 查詢 `is_notified=false` 的 Bill 與 `parse_failed` 且 `failure_notified_at` 為空的附件；經 `Outbox` 投遞（先認領再送，失敗釋放認領） | 成功後設 `Bill.is_notified=true`；解析失敗合併一則訊息並設 `failure_notified_at` | 缺 Telegram 設定時跳過且不認領；單筆失敗記錄並繼續，下次重試 | `bot/job.py`, `outbox.py` |
 
 每個 stage crash 都會被 `_run_stage()` 轉為 `StageSummary`，後續 stage 仍會執行。ingest/decrypt/parse 的已提交項目會保留；RQ job 若達到重試上限，worker 會把仍處於 `staged` 或 `decrypted` 的項目標為 `manual_review_needed`。
 
@@ -173,7 +173,7 @@ metadata。Agent 只序列化安全 `payload`，不包含 PDF 路徑或可用性
 
 Agent surfaces 共用 `ccas.services` 的安全投影；REST 提供 `/api/bills/payment-due` 與 `/api/pipeline/status`，CLI/MCP 僅允許唯讀查詢。loopback Streamable HTTP MCP 只接受與 REST 相同來源的 Bearer API token，不接受儀表板 session cookie。Agent response DTO 的 datetime 在 JSON serialization boundary 統一輸出 UTC RFC3339 `Z`；`AGENT_WRITE_ENABLED` 預設為 false，且目前不會暴露任何寫入工具。MCP 的 resources／prompts 與 tools 走同一組 service 投影，同樣唯讀；RFC 9728 protected resource metadata 一律不發布，舊 issuer 設定忽略並在非空時輸出固定棄用警告。現行 `2026-07-28` HTTP 協定為逐請求無 session；中斷後重建 SDK transport 並重新帶 Bearer（見 [`mcp-installation.md`](../mcp-installation.md)）。
 
-CLI／MCP 業務錯誤共用 `schemas.public_query_error()`，僅公開 code、安全 message 與必要的 needs_human，排除任意內部 data。月份 query DTO 與 prompts 共用有效 ASCII `YYYY-MM` 驗證。`budget_status(month=...)`／CLI `budget-status --month` 增加指定帳單月份的 assessment，以目前設定（budget_basis=current_settings）評估帳單月份消費；current_period 仍獨立表示本月，未指定 month 時不輸出 assessment。REST 本月預算契約保持相容。
+REST／MCP／CLI 的 Agent 查詢錯誤共用 `services/query_errors.py`：錯誤只能以封閉的 `QueryErrorKind` 建立，對外訊息由範本產生（唯一參數是 1–12 位數的呼叫端識別），`public_query_error()` 僅公開 code、message 與必要的 needs_human；非預期例外經 `public_unexpected_error()` 投影（REST 僅套用在 Agent 查詢路由的 `AgentQueryRoute`）。月份 query DTO 與 prompts 共用有效 ASCII `YYYY-MM` 驗證。`budget_status(month=...)`／CLI `budget-status --month` 增加指定帳單月份的 assessment，以目前設定（budget_basis=current_settings）評估帳單月份消費；current_period 仍獨立表示本月，未指定 month 時不輸出 assessment。REST 本月預算契約保持相容。
 
 CLI 與 MCP tool 透過 `services.query_outcome.require_tool_result()` 共用人工介入
 判定；重試耗盡的流程狀態轉成既有安全業務錯誤。MCP resource 不套用此工具政策，
