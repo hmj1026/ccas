@@ -5,6 +5,28 @@ REPO_ROOT="$(git rev-parse --show-toplevel)"
 RUN_BACKEND="${RUN_BACKEND:-1}"
 RUN_FRONTEND="${RUN_FRONTEND:-1}"
 
+# Ref-only pushes carry no unchecked commits: branch deletions, and tags whose
+# commit is already on a remote-tracking branch (e.g. a release tag on the
+# merged master commit). Anything else, including an empty ref list, runs the
+# full suite. stdin lines: <local ref> <local sha> <remote ref> <remote sha>.
+ref_only_push() {
+    local local_ref local_sha remote_ref _remote_sha commit seen=0
+    while read -r local_ref local_sha remote_ref _remote_sha; do
+        [ -n "$local_ref" ] || continue
+        seen=1
+        [[ "$local_sha" =~ ^0+$ ]] && continue
+        [[ "$remote_ref" == refs/tags/* ]] || return 1
+        commit="$(git rev-parse --verify --quiet "$local_sha^{commit}")" || return 1
+        [ -n "$(git for-each-ref --contains "$commit" --count=1 refs/remotes)" ] || return 1
+    done
+    [ "$seen" = 1 ]
+}
+
+if ref_only_push; then
+    echo "pre-push: ref-only push; skipping checks"
+    exit 0
+fi
+
 echo "=== Documentation & Workflow Tool Checks ==="
 python3 "$REPO_ROOT/scripts/check_docs.py" --root "$REPO_ROOT"
 python3 -m unittest discover -s "$REPO_ROOT/tests/scripts" -p 'test_*.py'
@@ -39,7 +61,7 @@ if [ "$RUN_BACKEND" = "1" ]; then
     echo "-> pyright"
     uv run pyright
     echo "-> pytest"
-    uv run pytest tests/unit/ -m "not live_fubon and not captcha_model" --cov --cov-fail-under=80 -q
+    uv run pytest tests/unit/ -m "not live_fubon and not captcha_model" --cov --cov-report=term:skip-covered --cov-fail-under=80 -q
 fi
 
 if [ "$RUN_FRONTEND" = "1" ]; then
@@ -54,7 +76,7 @@ if [ "$RUN_FRONTEND" = "1" ]; then
     echo "-> build (tsc + vite)"
     pnpm run build
     echo "-> vitest (coverage)"
-    pnpm run test --coverage
+    pnpm run test --coverage --coverage.reporter=text-summary
 fi
 
 echo "=== All checks passed ==="

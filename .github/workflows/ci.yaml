@@ -210,6 +210,9 @@ jobs:
       - name: Pre-commit scope regression
         run: bash tests/scripts/test_pre_commit.sh
 
+      - name: Pre-push ref filter regression
+        run: bash tests/scripts/test_pre_push.sh
+
       - name: host-services.sh unit tests
         run: ./tests/scripts/test_host_services.sh
 

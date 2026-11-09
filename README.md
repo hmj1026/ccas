@@ -53,7 +53,7 @@ Requires Docker + Docker Compose. First create a Google Cloud OAuth client — s
 ```bash
 mkdir ~/ccas && cd ~/ccas
 REPO_OWNER=<owner>   # GHCR namespace / GitHub owner (the <owner> in the release URL)
-RELEASE=v0.13.0      # pin a released version
+RELEASE=v0.13.1      # pin a released version
 curl -fsSL -o docker-compose.yml \
   "https://github.com/${REPO_OWNER}/ccas/releases/download/${RELEASE}/docker-compose.yml"
 curl -fsSL -o example.env \
@@ -150,7 +150,7 @@ GitHub Actions on push & PR to `develop` / `master`:
 - **backend-test** — `pytest tests/unit/` with coverage ≥ 80%
 - **frontend-lint-test** — `pnpm lint` + `pnpm build` (includes `tsc`) + `pnpm test`
 
-Release pipeline (`release-docker.yaml`) builds and pushes container images to GHCR on tagged releases.
+Release pipeline: merging a `Release vX.Y.Z` PR into `master` auto-tags it (`release-tag.yaml`), which builds and pushes container images to GHCR (`release-docker.yaml`).
 
 ## Contributing
 

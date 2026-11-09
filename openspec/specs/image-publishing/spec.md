@@ -11,12 +11,18 @@ proxy 三件套的角色分工。落地於 compose-pull-deploy change（v0.1.0 G
 
 ### Requirement: GHCR 自動發布工作流
 
-系統 SHALL 提供 `.github/workflows/release-docker.yaml`，於下列觸發條件執行 image 建置與發布到 GitHub Container Registry：(1) push tag 符合 `v*`，(2) push branch `main` 或 `master`。Workflow SHALL 建置並發布 `ccas-backend`、`ccas-frontend`、`ccas-proxy` 三個 image。Workflow SHALL 使用 `GITHUB_TOKEN` 認證 GHCR 與建立 GitHub Release、不得在 source 中硬編 token，且 SHALL 宣告 `permissions: contents: write, packages: write`。
+系統 SHALL 提供 `.github/workflows/release-docker.yaml`，於下列觸發條件執行 image 建置與發布到 GitHub Container Registry：(1) push tag 符合 `v*`，(2) push branch `main` 或 `master`，(3) `workflow_dispatch` 於 `v*` tag ref（行為等同 tag push）。Workflow SHALL 建置並發布 `ccas-backend`、`ccas-frontend`、`ccas-proxy` 三個 image。Workflow SHALL 使用 `GITHUB_TOKEN` 認證 GHCR 與建立 GitHub Release、不得在 source 中硬編 token，且 SHALL 宣告 `permissions: contents: write, packages: write`。
 
 #### Scenario: tag 觸發完整版本發布
 
 - **WHEN** 開發者執行 `git tag v0.1.0 && git push origin v0.1.0`
 - **THEN** workflow SHALL 建置 `ccas-backend`、`ccas-frontend`、`ccas-proxy` image 並推送到 `ghcr.io/<owner>/ccas-backend`、`ghcr.io/<owner>/ccas-frontend`、`ghcr.io/<owner>/ccas-proxy`
+
+#### Scenario: Release PR 合併自動打 tag 並發布
+
+- **WHEN** 標題為 `Release vX.Y.Z` 的 PR 合併進 `master`，且 `README.md`、`README.zh-TW.md`、`docs/install-quickstart.md` 的 `RELEASE=` 皆為 `vX.Y.Z`
+- **THEN** `.github/workflows/release-tag.yaml` SHALL 在 merge commit 建立 annotated tag `vX.Y.Z`，並以 `workflow_dispatch --ref vX.Y.Z` 啟動本 workflow（`GITHUB_TOKEN` 推送的 tag 不觸發 push 事件）
+- **AND** 任一 pin 與標題不符，或 tag 已存在時 SHALL 失敗且不建立 tag
 
 #### Scenario: main 分支觸發 release floating tag
 
