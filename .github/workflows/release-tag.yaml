@@ -1,7 +1,7 @@
 name: Release Tag
 
 # 觸發：標題為 `Release vX.Y.Z` 的 PR 合併進 master。
-#   1. scripts/release_tag.py 驗證三處 RELEASE= pin 與標題一致（不一致即失敗、不打 tag）
+#   1. scripts/release_tag.py 驗證 PINS 列出的全部版號位置與標題一致（不一致即失敗、不打 tag）
 #   2. 在 merge commit 建 annotated tag 並推送
 #   3. GITHUB_TOKEN 推的 tag 不會觸發其他 workflow，故以 workflow_dispatch
 #      在該 tag 上啟動 release-docker.yaml（建 image + 建立 GitHub Release）
